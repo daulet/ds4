@@ -1067,7 +1067,7 @@
 
 ### M7.6: Rust Session Payload Header Reader
 
-- Status: pending
+- Status: done
 - Goal: add a Rust reader for DSV4 session payload headers and structural
   validation without restoring tensors or executing a model.
 - Oracle: the M7.5 current-C on-disk session payload shape oracle.
@@ -1083,11 +1083,45 @@
   interpretation remains out of scope.
 - Review gate: ask Claude to review format-boundary checks, checked arithmetic,
   and the no-runtime-restore scope boundary.
-- Validation needed: payload comparator with negative tests, Rust tests,
-  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+- Validation: `cargo fmt --all -- --check`, `python3 -m py_compile
+  ds4-parity/compare_session_payload.py`, `python3
+  ds4-parity/compare_session_payload.py --negative-test`, `cargo test -p
+  ds4-gguf session_payload`, `cargo test -p ds4-gguf --bin
+  ds4-session-payload-dump-rs`, `cargo test --workspace`, and
   `git diff --check`.
 - Owner path: Rust session payload reader, `ds4-parity/`,
   `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
+### M7.7: KV Replay And Prefix Decision Comparator
+
+- Status: pending
+- Goal: compare request-level cache hit, cache miss, prefix match, exact DSML
+  replay, and effective prompt suffix construction against current C artifacts.
+- Oracle: M0.5 KV/cache traces, M0.4 server traces where DSML rendering is
+  involved, current `ds4_kvstore_try_load_text`, and current prompt rendering
+  behavior already covered by Milestone 5.
+- Fixture: committed cache request JSON, rendered cached text, cache-decision
+  logs, token prefix records, DSML tool-call records, hashes of the Milestone 5
+  prompt-rendering artifacts consumed as opaque fixture inputs, and M7.3 Rust
+  KV policy outputs.
+- Comparator: C/log-artifact versus Rust comparison for `cache_source`,
+  cached-token counts, cache-write-token counts, reason codes, key kind,
+  extension flags, rendered text SHA, exact prefix token records, and effective
+  prompt suffix bytes. M5 artifact-hash drift is reported as a fixture
+  precondition failure, not as KV behavior drift.
+- Acceptance: Rust makes the same cache hit/miss and prefix decisions for the
+  committed replay cases, including DSML-visible transcript boundaries and text
+  suffix construction, using M5 outputs as fixed inputs. M7.7 only uses replay
+  prompts already covered by committed M5 artifacts; extending M5 rendering
+  coverage is M5 work, not M7.7 work.
+- Drift policy: no cache-decision, rendered-text, token-prefix, or suffix-byte
+  drift; trace timing and process paths may be normalized.
+- Review gate: ask Claude to review replay coverage at the boundary between KV
+  policy, opaque Milestone 5 text fixtures, and future server runtime work.
+- Validation needed: replay comparator with negative tests, Milestone 5 fixture
+  hash precondition check, `cargo test --workspace`, and `git diff --check`.
+- Owner path: KV replay comparator, `ds4-parity/`, Rust KV policy helpers,
+  `.memory/status.md`.
 
 ## Later Items
 

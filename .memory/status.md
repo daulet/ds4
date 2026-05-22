@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.6 Rust Session Payload Header Reader
-- Last validated source commit: M7.5 C session payload shape oracle in this
-  commit; prior pushed source commit
-  `4cb3daf6b3856cbe04478c4c53ee5e7286a3d9da`
+- Active item: M7.7 KV Replay And Prefix Decision Comparator
+- Last validated source commit: M7.6 Rust session payload header reader in
+  this commit; prior pushed source commit
+  `8089ffa4670a77313df0e6decf747dadea84c988`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -786,3 +786,22 @@
   ds4-parity/check_session_payload_shape.py --negative-test` (`Session payload
   shape oracle: PASS, 552 checks`; negative tests `PASS, 8 checks`), `arch
   -arm64 make cpu`, and `git diff --check`.
+- M7.6 adds `rust/ds4-gguf/src/session_payload.rs`, a no-runtime-restore Rust
+  reader for DSV4 payload headers and structural body boundaries. It mirrors
+  C's combined bad-magic/bad-version `unsupported-version` behavior, fixed DS4
+  layout checks, CPU layout/cap checks, row-count validation, truncated body
+  rejection, and trailing-payload rejection.
+- M7.6 adds `ds4-session-payload-dump-rs`, which emits the Rust structural
+  surface for the same synthetic M7.5 cases without loading a model or claiming
+  tensor/session restore support.
+- M7.6 adds `python3 ds4-parity/compare_session_payload.py`, which compares
+  Rust output to the M7.5 current-C structural oracle and checks the M0.5
+  payload/hash/B300-command records as fixture preconditions.
+- M7.6 local validation passed for `cargo fmt --all -- --check`, `python3 -m
+  py_compile ds4-parity/compare_session_payload.py`, `python3
+  ds4-parity/compare_session_payload.py --negative-test` (`Session payload
+  C/Rust structural comparator: PASS, 347 checks`; M0.5 fixture contract
+  `PASS, 17 checks`; negative tests `PASS, 8 checks`), `cargo test -p
+  ds4-gguf session_payload`, `cargo test -p ds4-gguf --bin
+  ds4-session-payload-dump-rs`, `cargo test --workspace`, and
+  `git diff --check`.

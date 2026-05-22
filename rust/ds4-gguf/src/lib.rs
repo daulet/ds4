@@ -7,6 +7,7 @@ pub mod dsml;
 pub mod kv_policy;
 pub mod prompt;
 pub mod sampling;
+pub mod session_payload;
 mod tokenizer;
 
 pub use agent_dsml::{

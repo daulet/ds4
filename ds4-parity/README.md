@@ -190,3 +190,14 @@ the 13-u32 DSV4 header, fixed DS4 layout fields, body section order and size
 accounting, and current C load rejection categories. The checker also ties in
 the M0.5 B300 payload-size/hash records and exact B300 recapture commands while
 keeping raw KV payloads hash-only.
+
+Compare the M7.6 Rust DSV4 session payload reader against the M7.5 oracle:
+
+```sh
+python3 ds4-parity/compare_session_payload.py --negative-test
+```
+
+The comparator runs `ds4-session-payload-dump-rs`, checks that Rust decodes the
+same header fields, fixed layout, size accounting, trailing/truncated body
+boundaries, and structural rejection categories as C, and treats the M0.5
+payload records as fixture preconditions rather than raw body inputs.
