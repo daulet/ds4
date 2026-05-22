@@ -356,7 +356,7 @@
 
 ### M5.2: C Token And Prompt Dump Oracle
 
-- Status: pending
+- Status: done
 - Goal: add a deterministic current-C oracle that dumps tokenizer vocabulary
   identity, text tokenization, rendered chat prompt bytes, rendered prompt token
   IDs, CLI chat-construction token streams, token pieces, and request fixture

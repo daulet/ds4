@@ -1,0 +1,43 @@
+{
+  "schema": "ds4.tokenization_baseline.v1",
+  "source_commit": "same commit as this manifest",
+  "captured_from_parent_commit": "ed4b72a201b401f0ccb4f060d83eb15f87f17949",
+  "captured_utc": "2026-05-22T06:02:41Z",
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig"
+  },
+  "model": {
+    "link_path": "/workspace/ds4/ds4flash.gguf",
+    "resolved_path": "/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+    "size_bytes": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "dumps": {
+    "current_c": {
+      "path": "current-c.json",
+      "size_bytes": 124497,
+      "sha256": "b0689f47abe63750ab3191772d5661d5f0f433e954bcfd0de6a0e55a747489e9",
+      "producer": "current-c-server-token-oracle",
+      "command": "./ds4-server --cuda -m /workspace/ds4/ds4flash.gguf --ctx 393216 --dump-token-oracle /tmp/ds4-tokenization-m5.2-current-c.json --token-oracle-fixture-dir ds4-parity/baselines/server-fixtures/m0.4 --token-oracle-model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+    }
+  },
+  "refresh_commands": [
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4.c ds4-rust-port-b300:/workspace/ds4/ds4.c",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4.h ds4-rust-port-b300:/workspace/ds4/ds4.h",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4_server.c ds4-rust-port-b300:/workspace/ds4/ds4_server.c",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-parity/check_tokenization_dump.py ds4-rust-port-b300:/workspace/ds4/ds4-parity/check_tokenization_dump.py",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make clean ds4-server CUDA_ARCH=native; ./ds4-server --cuda -m /workspace/ds4/ds4flash.gguf --ctx 393216 --dump-token-oracle /tmp/ds4-tokenization-m5.2-current-c.json --token-oracle-fixture-dir ds4-parity/baselines/server-fixtures/m0.4 --token-oracle-model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668; wc -c /tmp/ds4-tokenization-m5.2-current-c.json; sha256sum /tmp/ds4-tokenization-m5.2-current-c.json; python3 ds4-parity/check_tokenization_dump.py /tmp/ds4-tokenization-m5.2-current-c.json --negative-test'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/tmp/ds4-tokenization-m5.2-current-c.json ds4-parity/baselines/tokenization/m5.2/current-c.json"
+  ],
+  "normalization": {
+    "model.path": "exact capture path retained in dump; comparisons may normalize path only",
+    "request_body_sha256": "sha256 over exact request body bytes as received, no JSON re-serialization",
+    "server_trace_metadata": "not part of this dump",
+    "tokenizer_identity": "exact token count, token bytes hash, merge count, merge hash, special token table, and literal-special table",
+    "prompt_and_token_streams": "exact rendered bytes, CLI append operations, token IDs, and token pieces"
+  }
+}

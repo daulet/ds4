@@ -119,6 +119,8 @@ int ds4_engine_collect_imatrix(ds4_engine *e,
                                int max_tokens);
 void ds4_engine_dump_tokens(ds4_engine *e, const ds4_tokens *tokens);
 int ds4_dump_text_tokenization(const char *model_path, const char *text, FILE *fp);
+void ds4_sha256_hex(const void *ptr, size_t len, char out[65]);
+int ds4_engine_dump_tokenizer_identity_json(ds4_engine *e, FILE *fp);
 int ds4_engine_head_test(ds4_engine *e, const ds4_tokens *prompt);
 int ds4_engine_first_token_test(ds4_engine *e, const ds4_tokens *prompt);
 int ds4_engine_metal_graph_test(ds4_engine *e, const ds4_tokens *prompt);

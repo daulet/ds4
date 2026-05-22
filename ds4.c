@@ -438,6 +438,156 @@ static uint64_t hash_bytes(const void *ptr, uint64_t len) {
     return h;
 }
 
+typedef struct {
+    uint32_t h[8];
+    uint8_t block[64];
+    uint64_t bytes;
+    size_t used;
+} ds4_sha256_ctx;
+
+static uint32_t rotr32(uint32_t x, unsigned n) {
+    return (x >> n) | (x << (32u - n));
+}
+
+static uint32_t sha256_load_be32(const uint8_t *p) {
+    return ((uint32_t)p[0] << 24) |
+           ((uint32_t)p[1] << 16) |
+           ((uint32_t)p[2] << 8) |
+           (uint32_t)p[3];
+}
+
+static void sha256_store_be32(uint8_t *p, uint32_t v) {
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+static void sha256_transform(ds4_sha256_ctx *ctx, const uint8_t block[64]) {
+    static const uint32_t k[64] = {
+        0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u,
+        0x3956c25bu, 0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u,
+        0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u,
+        0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u, 0xc19bf174u,
+        0xe49b69c1u, 0xefbe4786u, 0x0fc19dc6u, 0x240ca1ccu,
+        0x2de92c6fu, 0x4a7484aau, 0x5cb0a9dcu, 0x76f988dau,
+        0x983e5152u, 0xa831c66du, 0xb00327c8u, 0xbf597fc7u,
+        0xc6e00bf3u, 0xd5a79147u, 0x06ca6351u, 0x14292967u,
+        0x27b70a85u, 0x2e1b2138u, 0x4d2c6dfcu, 0x53380d13u,
+        0x650a7354u, 0x766a0abbu, 0x81c2c92eu, 0x92722c85u,
+        0xa2bfe8a1u, 0xa81a664bu, 0xc24b8b70u, 0xc76c51a3u,
+        0xd192e819u, 0xd6990624u, 0xf40e3585u, 0x106aa070u,
+        0x19a4c116u, 0x1e376c08u, 0x2748774cu, 0x34b0bcb5u,
+        0x391c0cb3u, 0x4ed8aa4au, 0x5b9cca4fu, 0x682e6ff3u,
+        0x748f82eeu, 0x78a5636fu, 0x84c87814u, 0x8cc70208u,
+        0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u,
+    };
+    uint32_t w[64];
+    for (int i = 0; i < 16; i++) w[i] = sha256_load_be32(block + (size_t)i * 4);
+    for (int i = 16; i < 64; i++) {
+        uint32_t s0 = rotr32(w[i - 15], 7) ^ rotr32(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        uint32_t s1 = rotr32(w[i - 2], 17) ^ rotr32(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+
+    uint32_t a = ctx->h[0], b = ctx->h[1], c = ctx->h[2], d = ctx->h[3];
+    uint32_t e = ctx->h[4], f = ctx->h[5], g = ctx->h[6], h = ctx->h[7];
+    for (int i = 0; i < 64; i++) {
+        uint32_t s1 = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25);
+        uint32_t ch = (e & f) ^ (~e & g);
+        uint32_t temp1 = h + s1 + ch + k[i] + w[i];
+        uint32_t s0 = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22);
+        uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+        uint32_t temp2 = s0 + maj;
+        h = g;
+        g = f;
+        f = e;
+        e = d + temp1;
+        d = c;
+        c = b;
+        b = a;
+        a = temp1 + temp2;
+    }
+    ctx->h[0] += a; ctx->h[1] += b; ctx->h[2] += c; ctx->h[3] += d;
+    ctx->h[4] += e; ctx->h[5] += f; ctx->h[6] += g; ctx->h[7] += h;
+}
+
+static void sha256_init(ds4_sha256_ctx *ctx) {
+    ctx->h[0] = 0x6a09e667u;
+    ctx->h[1] = 0xbb67ae85u;
+    ctx->h[2] = 0x3c6ef372u;
+    ctx->h[3] = 0xa54ff53au;
+    ctx->h[4] = 0x510e527fu;
+    ctx->h[5] = 0x9b05688cu;
+    ctx->h[6] = 0x1f83d9abu;
+    ctx->h[7] = 0x5be0cd19u;
+    ctx->bytes = 0;
+    ctx->used = 0;
+}
+
+static void sha256_update(ds4_sha256_ctx *ctx, const void *ptr, size_t len) {
+    const uint8_t *p = ptr;
+    ctx->bytes += (uint64_t)len;
+    while (len) {
+        size_t n = sizeof(ctx->block) - ctx->used;
+        if (n > len) n = len;
+        memcpy(ctx->block + ctx->used, p, n);
+        ctx->used += n;
+        p += n;
+        len -= n;
+        if (ctx->used == sizeof(ctx->block)) {
+            sha256_transform(ctx, ctx->block);
+            ctx->used = 0;
+        }
+    }
+}
+
+static void sha256_final(ds4_sha256_ctx *ctx, uint8_t out[32]) {
+    const uint64_t bit_len = ctx->bytes * 8u;
+    ctx->block[ctx->used++] = 0x80u;
+    if (ctx->used > 56) {
+        while (ctx->used < 64) ctx->block[ctx->used++] = 0;
+        sha256_transform(ctx, ctx->block);
+        ctx->used = 0;
+    }
+    while (ctx->used < 56) ctx->block[ctx->used++] = 0;
+    for (int i = 0; i < 8; i++) {
+        ctx->block[56 + i] = (uint8_t)(bit_len >> (56 - i * 8));
+    }
+    sha256_transform(ctx, ctx->block);
+    for (int i = 0; i < 8; i++) sha256_store_be32(out + i * 4, ctx->h[i]);
+}
+
+static void hex_encode(const uint8_t *bytes, size_t len, char *out) {
+    static const char hexdigits[] = "0123456789abcdef";
+    for (size_t i = 0; i < len; i++) {
+        out[i * 2] = hexdigits[bytes[i] >> 4];
+        out[i * 2 + 1] = hexdigits[bytes[i] & 15u];
+    }
+    out[len * 2] = '\0';
+}
+
+void ds4_sha256_hex(const void *ptr, size_t len, char out[65]) {
+    ds4_sha256_ctx ctx;
+    uint8_t digest[32];
+    sha256_init(&ctx);
+    sha256_update(&ctx, ptr, len);
+    sha256_final(&ctx, digest);
+    hex_encode(digest, sizeof(digest), out);
+}
+
+static void sha256_update_u64le(ds4_sha256_ctx *ctx, uint64_t v) {
+    uint8_t b[8];
+    for (int i = 0; i < 8; i++) b[i] = (uint8_t)(v >> (i * 8));
+    sha256_update(ctx, b, sizeof(b));
+}
+
+static void sha256_update_indexed_string(ds4_sha256_ctx *ctx, uint64_t index, ds4_str s) {
+    sha256_update_u64le(ctx, index);
+    sha256_update_u64le(ctx, s.len);
+    sha256_update(ctx, s.ptr, (size_t)s.len);
+}
+
 static bool g_alloc_guard_enabled;
 static const char *g_alloc_guard_phase;
 
@@ -14871,6 +15021,9 @@ bool ds4_tokens_starts_with(const ds4_tokens *tokens, const ds4_tokens *prefix) 
 struct ds4_vocab {
     ds4_str *token;
     int n_vocab;
+    uint64_t n_merges;
+    char token_bytes_sha256[65];
+    char merge_pairs_sha256[65];
     int bos_id;
     int eos_id;
     int user_id;
@@ -15317,19 +15470,32 @@ static void vocab_load(ds4_vocab *vocab, const ds4_model *model) {
     vocab->token = xcalloc((size_t)vocab->n_vocab, sizeof(vocab->token[0]));
     table_init(&vocab->token_to_id, tokens.len);
 
+    ds4_sha256_ctx token_hash;
+    sha256_init(&token_hash);
     ds4_cursor c = cursor_at(model, tokens.data_pos);
     for (int i = 0; i < vocab->n_vocab; i++) {
         if (!cursor_string(&c, &vocab->token[i])) ds4_die(c.error);
+        sha256_update_indexed_string(&token_hash, (uint64_t)i, vocab->token[i]);
         table_put(&vocab->token_to_id, vocab->token[i], i);
     }
+    uint8_t token_digest[32];
+    sha256_final(&token_hash, token_digest);
+    hex_encode(token_digest, sizeof(token_digest), vocab->token_bytes_sha256);
 
+    vocab->n_merges = merges.len;
     table_init(&vocab->merge_rank, merges.len);
+    ds4_sha256_ctx merge_hash;
+    sha256_init(&merge_hash);
     c = cursor_at(model, merges.data_pos);
     for (uint64_t i = 0; i < merges.len; i++) {
         ds4_str merge;
         if (!cursor_string(&c, &merge)) ds4_die(c.error);
+        sha256_update_indexed_string(&merge_hash, i, merge);
         table_put(&vocab->merge_rank, merge, (int)i);
     }
+    uint8_t merge_digest[32];
+    sha256_final(&merge_hash, merge_digest);
+    hex_encode(merge_digest, sizeof(merge_digest), vocab->merge_pairs_sha256);
 
     vocab->bos_id       = vocab_lookup(vocab, "<｜begin▁of▁sentence｜>");
     vocab->eos_id       = vocab_lookup(vocab, "<｜end▁of▁sentence｜>");
@@ -17238,6 +17404,58 @@ void ds4_session_snapshot_free(ds4_session_snapshot *snap) {
 
 void ds4_engine_dump_tokens(ds4_engine *e, const ds4_tokens *tokens) {
     dump_tokens(&e->vocab, tokens);
+}
+
+static void tokenizer_identity_emit_special(FILE *fp, bool *first,
+                                            const char *name, const char *text, int id) {
+    metadata_comma(fp, first);
+    fputs("    {\"name\": ", fp);
+    json_cstr_write(fp, name);
+    fputs(", \"text\": ", fp);
+    json_cstr_write(fp, text);
+    fprintf(fp, ", \"id\": %d}", id);
+}
+
+int ds4_engine_dump_tokenizer_identity_json(ds4_engine *e, FILE *fp) {
+    if (!e || !fp) return 1;
+    const ds4_vocab *vocab = &e->vocab;
+
+    fputs("{\n", fp);
+    fprintf(fp, "  \"token_count\": %d,\n", vocab->n_vocab);
+    fputs("  \"token_bytes_sha256\": ", fp);
+    json_cstr_write(fp, vocab->token_bytes_sha256);
+    fputs(",\n  \"merge_count\": ", fp);
+    fprintf(fp, "%" PRIu64 ",\n", vocab->n_merges);
+    fputs("  \"merge_pairs_sha256\": ", fp);
+    json_cstr_write(fp, vocab->merge_pairs_sha256);
+    fputs(",\n  \"canonical_hash_format\": ", fp);
+    json_cstr_write(fp, "repeated u64le index, u64le byte_length, raw bytes");
+    fputs(",\n  \"loaded_metadata\": [\"tokenizer.ggml.tokens\", \"tokenizer.ggml.merges\"],\n", fp);
+    fputs("  \"excluded_metadata\": [\"tokenizer.ggml.token_type\", \"tokenizer.ggml.scores\"],\n", fp);
+    fputs("  \"special_token_at\": [\n", fp);
+    bool first = true;
+    tokenizer_identity_emit_special(fp, &first, "bos", "<｜begin▁of▁sentence｜>", vocab->bos_id);
+    tokenizer_identity_emit_special(fp, &first, "eos", "<｜end▁of▁sentence｜>", vocab->eos_id);
+    tokenizer_identity_emit_special(fp, &first, "user", "<｜User｜>", vocab->user_id);
+    tokenizer_identity_emit_special(fp, &first, "assistant", "<｜Assistant｜>", vocab->assistant_id);
+    tokenizer_identity_emit_special(fp, &first, "think_start", "<think>", vocab->think_start_id);
+    tokenizer_identity_emit_special(fp, &first, "think_end", "</think>", vocab->think_end_id);
+    tokenizer_identity_emit_special(fp, &first, "dsml", "｜DSML｜", vocab->dsml_id);
+    fputs("\n  ],\n", fp);
+
+    fputs("  \"literal_special_tokens\": [\n", fp);
+    first = true;
+    for (int i = 0; i < vocab->n_vocab; i++) {
+        ds4_str s = vocab->token[i];
+        if (!vocab_token_is_literal_special(s)) continue;
+        metadata_comma(fp, &first);
+        fprintf(fp, "    {\"id\": %d, \"bytes\": ", i);
+        json_string_write(fp, s.ptr, s.len);
+        fputc('}', fp);
+    }
+    fputs("\n  ]\n", fp);
+    fputc('}', fp);
+    return ferror(fp) ? 1 : 0;
 }
 
 int ds4_dump_text_tokenization(const char *model_path, const char *text, FILE *fp) {

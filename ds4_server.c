@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <float.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <netinet/in.h>
@@ -8252,6 +8253,452 @@ static char *path_join(const char *dir, const char *name) {
     return ds4_kvstore_path_join(dir, name);
 }
 
+static bool token_oracle_valid_utf8_at(const char *s, size_t n, size_t i, size_t *len_out) {
+    if (len_out) *len_out = 0;
+    if (!s || i >= n) return false;
+    unsigned char c = (unsigned char)s[i];
+    size_t len = 0;
+    if (c < 0x80) {
+        len = 1;
+    } else if (c >= 0xC2 && c <= 0xDF) {
+        len = 2;
+        if (i + len > n) return false;
+        if (((unsigned char)s[i + 1] & 0xC0) != 0x80) return false;
+    } else if (c == 0xE0) {
+        len = 3;
+        if (i + len > n) return false;
+        unsigned char b1 = (unsigned char)s[i + 1];
+        unsigned char b2 = (unsigned char)s[i + 2];
+        if (b1 < 0xA0 || b1 > 0xBF || (b2 & 0xC0) != 0x80) return false;
+    } else if ((c >= 0xE1 && c <= 0xEC) || (c >= 0xEE && c <= 0xEF)) {
+        len = 3;
+        if (i + len > n) return false;
+        if (((unsigned char)s[i + 1] & 0xC0) != 0x80) return false;
+        if (((unsigned char)s[i + 2] & 0xC0) != 0x80) return false;
+    } else if (c == 0xED) {
+        len = 3;
+        if (i + len > n) return false;
+        unsigned char b1 = (unsigned char)s[i + 1];
+        unsigned char b2 = (unsigned char)s[i + 2];
+        if (b1 < 0x80 || b1 > 0x9F || (b2 & 0xC0) != 0x80) return false;
+    } else if (c == 0xF0) {
+        len = 4;
+        if (i + len > n) return false;
+        unsigned char b1 = (unsigned char)s[i + 1];
+        if (b1 < 0x90 || b1 > 0xBF) return false;
+        if (((unsigned char)s[i + 2] & 0xC0) != 0x80) return false;
+        if (((unsigned char)s[i + 3] & 0xC0) != 0x80) return false;
+    } else if (c >= 0xF1 && c <= 0xF3) {
+        len = 4;
+        if (i + len > n) return false;
+        if (((unsigned char)s[i + 1] & 0xC0) != 0x80) return false;
+        if (((unsigned char)s[i + 2] & 0xC0) != 0x80) return false;
+        if (((unsigned char)s[i + 3] & 0xC0) != 0x80) return false;
+    } else if (c == 0xF4) {
+        len = 4;
+        if (i + len > n) return false;
+        unsigned char b1 = (unsigned char)s[i + 1];
+        if (b1 < 0x80 || b1 > 0x8F) return false;
+        if (((unsigned char)s[i + 2] & 0xC0) != 0x80) return false;
+        if (((unsigned char)s[i + 3] & 0xC0) != 0x80) return false;
+    } else {
+        return false;
+    }
+    if (len_out) *len_out = len;
+    return true;
+}
+
+static void token_oracle_json_escape_bytes(buf *b, const char *s, size_t n) {
+    buf_putc(b, '"');
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '"' || c == '\\') {
+            buf_putc(b, '\\');
+            buf_putc(b, (char)c);
+        } else if (c == '\n') {
+            buf_puts(b, "\\n");
+        } else if (c == '\r') {
+            buf_puts(b, "\\r");
+        } else if (c == '\t') {
+            buf_puts(b, "\\t");
+        } else if (c < 0x20) {
+            buf_printf(b, "\\u%04x", (unsigned)c);
+        } else if (c >= 0x80) {
+            size_t utf8_len = 0;
+            if (token_oracle_valid_utf8_at(s, n, i, &utf8_len)) {
+                for (size_t j = 0; j < utf8_len; j++) buf_putc(b, s[i + j]);
+                i += utf8_len - 1;
+            } else {
+                buf_printf(b, "\\u%04x", (unsigned)c);
+            }
+        } else {
+            buf_putc(b, (char)c);
+        }
+    }
+    buf_putc(b, '"');
+}
+
+static void token_oracle_write_json_cstr(FILE *fp, const char *s) {
+    buf b = {0};
+    json_escape(&b, s ? s : "");
+    fputs(b.ptr ? b.ptr : "\"\"", fp);
+    buf_free(&b);
+}
+
+static void token_oracle_write_json_bytes(FILE *fp, const char *s, size_t n) {
+    buf b = {0};
+    token_oracle_json_escape_bytes(&b, s ? s : "", s ? n : 0);
+    fputs(b.ptr ? b.ptr : "\"\"", fp);
+    buf_free(&b);
+}
+
+static char *token_oracle_read_file(const char *path, size_t *len_out) {
+    if (len_out) *len_out = 0;
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return NULL;
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+        return NULL;
+    }
+    long n = ftell(fp);
+    if (n < 0) {
+        fclose(fp);
+        return NULL;
+    }
+    rewind(fp);
+    char *data = xmalloc((size_t)n + 1);
+    if ((size_t)n != 0 && fread(data, 1, (size_t)n, fp) != (size_t)n) {
+        fclose(fp);
+        free(data);
+        return NULL;
+    }
+    fclose(fp);
+    data[n] = '\0';
+    if (len_out) *len_out = (size_t)n;
+    return data;
+}
+
+static void token_oracle_write_token(FILE *fp, ds4_engine *engine, int token) {
+    size_t len = 0;
+    char *text = ds4_token_text(engine, token, &len);
+    fprintf(fp, "{\"id\":%d,\"text\":", token);
+    token_oracle_write_json_bytes(fp, text, len);
+    fputs(",\"bytes\":[", fp);
+    for (size_t i = 0; i < len; i++) {
+        if (i) fputc(',', fp);
+        fprintf(fp, "%u", (unsigned)(unsigned char)text[i]);
+    }
+    fputs("]}", fp);
+    free(text);
+}
+
+static void token_oracle_write_tokens(FILE *fp, ds4_engine *engine, const ds4_tokens *tokens) {
+    fputc('[', fp);
+    for (int i = 0; tokens && i < tokens->len; i++) {
+        if (i) fputc(',', fp);
+        token_oracle_write_token(fp, engine, tokens->v[i]);
+    }
+    fputc(']', fp);
+}
+
+static void token_oracle_hash_tokens(ds4_engine *engine, const ds4_tokens *tokens,
+                                     char ids_sha[65], char pieces_sha[65]) {
+    buf ids = {0};
+    buf pieces = {0};
+    for (int i = 0; tokens && i < tokens->len; i++) {
+        const int token = tokens->v[i];
+        buf_printf(&ids, "%d\n", token);
+        size_t len = 0;
+        char *text = ds4_token_text(engine, token, &len);
+        buf_printf(&pieces, "%d:%zu:", token, len);
+        buf_append(&pieces, text, len);
+        buf_putc(&pieces, '\n');
+        free(text);
+    }
+    ds4_sha256_hex(ids.ptr ? ids.ptr : "", ids.len, ids_sha);
+    ds4_sha256_hex(pieces.ptr ? pieces.ptr : "", pieces.len, pieces_sha);
+    buf_free(&ids);
+    buf_free(&pieces);
+}
+
+static void token_oracle_dump_text_case(FILE *fp, ds4_engine *engine,
+                                        const char *name, const char *mode,
+                                        const char *text, bool rendered,
+                                        bool *first) {
+    if (*first) *first = false;
+    else fputs(",\n", fp);
+    ds4_tokens tokens = {0};
+    if (rendered) ds4_tokenize_rendered_chat(engine, text, &tokens);
+    else ds4_tokenize_text(engine, text, &tokens);
+    char sha[65];
+    char token_ids_sha[65];
+    char token_pieces_sha[65];
+    ds4_sha256_hex(text, strlen(text), sha);
+    token_oracle_hash_tokens(engine, &tokens, token_ids_sha, token_pieces_sha);
+    fputs("    {\"name\": ", fp);
+    token_oracle_write_json_cstr(fp, name);
+    fputs(", \"mode\": ", fp);
+    token_oracle_write_json_cstr(fp, mode);
+    fputs(", \"input\": ", fp);
+    token_oracle_write_json_cstr(fp, text);
+    fputs(", \"input_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, sha);
+    fputs(", \"token_ids_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, token_ids_sha);
+    fputs(", \"token_pieces_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, token_pieces_sha);
+    fprintf(fp, ", \"token_count\": %d, \"tokens\": ", tokens.len);
+    token_oracle_write_tokens(fp, engine, &tokens);
+    fputc('}', fp);
+    ds4_tokens_free(&tokens);
+}
+
+static void token_oracle_dump_request_case(FILE *fp, server *s,
+                                           const char *name, const char *fixture_path,
+                                           const char *body, size_t body_len,
+                                           int ctx_size, bool *first) {
+    if (*first) *first = false;
+    else fputs(",\n", fp);
+
+    request req;
+    char err[160];
+    bool ok = parse_chat_request(s->engine, s, body, s->default_tokens,
+                                 ctx_size, &req, err, sizeof(err));
+    char body_sha[65];
+    ds4_sha256_hex(body, body_len, body_sha);
+    fputs("    {\"name\": ", fp);
+    token_oracle_write_json_cstr(fp, name);
+    fputs(", \"endpoint\": \"/v1/chat/completions\", \"fixture\": ", fp);
+    if (fixture_path) token_oracle_write_json_cstr(fp, fixture_path);
+    else fputs("null", fp);
+    fputs(", \"request_body_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, body_sha);
+    fputs(", \"request_body_bytes\": ", fp);
+    fprintf(fp, "%zu", body_len);
+    fputs(", \"parse_ok\": ", fp);
+    fputs(ok ? "true" : "false", fp);
+    if (!ok) {
+        fputs(", \"error\": ", fp);
+        token_oracle_write_json_cstr(fp, err);
+        fputc('}', fp);
+        return;
+    }
+    char prompt_sha[65];
+    char token_ids_sha[65];
+    char token_pieces_sha[65];
+    ds4_sha256_hex(req.prompt_text ? req.prompt_text : "", strlen(req.prompt_text ? req.prompt_text : ""), prompt_sha);
+    token_oracle_hash_tokens(s->engine, &req.prompt, token_ids_sha, token_pieces_sha);
+    fputs(", \"think_mode\": ", fp);
+    token_oracle_write_json_cstr(fp, ds4_think_mode_name(req.think_mode));
+    fputs(", \"has_tools\": ", fp);
+    fputs(req.has_tools ? "true" : "false", fp);
+    fputs(", \"prompt_preserves_reasoning\": ", fp);
+    fputs(req.prompt_preserves_reasoning ? "true" : "false", fp);
+    fputs(", \"prompt_text\": ", fp);
+    token_oracle_write_json_cstr(fp, req.prompt_text ? req.prompt_text : "");
+    fputs(", \"prompt_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, prompt_sha);
+    fputs(", \"token_ids_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, token_ids_sha);
+    fputs(", \"token_pieces_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, token_pieces_sha);
+    fprintf(fp, ", \"token_count\": %d, \"tokens\": ", req.prompt.len);
+    token_oracle_write_tokens(fp, s->engine, &req.prompt);
+    fputc('}', fp);
+    request_free(&req);
+}
+
+typedef struct {
+    const char *op;
+    const char *role;
+    const char *content;
+    ds4_think_mode think_mode;
+} cli_oracle_op;
+
+static void token_oracle_dump_cli_case(FILE *fp, ds4_engine *engine,
+                                       const char *name, const cli_oracle_op *ops,
+                                       size_t n_ops, bool *first) {
+    if (*first) *first = false;
+    else fputs(",\n", fp);
+
+    ds4_tokens tokens = {0};
+    fputs("    {\"name\": ", fp);
+    token_oracle_write_json_cstr(fp, name);
+    fputs(", \"operations\": [", fp);
+    for (size_t i = 0; i < n_ops; i++) {
+        const cli_oracle_op *op = &ops[i];
+        if (i) fputs(", ", fp);
+        fputs("{\"op\": ", fp);
+        token_oracle_write_json_cstr(fp, op->op);
+        if (op->role) {
+            fputs(", \"role\": ", fp);
+            token_oracle_write_json_cstr(fp, op->role);
+        }
+        if (op->content) {
+            fputs(", \"content\": ", fp);
+            token_oracle_write_json_cstr(fp, op->content);
+        }
+        if (!strcmp(op->op, "assistant_prefix")) {
+            fputs(", \"think_mode\": ", fp);
+            token_oracle_write_json_cstr(fp, ds4_think_mode_name(op->think_mode));
+        }
+        fputc('}', fp);
+
+        if (!strcmp(op->op, "begin")) {
+            ds4_chat_begin(engine, &tokens);
+        } else if (!strcmp(op->op, "max_effort_prefix")) {
+            ds4_chat_append_max_effort_prefix(engine, &tokens);
+        } else if (!strcmp(op->op, "append_message")) {
+            ds4_chat_append_message(engine, &tokens, op->role, op->content);
+        } else if (!strcmp(op->op, "assistant_prefix")) {
+            ds4_chat_append_assistant_prefix(engine, &tokens, op->think_mode);
+        }
+    }
+    char token_ids_sha[65];
+    char token_pieces_sha[65];
+    token_oracle_hash_tokens(engine, &tokens, token_ids_sha, token_pieces_sha);
+    fputs("], \"token_ids_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, token_ids_sha);
+    fputs(", \"token_pieces_sha256\": ", fp);
+    token_oracle_write_json_cstr(fp, token_pieces_sha);
+    fprintf(fp, ", \"token_count\": %d, \"tokens\": ", tokens.len);
+    token_oracle_write_tokens(fp, engine, &tokens);
+    fputc('}', fp);
+    ds4_tokens_free(&tokens);
+}
+
+static int token_oracle_dump_json(server *s, FILE *fp, const char *model_path,
+                                  const char *model_sha256,
+                                  const char *fixture_dir,
+                                  int ctx_size) {
+    struct stat st;
+    if (stat(model_path, &st) != 0) {
+        fprintf(stderr, "ds4-server: failed to stat model for token oracle: %s\n", strerror(errno));
+        return 1;
+    }
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.tokenization.v1\",\n", fp);
+    fputs("  \"source\": \"current-c-server-token-oracle\",\n", fp);
+    fputs("  \"model\": {\"path\": ", fp);
+    token_oracle_write_json_cstr(fp, model_path);
+    fprintf(fp, ", \"size\": %" PRIu64 ", \"sha256\": ",
+            (uint64_t)st.st_size);
+    token_oracle_write_json_cstr(fp, model_sha256 ? model_sha256 : "");
+    fputs("},\n", fp);
+
+    fputs("  \"tokenizer\": ", fp);
+    if (ds4_engine_dump_tokenizer_identity_json(s->engine, fp) != 0) return 1;
+    fputs(",\n", fp);
+
+    fputs("  \"text_cases\": [\n", fp);
+    bool first = true;
+    token_oracle_dump_text_case(fp, s->engine, "ascii_basic", "plain_text",
+                                "Hello, world!", false, &first);
+    token_oracle_dump_text_case(fp, s->engine, "numbers_and_spaces", "plain_text",
+                                "123456789 42 007", false, &first);
+    token_oracle_dump_text_case(fp, s->engine, "code_newlines", "plain_text",
+                                "for (int i = 0; i < 10; i++) {\n  printf(\"%d\\n\", i);\n}\n",
+                                false, &first);
+    token_oracle_dump_text_case(fp, s->engine, "utf8_mixed", "plain_text",
+                                "Cafe\xcc\x81 世界 カタカナ", false, &first);
+    token_oracle_dump_text_case(fp, s->engine, "literal_special_looking_user_text", "plain_text",
+                                "<｜User｜> literal ｜DSML｜ marker </think>", false, &first);
+    fputs("\n  ],\n", fp);
+
+    fputs("  \"rendered_chat_cases\": [\n", fp);
+    first = true;
+    token_oracle_dump_text_case(fp, s->engine, "rendered_specials", "rendered_chat",
+                                "<｜begin▁of▁sentence｜>System<｜User｜>Hello<｜Assistant｜><think>Reason</think>Answer｜DSML｜<｜end▁of▁sentence｜>",
+                                true, &first);
+    token_oracle_dump_text_case(fp, s->engine, "rendered_tool_result", "rendered_chat",
+                                "<｜begin▁of▁sentence｜><｜User｜><tool_result>a & b </tool_result><｜Assistant｜></think>",
+                                true, &first);
+    fputs("\n  ],\n", fp);
+
+    fputs("  \"server_request_cases\": [\n", fp);
+    first = true;
+    static const char *fixture_files[] = {
+        "chat_basic.json",
+        "chat_stream.json",
+        "chat_tool_call.json",
+        "chat_thinking_disabled.json",
+        "chat_cache_seed.json",
+        "chat_cache_continuation.json",
+    };
+    for (size_t i = 0; i < sizeof(fixture_files) / sizeof(fixture_files[0]); i++) {
+        char *path = path_join(fixture_dir, fixture_files[i]);
+        size_t body_len = 0;
+        char *body = token_oracle_read_file(path, &body_len);
+        if (!body) {
+            fprintf(stderr, "ds4-server: failed to read token oracle fixture %s\n", path);
+            free(path);
+            return 1;
+        }
+        char name[128];
+        snprintf(name, sizeof(name), "m0.4/%.*s",
+                 (int)(strlen(fixture_files[i]) - strlen(".json")),
+                 fixture_files[i]);
+        token_oracle_dump_request_case(fp, s, name, path, body, body_len, ctx_size, &first);
+        free(body);
+        free(path);
+    }
+    const char *max_req =
+        "{\"model\":\"deepseek-reasoner\",\"reasoning_effort\":\"max\","
+        "\"messages\":[{\"role\":\"developer\",\"content\":\"Use terse diagnostics.\"},"
+        "{\"role\":\"user\",\"content\":\"Explain tokenizer boundaries.\"}],"
+        "\"max_tokens\":1}";
+    token_oracle_dump_request_case(fp, s, "builtin_thinking_max_developer",
+                                   NULL, max_req, strlen(max_req), ctx_size, &first);
+    const char *function_req =
+        "{\"messages\":[{\"role\":\"user\",\"content\":\"run tool\"},"
+        "{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"call_1\","
+        "\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"query\\\":\\\"ds4\\\"}\"}}]},"
+        "{\"role\":\"function\",\"name\":\"lookup\",\"content\":\"result </tool_result> & raw\"}],"
+        "\"max_tokens\":1}";
+    token_oracle_dump_request_case(fp, s, "builtin_function_result",
+                                   NULL, function_req, strlen(function_req), ctx_size, &first);
+    const char *empty_tools_req =
+        "{\"messages\":[{\"role\":\"user\",\"content\":\"no tools\"}],"
+        "\"tools\":[],\"functions\":[],\"max_tokens\":1}";
+    token_oracle_dump_request_case(fp, s, "builtin_empty_tools_arrays",
+                                   NULL, empty_tools_req, strlen(empty_tools_req), ctx_size, &first);
+    fputs("\n  ],\n", fp);
+
+    fputs("  \"cli_chat_cases\": [\n", fp);
+    first = true;
+    const cli_oracle_op cli_basic[] = {
+        {"begin", NULL, NULL, DS4_THINK_HIGH},
+        {"append_message", "system", "You are terse.", DS4_THINK_HIGH},
+        {"append_message", "user", "Hello", DS4_THINK_HIGH},
+        {"assistant_prefix", NULL, NULL, DS4_THINK_HIGH},
+    };
+    token_oracle_dump_cli_case(fp, s->engine, "cli_basic_high", cli_basic,
+                               sizeof(cli_basic) / sizeof(cli_basic[0]), &first);
+    const cli_oracle_op cli_max[] = {
+        {"begin", NULL, NULL, DS4_THINK_MAX},
+        {"max_effort_prefix", NULL, NULL, DS4_THINK_MAX},
+        {"append_message", "developer", "Prefer exact token IDs.", DS4_THINK_MAX},
+        {"append_message", "user", "Why do chunks matter?", DS4_THINK_MAX},
+        {"assistant_prefix", NULL, NULL, DS4_THINK_MAX},
+    };
+    token_oracle_dump_cli_case(fp, s->engine, "cli_developer_max", cli_max,
+                               sizeof(cli_max) / sizeof(cli_max[0]), &first);
+    const cli_oracle_op cli_tools[] = {
+        {"begin", NULL, NULL, DS4_THINK_NONE},
+        {"append_message", "user", "Use the tool.", DS4_THINK_NONE},
+        {"append_message", "assistant", "done", DS4_THINK_NONE},
+        {"append_message", "tool", "tool output </tool_result>", DS4_THINK_NONE},
+        {"append_message", "function", "function output", DS4_THINK_NONE},
+        {"assistant_prefix", NULL, NULL, DS4_THINK_NONE},
+    };
+    token_oracle_dump_cli_case(fp, s->engine, "cli_tool_function_none", cli_tools,
+                               sizeof(cli_tools) / sizeof(cli_tools[0]), &first);
+    fputs("\n  ]\n", fp);
+    fputs("}\n", fp);
+    return ferror(fp) ? 1 : 0;
+}
+
 
 
 
@@ -10907,6 +11354,9 @@ typedef struct {
     int default_tokens;
     const char *chdir_path;
     const char *trace_path;
+    const char *token_oracle_output_path;
+    const char *token_oracle_fixture_dir;
+    const char *token_oracle_model_sha256;
     const char *kv_disk_dir;
     uint64_t kv_disk_space_mb;
     kv_cache_options kv_cache;
@@ -11029,6 +11479,12 @@ static void usage(FILE *fp) {
         "      Add Access-Control-Allow-* headers for browser JS clients. Does not change --host.\n"
         "  --trace FILE\n"
         "      Write a human-readable session trace: prompts, cache decisions, output, tool calls.\n"
+        "  --dump-token-oracle FILE\n"
+        "      Dump tokenizer, rendered prompt, and CLI prompt token oracle JSON, then exit.\n"
+        "  --token-oracle-fixture-dir DIR\n"
+        "      Server request fixture directory for --dump-token-oracle. Default: ds4-parity/baselines/server-fixtures/m0.4\n"
+        "  --token-oracle-model-sha256 HEX\n"
+        "      Recorded model SHA256 to include in --dump-token-oracle output.\n"
         "\n"
         "Thinking and sampling:\n"
         "  DeepSeek-compatible chat requests default to thinking mode with high effort.\n"
@@ -11109,6 +11565,7 @@ static server_config parse_options(int argc, char **argv) {
         .port = 8000,
         .ctx_size = 32768,
         .default_tokens = 393216,
+        .token_oracle_fixture_dir = "ds4-parity/baselines/server-fixtures/m0.4",
         .tool_memory_max_ids = DS4_TOOL_MEMORY_DEFAULT_MAX_IDS,
     };
     c.kv_cache = kv_cache_default_options();
@@ -11143,6 +11600,12 @@ static server_config parse_options(int argc, char **argv) {
             c.enable_cors = true;
         } else if (!strcmp(arg, "--trace")) {
             c.trace_path = need_arg(&i, argc, argv, arg);
+        } else if (!strcmp(arg, "--dump-token-oracle")) {
+            c.token_oracle_output_path = need_arg(&i, argc, argv, arg);
+        } else if (!strcmp(arg, "--token-oracle-fixture-dir")) {
+            c.token_oracle_fixture_dir = need_arg(&i, argc, argv, arg);
+        } else if (!strcmp(arg, "--token-oracle-model-sha256")) {
+            c.token_oracle_model_sha256 = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--kv-disk-dir")) {
             c.kv_disk_dir = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--kv-disk-space-mb")) {
@@ -11221,6 +11684,35 @@ int main(int argc, char **argv) {
 
     ds4_engine *engine = NULL;
     if (ds4_engine_open(&engine, &cfg.engine) != 0) return 1;
+
+    if (cfg.token_oracle_output_path) {
+        FILE *fp = fopen(cfg.token_oracle_output_path, "wb");
+        if (!fp) {
+            server_log(DS4_LOG_DEFAULT, "ds4-server: failed to open token oracle output %s: %s",
+                       cfg.token_oracle_output_path, strerror(errno));
+            ds4_engine_close(engine);
+            return 1;
+        }
+        server s;
+        memset(&s, 0, sizeof(s));
+        s.engine = engine;
+        s.default_tokens = cfg.default_tokens;
+        s.tool_mem.max_entries = cfg.tool_memory_max_ids;
+        pthread_mutex_init(&s.tool_mu, NULL);
+        int rc = token_oracle_dump_json(&s, fp, cfg.engine.model_path,
+                                        cfg.token_oracle_model_sha256,
+                                        cfg.token_oracle_fixture_dir,
+                                        cfg.ctx_size);
+        if (fclose(fp) != 0 && rc == 0) {
+            server_log(DS4_LOG_DEFAULT, "ds4-server: failed to close token oracle output %s: %s",
+                       cfg.token_oracle_output_path, strerror(errno));
+            rc = 1;
+        }
+        tool_memory_free(&s.tool_mem);
+        pthread_mutex_destroy(&s.tool_mu);
+        ds4_engine_close(engine);
+        return rc;
+    }
 
     log_context_memory(cfg.engine.backend, cfg.ctx_size);
 
@@ -13999,6 +14491,12 @@ static void test_sha1_bytes_hex_matches_known_vector(void) {
     TEST_ASSERT(!strcmp(sha, "a9993e364706816aba3e25717850c26c9cd0d89d"));
 }
 
+static void test_sha256_bytes_hex_matches_known_vector(void) {
+    char sha[65];
+    ds4_sha256_hex("abc", 3, sha);
+    TEST_ASSERT(!strcmp(sha, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+}
+
 static void test_kv_stub_file(const char *dir, const char *sha,
                               uint8_t reason, uint32_t tokens, uint32_t hits,
                               uint64_t last_used, uint64_t payload_bytes) {
@@ -14775,6 +15273,7 @@ static void ds4_server_unit_tests_run(void) {
     test_kv_cache_cold_store_suppresses_duplicate_continued_boundary();
     test_kv_cache_file_size_must_fit_budget();
     test_sha1_bytes_hex_matches_known_vector();
+    test_sha256_bytes_hex_matches_known_vector();
     test_kv_cache_lookup_uses_longest_text_prefix();
     test_kv_cache_eviction_values_fresh_snapshots();
     test_kv_cache_eviction_protects_current_store();

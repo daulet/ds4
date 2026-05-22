@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.2 C Token And Prompt Dump Oracle
-- Last validated source commit: `b7a485ca1b18471a048c022b9e790650dc918322`
+- Active item: M5.3 Rust Vocabulary Loader And JoyAI BPE
+- Last validated source commit: `ed4b72a201b401f0ccb4f060d83eb15f87f17949`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -248,3 +248,40 @@
   token decoding ownership, DSML chunk/EOF parser schedules, tool-schema
   fixture variants, and request body hashing; final Claude review returned
   `NO BLOCKERS`.
+- M5.2 added current-C tokenizer and prompt oracle dumping through
+  `./ds4-server --dump-token-oracle`, with tokenizer identity hashing in
+  `ds4_engine_dump_tokenizer_identity_json`, shared `ds4_sha256_hex`, raw
+  request-body hashing, server prompt/token fixtures, and CLI `ds4_chat_*`
+  operation/token-stream fixtures. The dump mode opens the model through the
+  existing engine path but exits before session/listener/worker startup, and
+  advisory token text emission preserves valid UTF-8 while escaping invalid
+  raw bytes so future byte-fallback fixtures still produce valid JSON.
+- M5.2 committed
+  `ds4-parity/baselines/tokenization/m5.2/current-c.json` captured on B300
+  `ds4-rust-port-b300` from `/workspace/ds4/ds4flash.gguf`; dump size is
+  124,497 bytes and dump SHA256 is
+  `b0689f47abe63750ab3191772d5661d5f0f433e954bcfd0de6a0e55a747489e9`.
+  The tokenizer identity records 129,280 tokens, token-bytes SHA256
+  `c92251fc634ff01cc6767d2e3ce1d368e72b5f02b647983d4410eb0c46693fa3`,
+  127,741 merge records, merge-pairs SHA256
+  `8100a9693dc10b8aad79abbe20b172545ff5e1e6051e0705cc91e73b88e3751f`,
+  the seven rendered-control specials, and 863 literal-special tokens.
+- M5.2 B300 validation passed after copying the changed source/checker into
+  `/workspace/ds4`, building with `make clean ds4-server CUDA_ARCH=native`,
+  dumping the oracle from the q2-imatrix model, and running
+  `python3 ds4-parity/check_tokenization_dump.py
+  /tmp/ds4-tokenization-m5.2-current-c.json --negative-test`; the final B300
+  checker reported `tokenization schema: PASS, 13409 checks` and
+  `tokenization negative tests: PASS, 12 checks`.
+- M5.2 local validation passed for
+  `python3 ds4-parity/check_tokenization_dump.py
+  ds4-parity/baselines/tokenization/m5.2/current-c.json --manifest
+  ds4-parity/baselines/tokenization/m5.2/manifest.json --negative-test`,
+  with `tokenization schema: PASS, 13409 checks`, `tokenization manifest:
+  PASS, 11 checks`, and `tokenization negative tests: PASS, 12 checks`;
+  `python3 -m py_compile ds4-parity/check_tokenization_dump.py`,
+  `./ds4_test --server`, `git diff --check`, `arch -arm64 make ds4-server`,
+  `cargo test --workspace`, and `arch -arm64 make cpu` also passed.
+- M5.2 Claude review returned `NO BLOCKERS`; after hardening invalid UTF-8
+  token text escaping and checker pinning for exact special/server semantics,
+  the follow-up Claude review also returned `NO BLOCKERS`.
