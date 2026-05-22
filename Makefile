@@ -36,12 +36,12 @@ endif
 .PHONY: all help clean test cpu cuda cuda-spark cuda-generic cuda-regression rust-test
 
 ifeq ($(UNAME_S),Darwin)
-all: ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump
+all: ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump
 
 help:
 	@echo "DS4 build targets:"
-	@echo "  make              Build Metal ./ds4, ./ds4-server, ./ds4-bench, ./ds4-eval, ./ds4-agent, ./ds4-metadata-dump, ./ds4-sampling-dump, ./ds4-logits-dump, ./ds4-decode-policy-dump, ./ds4-kv-policy-dump, ./ds4-kvc-file-dump, and ./ds4-kv-trailer-dump"
-	@echo "  make cpu          Build CPU-only ./ds4, ./ds4-server, ./ds4-bench, ./ds4-eval, ./ds4-agent, ./ds4-metadata-dump, ./ds4-sampling-dump, ./ds4-logits-dump, ./ds4-decode-policy-dump, ./ds4-kv-policy-dump, ./ds4-kvc-file-dump, and ./ds4-kv-trailer-dump"
+	@echo "  make              Build Metal ./ds4, ./ds4-server, ./ds4-bench, ./ds4-eval, ./ds4-agent, ./ds4-metadata-dump, ./ds4-sampling-dump, ./ds4-logits-dump, ./ds4-decode-policy-dump, ./ds4-kv-policy-dump, ./ds4-kvc-file-dump, ./ds4-kv-trailer-dump, and ./ds4-session-payload-dump"
+	@echo "  make cpu          Build CPU-only ./ds4, ./ds4-server, ./ds4-bench, ./ds4-eval, ./ds4-agent, ./ds4-metadata-dump, ./ds4-sampling-dump, ./ds4-logits-dump, ./ds4-decode-policy-dump, ./ds4-kv-policy-dump, ./ds4-kvc-file-dump, ./ds4-kv-trailer-dump, and ./ds4-session-payload-dump"
 	@echo "  make rust-test    Run Rust workspace tests"
 	@echo "  make test         Build and run tests"
 	@echo "  make clean        Remove build outputs"
@@ -82,7 +82,10 @@ ds4-kvc-file-dump: ds4_kvc_file_dump.o ds4_kvstore.o $(CORE_OBJS)
 ds4-kv-trailer-dump: ds4_kv_trailer_dump.o ds4_kvstore.o rax.o $(CORE_OBJS)
 	$(CC) $(CFLAGS) -o $@ ds4_kv_trailer_dump.o ds4_kvstore.o rax.o $(CORE_OBJS) $(METAL_LDLIBS)
 
-cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
+ds4-session-payload-dump: ds4_session_payload_dump.o $(CORE_OBJS)
+	$(CC) $(CFLAGS) -o $@ ds4_session_payload_dump.o $(CORE_OBJS) $(METAL_LDLIBS)
+
+cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_session_payload_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
 	$(CC) $(CFLAGS) -o ds4 ds4_cli_cpu.o linenoise.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-server ds4_server_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-bench ds4_bench_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
@@ -95,6 +98,7 @@ cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu
 	$(CC) $(CFLAGS) -o ds4-kv-policy-dump ds4_kv_policy_dump_cpu.o ds4_kvstore.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-kvc-file-dump ds4_kvc_file_dump_cpu.o ds4_kvstore.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-kv-trailer-dump ds4_kv_trailer_dump_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o ds4-session-payload-dump ds4_session_payload_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 
 cuda-regression:
 	@echo "cuda-regression requires a CUDA build"
@@ -106,16 +110,16 @@ help:
 	@echo "  make cuda-spark          Build CUDA for DGX Spark / GB10"
 	@echo "  make cuda-generic        Build CUDA for a generic local CUDA GPU"
 	@echo "  make cuda CUDA_ARCH=sm_N Build CUDA with an explicit nvcc -arch value"
-	@echo "  make cpu                 Build CPU-only ./ds4, ./ds4-server, ./ds4-bench, ./ds4-eval, ./ds4-agent, ./ds4-metadata-dump, ./ds4-sampling-dump, ./ds4-logits-dump, ./ds4-decode-policy-dump, ./ds4-kv-policy-dump, ./ds4-kvc-file-dump, and ./ds4-kv-trailer-dump"
+	@echo "  make cpu                 Build CPU-only ./ds4, ./ds4-server, ./ds4-bench, ./ds4-eval, ./ds4-agent, ./ds4-metadata-dump, ./ds4-sampling-dump, ./ds4-logits-dump, ./ds4-decode-policy-dump, ./ds4-kv-policy-dump, ./ds4-kvc-file-dump, ./ds4-kv-trailer-dump, and ./ds4-session-payload-dump"
 	@echo "  make rust-test           Run Rust workspace tests"
 	@echo "  make test                Build and run tests"
 	@echo "  make clean               Remove build outputs"
 
 cuda-spark:
-	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump CUDA_ARCH=
+	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump CUDA_ARCH=
 
 cuda-generic:
-	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump CUDA_ARCH=native
+	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump CUDA_ARCH=native
 
 cuda:
 	@if [ -z "$(strip $(CUDA_ARCH))" ]; then \
@@ -123,7 +127,7 @@ cuda:
 		echo "       or use make cuda-spark / make cuda-generic"; \
 		exit 2; \
 	fi
-	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump CUDA_ARCH="$(CUDA_ARCH)"
+	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump CUDA_ARCH="$(CUDA_ARCH)"
 
 ds4: ds4_cli.o linenoise.o $(CORE_OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
@@ -161,7 +165,10 @@ ds4-kvc-file-dump: ds4_kvc_file_dump.o ds4_kvstore.o $(CORE_OBJS)
 ds4-kv-trailer-dump: ds4_kv_trailer_dump.o ds4_kvstore.o rax.o $(CORE_OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
 
-cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
+ds4-session-payload-dump: ds4_session_payload_dump.o $(CORE_OBJS)
+	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
+
+cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_session_payload_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
 	$(CC) $(CFLAGS) -o ds4 ds4_cli_cpu.o linenoise.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-server ds4_server_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-bench ds4_bench_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
@@ -174,6 +181,7 @@ cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu
 	$(CC) $(CFLAGS) -o ds4-kv-policy-dump ds4_kv_policy_dump_cpu.o ds4_kvstore.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-kvc-file-dump ds4_kvc_file_dump_cpu.o ds4_kvstore.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-kv-trailer-dump ds4_kv_trailer_dump_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o ds4-session-payload-dump ds4_session_payload_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 
 cuda-regression: tests/cuda_long_context_smoke
 	./tests/cuda_long_context_smoke
@@ -217,6 +225,9 @@ ds4_kvc_file_dump.o: ds4_kvc_file_dump.c ds4.h ds4_kvstore.h
 
 ds4_kv_trailer_dump.o: ds4_kv_trailer_dump.c ds4_server.c ds4.h ds4_kvstore.h rax.h
 	$(CC) $(CFLAGS) -Wno-unused-function -c -o $@ ds4_kv_trailer_dump.c
+
+ds4_session_payload_dump.o: ds4_session_payload_dump.c ds4.h
+	$(CC) $(CFLAGS) -c -o $@ ds4_session_payload_dump.c
 
 ds4_kvstore.o: ds4_kvstore.c ds4_kvstore.h ds4.h
 	$(CC) $(CFLAGS) -c -o $@ ds4_kvstore.c
@@ -272,6 +283,9 @@ ds4_kvc_file_dump_cpu.o: ds4_kvc_file_dump.c ds4.h ds4_kvstore.h
 ds4_kv_trailer_dump_cpu.o: ds4_kv_trailer_dump.c ds4_server.c ds4.h ds4_kvstore.h rax.h
 	$(CC) $(CFLAGS) -DDS4_NO_GPU -Wno-unused-function -c -o $@ ds4_kv_trailer_dump.c
 
+ds4_session_payload_dump_cpu.o: ds4_session_payload_dump.c ds4.h
+	$(CC) $(CFLAGS) -DDS4_NO_GPU -c -o $@ ds4_session_payload_dump.c
+
 ds4_metal.o: ds4_metal.m ds4_gpu.h $(METAL_SRCS)
 	$(CC) $(OBJCFLAGS) -c -o $@ ds4_metal.m
 
@@ -295,4 +309,4 @@ rust-test:
 	cargo test --workspace
 
 clean:
-	rm -f ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4_cpu ds4_native ds4_server_test ds4_test *.o tests/cuda_long_context_smoke tests/cuda_long_context_smoke.o
+	rm -f ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4_cpu ds4_native ds4_server_test ds4_test *.o tests/cuda_long_context_smoke tests/cuda_long_context_smoke.o

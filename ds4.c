@@ -17715,6 +17715,490 @@ void ds4_session_snapshot_free(ds4_session_snapshot *snap) {
     memset(snap, 0, sizeof(*snap));
 }
 
+typedef struct {
+    uint8_t *ptr;
+    size_t len;
+    size_t cap;
+} payload_shape_bytes;
+
+typedef struct {
+    uint64_t token_bytes;
+    uint64_t logits_bytes;
+    uint64_t comp_count_bytes;
+    uint64_t index_count_bytes;
+    uint64_t raw_row_bytes;
+    uint64_t attn_comp_row_bytes;
+    uint64_t attn_state_bytes;
+    uint64_t index_comp_row_bytes;
+    uint64_t index_state_bytes;
+} payload_shape_sections;
+
+static uint32_t payload_shape_prefill_cap(uint32_t ctx_size) {
+    if (ctx_size == 0) return 1;
+    return ctx_size > 2048u ? 2048u : ctx_size;
+}
+
+static uint32_t payload_shape_cpu_comp_cap(uint32_t ctx_size) {
+    uint32_t cap = ctx_size / 4u + 2u;
+    if (cap < 2u) cap = 2u;
+    return cap;
+}
+
+static void payload_shape_default_header(uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS],
+                                         uint32_t ctx_size, uint32_t tokens) {
+    const uint32_t raw_cap = ds4_default_raw_cap(ctx_size);
+    const uint32_t raw_live = tokens < raw_cap ? tokens : raw_cap;
+    h[0] = DS4_SESSION_PAYLOAD_MAGIC;
+    h[1] = DS4_SESSION_PAYLOAD_VERSION;
+    h[2] = ctx_size;
+    h[3] = payload_shape_prefill_cap(ctx_size);
+    h[4] = raw_cap;
+    h[5] = raw_cap;
+    h[6] = payload_shape_cpu_comp_cap(ctx_size);
+    h[7] = tokens;
+    h[8] = DS4_N_LAYER;
+    h[9] = DS4_N_HEAD_DIM;
+    h[10] = DS4_N_INDEXER_HEAD_DIM;
+    h[11] = DS4_N_VOCAB;
+    h[12] = raw_live;
+}
+
+static void payload_shape_vec_reserve(payload_shape_bytes *v, size_t extra) {
+    if (extra > SIZE_MAX - v->len) ds4_die("session payload fixture overflow");
+    const size_t need = v->len + extra;
+    if (need <= v->cap) return;
+    size_t cap = v->cap ? v->cap : 4096;
+    while (cap < need) {
+        if (cap > SIZE_MAX / 2u) {
+            cap = need;
+            break;
+        }
+        cap *= 2u;
+    }
+    v->ptr = xrealloc(v->ptr, cap);
+    v->cap = cap;
+}
+
+static void payload_shape_vec_append(payload_shape_bytes *v, const void *ptr, size_t len) {
+    payload_shape_vec_reserve(v, len);
+    memcpy(v->ptr + v->len, ptr, len);
+    v->len += len;
+}
+
+static void payload_shape_vec_append_zeros(payload_shape_bytes *v, uint64_t len) {
+    if (len > (uint64_t)SIZE_MAX) ds4_die("session payload fixture too large");
+    const size_t n = (size_t)len;
+    payload_shape_vec_reserve(v, n);
+    memset(v->ptr + v->len, 0, n);
+    v->len += n;
+}
+
+static void payload_shape_vec_append_u32(payload_shape_bytes *v, uint32_t x) {
+    uint8_t b[4];
+    payload_put_u32(b, x);
+    payload_shape_vec_append(v, b, sizeof(b));
+}
+
+static void payload_shape_vec_free(payload_shape_bytes *v) {
+    free(v->ptr);
+    memset(v, 0, sizeof(*v));
+}
+
+static void payload_shape_sections_compute(const uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS],
+                                           const uint32_t n_comp[DS4_N_LAYER],
+                                           const uint32_t n_index_comp[DS4_N_LAYER],
+                                           payload_shape_sections *sections) {
+    memset(sections, 0, sizeof(*sections));
+    sections->token_bytes = (uint64_t)h[7] * sizeof(uint32_t);
+    sections->logits_bytes = (uint64_t)DS4_N_VOCAB * sizeof(float);
+    sections->comp_count_bytes = (uint64_t)DS4_N_LAYER * sizeof(uint32_t);
+    sections->index_count_bytes = (uint64_t)DS4_N_LAYER * sizeof(uint32_t);
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        sections->raw_row_bytes += (uint64_t)h[12] * DS4_N_HEAD_DIM * sizeof(float);
+        const uint32_t ratio = ds4_layer_compress_ratio(il);
+        if (ratio == 0) continue;
+        sections->attn_comp_row_bytes += (uint64_t)n_comp[il] * DS4_N_HEAD_DIM * sizeof(float);
+        sections->attn_state_bytes += 2ull * layer_attn_state_bytes(ratio);
+        if (ratio == 4) {
+            sections->index_comp_row_bytes += (uint64_t)n_index_comp[il] * DS4_N_INDEXER_HEAD_DIM * sizeof(float);
+            sections->index_state_bytes += 2ull * layer_index_state_bytes(ratio);
+        }
+    }
+}
+
+static uint64_t payload_shape_sections_total(const payload_shape_sections *sections) {
+    return (uint64_t)DS4_SESSION_PAYLOAD_U32_FIELDS * sizeof(uint32_t) +
+           sections->token_bytes +
+           sections->logits_bytes +
+           sections->comp_count_bytes +
+           sections->index_count_bytes +
+           sections->raw_row_bytes +
+           sections->attn_comp_row_bytes +
+           sections->attn_state_bytes +
+           sections->index_comp_row_bytes +
+           sections->index_state_bytes;
+}
+
+static void payload_shape_append_full(payload_shape_bytes *v,
+                                      const uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS],
+                                      const uint32_t n_comp[DS4_N_LAYER],
+                                      const uint32_t n_index_comp[DS4_N_LAYER]) {
+    for (uint32_t i = 0; i < DS4_SESSION_PAYLOAD_U32_FIELDS; i++) {
+        payload_shape_vec_append_u32(v, h[i]);
+    }
+    for (uint32_t i = 0; i < h[7]; i++) {
+        payload_shape_vec_append_u32(v, 1000u + i);
+    }
+    payload_shape_vec_append_zeros(v, (uint64_t)DS4_N_VOCAB * sizeof(float));
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        payload_shape_vec_append_u32(v, n_comp[il]);
+    }
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        payload_shape_vec_append_u32(v, n_index_comp[il]);
+    }
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        payload_shape_vec_append_zeros(v, (uint64_t)h[12] * DS4_N_HEAD_DIM * sizeof(float));
+        const uint32_t ratio = ds4_layer_compress_ratio(il);
+        if (ratio == 0) continue;
+        payload_shape_vec_append_zeros(v, (uint64_t)n_comp[il] * DS4_N_HEAD_DIM * sizeof(float));
+        payload_shape_vec_append_zeros(v, layer_attn_state_bytes(ratio));
+        payload_shape_vec_append_zeros(v, layer_attn_state_bytes(ratio));
+        if (ratio == 4) {
+            payload_shape_vec_append_zeros(v, (uint64_t)n_index_comp[il] * DS4_N_INDEXER_HEAD_DIM * sizeof(float));
+            payload_shape_vec_append_zeros(v, layer_index_state_bytes(ratio));
+            payload_shape_vec_append_zeros(v, layer_index_state_bytes(ratio));
+        }
+    }
+}
+
+static void payload_shape_append_prefix_to_first_comp(payload_shape_bytes *v,
+                                                      const uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS],
+                                                      uint32_t first_comp) {
+    for (uint32_t i = 0; i < DS4_SESSION_PAYLOAD_U32_FIELDS; i++) {
+        payload_shape_vec_append_u32(v, h[i]);
+    }
+    for (uint32_t i = 0; i < h[7]; i++) {
+        payload_shape_vec_append_u32(v, 1000u + i);
+    }
+    payload_shape_vec_append_zeros(v, (uint64_t)DS4_N_VOCAB * sizeof(float));
+    payload_shape_vec_append_u32(v, first_comp);
+}
+
+static void payload_shape_append_prefix_to_first_index(payload_shape_bytes *v,
+                                                       const uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS],
+                                                       const uint32_t n_comp[DS4_N_LAYER],
+                                                       uint32_t first_index) {
+    for (uint32_t i = 0; i < DS4_SESSION_PAYLOAD_U32_FIELDS; i++) {
+        payload_shape_vec_append_u32(v, h[i]);
+    }
+    for (uint32_t i = 0; i < h[7]; i++) {
+        payload_shape_vec_append_u32(v, 1000u + i);
+    }
+    payload_shape_vec_append_zeros(v, (uint64_t)DS4_N_VOCAB * sizeof(float));
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        payload_shape_vec_append_u32(v, n_comp[il]);
+    }
+    payload_shape_vec_append_u32(v, first_index);
+}
+
+static const char *payload_shape_error_code(const char *err) {
+    if (!err || !err[0]) return "unknown";
+    if (strcmp(err, "truncated session payload") == 0 ||
+        strcmp(err, "failed to read session payload") == 0)
+        return "truncated-payload";
+    if (strcmp(err, "unsupported session payload version") == 0)
+        return "unsupported-version";
+    if (strcmp(err, "KV checkpoint does not fit current context") == 0)
+        return "context-fit";
+    if (strcmp(err, "KV checkpoint was written for a different DS4 layout") == 0)
+        return "layout-mismatch";
+    if (strcmp(err, "KV checkpoint graph chunk layout does not match current runtime") == 0)
+        return "chunk-layout-mismatch";
+    if (strcmp(err, "KV checkpoint raw ring layout does not match current context") == 0)
+        return "raw-ring-mismatch";
+    if (strcmp(err, "KV checkpoint compressed cache is larger than current context") == 0)
+        return "compressed-cap-too-large";
+    if (strcmp(err, "KV checkpoint has invalid compressed row count") == 0)
+        return "invalid-compressed-row-count";
+    if (strcmp(err, "KV checkpoint has invalid indexer row count") == 0)
+        return "invalid-indexer-row-count";
+    if (strcmp(err, "KV checkpoint has trailing payload bytes") == 0)
+        return "trailing-payload-bytes";
+    return "unknown";
+}
+
+static void payload_shape_probe_load(const payload_shape_bytes *bytes,
+                                     const char **code,
+                                     bool *ok_out,
+                                     char err[128]) {
+    ds4_engine engine = {0};
+    ds4_session session = {0};
+    engine.backend = DS4_BACKEND_CPU;
+    session.engine = &engine;
+    session.ctx_size = 16;
+    session.prefill_cap = payload_shape_prefill_cap(16);
+    kv_cache_init(&session.cpu_cache, 16, 0);
+    cpu_decode_scratch_init(&session.cpu_scratch, 16);
+    session.logits = xmalloc((size_t)DS4_N_VOCAB * sizeof(session.logits[0]));
+
+    err[0] = '\0';
+    FILE *fp = fmemopen(bytes->ptr, bytes->len, "rb");
+    if (!fp) ds4_die("failed to open in-memory payload fixture");
+    const int rc = ds4_session_load_payload(&session, fp, (uint64_t)bytes->len, err, 128);
+    if (fclose(fp) != 0 && rc == 0) ds4_die("failed to close in-memory payload fixture");
+
+    *ok_out = rc == 0;
+    *code = rc == 0 ? "ok" : payload_shape_error_code(err);
+    token_vec_free(&session.checkpoint);
+    kv_cache_free(&session.cpu_cache);
+    cpu_decode_scratch_free(&session.cpu_scratch);
+    free(session.logits);
+}
+
+static void payload_shape_write_hex(FILE *fp, const void *ptr, size_t len) {
+    static const char hex[] = "0123456789abcdef";
+    const uint8_t *p = ptr;
+    fputc('"', fp);
+    for (size_t i = 0; i < len; i++) {
+        fputc(hex[p[i] >> 4], fp);
+        fputc(hex[p[i] & 15], fp);
+    }
+    fputc('"', fp);
+}
+
+static void payload_shape_write_header_hex(FILE *fp,
+                                           const uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS],
+                                           size_t fields) {
+    uint8_t bytes[DS4_SESSION_PAYLOAD_U32_FIELDS * sizeof(uint32_t)];
+    for (size_t i = 0; i < fields; i++) {
+        payload_put_u32(bytes + i * sizeof(uint32_t), h[i]);
+    }
+    payload_shape_write_hex(fp, bytes, fields * sizeof(uint32_t));
+}
+
+static void payload_shape_emit_probe_case(FILE *fp,
+                                          bool *first,
+                                          const char *name,
+                                          const char *build,
+                                          const payload_shape_bytes *bytes) {
+    const char *code = NULL;
+    bool ok = false;
+    char err[128];
+    payload_shape_probe_load(bytes, &code, &ok, err);
+    metadata_comma(fp, first);
+    fputs("    {\"name\": ", fp);
+    json_cstr_write(fp, name);
+    fputs(", \"build\": ", fp);
+    json_cstr_write(fp, build);
+    fprintf(fp, ", \"payload_bytes\": %zu, \"ok\": %s, \"code\": ",
+            bytes->len, ok ? "true" : "false");
+    json_cstr_write(fp, code);
+    fputs(", \"error\": ", fp);
+    json_cstr_write(fp, err);
+    fputc('}', fp);
+}
+
+static void payload_shape_emit_header_case(FILE *fp,
+                                           bool *first,
+                                           const char *name,
+                                           const uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS],
+                                           size_t fields) {
+    payload_shape_bytes bytes = {0};
+    for (size_t i = 0; i < fields; i++) {
+        payload_shape_vec_append_u32(&bytes, h[i]);
+    }
+    const char *code = NULL;
+    bool ok = false;
+    char err[128];
+    payload_shape_probe_load(&bytes, &code, &ok, err);
+
+    metadata_comma(fp, first);
+    fputs("    {\"name\": ", fp);
+    json_cstr_write(fp, name);
+    fprintf(fp, ", \"fields_written\": %zu, \"payload_bytes\": %zu, \"header_hex\": ",
+            fields, bytes.len);
+    payload_shape_write_header_hex(fp, h, fields);
+    fprintf(fp, ", \"ok\": %s, \"code\": ", ok ? "true" : "false");
+    json_cstr_write(fp, code);
+    fputs(", \"error\": ", fp);
+    json_cstr_write(fp, err);
+    fputc('}', fp);
+    payload_shape_vec_free(&bytes);
+}
+
+int ds4_dump_session_payload_shape_json(FILE *fp) {
+    if (!fp) fp = stdout;
+    const uint32_t probe_ctx = 16;
+    const uint32_t probe_tokens = 3;
+    uint32_t h[DS4_SESSION_PAYLOAD_U32_FIELDS];
+    uint32_t n_comp[DS4_N_LAYER] = {0};
+    uint32_t n_index_comp[DS4_N_LAYER] = {0};
+    payload_shape_default_header(h, probe_ctx, probe_tokens);
+
+    payload_shape_sections sections;
+    payload_shape_sections_compute(h, n_comp, n_index_comp, &sections);
+    const uint64_t total = payload_shape_sections_total(&sections);
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.session_payload_shape_structural.v1\",\n", fp);
+    fputs("  \"source\": \"current-c-session-payload-no-model\",\n", fp);
+    fputs("  \"model\": \"no model is loaded for this oracle\",\n", fp);
+    fprintf(fp,
+            "  \"constants\": {\"magic_u32\": %u, \"magic_field_hex\": \"34565344\", "
+            "\"magic_bytes_hex\": \"44535634\", \"version\": %u, "
+            "\"u32_fields\": %u, \"header_bytes\": %u, \"io_chunk_bytes\": %u, "
+            "\"u32_bytes\": %zu, \"float_bytes\": %zu},\n",
+            (unsigned)DS4_SESSION_PAYLOAD_MAGIC,
+            (unsigned)DS4_SESSION_PAYLOAD_VERSION,
+            (unsigned)DS4_SESSION_PAYLOAD_U32_FIELDS,
+            (unsigned)(DS4_SESSION_PAYLOAD_U32_FIELDS * sizeof(uint32_t)),
+            (unsigned)DS4_SESSION_IO_CHUNK,
+            sizeof(uint32_t),
+            sizeof(float));
+    fprintf(fp,
+            "  \"fixed_model_layout\": {\"n_layer\": %u, \"n_head_dim\": %u, "
+            "\"n_indexer_head_dim\": %u, \"n_vocab\": %u, \"n_swa\": %u},\n",
+            (unsigned)DS4_N_LAYER,
+            (unsigned)DS4_N_HEAD_DIM,
+            (unsigned)DS4_N_INDEXER_HEAD_DIM,
+            (unsigned)DS4_N_VOCAB,
+            (unsigned)DS4_N_SWA);
+
+    fputs("  \"compress_ratio_by_layer\": [", fp);
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        if (il) fputs(", ", fp);
+        fprintf(fp, "%u", (unsigned)ds4_layer_compress_ratio(il));
+    }
+    fputs("],\n", fp);
+
+    fputs("  \"header_fields\": [\n", fp);
+    const char *names[DS4_SESSION_PAYLOAD_U32_FIELDS] = {
+        "magic", "version", "ctx_size", "prefill_cap", "raw_cap",
+        "raw_window", "comp_cap", "token_count", "n_layer",
+        "n_head_dim", "n_indexer_head_dim", "n_vocab", "raw_live_rows",
+    };
+    for (uint32_t i = 0; i < DS4_SESSION_PAYLOAD_U32_FIELDS; i++) {
+        fprintf(fp, "    {\"index\": %u, \"name\": ", (unsigned)i);
+        json_cstr_write(fp, names[i]);
+        fputs("}", fp);
+        fputs(i + 1 == DS4_SESSION_PAYLOAD_U32_FIELDS ? "\n" : ",\n", fp);
+    }
+    fputs("  ],\n", fp);
+
+    fputs("  \"body_order\": [\n", fp);
+    fputs("    {\"name\": \"checkpoint_tokens\", \"bytes\": \"token_count * 4\"},\n", fp);
+    fputs("    {\"name\": \"last_logits\", \"bytes\": \"n_vocab * 4\"},\n", fp);
+    fputs("    {\"name\": \"attn_compressed_row_counts\", \"bytes\": \"n_layer * 4\"},\n", fp);
+    fputs("    {\"name\": \"indexer_compressed_row_counts\", \"bytes\": \"n_layer * 4\"},\n", fp);
+    fputs("    {\"name\": \"per_layer_raw_rows\", \"bytes\": \"raw_live_rows * n_head_dim * 4\"},\n", fp);
+    fputs("    {\"name\": \"per_layer_attn_compressed_rows\", \"bytes\": \"n_comp[layer] * n_head_dim * 4 when ratio != 0\"},\n", fp);
+    fputs("    {\"name\": \"per_layer_attn_state_kv_then_score\", \"bytes\": \"2 * coff * n_head_dim * coff * ratio * 4 when ratio != 0\"},\n", fp);
+    fputs("    {\"name\": \"per_layer_indexer_compressed_rows\", \"bytes\": \"n_index_comp[layer] * n_indexer_head_dim * 4 when ratio == 4\"},\n", fp);
+    fputs("    {\"name\": \"per_layer_indexer_state_kv_then_score\", \"bytes\": \"2 * coff * n_indexer_head_dim * coff * ratio * 4 when ratio == 4\"}\n", fp);
+    fputs("  ],\n", fp);
+
+    fputs("  \"size_case\": {\n", fp);
+    fprintf(fp,
+            "    \"name\": \"cpu_probe_ctx16_tokens3_zero_compressed_rows\", "
+            "\"ctx_size\": %u, \"prefill_cap\": %u, \"raw_cap\": %u, "
+            "\"raw_window\": %u, \"comp_cap\": %u, \"token_count\": %u, "
+            "\"raw_live_rows\": %u,\n",
+            (unsigned)h[2], (unsigned)h[3], (unsigned)h[4],
+            (unsigned)h[5], (unsigned)h[6], (unsigned)h[7],
+            (unsigned)h[12]);
+    fprintf(fp,
+            "    \"section_bytes\": {\"header\": %u, \"tokens\": %" PRIu64 ", "
+            "\"logits\": %" PRIu64 ", \"attn_counts\": %" PRIu64 ", "
+            "\"index_counts\": %" PRIu64 ", \"raw_rows\": %" PRIu64 ", "
+            "\"attn_compressed_rows\": %" PRIu64 ", \"attn_state\": %" PRIu64 ", "
+            "\"indexer_compressed_rows\": %" PRIu64 ", \"indexer_state\": %" PRIu64 "},\n",
+            (unsigned)(DS4_SESSION_PAYLOAD_U32_FIELDS * sizeof(uint32_t)),
+            sections.token_bytes,
+            sections.logits_bytes,
+            sections.comp_count_bytes,
+            sections.index_count_bytes,
+            sections.raw_row_bytes,
+            sections.attn_comp_row_bytes,
+            sections.attn_state_bytes,
+            sections.index_comp_row_bytes,
+            sections.index_state_bytes);
+    fprintf(fp, "    \"payload_bytes\": %" PRIu64 "\n", total);
+    fputs("  },\n", fp);
+
+    fputs("  \"header_rejection_cases\": [\n", fp);
+    bool first = true;
+    uint32_t hc[DS4_SESSION_PAYLOAD_U32_FIELDS];
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    payload_shape_emit_header_case(fp, &first, "truncated_header", hc, DS4_SESSION_PAYLOAD_U32_FIELDS - 1u);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[0] = 0;
+    payload_shape_emit_header_case(fp, &first, "bad_magic", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[1] = 2;
+    payload_shape_emit_header_case(fp, &first, "bad_version", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[2] = probe_ctx + 1u;
+    payload_shape_emit_header_case(fp, &first, "ctx_too_large", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[7] = probe_ctx;
+    hc[12] = hc[5];
+    payload_shape_emit_header_case(fp, &first, "tokens_equal_current_context", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[8] = DS4_N_LAYER + 1u;
+    payload_shape_emit_header_case(fp, &first, "layer_count_mismatch", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[9] = DS4_N_HEAD_DIM + 1u;
+    payload_shape_emit_header_case(fp, &first, "head_dim_mismatch", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[3] = hc[3] + 1u;
+    payload_shape_emit_header_case(fp, &first, "prefill_cap_mismatch", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[5] = hc[5] + 1u;
+    payload_shape_emit_header_case(fp, &first, "raw_window_mismatch", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[4] = 0;
+    payload_shape_emit_header_case(fp, &first, "zero_raw_cap", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[12] = hc[12] + 1u;
+    payload_shape_emit_header_case(fp, &first, "raw_live_rows_not_expected", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    hc[6] = hc[6] + 1u;
+    payload_shape_emit_header_case(fp, &first, "comp_cap_too_large", hc, DS4_SESSION_PAYLOAD_U32_FIELDS);
+    fputs("\n  ],\n", fp);
+
+    fputs("  \"body_probe_cases\": [\n", fp);
+    first = true;
+    payload_shape_bytes bytes = {0};
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    payload_shape_append_full(&bytes, hc, n_comp, n_index_comp);
+    payload_shape_emit_probe_case(fp, &first, "valid_cpu_payload", "full zero body", &bytes);
+
+    payload_shape_vec_append_u32(&bytes, 0);
+    payload_shape_emit_probe_case(fp, &first, "trailing_payload_bytes", "valid body plus 4 trailing bytes", &bytes);
+    payload_shape_vec_free(&bytes);
+
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    payload_shape_append_full(&bytes, hc, n_comp, n_index_comp);
+    if (bytes.len == 0) ds4_die("empty payload fixture");
+    bytes.len -= 1;
+    payload_shape_emit_probe_case(fp, &first, "truncated_tensor_body", "valid body minus 1 byte", &bytes);
+    payload_shape_vec_free(&bytes);
+
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    payload_shape_append_prefix_to_first_comp(&bytes, hc, hc[6] + 1u);
+    payload_shape_emit_probe_case(fp, &first, "n_comp_over_cap", "header tokens logits first n_comp", &bytes);
+    payload_shape_vec_free(&bytes);
+
+    payload_shape_default_header(hc, probe_ctx, probe_tokens);
+    payload_shape_append_prefix_to_first_index(&bytes, hc, n_comp, hc[6] + 1u);
+    payload_shape_emit_probe_case(fp, &first, "n_index_comp_over_cap", "header tokens logits n_comp_table first n_index_comp", &bytes);
+    payload_shape_vec_free(&bytes);
+
+    fputs("\n  ]\n", fp);
+    fputc('}', fp);
+    return ferror(fp) ? 1 : 0;
+}
+
 void ds4_engine_dump_tokens(ds4_engine *e, const ds4_tokens *tokens) {
     dump_tokens(&e->vocab, tokens);
 }

@@ -1,0 +1,32 @@
+{
+  "schema": "ds4.session_payload_shape_manifest.v1",
+  "milestone": "M7.5",
+  "artifact": {
+    "path": "current-c.json",
+    "sha256": "479d05d7274fde43ea5a2676895637639113534ee3f7bbb2723d032756b10806",
+    "size_bytes": 19774
+  },
+  "oracle": "current C DSV4 session payload structure and load rejection behavior",
+  "fixture": {
+    "model": "no model is loaded for the structural C oracle",
+    "model_backed_records": "M0.5 B300 disk-KV payload sizes and hashes",
+    "raw_payload_policy": "raw KV files larger than 1 MiB are represented by full and timestamp-normalized SHA256 records"
+  },
+  "comparator": "python3 ds4-parity/check_session_payload_shape.py --negative-test",
+  "acceptance": [
+    "The DSV4 magic, version, fixed 13-u32 header layout, field order, and fixed DS4 model dimensions are recorded",
+    "The body order and size formula for tokens, logits, row-count tables, raw rows, compressed rows, and compressor/indexer state are recorded",
+    "Current C load rejection categories are recorded for malformed headers, trailing bytes, truncated bodies, and row-count overflow",
+    "M0.5 model-backed KV payload records preserve payload byte counts, raw and timestamp-normalized file hashes, rendered-text hashes, and exact B300 refresh commands"
+  ],
+  "drift_policy": "No DSV4 payload format, fixed-layout, size-accounting, rejection-category, M0.5 payload hash, or B300 command drift.",
+  "validation": [
+    "arch -arm64 make ds4-session-payload-dump",
+    "./ds4-session-payload-dump | python3 -m json.tool >/tmp/ds4-session-payload-dump.json",
+    "python3 ds4-parity/check_session_payload_shape.py --write-baseline ds4-parity/baselines/kv/m7.5/current-c.json",
+    "python3 -m json.tool ds4-parity/baselines/kv/m7.5/current-c.json",
+    "python3 -m py_compile ds4-parity/check_session_payload_shape.py",
+    "python3 ds4-parity/check_session_payload_shape.py --negative-test",
+    "git diff --check"
+  ]
+}

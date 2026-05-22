@@ -1027,7 +1027,7 @@
 
 ### M7.5: C Session Payload Shape Oracle
 
-- Status: pending
+- Status: done
 - Goal: expose current C session payload structure, size budgeting, and
   on-disk payload-header rejection behavior before any Rust payload reader.
 - Source evidence needed: `DS4_SESSION_PAYLOAD_MAGIC`,
@@ -1054,9 +1054,39 @@
   capture workspace may be normalized.
 - Review gate: ask Claude to review that payload-shape evidence is sufficient
   for a Rust reader while avoiding a premature Rust runtime/session port.
-- Validation needed: C payload oracle helper or exact B300 blocked command,
-  schema/hash checker with negative tests, and `git diff --check`.
+- Validation: `arch -arm64 make ds4-session-payload-dump`,
+  `./ds4-session-payload-dump | python3 -m json.tool`,
+  `python3 ds4-parity/check_session_payload_shape.py --write-baseline
+  ds4-parity/baselines/kv/m7.5/current-c.json`, `python3 -m json.tool
+  ds4-parity/baselines/kv/m7.5/current-c.json`, `python3 -m py_compile
+  ds4-parity/check_session_payload_shape.py`, and `python3
+  ds4-parity/check_session_payload_shape.py --negative-test`. `arch -arm64
+  make cpu` and `git diff --check` also passed.
 - Owner path: C payload oracle surface, `ds4-parity/`,
+  `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
+### M7.6: Rust Session Payload Header Reader
+
+- Status: pending
+- Goal: add a Rust reader for DSV4 session payload headers and structural
+  validation without restoring tensors or executing a model.
+- Oracle: the M7.5 current-C on-disk session payload shape oracle.
+- Fixture: committed M7.5 payload metadata, rejection fixtures, frozen current-C
+  model-layout constants, and M0.5 payload-size/hash records.
+- Comparator: C/Rust comparison for payload magic, version, field decoding,
+  model-layout constant checks, payload-size accounting, trailing-byte
+  rejection, and malformed-header rejection.
+- Acceptance: Rust decodes current payload metadata, reports the same
+  structural rejection categories as C, and never claims tensor restore or
+  in-memory snapshot support.
+- Drift policy: no payload-header or size-accounting drift; body tensor
+  interpretation remains out of scope.
+- Review gate: ask Claude to review format-boundary checks, checked arithmetic,
+  and the no-runtime-restore scope boundary.
+- Validation needed: payload comparator with negative tests, Rust tests,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: Rust session payload reader, `ds4-parity/`,
   `ds4-parity/baselines/kv/`, `.memory/status.md`.
 
 ## Later Items

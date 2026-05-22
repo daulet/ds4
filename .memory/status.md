@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.5 C Session Payload Shape Oracle
-- Last validated source commit: M7.4b KV extension trailer payload coverage in
-  this commit; prior pushed source commit
-  `4d09821cbed8304499ed464ec4a78bbb235fc947`
+- Active item: M7.6 Rust Session Payload Header Reader
+- Last validated source commit: M7.5 C session payload shape oracle in this
+  commit; prior pushed source commit
+  `4cb3daf6b3856cbe04478c4c53ee5e7286a3d9da`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -762,3 +762,27 @@
   ds4-gguf --bin ds4-kv-trailer-dump-rs`, `cargo test --workspace`, `arch
   -arm64 make cpu`, CPU-regenerated `./ds4-kv-trailer-dump` comparison against
   the committed M7.4b artifact, and `git diff --check`.
+- M7.5 adds `./ds4-session-payload-dump`, a deterministic no-model current-C
+  oracle for the DSV4 session payload shape using the real payload constants,
+  fixed DS4 model layout constants, size formula, and `ds4_session_load_payload`
+  rejection behavior on synthetic CPU fixtures.
+- M7.5 fixture `ds4-parity/baselines/kv/m7.5/current-c.json` records the
+  13-u32 DSV4 header, little-endian magic bytes, field order, body section
+  order, synthetic payload byte accounting, header rejection categories,
+  body/trailing/truncated/row-count rejection categories, and M0.5 B300
+  model-backed payload size/hash records. The artifact is 19,774 bytes with
+  SHA256 `479d05d7274fde43ea5a2676895637639113534ee3f7bbb2723d032756b10806`.
+- M7.5 adds `python3 ds4-parity/check_session_payload_shape.py`, which reruns
+  the C payload dump, compares it to the committed fixture, verifies the M0.5
+  payload records against committed logs and hashes, and checks that exact B300
+  recapture commands preserve the temp kubeconfig, explicit context, pod, and
+  model path.
+- M7.5 local validation passed for `arch -arm64 make ds4-session-payload-dump`,
+  `./ds4-session-payload-dump | python3 -m json.tool`, baseline generation via
+  `python3 ds4-parity/check_session_payload_shape.py --write-baseline
+  ds4-parity/baselines/kv/m7.5/current-c.json`, `python3 -m json.tool
+  ds4-parity/baselines/kv/m7.5/current-c.json`, `python3 -m py_compile
+  ds4-parity/check_session_payload_shape.py`, and `python3
+  ds4-parity/check_session_payload_shape.py --negative-test` (`Session payload
+  shape oracle: PASS, 552 checks`; negative tests `PASS, 8 checks`), `arch
+  -arm64 make cpu`, and `git diff --check`.
