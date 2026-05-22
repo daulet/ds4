@@ -10,3 +10,19 @@ This directory stores oracle captures and future Rust comparison fixtures.
 
 Do not treat a log file as proof by itself. A manifest entry must explain which
 behavior the log proves and which requirements remain blocked or deferred.
+
+## Static Verification
+
+Run the local static verifier before changing baseline artifacts:
+
+```sh
+python3 ds4-parity/verify_baselines.py
+```
+
+The verifier checks committed hashes and structured artifact shapes without
+rerunning model-backed commands. Its negative test copies the baseline fixtures
+to a temporary directory, corrupts one CSV, and requires verification failure:
+
+```sh
+python3 ds4-parity/verify_baselines.py --negative-test
+```

@@ -104,7 +104,7 @@
 
 ### M1.2: Static Baseline Artifact Verifier
 
-- Status: in-progress
+- Status: done
 - Goal: add a local `ds4-parity` verifier that checks committed Milestone 0
   artifacts without rerunning model-backed commands.
 - Source evidence needed: M0 artifact hash files, M0.4/M0.5 JSON and trace
@@ -114,6 +114,22 @@
   structured artifacts, and emits a standard report.
 - Validation needed: verifier exits 0 on committed baselines; a negative test
   against a temporary changed fixture fails; `git diff --check`.
+- Owner path: `ds4-parity/`, `ds4-parity/baselines/`.
+
+### M1.3: Server And KV Normalization Comparators
+
+- Status: in-progress
+- Goal: add comparison helpers for M0.4 server traces/responses and M0.5 KV
+  restore artifacts.
+- Source evidence needed: M0.4 server fixtures, responses, traces, documented
+  normalization rules, M0.5 cache decision logs, rendered cached text, and
+  parsed `kv-header.tsv`.
+- Oracle: M0.4 `server-traces/m0.4/` and M0.5 `kv-artifacts/m0.5/`.
+- Comparator: harness command or module comparing a candidate artifact
+  directory to the baseline after only documented normalizations.
+- Validation needed: self-comparison succeeds; temporary edits to cache source,
+  cached token count, finish reason, KV reason, or rendered text fail;
+  `git diff --check`.
 - Owner path: `ds4-parity/`, `ds4-parity/baselines/`.
 
 ## Later Items

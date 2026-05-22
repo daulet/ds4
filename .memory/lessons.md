@@ -62,3 +62,14 @@ available directly from the repo.
   pattern would work with an ordinary shell variable name.
 - Permanent rule: local capture wrappers should use `rc` or another neutral
   variable for command exit codes.
+
+## 2026-05-22: Verifier Negative Tests Should Fail As Reports, Not Crashes
+
+- Symptom: the first M1.2 negative test corrupted a benchmark CSV and the
+  verifier raised a Python `ValueError` while parsing the bad row.
+- Root cause: the normal path assumed typed CSV fields after header validation;
+  corrupt candidate artifacts need to be reported as comparison failures, not
+  uncaught parser exceptions.
+- Permanent rule: parity verifier parsers should convert malformed structured
+  artifacts into section errors so negative tests prove failure reporting as
+  well as drift detection.

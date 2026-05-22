@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M1.2 Static Baseline Artifact Verifier
-- Last validated source commit: `04543efe69b2ad754c865df2f6b0a380f34ff1d2`
+- Active item: M1.3 Server And KV Normalization Comparators
+- Last validated source commit: `f0ba22ec93df8fb4a37bfbda3c2ca5576824cc9a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -70,3 +70,7 @@
 - M1.1 documented the Milestone 1 implementation work items in
   `RUST_PORT_ROADMAP.md`; the next executable item is a static verifier for the
   committed Milestone 0 artifacts.
+- M1.2 added `python3 ds4-parity/verify_baselines.py`, which verifies M0.2
+  through M0.6 artifact families locally without rerunning model-backed
+  commands. Its negative test corrupts a copied benchmark CSV and requires the
+  verifier to detect the drift.
