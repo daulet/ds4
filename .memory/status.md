@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M4.6 Metadata Baselines And Unified Report Integration
-- Last validated source commit: `da12244d15fde251196e3fcc4faa4a7552693ae0`
+- Active item: M4.7 Unsupported GGUF Negative Fixtures
+- Last validated source commit: `58bad019226499d5b294340093f77c70b7250b79`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -204,3 +204,22 @@
   `cargo test -p ds4-gguf` with 4 tests, `python3
   ds4-parity/compare_tensor_bindings.py --negative-test` with 33 checks, and
   `python3 -m py_compile ds4-parity/compare_tensor_bindings.py`.
+- M4.6 recaptured the supported-model metadata baseline on B300
+  `ds4-rust-port-b300` in `hou2-prod1` after refreshing `ds4.c`, `ds4.h`, and
+  `ds4_metadata_dump.c` from source commit
+  `58bad019226499d5b294340093f77c70b7250b79`.
+- M4.6 committed `ds4-parity/baselines/metadata/m4.6/current-c.json` for
+  `/workspace/ds4/ds4flash.gguf`, whose resolved path is
+  `/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf`,
+  model size is 86,720,111,488 bytes, model SHA256 is
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`,
+  dump size is 633,297 bytes, and dump SHA256 is
+  `39ad79574b19421e2c470a055376258b9415eb1f429188426cfd2860688a2a2f`.
+- M4.6 added `python3 ds4-parity/compare_metadata_baseline.py --negative-test`,
+  which schema-checks the committed baseline, verifies manifest artifact hashes,
+  normalizes model paths/source for candidate comparisons, and detects scalar
+  metadata, array metadata, tensor shape, tensor type, binding, and offset
+  drift.
+- M4.6 wired the metadata baseline comparator into
+  `python3 ds4-parity/run_parity_report.py` and added a B300 skip entry with
+  exact source-refresh, capture, hash, schema-check, and copy-back commands.

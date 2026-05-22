@@ -4,7 +4,7 @@
 The report has two jobs:
 
 * run local no-model C checks that are available in this workspace;
-* run the committed artifact comparators from M1.2 through M1.5.
+* run the committed artifact comparators from M1.2 through M1.5 and M4.6.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -97,6 +97,10 @@ class ParityReport:
             (
                 "M1.5 benchmark CSV comparator",
                 [sys.executable, "ds4-parity/compare_bench_csv.py"],
+            ),
+            (
+                "M4.6 metadata baseline comparator",
+                [sys.executable, "ds4-parity/compare_metadata_baseline.py", "--negative-test"],
             ),
         ]
         for name, command in commands:
@@ -285,7 +289,45 @@ def b300_skip_items() -> list[ReportItem]:
                 "--gen-tokens 32 --csv ds4-parity/baselines/bench/m0.6/csv/b300-long.csv"
             ),
         ),
+        ReportItem(
+            name="B300 model-backed M4.6 metadata baseline refresh",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "metadata baseline refresh requires the B300 q2-imatrix model; "
+                "the committed manifest records source-file copy commands and artifact hashes"
+            ),
+            rerun_command=b300_metadata_refresh_command(),
+        ),
     ]
+
+
+def b300_metadata_refresh_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    copy_commands = [
+        shell_join(prefix + ["cp", "ds4.c", f"{KUBE_POD}:{B300_WORKDIR}/ds4.c"]),
+        shell_join(prefix + ["cp", "ds4.h", f"{KUBE_POD}:{B300_WORKDIR}/ds4.h"]),
+        shell_join(prefix + ["cp", "ds4_metadata_dump.c", f"{KUBE_POD}:{B300_WORKDIR}/ds4_metadata_dump.c"]),
+    ]
+    capture = b300_exec(
+        "make clean ds4-metadata-dump CUDA_ARCH=native && "
+        f"./ds4-metadata-dump -m {B300_MODEL} -o /tmp/ds4-metadata-m4.6-c.json && "
+        "wc -c /tmp/ds4-metadata-m4.6-c.json && "
+        "sha256sum /tmp/ds4-metadata-m4.6-c.json && "
+        "python3 ds4-parity/check_metadata_dump.py /tmp/ds4-metadata-m4.6-c.json --negative-test"
+    )
+    copy_back = shell_join(
+        prefix + ["cp", f"{KUBE_POD}:/tmp/ds4-metadata-m4.6-c.json", "/tmp/ds4-metadata-m4.6-c.json"]
+    )
+    return " && ".join([*copy_commands, capture, copy_back])
 
 
 def b300_exec(script: str) -> str:

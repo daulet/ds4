@@ -1,0 +1,41 @@
+{
+  "schema": "ds4.metadata_baseline.v1",
+  "source_commit": "58bad019226499d5b294340093f77c70b7250b79",
+  "captured_utc": "2026-05-22T05:19:15Z",
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig"
+  },
+  "model": {
+    "link_path": "/workspace/ds4/ds4flash.gguf",
+    "resolved_path": "/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+    "size_bytes": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "dumps": {
+    "current_c": {
+      "path": "current-c.json",
+      "size_bytes": 633297,
+      "sha256": "39ad79574b19421e2c470a055376258b9415eb1f429188426cfd2860688a2a2f",
+      "producer": "current-c-loader",
+      "command": "./ds4-metadata-dump -m /workspace/ds4/ds4flash.gguf -o /tmp/ds4-metadata-m4.6-c.json"
+    }
+  },
+  "refresh_commands": [
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4.c ds4-rust-port-b300:/workspace/ds4/ds4.c",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4.h ds4-rust-port-b300:/workspace/ds4/ds4.h",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4_metadata_dump.c ds4-rust-port-b300:/workspace/ds4/ds4_metadata_dump.c",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make clean ds4-metadata-dump CUDA_ARCH=native; ./ds4-metadata-dump -m /workspace/ds4/ds4flash.gguf -o /tmp/ds4-metadata-m4.6-c.json; wc -c /tmp/ds4-metadata-m4.6-c.json; sha256sum /tmp/ds4-metadata-m4.6-c.json; python3 ds4-parity/check_metadata_dump.py /tmp/ds4-metadata-m4.6-c.json --negative-test'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/tmp/ds4-metadata-m4.6-c.json /tmp/ds4-metadata-m4.6-c.json"
+  ],
+  "normalization": {
+    "model.path": "normalized for comparisons",
+    "source": "ignored for C/Rust candidate comparison",
+    "semantic_metadata": "exact",
+    "tensor_descriptors": "exact",
+    "bound_tensors": "exact"
+  }
+}

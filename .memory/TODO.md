@@ -306,7 +306,7 @@
 
 ### M4.6: Metadata Baselines And Unified Report Integration
 
-- Status: pending
+- Status: done
 - Goal: commit supported-model metadata baselines and wire metadata comparison
   into the unified parity report.
 - Source evidence needed: M4.2 B300 metadata dump, M4.3 through M4.5 C/Rust
@@ -321,6 +321,21 @@
   parity report, any required B300 capture command, and `git diff --check`.
 - Owner path: `ds4-parity/baselines/metadata/`, `ds4-parity/`,
   `.memory/status.md`.
+
+### M4.7: Unsupported GGUF Negative Fixtures
+
+- Status: pending
+- Goal: lock down unsupported and malformed GGUF behavior before Rust metadata
+  is used by runtime code.
+- Source evidence needed: current C loader and validation failures from the
+  M4.2 dump helper, Rust GGUF parser errors, and existing generated metadata
+  validation/layout fixtures.
+- Oracle: current C loader and validation failures from the M4.2 dump helper.
+- Comparator: C and Rust validator runs compared by exit status and normalized
+  first error category/key.
+- Validation needed: negative fixture generation/comparison, workspace Rust
+  tests, and `git diff --check`.
+- Owner path: `ds4-parity/`, `rust/ds4-gguf/`, `.memory/status.md`.
 
 ## Later Items
 
