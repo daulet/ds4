@@ -1,0 +1,19 @@
+{
+  "schema": "ds4.decode_policy_manifest.v1",
+  "oracle": "current C no-model decode stop policy",
+  "artifact": {
+    "path": "ds4-parity/baselines/sampling/m6.6a/current-c.json",
+    "bytes": 17000,
+    "sha256": "9d11d90a12e1ee4d16ac1d4aa8c971efe775a86202004db91aff8d452081a2b5"
+  },
+  "producer": {
+    "name": "ds4-decode-policy-dump",
+    "command": "./ds4-decode-policy-dump ds4-parity/baselines/sampling/m6.6a/current-c.json",
+    "model": "no model is loaded for this oracle"
+  },
+  "validation_commands": [
+    "arch -arm64 make ds4-decode-policy-dump",
+    "python3 -m py_compile ds4-parity/check_decode_policy_dump.py",
+    "python3 ds4-parity/check_decode_policy_dump.py --negative-test"
+  ]
+}

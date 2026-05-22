@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.6a Decode Stop Policy C Oracle Fixtures
-- Last validated source commit: M6.5 Rust fixed-logits model-slice comparator
+- Active item: M6.6b Rust Decode Stop Policy Port
+- Last validated source commit: M6.6a decode stop policy C oracle fixture
   commit once committed; prior pushed source commit
-  `24aa0e667d41b2c287bab09546d08f2e435b6691`
+  `625dc2552a3b38b98825dfffd3f76097d5a209c0`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -598,4 +598,27 @@
   max_abs_logprob_delta=5.00000006e-08`; negative tests `PASS, 6 checks`),
   `cargo fmt --all -- --check`, `cargo test -p ds4-gguf --bin
   ds4-model-logits-dump-rs`, `cargo test --workspace`, and
+  `git diff --check`.
+- M6.6a adds `./ds4-decode-policy-dump`, a no-model current-C decode stop
+  policy oracle. The helper includes the `ds4_server.c` test surface so the
+  fixture uses the real C stop-list, UTF-8 stream-hold, DSML marker, generated
+  message parse, Anthropic stop-reason, and Responses status mapping helpers.
+- M6.6a fixture `ds4-parity/baselines/sampling/m6.6a/current-c.json` covers
+  CLI EOS/length, server OpenAI EOS/length/user-stop/stream-stop-tail/
+  streaming-stop-hit/partial-UTF-8/stop-at-mid-UTF-8-boundary/
+  tool-call-boundary, server Responses length mapping, server Anthropic tool
+  mapping, and agent EOS/length defaults. The artifact is 17,000 bytes with
+  SHA256
+  `9d11d90a12e1ee4d16ac1d4aa8c971efe775a86202004db91aff8d452081a2b5`.
+- M6.6a adds `python3 ds4-parity/check_decode_policy_dump.py`, whose schema
+  and negative checks validate case coverage, request option records,
+  generated text schedules, finish reason, visible bytes, streamed bytes,
+  held-tail bytes, session invalidation, stop boundary offsets, tool-call
+  boundary flags, and API finish mappings.
+- M6.6a validation passed with `arch -arm64 make ds4-decode-policy-dump`,
+  `./ds4-decode-policy-dump ds4-parity/baselines/sampling/m6.6a/current-c.json`,
+  `python3 -m py_compile ds4-parity/check_decode_policy_dump.py`, `python3
+  ds4-parity/check_decode_policy_dump.py --negative-test` (`decode policy
+  schema: PASS, 969 checks`; manifest `PASS, 5 checks`; negative tests `PASS,
+  10 checks`), `arch -arm64 make ds4_test`, `./ds4_test --server`, and
   `git diff --check`.

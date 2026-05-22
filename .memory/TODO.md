@@ -739,6 +739,36 @@
 - Owner path: Rust model-slice comparator, `ds4-parity/`,
   `.memory/status.md`.
 
+### M6.6a: Decode Stop Policy C Oracle Fixtures
+
+- Status: done
+- Goal: expose request-surface decode stop policy through deterministic
+  no-model C fixtures before any Rust policy port.
+- Oracle: current C CLI, server, and agent decode-loop behavior around EOS,
+  `max_tokens`, user stop sequences, UTF-8 stream-safe holding, and API finish
+  reason mapping.
+- Fixture: generated-token/text schedules plus request option records for CLI,
+  OpenAI chat/responses, Anthropic, and agent defaults. Tool-call schedules
+  cover only the decode-loop finish transition after a complete DSML tool-call
+  boundary has already been identified.
+- Comparator: schema checker and negative tests for a C oracle dump covering
+  finish reason, emitted visible text, held streaming tail, session
+  invalidation requirement, stop boundary offsets, and API finish mappings.
+- Acceptance: EOS, length, stop sequence, UTF-8 boundary, and complete
+  tool-call finish outcomes match C for every fixture.
+- Drift policy: no finish-reason or emitted-text drift; policy-only
+  normalizations must not hide token/text boundary changes.
+- Review gate: ask Claude to review stop sequence coverage and the boundary
+  between sampler math, M5 DSML parsing, and API finish semantics.
+- Validation passed: `arch -arm64 make ds4-decode-policy-dump`, `./ds4-decode-policy-dump
+  ds4-parity/baselines/sampling/m6.6a/current-c.json`, `python3 -m
+  py_compile ds4-parity/check_decode_policy_dump.py`, `python3
+  ds4-parity/check_decode_policy_dump.py --negative-test` (`969` schema
+  checks, `5` manifest checks, `10` negative checks), `arch -arm64 make
+  ds4_test`, `./ds4_test --server`, and `git diff --check`.
+- Owner path: C decode-policy oracle, `ds4-parity/`,
+  `.memory/status.md`.
+
 ## Later Items
 
 Add later roadmap items from `RUST_PORT_ROADMAP.md` as each active item
