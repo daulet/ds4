@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.3 Rust Vocabulary Loader And JoyAI BPE
-- Last validated source commit: `ed4b72a201b401f0ccb4f060d83eb15f87f17949`
+- Active item: M5.4 Rust Rendered Chat Special Tokenization
+- Last validated source commit: `0b351c7f309cf53981a646d1701ea2d4bd11ead4`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -285,3 +285,32 @@
 - M5.2 Claude review returned `NO BLOCKERS`; after hardening invalid UTF-8
   token text escaping and checker pinning for exact special/server semantics,
   the follow-up Claude review also returned `NO BLOCKERS`.
+- M5.3 added `Ds4Tokenizer` to `ds4-gguf`, loading
+  `tokenizer.ggml.tokens` and `tokenizer.ggml.merges` from GGUF metadata,
+  computing the same canonical token/merge SHA256 identity as C, validating
+  required DS4 special token IDs, porting JoyAI plain-text pre-tokenization and
+  byte-level BPE merge ranking, and decoding ordinary token pieces through the
+  GPT-2 byte mapping used by `ds4_token_text`.
+- M5.3 added `ds4-tokenizer-dump` for fixed plain-text cases and
+  `python3 ds4-parity/compare_tokenizer_text.py`, which compares Rust token
+  IDs and decoded token-piece bytes against the M5.2 current-C `text_cases`.
+  Its negative tests cover missing token table, missing merges, token-bytes
+  hash drift, merge hash drift, missing required special token, invalid UTF-8
+  token strings, and merge-rank drift.
+- M5.3 B300 extraction copied `ds4-parity/extract_tokenizer_fixture.py` to
+  `ds4-rust-port-b300` and wrote
+  `/tmp/ds4-tokenization-m5.3/tokenizer.gguf` from
+  `/workspace/ds4/ds4flash.gguf`. The committed tokenizer-only GGUF fixture has
+  129,280 tokens, 127,741 merges, size 4,722,720 bytes, and SHA256
+  `b1e0d128bde9ea996fee335c9662e93707d2a68decaeb47a8dc5fb902bdbb025`.
+- M5.3 local validation passed for `cargo fmt --all -- --check`,
+  `cargo test -p ds4-gguf` with 8 tests,
+  `python3 -m py_compile ds4-parity/extract_tokenizer_fixture.py
+  ds4-parity/compare_tokenizer_text.py`, and
+  `python3 ds4-parity/compare_tokenizer_text.py --manifest
+  ds4-parity/baselines/tokenization/m5.3/manifest.json --negative-test` with
+  `tokenizer text comparison: PASS, 51 checks`, `tokenizer manifest: PASS, 4
+  checks`, and `tokenizer negative tests: PASS, 7 checks`.
+- M5.3 Claude review returned `NO BLOCKERS` after checking the Rust tokenizer
+  against the C byte encoding, JoyAI split rules, BPE merge loop, token text
+  decoding, and comparator scope.

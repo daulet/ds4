@@ -404,7 +404,7 @@
 
 ### M5.3: Rust Vocabulary Loader And JoyAI BPE
 
-- Status: pending
+- Status: done
 - Goal: port tokenizer metadata loading, byte-level GPT-2 encoding/decoding,
   JoyAI pre-tokenization, BPE merge ranking, and plain text tokenization into
   Rust without prompt rendering yet.

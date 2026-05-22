@@ -1,6 +1,10 @@
 use std::fmt;
 use std::str;
 
+mod tokenizer;
+
+pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
+
 const GGUF_MAGIC: u32 = 0x4655_4747;
 const MAX_DIMS: usize = 8;
 const DEFAULT_ALIGNMENT: u64 = 32;
