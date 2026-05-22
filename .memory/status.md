@@ -3,9 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.9 KV And Snapshot Report Integration
-- Last validated source commit: M7.8 B300 restore oracle in this commit;
-  prior pushed source commit `c778d6659d988291266e248284b805663ba6f3a4`
+- Active item: M8.1 CLI Surface Work Item Breakdown
+- Last validated source commit: M7.9 KV/snapshot report integration in this
+  commit; prior pushed source commit
+  `ba90982d83ce527fe510ae9db0a9c8dc75297978`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -858,3 +859,19 @@
   schema: PASS, 1448 checks`; manifest `PASS, 13 checks`; negative tests
   `PASS, 6 checks`), `python3 -m json.tool` for both committed M7.8 JSON files,
   `arch -arm64 make cpu`, and `git diff --check`.
+- M7.9 adds `python3 ds4-parity/run_kv_parity_report.py`, which builds the
+  local no-model `ds4-session-payload-dump` helper, runs M7.2 through M7.8
+  KV/snapshot comparator commands, emits text or machine-readable JSON, and
+  skips only the model-backed M7.8 B300 restore recapture with the manifest
+  refresh commands.
+- M7.9 wires the Milestone 7 report into
+  `python3 ds4-parity/run_parity_report.py` as the `M7.9 KV/snapshot parity
+  report` comparator item, so the unified report now covers M1, M4, M5, M6, and
+  M7 comparator families.
+- M7.9 validation passed for `python3 -m py_compile
+  ds4-parity/run_kv_parity_report.py ds4-parity/run_parity_report.py`,
+  `python3 ds4-parity/run_kv_parity_report.py` (`summary: 9 passed, 1 skipped,
+  0 failed`), `python3 ds4-parity/run_kv_parity_report.py --json | python3 -m
+  json.tool >/dev/null`, `python3 ds4-parity/run_parity_report.py` (`summary:
+  13 passed, 5 skipped, 0 failed`), `cargo test --workspace`, and
+  `git diff --check`.

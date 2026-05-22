@@ -5,7 +5,7 @@ The report has two jobs:
 
 * run local no-model C checks that are available in this workspace;
 * run the committed artifact comparators from M1.2 through M1.5, M4.6, M5.7,
-  and M6.7.
+  M6.7, and M7.9.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -110,6 +110,10 @@ class ParityReport:
             (
                 "M6.7 sampling/logprob parity report",
                 [sys.executable, "ds4-parity/run_sampling_parity_report.py"],
+            ),
+            (
+                "M7.9 KV/snapshot parity report",
+                [sys.executable, "ds4-parity/run_kv_parity_report.py"],
             ),
         ]
         for name, command in commands:

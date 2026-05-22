@@ -109,7 +109,7 @@ python3 ds4-parity/run_parity_report.py
 ```
 
 The unified report runs local no-model C checks, then runs the committed M1,
-M4, M5, and M6 comparator reports. Model-backed B300 oracle refreshes are
+M4, M5, M6, and M7 comparator reports. Model-backed B300 oracle refreshes are
 skipped by default, but each skip includes the temp-kubeconfig and
 explicit-context rerun command needed to reproduce the check. For a
 comparator-only report:
@@ -133,6 +133,17 @@ decode-policy comparator. The B300 model-backed M6.4 recapture is skipped by
 default with the exact manifest refresh command.
 
 ## KV And Snapshot Parity
+
+Run the local Milestone 7 report:
+
+```sh
+python3 ds4-parity/run_kv_parity_report.py
+```
+
+The report builds the local no-model C session-payload helper, runs the M7.2
+through M7.8 KV/snapshot comparators, emits text or JSON reports, and skips the
+model-backed B300 M7.8 restore recapture only with the exact manifest refresh
+commands.
 
 Validate the M7.2 no-model current-C KV header and policy oracle:
 

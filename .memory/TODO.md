@@ -1182,7 +1182,7 @@
 
 ### M7.9: KV And Snapshot Report Integration
 
-- Status: pending
+- Status: done
 - Goal: wire M7 local comparators and B300 restore refresh records into the
   parity reports.
 - Source evidence needed: committed M7.2 through M7.8 fixtures, manifest
@@ -1200,9 +1200,39 @@
 - Drift policy: report normalizes only capture paths and timestamps.
 - Review gate: ask Claude to review report integration and skipped-B300 command
   fidelity.
-- Validation needed: M7 report, unified parity report, `py_compile`,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: `python3 -m py_compile
+  ds4-parity/run_kv_parity_report.py ds4-parity/run_parity_report.py`,
+  `python3 ds4-parity/run_kv_parity_report.py` (`summary: 9 passed, 1
+  skipped, 0 failed`), `python3 ds4-parity/run_kv_parity_report.py --json |
+  python3 -m json.tool >/dev/null`, `python3 ds4-parity/run_parity_report.py`
+  (`summary: 13 passed, 5 skipped, 0 failed`), `cargo test --workspace`, and
+  `git diff --check`.
 - Owner path: parity report integration, `ds4-parity/`, `.memory/status.md`.
+
+### M8.1: CLI Surface Work Item Breakdown
+
+- Status: pending
+- Goal: split Milestone 8 into commit-sized CLI parity work items before
+  adding Rust CLI behavior.
+- Source evidence needed: Milestone 8 roadmap text, current `ds4_cli.c`, CLI
+  targets in `Makefile`, existing CLI/test-vector fixtures, and current
+  parity-report conventions.
+- Oracle: current `./ds4` binary and its documented CLI behavior.
+- Fixture: help/flag surface, one-shot prompt, prompt-file input, stdin
+  transcript, logprob dump mode, thinking controls, output formatting, and
+  stderr/error categories to be assigned to later executable milestones.
+- Comparator: documentation-only breakdown with a tangible oracle, fixture,
+  comparator, acceptance rule, and validation gate per CLI work item.
+- Acceptance: `RUST_PORT_ROADMAP.md` and the active board name executable CLI
+  milestones that can be reviewed and compared independently; no source or
+  build behavior changes.
+- Drift policy: no behavior drift; roadmap wording may normalize names and
+  fixture paths.
+- Review gate: ask Claude to review whether the split makes each CLI milestone
+  verifiable and comparable to current C.
+- Validation needed: inspect diff for docs/state-only scope and run
+  `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/status.md`, `.memory/TODO.md`.
 
 ## Later Items
 
