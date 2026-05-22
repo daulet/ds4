@@ -3,9 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.7 Request Fixture Integration And Text Parity Report
-- Last validated source commit: same commit as the M5.6b status entry once
-  committed
+- Active item: M6.1 Sampling And Logprob Work Item Breakdown
+- Last validated source commit: M5.7 text parity report commit once committed;
+  prior pushed source commit
+  `d6bade1d5bde4c72280bed0395322d85dfc30d5e`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -422,3 +423,26 @@
   behavior, mid-chunk done/error accumulation, close-tag variants, search-tail
   behavior, raw buffer accumulation, current/completed call transitions,
   fixture coverage, and no-model oracle startup.
+- M5.6b implementation commit:
+  `d6bade1d5bde4c72280bed0395322d85dfc30d5e`.
+- M5.7 added `python3 ds4-parity/run_text_parity_report.py`, which runs the
+  M5.2 token/prompt schema checker, M5.3-M5.5 Rust tokenizer/prompt
+  comparator, M5.6a server DSML comparator, and M5.6b agent DSML comparator
+  from committed fixtures without requiring the model locally.
+- M5.7 records model-backed refreshes as skipped report items using exact
+  `refresh_commands` from the M5.2 and M5.3 manifests, preserving the
+  `--kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1` B300
+  command path for future recapture.
+- M5.7 wired the text report into
+  `python3 ds4-parity/run_parity_report.py`, so the unified parity report now
+  includes Milestone 5 text parity alongside earlier baseline comparators.
+- M5.7 validation passed for `python3 -m py_compile
+  ds4-parity/run_text_parity_report.py ds4-parity/run_parity_report.py`,
+  `python3 ds4-parity/run_text_parity_report.py` with `summary: 4 passed, 2
+  skipped, 0 failed`, JSON mode output with `ok: true`,
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with
+  `summary: 6 passed, 10 skipped, 0 failed`, `cargo test --workspace`, and
+  `git diff --check`.
+- M5.7 Claude review returned `NO BLOCKERS` after checking report
+  integration, failure output, B300 refresh command fidelity, JSON/text output
+  shape, status/TODO consistency, and accidental local model dependencies.

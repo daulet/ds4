@@ -102,6 +102,10 @@ class ParityReport:
                 "M4.6 metadata baseline comparator",
                 [sys.executable, "ds4-parity/compare_metadata_baseline.py", "--negative-test"],
             ),
+            (
+                "M5.7 text parity report",
+                [sys.executable, "ds4-parity/run_text_parity_report.py"],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

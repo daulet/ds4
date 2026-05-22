@@ -564,7 +564,7 @@
 
 ### M5.7: Request Fixture Integration And Text Parity Report
 
-- Status: pending
+- Status: done
 - Goal: wire tokenization, rendered prompt, and DSML comparators into a single
   Milestone 5 text parity report that runs locally from committed fixtures and
   records exact B300 refresh commands for model-backed recapture.
@@ -583,6 +583,32 @@
 - Validation needed: text parity report, unified parity report if wired there,
   py_compile, `cargo test --workspace`, and `git diff --check`.
 - Owner path: `ds4-parity/`, `.memory/status.md`.
+
+### M6.1: Sampling And Logprob Work Item Breakdown
+
+- Status: pending
+- Goal: split Milestone 6 sampling and logprob parity into reviewable work
+  items before adding Rust sampler or logits-processing code.
+- Source evidence needed: `RUST_PORT_ROADMAP.md` Milestone 6, current C
+  sampling and logprob paths, official-vector fixtures, server/CLI decode
+  selection behavior, stop-token handling, and existing numeric comparator
+  conventions.
+- Oracle: current C `ds4_session_top_logprobs`, token logprob, decode
+  selection, and stop-handling behavior.
+- Comparator: documentation-only work item list that defines fixed logits
+  fixtures, official-vector prompt cases, top-logprob ordering checks, selected
+  token checks, token-byte checks, numeric tolerance, review gates, and
+  validation gates.
+- Acceptance: the split gives each sampling/logprob item a tangible oracle,
+  fixture, comparator, drift policy, and validation gate before implementation
+  begins.
+- Drift policy: no implementation behavior changes in the split.
+- Review gate: ask Claude to review that the split isolates fixture capture,
+  Rust sampler logic, logprob/top-k comparison, stop-token behavior, and report
+  integration without mixing oracle surfaces.
+- Validation needed: `git diff --check`.
+- Owner path: `.memory/TODO.md`, `.memory/status.md`,
+  `RUST_PORT_ROADMAP.md` source evidence.
 
 ## Later Items
 
