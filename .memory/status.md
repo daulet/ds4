@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M1.5 Benchmark CSV Comparator
-- Last validated source commit: `cd596dd8504aef144663e853e92f78fcbf6779f2`
+- Active item: M1.6 Oracle Runner And Unified Report
+- Last validated source commit: `48ba21551ee46a64e79c5a79a37b020f9ce08f8d`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -83,3 +83,8 @@
   verifies the M0.3 B300 pass markers, and compares candidate vector files with
   exact selected tokens plus a reported 4.0 absolute logprob tolerance. Its
   negative test covers selected-token drift and numeric drift outside tolerance.
+- M1.5 added `python3 ds4-parity/compare_bench_csv.py`, which self-compares
+  committed M0.6 benchmark CSV artifacts, validates capture metadata for
+  threshold use, requires exact workload shape and KV byte counts, and applies
+  the documented 10% throughput regression threshold. Its negative test covers
+  schema, context frontier, generation-token, cache-byte, and throughput drift.

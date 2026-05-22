@@ -150,7 +150,7 @@
 
 ### M1.5: Benchmark CSV Comparator
 
-- Status: in-progress
+- Status: done
 - Goal: add comparison support for M0.6 benchmark CSV baselines.
 - Source evidence needed: M0.6 `bench/m0.6/csv/b300-short.csv`,
   `bench/m0.6/csv/b300-long.csv`, prompt hash, model hash, B300 machine record,
@@ -163,6 +163,24 @@
   frontier, generation-token, cache-byte, and throughput-threshold edits fail;
   `git diff --check`.
 - Owner path: `ds4-parity/`, `ds4-parity/baselines/bench/m0.6/`.
+
+### M1.6: Oracle Runner And Unified Report
+
+- Status: in-progress
+- Goal: add a single documented command that can run available current-C oracle
+  checks and compare their outputs to Milestone 0 baselines.
+- Source evidence needed: current C binaries, Milestone 0 baselines, local
+  no-model fixture availability, B300-routed model fixtures, and the baseline
+  manifest.
+- Oracle: current C binaries plus Milestone 0 baselines.
+- Comparator: report-producing `ds4-parity` command that either runs available
+  oracle checks locally or marks model/GPU cases with exact B300 rerun commands,
+  then compares produced artifacts with the M1.2 through M1.5 helpers.
+- Validation needed: local no-model checks run without `ds4flash.gguf`;
+  model-backed checks are either executed on the B300 pod or reported as
+  skipped with exact reproduction commands; unified report has no unexpected
+  baseline drift; `git diff --check`.
+- Owner path: `ds4-parity/`, `ds4-parity/baselines/`.
 
 ## Later Items
 

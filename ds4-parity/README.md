@@ -74,3 +74,30 @@ value and requires comparison failure:
 ```sh
 python3 ds4-parity/compare_logprob_numeric.py --negative-test
 ```
+
+Compare the committed B300 benchmark CSV baselines:
+
+```sh
+python3 ds4-parity/compare_bench_csv.py
+```
+
+The benchmark comparator treats workload shape as exact behavioral surface:
+schema, context frontiers, prefill intervals, generation-token counts, and
+`kvcache_bytes` must match. Throughput is performance surface; it is compared
+only after capture metadata confirms the same model, prompt, CUDA backend
+marker, and GPU machine class. The default throughput threshold is the M0.6
+policy of at most 10% regression:
+
+```sh
+python3 ds4-parity/compare_bench_csv.py \
+  --candidate-dir /path/to/bench/m0.6 \
+  --max-regression 0.10
+```
+
+Its negative test corrupts schema, context frontier, generation-token,
+`kvcache_bytes`, and throughput fields in temporary candidate copies and
+requires comparison failure:
+
+```sh
+python3 ds4-parity/compare_bench_csv.py --negative-test
+```
