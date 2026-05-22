@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M4.3 Rust GGUF Directory Parser
-- Last validated source commit: `de1c3c98b84a97732df5c29233a2585e53753223`
+- Active item: M4.4 DS4 Metadata Validation Parity
+- Last validated source commit: `d466688029a1a2a4a92f9d3d12e9b65dcaf2e601`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -139,3 +139,31 @@
   sequential `arch -arm64 make clean`, sequential `arch -arm64 make cpu`,
   `python3 ds4-parity/run_parity_report.py` with 9 passed, 4 skipped, 0 failed,
   `cargo test --workspace`, and `git diff --check`.
+- M4.3 added a dependency-free `ds4-gguf` Rust crate and `ds4-gguf-dump` CLI
+  that parse GGUF v3 metadata and tensor directory records, compute C-equivalent
+  tensor byte sizes and aligned absolute offsets, and emit the same
+  `ds4.metadata.v1` directory surface as the C metadata dump.
+- M4.3 added `./ds4-metadata-dump --directory-only` so local synthetic GGUF
+  fixtures can compare the current C GGUF directory parser against Rust without
+  requiring the full DS4 model or semantic tensor binding.
+- M4.3 added `python3 ds4-parity/compare_gguf_directory.py`, whose synthetic
+  fixture covers scalar metadata, array metadata, non-power-of-two
+  `general.alignment=48`, F32 byte sizing, Q8_0 block byte sizing, relative and
+  absolute offsets, C-compatible float metadata formatting, unsupported scalar
+  metadata emission as `null`, and C/Rust rejection of corrupted magic,
+  truncated metadata, truncated tensor data, and tensor offset overflow.
+- M4.3 B300 check confirmed the pod does not currently have `rustc` or `cargo`,
+  so this item used local synthetic C-vs-Rust directory comparison instead of a
+  B300 Rust run. Real supported-model Rust comparison remains deferred to the
+  roadmap item that provides Rust on the model host or transfers feasible dump
+  artifacts.
+- M4.3 local validation passed for `arch -arm64 make ds4-metadata-dump`,
+  `cargo test -p ds4-gguf` with 4 tests,
+  `python3 ds4-parity/compare_gguf_directory.py --negative-test` with 14
+  checks, `cargo fmt --all -- --check`, `python3 -m py_compile
+  ds4-parity/compare_gguf_directory.py ds4-parity/check_metadata_dump.py`,
+  local schema/negative checks against the copied B300 M4.2 dump,
+  `cargo test --workspace`, `git diff --check`, sequential
+  `arch -arm64 make clean`, sequential `arch -arm64 make`, sequential
+  `arch -arm64 make clean`, sequential `arch -arm64 make cpu`, and
+  `python3 ds4-parity/run_parity_report.py` with 9 passed, 4 skipped, 0 failed.

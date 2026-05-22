@@ -15,6 +15,7 @@ static void usage(FILE *fp) {
         "Options:\n"
         "  -m, --model FILE   GGUF model path. Default: ds4flash.gguf\n"
         "  --mtp FILE         Optional MTP support GGUF to bind and dump\n"
+        "  --directory-only   Parse GGUF metadata/tensor directory without DS4 validation\n"
         "  -o, --output FILE  Write JSON to FILE instead of stdout\n"
         "  -h, --help         Show this help\n");
 }
@@ -23,6 +24,7 @@ int main(int argc, char **argv) {
     const char *model_path = "ds4flash.gguf";
     const char *mtp_path = NULL;
     const char *output_path = NULL;
+    unsigned flags = 0;
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -41,6 +43,8 @@ int main(int argc, char **argv) {
                 return 2;
             }
             mtp_path = argv[i];
+        } else if (!strcmp(arg, "--directory-only")) {
+            flags |= DS4_METADATA_DUMP_DIRECTORY_ONLY;
         } else if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
             if (++i >= argc) {
                 usage(stderr);
@@ -64,7 +68,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    int rc = ds4_dump_metadata_json(model_path, mtp_path, fp);
+    int rc = ds4_dump_metadata_json_ex(model_path, mtp_path, fp, flags);
     if (output_path && fclose(fp) != 0) {
         fprintf(stderr, "ds4-metadata-dump: failed to close %s: %s\n",
                 output_path, strerror(errno));

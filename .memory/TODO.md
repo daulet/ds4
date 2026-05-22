@@ -252,7 +252,7 @@
 
 ### M4.3: Rust GGUF Directory Parser
 
-- Status: pending
+- Status: done
 - Goal: add a `ds4-gguf` parser for GGUF v3 header, metadata descriptors,
   scalar and array value decoding, tensor directory parsing, alignment,
   absolute offsets, and tensor byte sizing.
@@ -268,6 +268,24 @@
   `git diff --check`.
 - Owner path: new `rust/ds4-gguf/` crate or equivalent parser module,
   `ds4-parity/`, `.memory/status.md`.
+
+### M4.4: DS4 Metadata Validation Parity
+
+- Status: pending
+- Goal: port DS4-specific metadata validation from `config_validate_model`,
+  including required key lookup, numeric type coercions, compression ratio
+  arrays, SwiGLU clamp arrays, RoPE constants, HC constants, and expert
+  routing constants.
+- Source evidence needed: `config_validate_model`, M4.2 metadata dump schema,
+  M4.3 Rust GGUF metadata value model, supported-model metadata, and generated
+  metadata mutation fixtures.
+- Oracle: C validation behavior and first-failure messages from the M4.2 dump
+  helper.
+- Comparator: C and Rust validation runs compared by pass/fail, normalized
+  first failing key, expected/got category, and tolerance policy.
+- Validation needed: metadata validation comparator, negative fixtures,
+  workspace Rust tests, and `git diff --check`.
+- Owner path: `rust/ds4-gguf/`, `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items
 

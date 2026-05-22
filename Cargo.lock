@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "ds4-gguf"
+version = "0.0.0"
+
+[[package]]
 name = "ds4-gpu"
 version = "0.0.0"
 dependencies = [

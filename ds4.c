@@ -3178,17 +3178,21 @@ static void metadata_emit_mtp_bindings(FILE *fp, const ds4_mtp_weights *w, bool 
     metadata_emit_mtp_block_bindings(fp, first, "mtp.block", &w->block);
 }
 
-int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *fp) {
+int ds4_dump_metadata_json_ex(const char *model_path, const char *mtp_path, FILE *fp, unsigned flags) {
+    const bool directory_only = (flags & DS4_METADATA_DUMP_DIRECTORY_ONLY) != 0;
+
     ds4_model model;
     model_open(&model, model_path, false, false);
 
-    ds4_weights weights;
-    config_validate_model(&model);
-    weights_bind(&weights, &model);
+    ds4_weights weights = {0};
+    if (!directory_only) {
+        config_validate_model(&model);
+        weights_bind(&weights, &model);
+    }
 
     ds4_model mtp_model = { .fd = -1 };
     ds4_mtp_weights mtp_weights = {0};
-    const bool has_mtp = mtp_path && mtp_path[0];
+    const bool has_mtp = !directory_only && mtp_path && mtp_path[0];
     if (has_mtp) {
         model_open(&mtp_model, mtp_path, false, false);
         mtp_weights_bind(&mtp_weights, &mtp_model);
@@ -3214,7 +3218,11 @@ int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *f
             model.alignment,
             model.tensor_data_pos);
     fputs("  },\n", fp);
-    fputs("  \"validation\": {\"config\": \"passed\", \"weights\": \"passed\", \"mtp_weights\": ", fp);
+    fputs("  \"validation\": {\"config\": ", fp);
+    json_cstr_write(fp, directory_only ? "skipped" : "passed");
+    fputs(", \"weights\": ", fp);
+    json_cstr_write(fp, directory_only ? "skipped" : "passed");
+    fputs(", \"mtp_weights\": ", fp);
     json_cstr_write(fp, has_mtp ? "passed" : "skipped");
     fputs("},\n", fp);
     metadata_emit_selected_metadata(fp, &model);
@@ -3222,8 +3230,10 @@ int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *f
     metadata_emit_tensors(fp, &model);
     fputs("  \"bound_tensors\": [\n", fp);
     bool first = true;
-    metadata_emit_base_bindings(fp, &weights, &first);
-    if (has_mtp) metadata_emit_mtp_bindings(fp, &mtp_weights, &first);
+    if (!directory_only) {
+        metadata_emit_base_bindings(fp, &weights, &first);
+        if (has_mtp) metadata_emit_mtp_bindings(fp, &mtp_weights, &first);
+    }
     fputs("\n  ]\n", fp);
     fputs("}\n", fp);
 
@@ -3231,6 +3241,10 @@ int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *f
     weights_free(&weights);
     model_close(&model);
     return ferror(fp) ? 1 : 0;
+}
+
+int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *fp) {
+    return ds4_dump_metadata_json_ex(model_path, mtp_path, fp, 0);
 }
 
 /* Load one token embedding row and expand it to float activations. */
