@@ -1,0 +1,39 @@
+===== server-a =====
+--- cache decision ---
+live_tokens_before: 0
+prompt_tokens: 550
+live_prompt_common: 0
+memory_token_reusable: 0
+memory_miss_reason: no-live-checkpoint
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+
+===== server-b =====
+--- cache decision ---
+live_tokens_before: 0
+prompt_tokens: 550
+live_prompt_common: 0
+memory_token_reusable: 0
+memory_miss_reason: no-live-checkpoint
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: disk-text
+cached_tokens: 550
+disk_cached_tokens: 550
+disk_cache_file: ds4-parity/baselines/kv-artifacts/m0.5/kv/0ab2314538b11686a11e296b7f697651fbd17e60.kv
+
+
+===== server-c =====
+--- cache decision ---
+live_tokens_before: 0
+prompt_tokens: 561
+live_prompt_common: 0
+memory_token_reusable: 0
+memory_miss_reason: no-live-checkpoint
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: disk-text
+cached_tokens: 552
+disk_cached_tokens: 552
+disk_cache_file: ds4-parity/baselines/kv-artifacts/m0.5/kv/a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv

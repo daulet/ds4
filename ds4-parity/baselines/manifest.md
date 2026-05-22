@@ -218,3 +218,107 @@ finish reason, `prompt_tokens`, `completion_tokens`, `cached_tokens`,
 | copy `server-fixtures/m0.4/` into the pod | local to B300 pod, explicit `--context hou2-prod1` | 0 | `logs/m0.4-b300-fixture-copy.log` | All six fixture JSON files are available in the pod workspace. |
 | traced replay script | B300 pod, `/workspace/ds4` | 0 | `logs/m0.4-b300-server-replay.log` | All six request replays return HTTP 200 and artifacts are written under `server-traces/m0.4/`. |
 | `jq empty` over fixture and response JSON files | local repo | 0 | command output not persisted | All request fixtures and JSON responses parse. |
+
+# M0.5 KV And Snapshot Baselines
+
+## Capture Scope
+
+- Work item: M0.5 KV And Snapshot Baselines
+- Source oracle commit: `0623bbb4d97d056a58e208e324216f97abed685e`
+- Oracle: current C/CUDA `./ds4-server` disk-KV store and restore path.
+- Fixture directory: `kv-fixtures/m0.5/`
+- Artifact directory: `kv-artifacts/m0.5/`
+- Comparator: replay the listed request JSON files across three fresh
+  `ds4-server` lifetimes sharing one disk-KV directory, then compare HTTP
+  status, response usage cache fields, normalized trace cache decisions, parsed
+  KV headers, rendered cached text, and KV file hashes.
+- Acceptance: cold seed returns HTTP 200 and writes a 550-token disk-KV entry;
+  same-prompt restart restores 550 tokens from `disk-text`; continuation
+  restart restores the 552-token shutdown prefix from `disk-text` and writes
+  the 9-token suffix. KV headers parse as version 1 `KVC` files with quant 2,
+  context 32768, and the recorded reason/token fields.
+- Drift policy: future Rust-written KV files must match the current format and
+  rendered text byte-for-byte until a versioned format change is explicitly
+  introduced. Header creation and last-used timestamps are normalized by
+  zeroing bytes 24 through 39 before hashing.
+
+## Normalization Rules
+
+Future comparators must normalize values that are expected to vary between
+runs:
+
+- KV fixed-header `created_unix` and `last_used_unix` fields at bytes 24
+  through 39. `kv-file-normalized-sha256.txt` records hashes after this
+  zeroing; full raw file hashes are retained in `kv-file-sha256.txt`.
+- Wall-clock timestamps in response `created` fields, trace request headings,
+  replay logs, and server logs.
+- Generated OpenAI object IDs.
+- Throughput, elapsed time, model-load timing, CUDA progress rates, and local
+  port numbers in server logs and traces.
+- Absolute pod-local paths when repo-relative artifact paths are unchanged.
+
+The following fields are behavioral surface and should not be normalized away:
+HTTP status, prompt token counts, generated content, finish reason,
+`cached_tokens`, `cache_write_tokens`, `cache_source`, `disk_cached_tokens`,
+disk-cache filename, KV magic/version/quant/reason/ext flags/token count/hits,
+context size, payload byte count, rendered text bytes, and rendered text hash.
+
+## B300 KV Fixture
+
+- Context: `hou2-prod1`
+- Namespace: `default`
+- Pod: `ds4-rust-port-b300`
+- Node: `c1v17-b300n1-nic1`
+- GPU: NVIDIA B300 SXM6 AC, UUID
+  `GPU-81f6bd2a-3404-6445-1788-365264243aab`
+- Model path: `/workspace/ds4/ds4flash.gguf`
+- Resolved model path:
+  `/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf`
+- Model SHA256:
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`
+- Model size: 86,720,111,488 bytes.
+- `ds4-server` SHA256:
+  `038f660eaf6fb1d6d1eca53faf543fe800bf10330ce56159fb5541c29ff76608`
+- Server command log: `kv-artifacts/m0.5/logs/capture-env.txt`
+- Replay log: `kv-artifacts/m0.5/logs/replay.log`
+- Cache decision summary: `kv-artifacts/m0.5/logs/cache-decisions.txt`
+- Parsed KV metadata: `kv-artifacts/m0.5/logs/kv-header.tsv`
+- Raw KV file hashes: `kv-artifacts/m0.5/logs/kv-file-sha256.txt`
+- Timestamp-normalized KV file hashes:
+  `kv-artifacts/m0.5/logs/kv-file-normalized-sha256.txt`
+- Extracted rendered cache text: `kv-artifacts/m0.5/rendered-text/*.txt`
+- Per-server traces: `kv-artifacts/m0.5/traces/server-*.trace`
+- Per-server stdout/stderr logs: `kv-artifacts/m0.5/logs/server-*.log`
+- Artifact hashes: `kv-artifacts/m0.5/logs/artifact-sha256.txt`
+- Artifact byte sizes: `kv-artifacts/m0.5/logs/artifact-sizes.txt`
+- Raw `.kv` binaries are intentionally not checked in because each generated
+  file is roughly 30 MiB. They remain reproducible from the fixture and command
+  entries; committed artifacts include full hashes, normalized hashes, parsed
+  headers, and extracted rendered text.
+
+| Replay | Server lifetime | Fixture | Response | Expected behavioral marker |
+| --- | --- | --- | --- | --- |
+| `seed_miss` | `server-a` | `kv-fixtures/m0.5/kv_seed.json` | `kv-artifacts/m0.5/responses/seed_miss.json` | Cold request: `prompt_tokens=550`, `cached_tokens=0`, `cache_write_tokens=550`, trace `cache_source=none`, generated content `I notice`, `finish_reason=length`. |
+| `seed_restore` | `server-b` | `kv-fixtures/m0.5/kv_seed.json` | `kv-artifacts/m0.5/responses/seed_restore.json` | Restart restore: `prompt_tokens=550`, `cached_tokens=550`, `cache_write_tokens=0`, trace `cache_source=disk-text`, `disk_cached_tokens=550`, cache file `0ab2314538b11686a11e296b7f697651fbd17e60.kv`. |
+| `continuation_restore` | `server-c` | `kv-fixtures/m0.5/kv_continuation.json` | `kv-artifacts/m0.5/responses/continuation_restore.json` | Continuation restore: `prompt_tokens=561`, `cached_tokens=552`, `cache_write_tokens=9`, trace `cache_source=disk-text`, `disk_cached_tokens=552`, cache file `a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv`, generated content `kv continued`. |
+
+## KV Files
+
+| File | Reason | Tokens | Hits | Rendered bytes | Size bytes | Comparator |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| `0ab2314538b11686a11e296b7f697651fbd17e60.kv` | `cold` | 550 | 1 | 2520 | 31,529,520 | Full and timestamp-normalized hashes in `kv-file-*.txt`; rendered text in `rendered-text/0ab2314538b11686a11e296b7f697651fbd17e60.txt`. |
+| `a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv` | `shutdown` | 552 | 1 | 2528 | 31,583,296 | Full and timestamp-normalized hashes in `kv-file-*.txt`; rendered text in `rendered-text/a0cac6ff193696ccb5d7e9ae151d7255d39cf161.txt`. |
+| `4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.kv` | `shutdown` | 563 | 0 | 2632 | 31,690,964 | Full and timestamp-normalized hashes in `kv-file-*.txt`; rendered text in `rendered-text/4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.txt`. |
+
+## Command Entries
+
+| Command | Environment | Exit | Log | Acceptance |
+| --- | --- | ---: | --- | --- |
+| refresh `/workspace/ds4` from `git archive HEAD` | local to B300 pod, explicit `--context hou2-prod1` | 0 | `logs/m0.5-b300-source-refresh.log` | Pod source matches the source oracle commit without local uncommitted artifacts. |
+| copy `kv-fixtures/m0.5/` into the pod | local to B300 pod, explicit `--context hou2-prod1` | 0 | `logs/m0.5-b300-fixture-copy.log` | All fixture files are available in the pod workspace without macOS sidecar files. |
+| `make clean ds4-server` | B300 pod, `/workspace/ds4` | 0 | `logs/m0.5-b300-make-ds4-server.log` | CUDA server binary is rebuilt from the source oracle commit. |
+| `sha256sum ds4-server && file ds4-server` | B300 pod, `/workspace/ds4` | 0 | `logs/m0.5-b300-ds4-server-sha256.log` | Rebuilt server binary hash matches the value recorded above. |
+| three-lifetime disk-KV replay script | B300 pod, `/workspace/ds4` | 0 | `kv-artifacts/m0.5/logs/replay.log` | `seed_miss`, `seed_restore`, and `continuation_restore` all return HTTP 200 with the expected cache markers. |
+| parse generated `.kv` headers and rendered text | B300 pod, `/workspace/ds4` | 0 | `kv-artifacts/m0.5/logs/kv-header.tsv` | All generated cache files parse as version 1 `KVC` files with the recorded reason, token, hit, context, payload, rendered-text, and size fields. |
+| `jq empty` over fixture and response JSON files | local repo | 0 | command output not persisted | All request fixtures and JSON responses parse. |
+| `sha256sum -c kv-artifacts/m0.5/logs/artifact-sha256.txt` | local repo | 0 | command output not persisted | Committed non-raw-KV artifacts match the recorded hashes. |

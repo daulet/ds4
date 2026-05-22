@@ -60,7 +60,7 @@
 
 ### M0.5: KV And Snapshot Baselines
 
-- Status: in-progress
+- Status: done
 - Goal: capture current KV-cache and session-restore behavior for prompt reuse.
 - Source evidence needed: `ds4_server.c`, KV-store helpers and tests in
   `tests/ds4_test.c`, existing M0.4 cache trace, and model-backed B300
@@ -72,6 +72,23 @@
   and restore behavior.
 - Owner path: `ds4-parity/baselines/`, `.memory/status.md`.
 
+### M0.6: Benchmark CSV Baselines
+
+- Status: in-progress
+- Goal: capture at least one short-context and one long-context `ds4-bench`
+  CSV for the reference backend.
+- Source evidence needed: `ds4-bench` CLI behavior, model-backed B300
+  workspace state, benchmark prompt fixture, and machine/backend metadata.
+- Oracle: current `./ds4-bench` binary on the same machine, model, backend,
+  context settings, and power state.
+- Comparator: CSV schema and selected throughput fields compared by later
+  `ds4-parity` helpers.
+- Validation needed: generate benchmark prompt fixtures, run short-context and
+  long-context B300 captures, record command lines, CSV outputs, model identity,
+  backend, and normalization/performance comparison policy.
+- Owner path: `ds4-parity/baselines/bench/`, `.memory/status.md`.
+
 ## Later Items
 
-Add later Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.5 completes.
+Add later post-Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.6
+completes.

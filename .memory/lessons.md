@@ -40,3 +40,16 @@ available directly from the repo.
   context and default-scale disk-KV thresholds. M0.5 should test disk-KV files
   with prompt sizes that naturally satisfy the production thresholds rather than
   forcing `--kv-cache-min-tokens 1`.
+
+## 2026-05-22: M0.5 KV Fixtures Should Commit Metadata, Not Raw KV Files
+
+- Symptom: a 160-word synthetic cache prompt tokenized below the 512-token
+  disk-KV threshold and produced no cache files, while a 900-word prompt
+  produced 52 to 74 MiB cache files.
+- Root cause: the useful M0.5 prompt needs to sit just above the production
+  disk-KV threshold; 270 `cacheNNN` words tokenized to 550 prompt tokens and
+  generated reproducible cache behavior with roughly 30 MiB `.kv` files.
+- Permanent rule: M0.5 commits fixture JSON, rendered cached text, parsed KVC
+  headers, full hashes, and timestamp-normalized hashes, but leaves raw `.kv`
+  binaries out of git unless a later milestone explicitly needs binary fixtures
+  checked in.

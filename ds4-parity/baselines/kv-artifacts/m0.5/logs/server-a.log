@@ -1,0 +1,22 @@
+ds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)
+ds4: CUDA host registration skipped: operation not supported
+ds4: CUDA loading model tensors into device cache
+ds4: CUDA loading model tensors 16.02 GiB cached
+ds4: CUDA loading model tensors 32.06 GiB cached
+ds4: CUDA loading model tensors 48.02 GiB cached
+ds4: CUDA loading model tensors 64.06 GiB cached
+ds4: CUDA loading model tensors 80.04 GiB cached
+ds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in 14.054s
+ds4: cuda backend initialized for graph diagnostics
+0522 02:38:18 ds4-server: context buffers 751.71 MiB (ctx=32768, backend=cuda, prefill_chunk=2048, raw_kv_rows=2304, compressed_kv_rows=8194)
+0522 02:38:18 ds4-server: KV disk cache ds4-parity/baselines/kv-artifacts/m0.5/kv (budget=512 MiB, cross-quant=accept, min=512, cold_max=30000, continued=0, trim=32, align=2048, hit_half_life=21600s)
+0522 02:38:18 ds4-server: tracing session to ds4-parity/baselines/kv-artifacts/m0.5/traces/server-a.trace
+0522 02:38:18 ds4-server: listening on http://127.0.0.1:18086
+0522 02:38:19 ds4-server: chat ctx=0..550:550 prompt start
+0522 02:38:19 ds4-server: chat ctx=0..550:550 prompt done 0.554s
+0522 02:38:19 ds4-server: kv cache stored tokens=550 trimmed=0 reason=cold key=token-text size=30.07 MiB save=93.8 ms
+0522 02:38:19 ds4-server: chat ctx=550..552:2 gen=2 decoding chunk=42.12 t/s avg=42.12 t/s 0.047s
+0522 02:38:19 ds4-server: chat ctx=0..550:550 gen=2 finish=length 0.695s
+0522 02:38:19 ds4-server: shutdown requested, draining requests
+0522 02:38:19 ds4-server: persisting current KV cache before shutdown tokens=552
+0522 02:38:20 ds4-server: kv cache stored tokens=552 trimmed=0 reason=shutdown key=token-text size=30.12 MiB save=93.1 ms

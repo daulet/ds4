@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M0.5 KV And Snapshot Baselines
-- Last validated source commit: `3d87577962abeac1ab0d80e9c21d0012bfc53afb`
+- Active item: M0.6 Benchmark CSV Baselines
+- Last validated source commit: `0623bbb4d97d056a58e208e324216f97abed685e`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -48,3 +48,14 @@
   final trace records non-streaming chat, SSE chat, DSML-to-OpenAI tool calls,
   explicit thinking-disabled chat, and cache continuation with
   `cache_source=memory-token`, `cached_tokens=41`, `cache_write_tokens=9`.
+- M0.5 B300 validation refreshed source commit
+  `0623bbb4d97d056a58e208e324216f97abed685e`, built `ds4-server`, and replayed
+  three disk-KV server lifetimes from
+  `ds4-parity/baselines/kv-fixtures/m0.5/` with HTTP 200 for all requests.
+- M0.5 artifacts live under `ds4-parity/baselines/kv-artifacts/m0.5/`; the
+  replay records a cold 550-token cache write, a fresh-process 550-token
+  `disk-text` restore, and a fresh-process continuation restore of the
+  552-token shutdown prefix with a 9-token suffix write.
+- M0.5 raw `.kv` files are not checked in; committed comparator artifacts
+  include full raw hashes, timestamp-normalized hashes, parsed KVC headers, and
+  extracted rendered cache text.
