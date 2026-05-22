@@ -324,7 +324,7 @@
 
 ### M4.7: Unsupported GGUF Negative Fixtures
 
-- Status: pending
+- Status: done
 - Goal: lock down unsupported and malformed GGUF behavior before Rust metadata
   is used by runtime code.
 - Source evidence needed: current C loader and validation failures from the
@@ -336,6 +336,23 @@
 - Validation needed: negative fixture generation/comparison, workspace Rust
   tests, and `git diff --check`.
 - Owner path: `ds4-parity/`, `rust/ds4-gguf/`, `.memory/status.md`.
+
+### M5.1: Tokenization Work Item Breakdown
+
+- Status: pending
+- Goal: split Milestone 5 tokenization, prompt rendering, and DSML parity into
+  reviewable Rust port work items before adding runtime-facing text code.
+- Source evidence needed: current C tokenizer loading/encoding/decoding, chat
+  prompt rendering, DSML tool-call parsing/rendering, CLI/server request paths,
+  and available Milestone 0 request/vector fixtures.
+- Oracle: `RUST_PORT_ROADMAP.md` Milestone 5 plus current C CLI/server
+  rendering and token handling.
+- Comparator: documentation-only work item list that defines concrete fixtures,
+  C dump helpers if needed, candidate Rust APIs, acceptance rules, drift
+  policies, review gates, and validation gates.
+- Validation needed: `git diff --check`.
+- Owner path: `.memory/TODO.md`, `.memory/status.md`,
+  `RUST_PORT_ROADMAP.md` source evidence.
 
 ## Later Items
 

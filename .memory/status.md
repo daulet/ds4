@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M4.7 Unsupported GGUF Negative Fixtures
-- Last validated source commit: `58bad019226499d5b294340093f77c70b7250b79`
+- Active item: M5.1 Tokenization Work Item Breakdown
+- Last validated source commit: `4ca3bf0df2bbf8f8a5fef56c0cf9e9c3e1881361`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -223,3 +223,16 @@
 - M4.6 wired the metadata baseline comparator into
   `python3 ds4-parity/run_parity_report.py` and added a B300 skip entry with
   exact source-refresh, capture, hash, schema-check, and copy-back commands.
+- M4.7 added `python3 ds4-parity/compare_gguf_failures.py`, a generated
+  malformed-GGUF matrix that compares C and Rust rejection status plus
+  normalized first-error categories for invalid magic, unsupported version,
+  truncated metadata, unknown metadata type, bad tensor dimension, out-of-file
+  tensor data, tensor offset overflow, missing required metadata, wrong
+  metadata type, bad metadata array length, and unsupported DS4 tensor type.
+- M4.7 validation passed for `arch -arm64 make ds4-metadata-dump`,
+  `python3 ds4-parity/compare_gguf_failures.py` with 55 checks,
+  `python3 ds4-parity/compare_gguf_failures.py --list-cases`, M4.3 through
+  M4.5 comparators (`compare_gguf_directory.py --negative-test`,
+  `compare_metadata_validation.py --negative-test`, and
+  `compare_tensor_bindings.py --negative-test`), `python3 -m py_compile` for
+  all involved comparators, and `cargo test --workspace`.
