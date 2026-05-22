@@ -1192,6 +1192,313 @@ Acceptance:
 - Machine-readable outputs match byte-for-byte where applicable.
 - Interactive behavior is covered by scripted stdin/stdout transcripts.
 
+Work items:
+
+#### M8.1: CLI Surface Work Item Breakdown
+
+- Goal: split Milestone 8 into reviewable CLI parity work items before adding
+  Rust CLI behavior.
+- Oracle: current `ds4_cli.c` option parser, invocation modes, diagnostics, and
+  REPL command surface.
+- Fixture: roadmap text plus current CLI source evidence for prompt sources,
+  backend flags, sampling flags, thinking controls, diagnostics, one-shot
+  generation, and interactive commands.
+- Comparator: documentation-only diff that assigns an oracle, fixture,
+  comparator, acceptance rule, and validation gate to each executable CLI item.
+- Acceptance: each later M8 item is small enough to validate independently and
+  names whether it needs a local no-model fixture, B300 model capture, PTY
+  transcript, or Rust implementation comparator.
+- Drift policy: no source behavior changes.
+- Review gate: ask Claude to review that the split is verifiable and comparable
+  to the current C CLI.
+- Validation gate: docs/state-only diff inspection and `git diff --check`.
+- Scope note: `--head-test`, `--first-token-test`, `--metal-graph-test`,
+  `--metal-graph-full-test`, and `--metal-graph-prompt-test` are internal
+  graph/runtime diagnostics whose success-path parity belongs with Milestone 10
+  runtime graph orchestration. M8.2 captures their parser/help surface and
+  removed-flag errors; M8 does not claim Rust success-path parity for those
+  debug modes.
+
+#### M8.2: Current-C CLI Parse And Error Oracle
+
+- Goal: capture the no-model CLI argument, help, and early error surface.
+- Oracle: current `./ds4` parser in `ds4_cli.c` before model loading.
+- Fixture: `--help`, missing option values, unknown options, invalid numeric
+  and float values, invalid backend names, duplicate prompt sources,
+  `--server`, removed `--metal-graph-generate`, `--dump-tokens` without a
+  prompt, imatrix option coupling, and `--perplexity-file` prompt-source
+  rejection.
+- Comparator: schema checker for exit status, stdout/stderr category, help text
+  anchors, and exact option names.
+- Acceptance: all cases are local and model-free; exit code and stderr category
+  match exactly, with help text compared by stable section anchors.
+- Drift policy: executable path and compiler diagnostics may be normalized; CLI
+  option spelling, exit status, and user-facing error category are exact.
+- Review gate: ask Claude to review coverage for parser branches and accidental
+  model-loading cases.
+- Validation gate: local C capture, schema checker with negative tests, and
+  `git diff --check`.
+
+#### M8.3: Rust CLI Parse And Error Parity
+
+- Goal: implement Rust CLI parsing for the M8.2 no-model surface.
+- Oracle: committed M8.2 current-C CLI parse/error fixture.
+- Fixture: same argument matrix as M8.2, run against the Rust CLI binary.
+- Comparator: C/Rust CLI parser comparator for exit status, stdout/stderr
+  category, help anchors, normalized executable names, and option spelling.
+- Acceptance: Rust exits with the same status and reports the same category and
+  option names without loading a model for early parse failures.
+- Drift policy: binary path and usage indentation may be normalized only where
+  documented by the comparator.
+- Review gate: ask Claude to review parser compatibility and whether any C
+  parser branch remains uncovered.
+- Validation gate: Rust CLI parser tests, comparator with negative tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M8.4: Current-C CLI Token And Prompt Diagnostic Oracle
+
+- Goal: capture current-C CLI prompt ingestion and token-dump behavior.
+- Oracle: current `./ds4 --dump-tokens` with the recorded B300 model/tokenizer.
+- Fixture: `-p`, `--prompt-file`, rendered-chat prompt passthrough, custom
+  system prompt, empty system prompt, `--think`, `--think-max` with below/above
+  threshold contexts, and `--nothink`.
+- Comparator: schema/hash checker for token IDs, token bytes, prompt-file byte
+  hashes, thinking-mode warning categories, and exact B300 refresh commands.
+- Acceptance: prompt bytes, selected thinking mode, token sequence, and warning
+  category match the current CLI fixture; raw large prompt files are represented
+  by hashes when needed.
+- Drift policy: model path and B300 workspace may be normalized; prompt bytes,
+  token IDs, token bytes, thinking controls, and warning categories are exact.
+- Review gate: ask Claude to review prompt-source and thinking-control
+  coverage against `ds4_cli.c`.
+- Validation gate: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+
+#### M8.5: Rust CLI Token And Prompt Diagnostic Parity
+
+- Goal: implement Rust CLI behavior for `--dump-tokens` and prompt-source
+  diagnostics.
+- Oracle: committed M8.4 current-C token/prompt diagnostic fixture.
+- Fixture: same prompt-source and thinking-control cases as M8.4, run through
+  the Rust CLI.
+- Comparator: C/Rust diagnostic comparator for token IDs, token bytes,
+  prompt-file hashes, stdout shape, stderr warning categories, and exit status.
+- Acceptance: Rust matches the C CLI for prompt ingestion and dump-token output
+  without introducing alternate formatting.
+- Drift policy: executable paths and timing-free stderr prefixes may be
+  normalized; token and prompt surfaces are exact.
+- Review gate: ask Claude to review CLI-to-tokenizer plumbing and normalization
+  boundaries.
+- Validation gate: comparator with negative tests, targeted Rust CLI tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M8.6: Current-C CLI Logprob And Perplexity Oracle
+
+- Goal: capture current-C CLI machine-readable diagnostic outputs that require
+  model execution.
+- Oracle: current `./ds4 --dump-logprobs` and `./ds4 --perplexity-file` on the
+  recorded B300 model.
+- Fixture: fixed short prompt, prompt-file variant, `--logprobs-top-k`, greedy
+  token limit, invalid output path category, and a fixed raw-text perplexity
+  file.
+- Comparator: schema/numeric checker for JSON logprob shape, selected tokens,
+  top-logprob ordering, score tolerances from M6, perplexity text fields, file
+  hashes, and exact B300 refresh commands.
+- Acceptance: selected tokens and top-logprob ordering match exactly; score
+  values stay within the M6 model-logits tolerance; perplexity scalar fields
+  match within documented numeric tolerances.
+- Drift policy: timing/progress stderr and workspace paths may be normalized;
+  CLI JSON fields, selected tokens, score tolerances, and output file hashes are
+  exact.
+- Review gate: ask Claude to review diagnostic output coverage and numeric
+  tolerance reuse from M6.
+- Validation gate: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+
+#### M8.7: Rust CLI Logprob And Perplexity Parity
+
+- Goal: implement Rust CLI parity for logprob and perplexity diagnostic modes.
+- Oracle: committed M8.6 current-C CLI diagnostic fixture.
+- Fixture: same `--dump-logprobs` and `--perplexity-file` cases as M8.6.
+- Comparator: C/Rust comparator for JSON shape, selected tokens, top-logprob
+  ordering, score tolerances, perplexity text fields, and error categories.
+- Acceptance: Rust emits the same machine-readable diagnostic surface and
+  preserves M6 numeric tolerance policy.
+- Drift policy: path and progress-stderr normalization only.
+- Review gate: ask Claude to review model-backed CLI diagnostic parity and
+  failure categories.
+- Validation gate: comparator with negative tests, targeted Rust tests, B300
+  refresh if required by the comparator, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M8.8: Current-C CLI Inspect Output Oracle
+
+- Goal: capture the current-C `--inspect` CLI output surface.
+- Oracle: current `./ds4 --inspect` on the recorded B300 model.
+- Fixture: model path, backend selection, summary stdout/stderr records, model
+  identity, exit status, and exact B300 refresh commands.
+- Comparator: schema/hash checker for summary output anchors, model/backend
+  identity, exit status, and refresh commands.
+- Acceptance: summary output anchors and model identity match current C; no
+  generation, REPL, perplexity, or imatrix path is entered.
+- Drift policy: workspace paths and volatile memory addresses may be
+  normalized; model identity, summary sections, and exit status are exact.
+- Review gate: ask Claude to review inspect-output coverage against
+  `ds4_engine_summary` dispatch.
+- Validation gate: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+
+#### M8.9: Rust CLI Inspect Output Parity
+
+- Goal: implement Rust CLI parity for `--inspect`.
+- Oracle: committed M8.8 current-C inspect fixture.
+- Fixture: same model/backend inspect cases as M8.8.
+- Comparator: C/Rust inspect comparator for normalized summary output, model
+  identity, backend identity, and exit status.
+- Acceptance: Rust enters only the inspect path and matches the committed C
+  summary surface within documented normalization.
+- Drift policy: path and volatile-address normalization only.
+- Review gate: ask Claude to review dispatch exclusivity and output
+  normalization.
+- Validation gate: comparator with negative tests, targeted Rust CLI tests,
+  B300 comparison when required, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M8.10: Current-C CLI Imatrix Capture Oracle
+
+- Goal: capture the current-C CLI imatrix execution mode.
+- Oracle: current `./ds4 --imatrix-dataset --imatrix-out` on the recorded B300
+  model.
+- Fixture: fixed imatrix dataset, output `.dat` file hash/size, `--ctx`,
+  `--imatrix-max-prompts`, `--imatrix-max-tokens`, backend/model identity,
+  progress stderr categories, and exact B300 refresh commands.
+- Comparator: schema/hash checker for output file metadata, prompt/token limit
+  accounting, exit status, stderr categories, and refresh commands.
+- Acceptance: output file hash/size and limit accounting match current C for
+  the fixed dataset; invalid coupling remains covered by M8.2.
+- Drift policy: timing/progress counters and workspace paths may be normalized;
+  output bytes, limit semantics, model identity, and exit status are exact.
+- Review gate: ask Claude to review imatrix dataset coverage and limit
+  semantics.
+- Validation gate: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+
+#### M8.11: Rust CLI Imatrix Capture Parity
+
+- Goal: implement Rust CLI parity for imatrix capture mode.
+- Oracle: committed M8.10 current-C imatrix fixture.
+- Fixture: same dataset, limit, context, backend, and output-path cases as
+  M8.10.
+- Comparator: C/Rust imatrix comparator for output file hash/size, limit
+  accounting, exit status, and normalized stderr categories.
+- Acceptance: Rust writes the same imatrix output bytes for the committed
+  dataset and preserves the current C limit semantics.
+- Drift policy: timing/progress/path normalization only.
+- Review gate: ask Claude to review file-output determinism and limit handling.
+- Validation gate: comparator with negative tests, targeted Rust CLI tests,
+  B300 comparison when required, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M8.12: Current-C CLI One-Shot Generation Oracle
+
+- Goal: capture deterministic current-C one-shot CLI generation transcripts.
+- Oracle: current `./ds4` one-shot mode on the recorded B300 model.
+- Fixture: `-p`, `--prompt-file`, greedy generation with fixed token limit,
+  seeded non-greedy sampling, `--nothink`, `--think`, `--think-max` downgrade
+  warning, backend selection, `--mtp`, `--mtp-draft`, `--mtp-margin`,
+  `--quality`, `--dir-steering-file`, `--dir-steering-ffn`,
+  `--dir-steering-attn`, `--warm-weights`, `-t`/`--threads`, context-size
+  clipping, and timing/progress stderr normalization rules.
+- Comparator: transcript checker for stdout bytes, selected token sequence,
+  exit status, stderr categories, prompt hashes, seed, backend/model identity,
+  and exact B300 refresh commands.
+- Acceptance: deterministic cases match byte-for-byte after documented
+  progress/timing normalization; sampled cases are fixed by seed and compared by
+  selected-token sequence plus stdout bytes.
+- Drift policy: timing, throughput, terminal color, and absolute paths may be
+  normalized; generated bytes, exit status, and stderr categories are exact.
+- Review gate: ask Claude to review stdout/stderr normalization and seeded
+  sampling determinism.
+- Validation gate: B300 capture or exact skipped recapture command, local
+  transcript checker with negative tests, and `git diff --check`.
+
+#### M8.13: Rust CLI One-Shot Generation Parity
+
+- Goal: implement Rust CLI one-shot generation against the M8.12 transcript
+  oracle.
+- Oracle: committed M8.12 current-C transcript fixture.
+- Fixture: same one-shot prompt, prompt-file, thinking-control, sampling, and
+  context cases as M8.12.
+- Comparator: C/Rust transcript comparator for normalized stderr, stdout bytes,
+  token sequence, exit status, and machine-readable fixture metadata.
+- Acceptance: Rust one-shot mode matches current C for all committed transcript
+  cases and uses the same prompt/render/sampling/runtime surfaces already
+  covered by M5 through M7.
+- Drift policy: only documented progress/timing/path normalization.
+- Review gate: ask Claude to review CLI orchestration boundaries and whether
+  any runtime differences are hidden by normalization.
+- Validation gate: comparator with negative tests, targeted Rust CLI tests,
+  B300 comparison run when model-backed, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M8.14: Current-C Interactive CLI Transcript Oracle
+
+- Goal: capture scripted current-C interactive CLI behavior.
+- Oracle: current `./ds4` REPL using a PTY so `linenoise`, prompts, Ctrl+C, and
+  command output are represented.
+- Fixture: `/help`, `/think`, `/think-max`, `/nothink`, `/ctx`, `/read`,
+  unknown command, `/quit`, empty input, one short model-backed turn, and a
+  Ctrl+C interruption case if the PTY harness can make it deterministic.
+- Comparator: PTY transcript checker for prompt markers, command responses,
+  normalized progress/timing lines, exit status, transcript hashes, and exact
+  B300 refresh commands for model-backed cases.
+- Acceptance: command-only cases run locally without a model where possible;
+  model-backed transcript cases have reproducible B300 commands and stable
+  normalization for timing, terminal control, and color.
+- Drift policy: terminal color/control sequences, timing, and absolute paths may
+  be normalized; prompt markers, command responses, and exit categories are
+  exact.
+- Review gate: ask Claude to review PTY determinism and command coverage.
+- Validation gate: local or B300 PTY capture, checker with negative tests, and
+  `git diff --check`.
+
+#### M8.15: Rust Interactive CLI Transcript Parity
+
+- Goal: implement Rust interactive CLI behavior for the M8.14 transcript
+  surface.
+- Oracle: committed M8.14 current-C PTY transcript fixture.
+- Fixture: same command-only and model-backed transcript cases as M8.14.
+- Comparator: C/Rust PTY transcript comparator for prompt markers, command
+  responses, normalized timing/progress, exit status, transcript hashes, and
+  interruption behavior.
+- Acceptance: Rust REPL command handling, prompt display, file-read behavior,
+  thinking-mode switching, context reset, and interruption behavior match the C
+  CLI within documented normalization.
+- Drift policy: terminal escape normalization only where the comparator records
+  it.
+- Review gate: ask Claude to review interactive state handling and transcript
+  normalization.
+- Validation gate: PTY comparator with negative tests, targeted Rust CLI tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M8.16: CLI Parity Report Integration
+
+- Goal: wire M8 CLI comparators and B300 refresh records into parity reports.
+- Oracle: committed M8.2 through M8.15 fixtures and refresh commands.
+- Fixture: M8 manifest entries, local comparator commands, B300 recapture
+  records, and PTY transcript records.
+- Comparator: a Milestone 8 report that runs all local CLI comparators,
+  summarizes first drift paths, and skips only model-backed B300 recaptures with
+  exact commands; the unified parity report includes that M8 report.
+- Acceptance: local report passes without the model, JSON output is
+  machine-readable, failures name fixture/field/expected/got where underlying
+  comparators provide it, and B300 refreshes are reproducible from the report.
+- Drift policy: report normalizes only capture paths and timestamps.
+- Review gate: ask Claude to review report integration and skipped-B300 command
+  fidelity.
+- Validation gate: M8 report, unified parity report, `py_compile`,
+  `cargo test --workspace`, and `git diff --check`.
+
 ## Milestone 9: Server Surface Parity
 
 Port the HTTP server with request/trace comparison.

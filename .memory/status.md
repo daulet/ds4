@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.1 CLI Surface Work Item Breakdown
-- Last validated source commit: M7.9 KV/snapshot report integration in this
+- Active item: M8.2 Current-C CLI Parse And Error Oracle
+- Last validated source commit: M8.1 CLI surface work item breakdown in this
   commit; prior pushed source commit
-  `ba90982d83ce527fe510ae9db0a9c8dc75297978`
+  `8c002617c6ca9537f2e8a9eea5d8e5a4ecb88d09`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -874,4 +874,16 @@
   0 failed`), `python3 ds4-parity/run_kv_parity_report.py --json | python3 -m
   json.tool >/dev/null`, `python3 ds4-parity/run_parity_report.py` (`summary:
   13 passed, 5 skipped, 0 failed`), `cargo test --workspace`, and
+  `git diff --check`.
+- M8.1 split Milestone 8 into CLI parity work items after inspecting
+  `ds4_cli.c` usage text, parser branches, prompt building, one-shot
+  generation, `--dump-tokens`, `--dump-logprobs`, `--perplexity-file`,
+  `--inspect`, imatrix capture, debug/test mode flags, thinking controls, and
+  REPL command handling.
+- M8.1 added roadmap items M8.2 through M8.16, covering current-C parse/error
+  oracle, Rust parse/error parity, token/prompt diagnostics, logprob/perplexity
+  diagnostics, inspect output, imatrix capture, one-shot generation,
+  interactive PTY transcripts, and CLI report integration. The next executable
+  item is M8.2 current-C CLI parse/error oracle.
+- M8.1 validation passed for docs/state-only diff inspection and
   `git diff --check`.

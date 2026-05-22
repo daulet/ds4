@@ -1211,7 +1211,7 @@
 
 ### M8.1: CLI Surface Work Item Breakdown
 
-- Status: pending
+- Status: done
 - Goal: split Milestone 8 into commit-sized CLI parity work items before
   adding Rust CLI behavior.
 - Source evidence needed: Milestone 8 roadmap text, current `ds4_cli.c`, CLI
@@ -1230,9 +1230,36 @@
   fixture paths.
 - Review gate: ask Claude to review whether the split makes each CLI milestone
   verifiable and comparable to current C.
-- Validation needed: inspect diff for docs/state-only scope and run
-  `git diff --check`.
+- Validation passed: inspected `ds4_cli.c` usage, generation, diagnostics,
+  parser, inspect, imatrix, and REPL surfaces; updated
+  `RUST_PORT_ROADMAP.md` with M8.2 through M8.16 work items;
+  `git diff --check` passed.
 - Owner path: `RUST_PORT_ROADMAP.md`, `.memory/status.md`, `.memory/TODO.md`.
+
+### M8.2: Current-C CLI Parse And Error Oracle
+
+- Status: pending
+- Goal: capture the no-model CLI argument, help, and early error surface.
+- Source evidence needed: current `ds4_cli.c` parser, `usage()` text, `main()`
+  early exits, local `ds4` build target, and parse/error branches that exit
+  before model loading.
+- Oracle: current `./ds4` parser in `ds4_cli.c` before model loading.
+- Fixture: `--help`, missing option values, unknown options, invalid numeric
+  and float values, invalid backend names, duplicate prompt sources, `--server`,
+  removed `--metal-graph-generate`, `--dump-tokens` without a prompt, imatrix
+  option coupling, and `--perplexity-file` prompt-source rejection.
+- Comparator: schema checker for exit status, stdout/stderr category, help text
+  anchors, and exact option names.
+- Acceptance: all cases are local and model-free; exit code and stderr category
+  match exactly, with help text compared by stable section anchors.
+- Drift policy: executable path and compiler diagnostics may be normalized; CLI
+  option spelling, exit status, and user-facing error category are exact.
+- Review gate: ask Claude to review coverage for parser branches and accidental
+  model-loading cases.
+- Validation needed: local C capture, schema checker with negative tests, and
+  `git diff --check`.
+- Owner path: CLI parse/error oracle artifacts, `ds4-parity/`,
+  `ds4-parity/baselines/cli/`, `.memory/status.md`.
 
 ## Later Items
 
