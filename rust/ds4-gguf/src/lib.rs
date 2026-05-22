@@ -4,6 +4,7 @@ use std::str;
 pub mod agent_dsml;
 pub mod dsml;
 pub mod prompt;
+pub mod sampling;
 mod tokenizer;
 
 pub use agent_dsml::{
@@ -16,6 +17,10 @@ pub use dsml::{
 };
 pub use prompt::{
     apply_cli_ops, render_chat_prompt_text, ChatMessage, CliOp, ThinkMode, ToolArgument, ToolCall,
+};
+pub use sampling::{
+    sample_argmax, sample_rng_f32, sample_rng_next, sample_top_p_min_p, token_logprob,
+    top_logprobs, SamplingParams, SamplingTrace, TokenScore,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

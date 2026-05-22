@@ -647,7 +647,7 @@
 
 ### M6.3: Rust Sampler And Logprob Math
 
-- Status: pending
+- Status: done
 - Goal: port C sampler, RNG, top-logprob, and token-logprob math to Rust
   without depending on model execution.
 - Source evidence needed: M6.2 fixed-logits C oracle dump,
@@ -669,6 +669,38 @@
   `cargo fmt --all -- --check`, `cargo test --workspace`, and
   `git diff --check`.
 - Owner path: Rust sampler/logprob module, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M6.4: Current-C Session Logits And Logprob Fixture Oracle
+
+- Status: pending
+- Goal: capture model-backed current-C session logits and top-logprob slices
+  for official-vector prompt cases without requiring Rust runtime execution.
+- Source evidence needed: `RUST_PORT_ROADMAP.md` M6.4, M0.3 official-vector
+  prompt cases, `ds4_session_sync`, `ds4_session_argmax`,
+  `ds4_session_top_logprobs`, `ds4_session_token_logprob`, and
+  `ds4_session_eval` on the B300 q2-imatrix model.
+- Oracle: current C session execution on the recorded B300 model.
+- Comparator: schema/hash checker that validates the committed model-backed
+  logits fixture and records skipped local refresh with exact B300 rerun
+  commands.
+- Fixture: official-vector prompt cases, selected continuation tokens, logits
+  payloads or logits hashes for each scored step, top-logprob slices,
+  token-byte renderings, context settings, backend, model identity, and exact
+  B300 refresh commands.
+- Acceptance: selected greedy tokens match the existing official-vector
+  contract, top-logprob slices are deterministic for the recorded backend, and
+  the fixture is small enough to commit or explicitly shards large binary
+  payloads with hashes.
+- Drift policy: model path and capture workspace may be normalized; logits
+  bytes or hashes, selected token IDs/bytes, top-logprob order, token bytes,
+  backend, and model hash are exact.
+- Review gate: ask Claude to review capture schema, artifact size policy, and
+  B300 refresh command fidelity.
+- Validation needed: B300 capture or existing captured-state check, schema/hash
+  checker with negative tests, skipped local refresh evidence, and
+  `git diff --check`.
+- Owner path: C logits fixture dump surface, `ds4-parity/baselines/sampling/`,
   `.memory/status.md`.
 
 ## Later Items

@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.3 Rust Sampler And Logprob Math
-- Last validated source commit: M6.2 fixed-logits sampling oracle commit once
+- Active item: M6.4 Current-C Session Logits And Logprob Fixture Oracle
+- Last validated source commit: M6.3 Rust sampler/logprob parity commit once
   committed; prior pushed source commit
-  `4d401ecf2a2f13e214927ab8ec05dc931d5e796e`
+  `b1b637978779700fb6ce7250e67eaa3eb23c19c6`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -505,3 +505,33 @@
   coverage. Non-blocking notes: `matches_actual` now compares two calls through
   the same helper, and the schema checker is mostly shape/coverage while
   byte-for-byte baseline comparison carries M6.2 drift detection.
+- M6.2 implementation commit:
+  `b1b637978779700fb6ce7250e67eaa3eb23c19c6`.
+- M6.3 added Rust no-model sampler/logprob math in `ds4_gguf::sampling`,
+  including argmax, xorshift RNG, top-p/min-p/top-k filtering, full-vocab
+  sampling, top-logprob slices, token-logprob scoring, and shared sampling
+  parameter defaults.
+- M6.3 added `cargo run --quiet -p ds4-gguf --bin ds4-sampling-dump-rs`, which
+  emits the same fixed-logits case set as the M6.2 C oracle with selected
+  tokens, RNG states, filtered candidates, and logprob scores.
+- M6.3 added `python3 ds4-parity/compare_sampling.py --negative-test`, whose
+  C/Rust comparator enforces exact selected token, RNG state, candidate IDs,
+  candidate counts, request case coverage, top-logprob order, and token-logprob
+  request shape, with `1e-5` ordinary absolute float tolerance and `1e-6`
+  relative tolerance for large sentinel values. Negative tests catch selected
+  token drift, RNG drift, candidate-list drift, logprob drift, and request
+  coverage drift.
+- M6.3 validation passed for `cargo test -p ds4-gguf sampling --quiet` with 3
+  sampling tests passing, `python3 -m py_compile
+  ds4-parity/compare_sampling.py`, `python3 ds4-parity/compare_sampling.py
+  --negative-test --write-rust-dump /tmp/ds4-sampling-rust-from-comparator.json`
+  with `sampling C/Rust comparator: PASS, 3241 checks` and `sampling C/Rust
+  negative tests: PASS, 5 checks`, `cargo fmt --all -- --check`,
+  `cargo test --workspace` with all workspace tests passing, and
+  `git diff --check`.
+- M6.3 Claude review returned `NO BLOCKERS` after checking Rust numeric edge
+  cases, RNG semantics, candidate filtering order, top-logprob tie order,
+  non-finite handling, request fixture coverage, and comparator negative tests.
+  Non-blocking notes: top-p/full-vocab tied-logit fixture coverage is latent,
+  Rust faithfully recomputes full-vocab weights during roulette like C, and
+  greedy mode intentionally leaves effective params unclamped to match C.
