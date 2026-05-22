@@ -536,7 +536,7 @@
 
 ### M5.6b: Agent DSML Streaming Parse Parity
 
-- Status: pending
+- Status: done
 - Goal: port `agent_dsml_parse` streaming behavior for incremental generated
   DSML, including parser states, buffering, emitted calls, and error/truncated
   boundaries.

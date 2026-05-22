@@ -1,0 +1,26 @@
+{
+  "schema": "ds4.agent_dsml_baseline.v1",
+  "milestone": "M5.6b",
+  "source_commit": "same commit as this manifest",
+  "captured_from_parent_commit": "aaab1818710384e1c0b754c94f63dbf408ddb724",
+  "captured_utc": "2026-05-22T08:10:40Z",
+  "dumps": {
+    "current_c": {
+      "path": "current-c.json",
+      "size_bytes": 887559,
+      "sha256": "0b0f21728b0f5230dcbae5d3d2a99e272347ecdeac04fa57ca07ec00b9f00618",
+      "producer": "current-c-agent-dsml-oracle",
+      "command": "./ds4-agent --dump-agent-dsml-oracle ds4-parity/baselines/dsml/m5.6b/current-c.json"
+    }
+  },
+  "refresh_commands": [
+    "arch -arm64 make ds4-agent",
+    "./ds4-agent --dump-agent-dsml-oracle ds4-parity/baselines/dsml/m5.6b/current-c.json",
+    "python3 ds4-parity/compare_agent_dsml.py --manifest ds4-parity/baselines/dsml/m5.6b/manifest.json --negative-test"
+  ],
+  "normalization": {
+    "states": "exact parser state names, offsets, raw/search hex buffers, current call, completed calls, parameter state, and error string",
+    "schedules": "whole-message, one-byte, marker-prefix, and parameter-boundary schedules are exact for every fixture where applicable",
+    "model": "no model is loaded for this oracle"
+  }
+}

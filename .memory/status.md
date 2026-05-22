@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.6b Agent DSML Streaming Parse Parity
-- Last validated source commit: same commit as the M5.6a status entry once
+- Active item: M5.7 Request Fixture Integration And Text Parity Report
+- Last validated source commit: same commit as the M5.6b status entry once
   committed
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
@@ -395,3 +395,30 @@
   parser/formatter against C tool-start ordering, raw block boundaries,
   sentinel escaping, entity escaping, JSON minification, response recovery,
   raw DSML replay, prompt-renderer routing, and comparator coverage.
+- M5.6a implementation commit:
+  `aaab1818710384e1c0b754c94f63dbf408ddb724`.
+- M5.6b added `./ds4-agent --dump-agent-dsml-oracle`, a no-model current-C
+  oracle for the agent incremental DSML parser. The fixture records whole,
+  one-byte, marker-prefix, and parameter-boundary schedules where applicable,
+  including raw/search buffer hex, parser states, current call, completed calls,
+  parameter state, and error text after each chunk.
+- M5.6b added Rust `ds4_gguf::agent_dsml`, `ds4-agent-dsml-dump`, and
+  `python3 ds4-parity/compare_agent_dsml.py`. The committed C baseline lives at
+  `ds4-parity/baselines/dsml/m5.6b/current-c.json` with size 887,559 bytes and
+  SHA256
+  `0b0f21728b0f5230dcbae5d3d2a99e272347ecdeac04fa57ca07ec00b9f00618`.
+- M5.6b validation passed for `arch -arm64 make ds4-agent`,
+  `./ds4-agent --dump-agent-dsml-oracle /tmp/agent-dsml-final-c.json` compared
+  byte-for-byte with the committed baseline,
+  `python3 ds4-parity/compare_agent_dsml.py --manifest
+  ds4-parity/baselines/dsml/m5.6b/manifest.json --negative-test` with
+  `agent DSML comparison: PASS, 37873 checks`, `python3 -m py_compile
+  ds4-parity/compare_agent_dsml.py ds4-parity/compare_dsml.py`,
+  `cargo fmt --all -- --check`, `cargo test -p ds4-gguf` with 16 tests,
+  `cargo test --workspace`, `python3 ds4-parity/compare_dsml.py --manifest
+  ds4-parity/baselines/dsml/m5.6a/manifest.json --negative-test`,
+  `./ds4_test --server`, and `git diff --check`.
+- M5.6b Claude review returned `NO BLOCKERS` after checking byte-vs-UTF-8
+  behavior, mid-chunk done/error accumulation, close-tag variants, search-tail
+  behavior, raw buffer accumulation, current/completed call transitions,
+  fixture coverage, and no-model oracle startup.

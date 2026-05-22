@@ -14,3 +14,7 @@ path = "src/bin/ds4-gguf-dump.rs"
 [[bin]]
 name = "ds4-dsml-dump"
 path = "src/bin/ds4-dsml-dump.rs"
+
+[[bin]]
+name = "ds4-agent-dsml-dump"
+path = "src/bin/ds4-agent-dsml-dump.rs"

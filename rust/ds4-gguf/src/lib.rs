@@ -1,10 +1,14 @@
 use std::fmt;
 use std::str;
 
+pub mod agent_dsml;
 pub mod dsml;
 pub mod prompt;
 mod tokenizer;
 
+pub use agent_dsml::{
+    hex as agent_dsml_hex, AgentDsmlParser, AgentDsmlState, AgentToolArg, AgentToolCall,
+};
 pub use dsml::{
     parse_generated_message, parse_generated_message_for_response, render_dsml_tool_calls,
     render_dsml_tool_calls_from_json, render_tool_result_text, DsmlArgument, DsmlJsonCall,

@@ -60,6 +60,7 @@ typedef struct {
 typedef struct {
     ds4_engine_options engine;
     agent_generation_options gen;
+    const char *agent_dsml_oracle_output_path;
 } agent_config;
 
 typedef enum {
@@ -385,6 +386,8 @@ static void usage(FILE *fp) {
         "  -p, --prompt TEXT      Submit an initial prompt after startup.\n"
         "  -sys, --system TEXT    Extra system prompt. Empty disables extra text.\n"
         "  --trace FILE           Write prompt, token, and DSML debug trace.\n"
+        "  --dump-agent-dsml-oracle FILE\n"
+        "                          Dump no-model agent DSML streaming parser oracle JSON, then exit.\n"
         "  --temp F               Sampling temperature. Default: 1\n"
         "  --top-p F              Nucleus sampling probability. Default: 1\n"
         "  --min-p F              Min-p sampling threshold. Default: 0.05\n"
@@ -451,6 +454,8 @@ static agent_config parse_options(int argc, char **argv) {
             c.gen.system = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--trace")) {
             c.gen.trace_path = need_arg(&i, argc, argv, arg);
+        } else if (!strcmp(arg, "--dump-agent-dsml-oracle")) {
+            c.agent_dsml_oracle_output_path = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "-m") || !strcmp(arg, "--model")) {
             c.engine.model_path = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--mtp")) {
@@ -1056,6 +1061,338 @@ static void agent_dsml_feed(agent_dsml_parser *p, const char *s, size_t n) {
         agent_dsml_raw_append(p, &c, 1);
         agent_dsml_parse(p);
     }
+}
+
+static const char *agent_dsml_state_name(agent_dsml_state state) {
+    switch (state) {
+    case AGENT_DSML_SEARCH: return "search";
+    case AGENT_DSML_STRUCTURAL: return "structural";
+    case AGENT_DSML_PARAM_VALUE: return "param_value";
+    case AGENT_DSML_DONE: return "done";
+    case AGENT_DSML_ERROR: return "error";
+    }
+    return "unknown";
+}
+
+static void agent_dsml_oracle_json_string(FILE *fp, const char *s) {
+    fputc('"', fp);
+    for (s = s ? s : ""; *s; s++) {
+        unsigned char c = (unsigned char)*s;
+        if (c == '"' || c == '\\') {
+            fputc('\\', fp);
+            fputc((char)c, fp);
+        } else if (c == '\n') {
+            fputs("\\n", fp);
+        } else if (c == '\r') {
+            fputs("\\r", fp);
+        } else if (c == '\t') {
+            fputs("\\t", fp);
+        } else if (c < 0x20) {
+            fprintf(fp, "\\u%04x", (unsigned)c);
+        } else {
+            fputc((char)c, fp);
+        }
+    }
+    fputc('"', fp);
+}
+
+static void agent_dsml_oracle_json_nullable(FILE *fp, const char *s) {
+    if (s) agent_dsml_oracle_json_string(fp, s);
+    else fputs("null", fp);
+}
+
+static void agent_dsml_oracle_hex(FILE *fp, const char *s, size_t n) {
+    static const char hex[] = "0123456789abcdef";
+    fputc('"', fp);
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        fputc(hex[c >> 4], fp);
+        fputc(hex[c & 15], fp);
+    }
+    fputc('"', fp);
+}
+
+static void agent_dsml_oracle_args(FILE *fp, const agent_tool_call *call) {
+    fputc('[', fp);
+    if (call) {
+        for (int i = 0; i < call->argc; i++) {
+            if (i) fputs(", ", fp);
+            fputs("{\"name\": ", fp);
+            agent_dsml_oracle_json_nullable(fp, call->args[i].name);
+            fputs(", \"value\": ", fp);
+            agent_dsml_oracle_json_nullable(fp, call->args[i].value);
+            fputs(", \"is_string\": ", fp);
+            fputs(call->args[i].is_string ? "true" : "false", fp);
+            fputc('}', fp);
+        }
+    }
+    fputc(']', fp);
+}
+
+static void agent_dsml_oracle_call(FILE *fp, const agent_tool_call *call) {
+    fputs("{\"name\": ", fp);
+    agent_dsml_oracle_json_nullable(fp, call ? call->name : NULL);
+    fputs(", \"args\": ", fp);
+    agent_dsml_oracle_args(fp, call);
+    fputc('}', fp);
+}
+
+static void agent_dsml_oracle_calls(FILE *fp, const agent_tool_calls *calls) {
+    fputc('[', fp);
+    if (calls) {
+        for (int i = 0; i < calls->len; i++) {
+            if (i) fputs(", ", fp);
+            agent_dsml_oracle_call(fp, &calls->v[i]);
+        }
+    }
+    fputc(']', fp);
+}
+
+static void agent_dsml_oracle_snapshot(FILE *fp, const agent_dsml_parser *p,
+                                       int chunk_index, size_t offset,
+                                       size_t len, bool include_chunk) {
+    fputc('{', fp);
+    if (include_chunk) {
+        fprintf(fp, "\"chunk_index\": %d, \"offset\": %zu, \"len\": %zu, ",
+                chunk_index, offset, len);
+    }
+    fputs("\"state\": ", fp);
+    agent_dsml_oracle_json_string(fp, agent_dsml_state_name(p->state));
+    fprintf(fp, ", \"search_len\": %zu, \"search_tail_hex\": ", p->search_len);
+    agent_dsml_oracle_hex(fp, p->search_tail, p->search_len);
+    fprintf(fp, ", \"raw_len\": %zu, \"raw_hex\": ", p->raw_len);
+    agent_dsml_oracle_hex(fp, p->raw ? p->raw : "", p->raw_len);
+    fprintf(fp, ", \"parse_pos\": %zu, \"param_name\": ", p->parse_pos);
+    agent_dsml_oracle_json_nullable(fp, p->param_name);
+    fputs(", \"param_is_string\": ", fp);
+    fputs(p->param_is_string ? "true" : "false", fp);
+    fprintf(fp, ", \"param_value_start\": %zu, \"current\": ", p->param_value_start);
+    agent_dsml_oracle_call(fp, &p->current);
+    fputs(", \"calls\": ", fp);
+    agent_dsml_oracle_calls(fp, &p->calls);
+    fputs(", \"error\": ", fp);
+    agent_dsml_oracle_json_string(fp, p->error);
+    fputc('}', fp);
+}
+
+typedef struct {
+    size_t v[16];
+    int len;
+} agent_dsml_splits;
+
+static void agent_dsml_split_add(agent_dsml_splits *splits, size_t split, size_t input_len) {
+    if (!split || split >= input_len) return;
+    if (splits->len >= (int)(sizeof(splits->v) / sizeof(splits->v[0]))) return;
+    for (int i = 0; i < splits->len; i++) {
+        if (splits->v[i] == split) return;
+        if (splits->v[i] > split) {
+            memmove(&splits->v[i + 1], &splits->v[i],
+                    (size_t)(splits->len - i) * sizeof(splits->v[0]));
+            splits->v[i] = split;
+            splits->len++;
+            return;
+        }
+    }
+    splits->v[splits->len++] = split;
+}
+
+static void agent_dsml_oracle_schedule(FILE *fp, const char *name,
+                                       const char *input,
+                                       const agent_dsml_splits *splits,
+                                       bool one_byte,
+                                       bool first) {
+    if (!first) fputs(",\n", fp);
+    fputs("        {\"name\": ", fp);
+    agent_dsml_oracle_json_string(fp, name);
+    fputs(", \"steps\": [", fp);
+
+    agent_dsml_parser p = {.state = AGENT_DSML_SEARCH};
+    size_t input_len = strlen(input);
+    size_t offset = 0;
+    int chunk_index = 0;
+    bool first_step = true;
+
+    if (one_byte) {
+        for (offset = 0; offset < input_len; offset++) {
+            agent_dsml_feed(&p, input + offset, 1);
+            if (!first_step) fputs(", ", fp);
+            agent_dsml_oracle_snapshot(fp, &p, chunk_index++, offset, 1, true);
+            first_step = false;
+        }
+    } else {
+        for (int i = 0; splits && i < splits->len; i++) {
+            size_t split = splits->v[i];
+            if (split <= offset || split > input_len) continue;
+            agent_dsml_feed(&p, input + offset, split - offset);
+            if (!first_step) fputs(", ", fp);
+            agent_dsml_oracle_snapshot(fp, &p, chunk_index++, offset,
+                                       split - offset, true);
+            first_step = false;
+            offset = split;
+        }
+        if (offset < input_len || chunk_index == 0) {
+            agent_dsml_feed(&p, input + offset, input_len - offset);
+            if (!first_step) fputs(", ", fp);
+            agent_dsml_oracle_snapshot(fp, &p, chunk_index++, offset,
+                                       input_len - offset, true);
+            first_step = false;
+        }
+    }
+
+    fputs("], \"final\": ", fp);
+    agent_dsml_oracle_snapshot(fp, &p, -1, 0, 0, false);
+    fputc('}', fp);
+    agent_dsml_parser_free(&p);
+}
+
+static void agent_dsml_oracle_standard_splits(const char *input,
+                                              agent_dsml_splits *start,
+                                              agent_dsml_splits *param) {
+    size_t input_len = strlen(input);
+    static const char marker[] = "<｜DSML｜tool_calls>";
+    char *m = strstr(input, marker);
+    if (m) {
+        size_t pos = (size_t)(m - input);
+        agent_dsml_split_add(start, pos + 1, input_len);
+        agent_dsml_split_add(start, pos + 8, input_len);
+        agent_dsml_split_add(start, pos + strlen(marker) - 1, input_len);
+        agent_dsml_split_add(start, pos + strlen(marker), input_len);
+    }
+
+    static const char param_start[] = "<｜DSML｜parameter";
+    char *p = strstr(input, param_start);
+    if (p) {
+        char *tag_end = strchr(p, '>');
+        if (tag_end) agent_dsml_split_add(param, (size_t)(tag_end - input) + 1, input_len);
+        char *close = strstr(p, "</｜DSML｜parameter");
+        if (close) {
+            size_t close_pos = (size_t)(close - input);
+            agent_dsml_split_add(param, close_pos + 1, input_len);
+            agent_dsml_split_add(param, close_pos + 8, input_len);
+            char *close_end = strchr(close, '>');
+            if (close_end) {
+                agent_dsml_split_add(param, (size_t)(close_end - input), input_len);
+                agent_dsml_split_add(param, (size_t)(close_end - input) + 1, input_len);
+            }
+        }
+    }
+}
+
+typedef struct {
+    const char *name;
+    const char *input;
+} agent_dsml_oracle_case;
+
+static const agent_dsml_oracle_case AGENT_DSML_ORACLE_CASES[] = {
+    {
+        "simple_tool",
+        "prefix <｜DSML｜tool_calls>\n"
+        "<｜DSML｜invoke name=\"bash\">\n"
+        "<｜DSML｜parameter name=\"command\" string=\"true\">pwd</｜DSML｜parameter>\n"
+        "</｜DSML｜invoke>\n"
+        "</｜DSML｜tool_calls>",
+    },
+    {
+        "multiple_invokes",
+        "<｜DSML｜tool_calls>\n"
+        "<｜DSML｜invoke name=\"first\">\n"
+        "<｜DSML｜parameter name=\"value\" string=\"true\">one</｜DSML｜parameter>\n"
+        "</｜DSML｜invoke>\n"
+        "<｜DSML｜invoke name=\"second\">\n"
+        "<｜DSML｜parameter name=\"value\" string=\"false\">2</｜DSML｜parameter>\n"
+        "</｜DSML｜invoke>\n"
+        "</｜DSML｜tool_calls>",
+    },
+    {
+        "escaped_parameter_delimiter",
+        "<｜DSML｜tool_calls>\n"
+        "<｜DSML｜invoke name=\"bash\">\n"
+        "<｜DSML｜parameter name=\"command\" string=\"true\">echo &lt;/｜DSML｜parameter> keep</｜DSML｜parameter>\n"
+        "</｜DSML｜invoke>\n"
+        "</｜DSML｜tool_calls>",
+    },
+    {
+        "close_tag_variants",
+        "<｜DSML｜tool_calls>\n"
+        "<｜DSML｜invoke name=\"bash\">\n"
+        "<｜DSML｜parameter name=\"command\" string=\"true\">pwd</｜DSML｜parameter ｜ >\n"
+        "</｜DSML｜invoke ｜ >\n"
+        "</｜DSML｜tool_calls ｜ >",
+    },
+    {
+        "malformed_missing_invoke_name",
+        "<｜DSML｜tool_calls>\n<｜DSML｜invoke>\n</｜DSML｜tool_calls>",
+    },
+    {
+        "malformed_missing_parameter_name",
+        "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"bash\">\n<｜DSML｜parameter>value</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>",
+    },
+    {
+        "unexpected_tag",
+        "<｜DSML｜tool_calls>\n<｜DSML｜oops>\n</｜DSML｜tool_calls>",
+    },
+    {
+        "truncated_tool_calls",
+        "<｜DSML｜tool_calls>\n",
+    },
+    {
+        "truncated_invoke",
+        "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"bash\"",
+    },
+    {
+        "truncated_parameter",
+        "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"bash\">\n<｜DSML｜parameter name=\"command\" string=\"true\">unterminated",
+    },
+    {
+        "short_marker_ignored",
+        "<DSML｜tool_calls>\n<DSML｜invoke name=\"bash\"></DSML｜invoke>\n</DSML｜tool_calls>",
+    },
+    {
+        "no_start_prose",
+        "plain text with </｜DSML｜tool_calls> but no canonical opening marker",
+    },
+    {
+        "think_wrapped_start",
+        "<think>reason</think>\n\n<｜DSML｜tool_calls>\n"
+        "<｜DSML｜invoke name=\"bash\">\n"
+        "<｜DSML｜parameter name=\"command\" string=\"true\">pwd</｜DSML｜parameter>\n"
+        "</｜DSML｜invoke>\n"
+        "</｜DSML｜tool_calls>",
+    },
+};
+
+static int agent_dsml_oracle_dump_json(FILE *fp) {
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.agent_dsml_oracle.v1\",\n", fp);
+    fputs("  \"cases\": [\n", fp);
+    for (size_t i = 0; i < sizeof(AGENT_DSML_ORACLE_CASES) / sizeof(AGENT_DSML_ORACLE_CASES[0]); i++) {
+        const agent_dsml_oracle_case *tc = &AGENT_DSML_ORACLE_CASES[i];
+        if (i) fputs(",\n", fp);
+        fputs("    {\"name\": ", fp);
+        agent_dsml_oracle_json_string(fp, tc->name);
+        fputs(", \"input\": ", fp);
+        agent_dsml_oracle_json_string(fp, tc->input);
+        fputs(", \"schedules\": [\n", fp);
+
+        agent_dsml_splits none = {0};
+        agent_dsml_splits start = {0};
+        agent_dsml_splits param = {0};
+        agent_dsml_oracle_standard_splits(tc->input, &start, &param);
+        bool first = true;
+        agent_dsml_oracle_schedule(fp, "whole", tc->input, &none, false, first);
+        first = false;
+        agent_dsml_oracle_schedule(fp, "one_byte", tc->input, NULL, true, first);
+        if (start.len) {
+            agent_dsml_oracle_schedule(fp, "marker_prefix", tc->input, &start, false, false);
+        }
+        if (param.len) {
+            agent_dsml_oracle_schedule(fp, "parameter_boundary", tc->input, &param, false, false);
+        }
+        fputs("\n      ]}", fp);
+    }
+    fputs("\n  ]\n", fp);
+    fputs("}\n", fp);
+    return ferror(fp) ? 1 : 0;
 }
 
 /* ============================================================================
@@ -7165,6 +7502,22 @@ static int run_agent(ds4_engine *engine, agent_config *cfg) {
 
 int main(int argc, char **argv) {
     agent_config cfg = parse_options(argc, argv);
+    if (cfg.agent_dsml_oracle_output_path) {
+        FILE *fp = fopen(cfg.agent_dsml_oracle_output_path, "wb");
+        if (!fp) {
+            fprintf(stderr, "ds4-agent: failed to open agent DSML oracle output %s: %s\n",
+                    cfg.agent_dsml_oracle_output_path, strerror(errno));
+            return 1;
+        }
+        int rc = agent_dsml_oracle_dump_json(fp);
+        if (fclose(fp) != 0 && rc == 0) {
+            fprintf(stderr, "ds4-agent: failed to close agent DSML oracle output %s: %s\n",
+                    cfg.agent_dsml_oracle_output_path, strerror(errno));
+            rc = 1;
+        }
+        return rc;
+    }
+
     log_context_memory(cfg.engine.backend, cfg.gen.ctx_size);
 
     ds4_engine *engine = NULL;
