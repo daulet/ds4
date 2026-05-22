@@ -240,6 +240,134 @@ Acceptance:
 - Numeric comparisons use explicit tolerances; text and binary comparisons are
   byte-exact unless a fixture says otherwise.
 
+### Milestone 1 Work Items
+
+Milestone 1 must land as harness-only commits. It should not introduce Rust
+runtime behavior or change existing C binaries.
+
+#### M1.1: Parity Harness Work Item Breakdown
+
+- Goal: split Milestone 1 into reviewable work items before adding harness
+  code.
+- Oracle: Milestone 0 baseline artifacts and this roadmap's Milestone 1
+  deliverables.
+- Fixture: `ds4-parity/baselines/manifest.md`, the committed Milestone 0
+  artifact directories, and current build/test command records.
+- Comparator: documentation-only review; no source behavior changes.
+- Acceptance: each Milestone 1 implementation item names a tangible goal,
+  oracle, fixture, comparator, acceptance rule, drift policy, review gate, and
+  validation gate.
+- Drift policy: no implementation or fixture-format drift allowed.
+- Review gate: ask Claude to review the roadmap diff for missing or oversized
+  Milestone 1 work items.
+- Validation gate: `git diff --check`.
+
+#### M1.2: Static Baseline Artifact Verifier
+
+- Goal: add a local `ds4-parity` verifier that checks committed Milestone 0
+  artifacts without rerunning model-backed commands.
+- Oracle: committed Milestone 0 artifact hash files, JSON responses, CSV files,
+  parsed KV metadata, and the baseline manifest.
+- Fixture: `ds4-parity/baselines/**/artifact-sha256.txt`,
+  M0.4/M0.5 response JSON, M0.5 KV metadata, and M0.6 benchmark CSVs.
+- Comparator: a checked-in command such as
+  `python3 ds4-parity/verify_baselines.py` that validates hashes, parses JSON
+  and CSV artifacts, and emits a standard report naming oracle, fixture,
+  comparator, and result for each section.
+- Acceptance: the verifier exits 0 against the committed baseline artifacts,
+  reports every Milestone 0 artifact family, and fails when a copied fixture is
+  deliberately changed in a temporary test directory.
+- Drift policy: exact bytes for hash-listed artifacts; structured parsers may
+  normalize only the timestamp/path fields already documented in
+  `ds4-parity/baselines/manifest.md`.
+- Review gate: ask Claude to review the verifier diff, report format, and
+  validation evidence for uncovered Milestone 0 artifacts.
+- Validation gate: run the verifier, run its negative test, and run
+  `git diff --check`.
+
+#### M1.3: Server And KV Normalization Comparators
+
+- Goal: add comparison helpers for M0.4 server traces/responses and M0.5 KV
+  restore artifacts.
+- Oracle: M0.4 `server-traces/m0.4/` and M0.5 `kv-artifacts/m0.5/`.
+- Fixture: M0.4 server request fixtures, response JSON/SSE/header artifacts,
+  trace files, M0.5 cache decision logs, rendered cached text, and parsed
+  `kv-header.tsv`.
+- Comparator: harness subcommands or modules that compare a candidate artifact
+  directory to the baseline after applying only the documented normalizations.
+- Acceptance: self-comparison of committed M0.4 and M0.5 artifacts reports no
+  drift; temporary candidate edits to cache source, cached token count, finish
+  reason, KV reason, or rendered text produce failures.
+- Drift policy: response shape, prompt rendering, tool-call mapping, cache
+  source, cache token counts, KV header semantic fields, and rendered text are
+  exact behavioral surface.
+- Review gate: ask Claude to review the normalization allow-list and negative
+  test coverage for over-normalization.
+- Validation gate: run self-comparison, run negative tests, and run
+  `git diff --check`.
+
+#### M1.4: Logprob And Numeric Comparator
+
+- Goal: add numeric comparison support for official-vector output and later
+  tensor/logit fixtures.
+- Oracle: M0.3 official-vector baseline and the current
+  `./ds4_test --logprob-vectors` command on the recorded model/backend.
+- Fixture: `tests/test-vectors/official.vec`, model identity from M0.3, and the
+  captured M0.3 B300 logprob output.
+- Comparator: harness logic that parses selected greedy-token outcomes exactly
+  and compares numeric slices with an explicit tolerance recorded in the report.
+- Acceptance: current captured M0.3 output compares cleanly to its baseline;
+  exact-token mismatches fail; numeric mismatches outside the declared tolerance
+  fail.
+- Drift policy: selected greedy tokens are exact; numeric logprob/tensor values
+  may use only the tolerance declared by the fixture or report.
+- Review gate: ask Claude to review tolerance choices and exact-token failure
+  coverage.
+- Validation gate: run the numeric comparator, run negative tests for token and
+  numeric drift, and run `git diff --check`.
+
+#### M1.5: Benchmark CSV Comparator
+
+- Goal: add comparison support for M0.6 benchmark CSV baselines.
+- Oracle: M0.6 `bench/m0.6/csv/b300-short.csv` and
+  `bench/m0.6/csv/b300-long.csv`.
+- Fixture: the M0.6 prompt hash, model hash, B300 machine record, CSV files,
+  and `csv-summary.json`.
+- Comparator: harness logic that validates CSV schema, context frontiers,
+  prefill intervals, generation-token counts, `kvcache_bytes`, and throughput
+  ratios against the M0.6 drift policy.
+- Acceptance: committed M0.6 CSVs self-compare cleanly; schema, frontier,
+  generation-token, or cache-byte edits fail; throughput values below the
+  documented threshold are reported as performance regressions.
+- Drift policy: workload shape and `kvcache_bytes` are exact; throughput is
+  compared only on the same machine class and uses the M0.6 threshold unless a
+  later milestone changes it.
+- Review gate: ask Claude to review threshold handling and failure reporting.
+- Validation gate: run CSV self-comparison, run negative tests, and run
+  `git diff --check`.
+
+#### M1.6: Oracle Runner And Unified Report
+
+- Goal: add a single documented command that can run available current-C
+  oracle checks and compare their outputs to Milestone 0 baselines.
+- Oracle: current C binaries plus Milestone 0 baselines.
+- Fixture: local non-model fixtures, B300-routed model fixtures, and the
+  baseline manifest.
+- Comparator: a report-producing `ds4-parity` command that either runs the
+  available oracle locally or marks a model/GPU case with the exact B300 command
+  required, then compares produced artifacts with the M1.2 through M1.5 helpers.
+- Acceptance: local no-model checks run without `ds4flash.gguf`; model-backed
+  checks are either executed on the B300 pod or reported as skipped with exact
+  reproduction commands; the unified report has no unexpected drift against the
+  current baseline.
+- Drift policy: no source behavior changes; runner skips are allowed only when
+  the report names the missing model/backend requirement and exact rerun
+  command.
+- Review gate: ask Claude to review runner skip semantics, B300 command
+  routing, and whether report results are actionable.
+- Validation gate: run the unified report locally, run any available B300
+  oracle checks needed for the commit, and run `git diff --check`.
+
 ## Milestone 2: Rust Workspace and FFI Skeleton
 
 Add Rust build structure without moving behavior.

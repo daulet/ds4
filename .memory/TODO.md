@@ -90,7 +90,7 @@
 
 ### M1.1: Parity Harness Work Item Breakdown
 
-- Status: in-progress
+- Status: done
 - Goal: split Milestone 1 into reviewable work items in `RUST_PORT_ROADMAP.md`
   before adding Rust harness code.
 - Source evidence needed: Milestone 0 manifest sections and artifact layout,
@@ -102,7 +102,21 @@
   gate.
 - Owner path: `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
 
+### M1.2: Static Baseline Artifact Verifier
+
+- Status: in-progress
+- Goal: add a local `ds4-parity` verifier that checks committed Milestone 0
+  artifacts without rerunning model-backed commands.
+- Source evidence needed: M0 artifact hash files, M0.4/M0.5 JSON and trace
+  artifacts, M0.5 KV metadata, M0.6 benchmark CSVs, and the baseline manifest.
+- Oracle: committed Milestone 0 artifacts and their hash/shape contracts.
+- Comparator: checked-in verifier command that validates hashes, parses
+  structured artifacts, and emits a standard report.
+- Validation needed: verifier exits 0 on committed baselines; a negative test
+  against a temporary changed fixture fails; `git diff --check`.
+- Owner path: `ds4-parity/`, `ds4-parity/baselines/`.
+
 ## Later Items
 
-Add later post-Milestone 1 items from `RUST_PORT_ROADMAP.md` when the Milestone
-1 work item breakdown completes.
+Add later Milestone 1 items from `RUST_PORT_ROADMAP.md` as each active item
+completes.

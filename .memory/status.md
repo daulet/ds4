@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M1.1 Parity Harness Work Item Breakdown
-- Last validated source commit: `add2c507f81aa2e363809213771134c282c50bf2`
+- Active item: M1.2 Static Baseline Artifact Verifier
+- Last validated source commit: `04543efe69b2ad754c865df2f6b0a380f34ff1d2`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -67,3 +67,6 @@
 - M0.6 artifacts live under `ds4-parity/baselines/bench/m0.6/`; the short CSV
   covers 2048 through 8192 tokens and the long CSV covers 16384 through 32768
   tokens, both with 32 greedy generation tokens per frontier.
+- M1.1 documented the Milestone 1 implementation work items in
+  `RUST_PORT_ROADMAP.md`; the next executable item is a static verifier for the
+  committed Milestone 0 artifacts.
