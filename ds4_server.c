@@ -748,10 +748,11 @@ static void request_init(request *r, req_kind kind, int max_tokens) {
     r->api = API_OPENAI;
     r->model = xstrdup("deepseek-v4-flash");
     r->max_tokens = max_tokens;
-    r->top_k = 0;
-    r->temperature = DS4_DEFAULT_TEMPERATURE;
-    r->top_p = DS4_DEFAULT_TOP_P;
-    r->min_p = DS4_DEFAULT_MIN_P;
+    const ds4_sampling_params sampling = ds4_sampling_params_defaults();
+    r->top_k = sampling.top_k;
+    r->temperature = sampling.temperature;
+    r->top_p = sampling.top_p;
+    r->min_p = sampling.min_p;
     r->think_mode = DS4_THINK_HIGH;
 }
 
@@ -10847,20 +10848,20 @@ static void generate_job(server *s, job *j) {
         if (!(j->req.kind == REQ_CHAT && j->req.has_tools && (saw_tool_start || in_tool_call))) {
             kv_cache_maybe_store_continued(s);
         }
-        float temperature = j->req.temperature;
-        int top_k = j->req.top_k;
-        float top_p = j->req.top_p;
-        float min_p = j->req.min_p;
+        ds4_sampling_params sampling = {
+            .temperature = j->req.temperature,
+            .top_k = j->req.top_k,
+            .top_p = j->req.top_p,
+            .min_p = j->req.min_p,
+        };
         if (ds4_think_mode_enabled(j->req.think_mode)) {
-            temperature = DS4_DEFAULT_TEMPERATURE;
-            top_k = 0;
-            top_p = DS4_DEFAULT_TOP_P;
-            min_p = DS4_DEFAULT_MIN_P;
+            ds4_sampling_params_apply_thinking_defaults(&sampling);
         }
         if (in_tool_call && !dsml_decode_state_uses_payload_sampling(dsml_state)) {
-            temperature = 0.0f;
+            ds4_sampling_params_apply_dsml_structural(&sampling);
         }
-        int token = ds4_session_sample(s->session, temperature, top_k, top_p, min_p, &rng);
+        int token = ds4_session_sample(s->session, sampling.temperature, sampling.top_k,
+                                       sampling.top_p, sampling.min_p, &rng);
         if (token == ds4_token_eos(s->engine)) {
             finish = "stop";
             break;
@@ -10868,7 +10869,7 @@ static void generate_job(server *s, job *j) {
 
         int toks[17];
         int ntok = 0;
-        if (temperature <= 0.0f &&
+        if (sampling.temperature <= 0.0f &&
             ds4_engine_mtp_draft_tokens(s->engine) > 1 &&
             getenv("DS4_MTP_SPEC_DISABLE") == NULL)
         {

@@ -1281,13 +1281,15 @@ static cli_config parse_options(int argc, char **argv) {
             .system = "You are a helpful assistant",
             .n_predict = 50000,
             .ctx_size = 32768,
-            .temperature = DS4_DEFAULT_TEMPERATURE,
-            .top_p = DS4_DEFAULT_TOP_P,
-            .min_p = DS4_DEFAULT_MIN_P,
             .dump_logprobs_top_k = 20,
             .think_mode = DS4_THINK_HIGH,
         },
     };
+
+    const ds4_sampling_params sampling = ds4_sampling_params_defaults();
+    c.gen.temperature = sampling.temperature;
+    c.gen.top_p = sampling.top_p;
+    c.gen.min_p = sampling.min_p;
 
     bool directional_steering_scale_set = false;
     for (int i = 1; i < argc; i++) {

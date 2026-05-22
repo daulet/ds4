@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.2 C Fixed-Logits Sampling And Logprob Oracle
-- Last validated source commit: M6.1 sampling/logprob split commit once
+- Active item: M6.3 Rust Sampler And Logprob Math
+- Last validated source commit: M6.2 fixed-logits sampling oracle commit once
   committed; prior pushed source commit
-  `3223f6e3a09f066873c5b8afc1b855adabad068d`
+  `4d401ecf2a2f13e214927ab8ec05dc931d5e796e`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -464,3 +464,44 @@
   `NO BLOCKERS` after tightening M6.2 fixture ownership for source-named
   request-surface sampling tuples and splitting decode stop policy into M6.6a
   C oracle fixtures plus M6.6b Rust policy comparison.
+- M6.1 implementation commit:
+  `4d401ecf2a2f13e214927ab8ec05dc931d5e796e`.
+- M6.2 added `./ds4-sampling-dump`, a no-model current-C fixed-logits sampler
+  and logprob oracle that records selected token, actual sampler selection,
+  consumed RNG state, effective sampling parameters, filtered candidate sets,
+  input logits, top-logprob slices, token-logprob requests, and source-named
+  request-surface sampling tuples.
+- M6.2 committed
+  `ds4-parity/baselines/sampling/m6.2/current-c.json` with size 16,556 bytes
+  and SHA256
+  `f3740560d562960ed3960f7aa07f50793b7b4338a31114b67f827ee9706493e0`.
+- M6.2 routes oracle trace fields through the same helper used by
+  `ds4_session_sample`, and request-surface sampling tuples now resolve through
+  shared `ds4_sampling_params_*` helpers used by server, CLI, and agent
+  defaults.
+- M6.2 added `python3 ds4-parity/check_sampling_dump.py`, whose schema checker
+  validates coverage for greedy ties, non-finite logits, temperature
+  normalization, `top_p` clamping, `top_k` caps, `min_p` thresholds,
+  full-vocab sampling, seeded RNG draws, top-logprob ordering, token-logprob
+  requests, and request-surface parameter tuples. Its negative tests catch
+  selected-token drift, missing request cases, candidate-list drift,
+  top-logprob ordering drift, token-logprob schema drift, and manifest hash
+  drift.
+- M6.2 validation passed for `arch -arm64 make ds4-sampling-dump`,
+  `./ds4-sampling-dump /tmp/ds4-sampling-m6.2-refresh.json` compared
+  byte-for-byte with the committed baseline,
+  `python3 ds4-parity/check_sampling_dump.py
+  ds4-parity/baselines/sampling/m6.2/current-c.json --manifest
+  ds4-parity/baselines/sampling/m6.2/manifest.json --negative-test` with
+  `sampling schema: PASS, 1243 checks`, `sampling manifest: PASS, 7 checks`,
+  and `sampling negative tests: PASS, 6 checks`, `python3 -m py_compile
+  ds4-parity/check_sampling_dump.py`, `arch -arm64 make ds4_test`,
+  `./ds4_test --server`, `arch -arm64 make cpu`, CPU
+  `./ds4-sampling-dump` compared byte-for-byte with the committed baseline, and
+  `git diff --check`.
+- M6.2 Claude review returned `NO BLOCKERS` after checking sampler helper
+  sharing, RNG bookkeeping, candidate ordering, request-surface helper
+  plumbing, fake-session logprob safety, manifest checks, and negative-test
+  coverage. Non-blocking notes: `matches_actual` now compares two calls through
+  the same helper, and the schema checker is mostly shape/coverage while
+  byte-for-byte baseline comparison carries M6.2 drift detection.

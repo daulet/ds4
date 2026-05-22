@@ -1,0 +1,15 @@
+{
+  "schema": "ds4.sampling_manifest.v1",
+  "milestone": "M6.2",
+  "oracle": "current C fixed-logits sampler and logprob math",
+  "artifact": {
+    "path": "current-c.json",
+    "size": 16556,
+    "sha256": "f3740560d562960ed3960f7aa07f50793b7b4338a31114b67f827ee9706493e0"
+  },
+  "refresh_commands": [
+    "arch -arm64 make ds4-sampling-dump",
+    "./ds4-sampling-dump ds4-parity/baselines/sampling/m6.2/current-c.json",
+    "python3 ds4-parity/check_sampling_dump.py ds4-parity/baselines/sampling/m6.2/current-c.json --manifest ds4-parity/baselines/sampling/m6.2/manifest.json --negative-test"
+  ]
+}

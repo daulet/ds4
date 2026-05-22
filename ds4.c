@@ -60,6 +60,12 @@
 #define DS4_COMPRESS_ROPE_FREQ_BASE (160000.0f)
 #define DS4_ROPE_ORIG_CTX       UINT64_C(65536)
 
+#if defined(__clang__)
+#define DS4_ORACLE_NO_OPT __attribute__((optnone))
+#else
+#define DS4_ORACLE_NO_OPT
+#endif
+
 static const char DS4_REASONING_EFFORT_MAX_PREFIX[] =
     "Reasoning Effort: Absolute maximum with no shortcuts permitted.\n"
     "You MUST be very thorough in your thinking and comprehensively decompose the problem to resolve the root cause, rigorously stress-testing your logic against all potential paths, edge cases, and adversarial scenarios.\n"
@@ -15818,6 +15824,54 @@ typedef struct {
     float prob;
 } sample_candidate;
 
+typedef struct {
+    int id;
+    float logit;
+    float weight;
+    float normalized_prob;
+} sampling_oracle_candidate;
+
+typedef struct {
+    int selected;
+    int actual_selected;
+    bool matches_actual;
+    uint64_t rng_before;
+    uint64_t rng_after;
+    uint64_t actual_rng_after;
+    bool greedy;
+    int effective_top_k;
+    float effective_top_p;
+    float effective_min_p;
+    uint32_t finite_count;
+    float max_logit;
+    float sum;
+    float filtered_sum;
+    float rng_unit;
+    sampling_oracle_candidate *filtered;
+    uint32_t filtered_count;
+} sampling_oracle_trace;
+
+static int sampling_trace_return(sampling_oracle_trace *trace, int selected, const uint64_t *rng) {
+    if (trace) {
+        trace->selected = selected;
+        if (rng) trace->rng_after = *rng;
+    }
+    return selected;
+}
+
+static void sampling_oracle_add_candidate(sampling_oracle_trace *t, int id,
+                                          float logit, float weight,
+                                          float normalized_prob) {
+    if (!t) return;
+    t->filtered = xrealloc(t->filtered, (size_t)(t->filtered_count + 1) * sizeof(t->filtered[0]));
+    t->filtered[t->filtered_count++] = (sampling_oracle_candidate){
+        .id = id,
+        .logit = logit,
+        .weight = weight,
+        .normalized_prob = normalized_prob,
+    };
+}
+
 static int sample_candidate_cmp_desc(const void *a, const void *b) {
     const sample_candidate *ca = a;
     const sample_candidate *cb = b;
@@ -15830,7 +15884,8 @@ static int sample_full_vocab(
         float        temperature,
         float        top_p,
         float        min_p,
-        uint64_t    *rng) {
+        uint64_t    *rng,
+        sampling_oracle_trace *trace) {
     float max_logit = DS4_NEG_INF;
     int best = 0;
     uint32_t finite = 0;
@@ -15843,7 +15898,11 @@ static int sample_full_vocab(
             best = (int)i;
         }
     }
-    if (finite == 0) return sample_argmax(logits, n_vocab);
+    if (trace) {
+        trace->finite_count = finite;
+        trace->max_logit = max_logit;
+    }
+    if (finite == 0) return sampling_trace_return(trace, sample_argmax(logits, n_vocab), rng);
 
     if (top_p >= 1.0f) {
         float sum = 0.0f;
@@ -15854,18 +15913,33 @@ static int sample_full_vocab(
             const float p = expf((v - max_logit) / temperature);
             if (p < min_rel) continue;
             sum += p;
+            sampling_oracle_add_candidate(trace, (int)i, v, p, 0.0f);
         }
-        if (sum <= 0.0f || !isfinite(sum)) return best;
-        float r = sample_rng_f32(rng) * sum;
+        if (trace) {
+            trace->sum = sum;
+            trace->filtered_sum = sum;
+        }
+        if (sum <= 0.0f || !isfinite(sum)) return sampling_trace_return(trace, best, rng);
+        if (trace) {
+            for (uint32_t i = 0; i < trace->filtered_count; i++) {
+                trace->filtered[i].normalized_prob = trace->filtered[i].weight / sum;
+            }
+        }
+        const float rng_unit = sample_rng_f32(rng);
+        if (trace) {
+            trace->rng_unit = rng_unit;
+            trace->rng_after = *rng;
+        }
+        float r = rng_unit * sum;
         for (uint32_t i = 0; i < n_vocab; i++) {
             const float v = logits[i];
             if (!isfinite(v)) continue;
             const float p = expf((v - max_logit) / temperature);
             if (p < min_rel) continue;
             r -= p;
-            if (r <= 0.0f) return (int)i;
+            if (r <= 0.0f) return sampling_trace_return(trace, (int)i, rng);
         }
-        return best;
+        return sampling_trace_return(trace, best, rng);
     }
 
     sample_candidate *cand = xmalloc((size_t)finite * sizeof(cand[0]));
@@ -15878,9 +15952,10 @@ static int sample_full_vocab(
         cand[n++] = (sample_candidate){.id = (int)i, .logit = v, .prob = p};
         sum += p;
     }
+    if (trace) trace->sum = sum;
     if (sum <= 0.0f || !isfinite(sum)) {
         free(cand);
-        return best;
+        return sampling_trace_return(trace, best, rng);
     }
 
     qsort(cand, n, sizeof(cand[0]), sample_candidate_cmp_desc);
@@ -15891,49 +15966,76 @@ static int sample_full_vocab(
         const float p = cand[i].prob / sum;
         if (i > 0 && p < min_prob) break;
         filtered_sum += cand[i].prob;
+        sampling_oracle_add_candidate(trace, cand[i].id, cand[i].logit, cand[i].prob, p);
         filtered++;
         if (filtered_sum / sum >= top_p) break;
     }
+    if (trace) trace->filtered_sum = filtered_sum;
     if (filtered == 0) {
         free(cand);
-        return best;
+        return sampling_trace_return(trace, best, rng);
     }
 
-    float r = sample_rng_f32(rng) * filtered_sum;
+    const float rng_unit = sample_rng_f32(rng);
+    if (trace) {
+        trace->rng_unit = rng_unit;
+        trace->rng_after = *rng;
+    }
+    float r = rng_unit * filtered_sum;
     for (uint32_t i = 0; i < filtered; i++) {
         r -= cand[i].prob;
         if (r <= 0.0f) {
             const int id = cand[i].id;
             free(cand);
-            return id;
+            return sampling_trace_return(trace, id, rng);
         }
     }
     const int id = cand[filtered - 1].id;
     free(cand);
-    return id;
+    return sampling_trace_return(trace, id, rng);
 }
 
-static int sample_top_p_min_p(
+static int sample_top_p_min_p_trace(
         const float *logits,
         uint32_t     n_vocab,
         float        temperature,
         int          top_k,
         float        top_p,
         float        min_p,
-        uint64_t    *rng) {
-    if (temperature <= 0.0f) return sample_argmax(logits, n_vocab);
+        uint64_t    *rng,
+        sampling_oracle_trace *trace) {
+    if (temperature <= 0.0f) {
+        if (trace) trace->greedy = true;
+        return sampling_trace_return(trace, sample_argmax(logits, n_vocab), rng);
+    }
     if (top_p <= 0.0f || top_p > 1.0f) top_p = 1.0f;
     if (min_p < 0.0f) min_p = 0.0f;
-    if (top_k <= 0) return sample_full_vocab(logits, n_vocab, temperature, top_p, min_p, rng);
+    if (top_k <= 0) {
+        if (trace) {
+            trace->effective_top_k = top_k;
+            trace->effective_top_p = top_p;
+            trace->effective_min_p = min_p;
+        }
+        return sample_full_vocab(logits, n_vocab, temperature, top_p, min_p, rng, trace);
+    }
     if (top_k > 1024) top_k = 1024;
     if ((uint32_t)top_k > n_vocab) top_k = (int)n_vocab;
+    if (trace) {
+        trace->effective_top_k = top_k;
+        trace->effective_top_p = top_p;
+        trace->effective_min_p = min_p;
+    }
 
     int ids[1024];
     float vals[1024];
     int n = 0;
+    float max_logit = DS4_NEG_INF;
+    uint32_t finite = 0;
     for (uint32_t i = 0; i < n_vocab; i++) {
         float v = logits[i];
         if (!isfinite(v)) continue;
+        finite++;
+        if (v > max_logit) max_logit = v;
         if (n == top_k && v <= vals[n - 1]) continue;
         int j = n < top_k ? n++ : n - 1;
         while (j > 0 && vals[j - 1] < v) {
@@ -15944,16 +16046,22 @@ static int sample_top_p_min_p(
         vals[j] = v;
         ids[j] = (int)i;
     }
-    if (n == 0) return sample_argmax(logits, n_vocab);
+    if (trace) {
+        trace->finite_count = finite;
+        trace->max_logit = max_logit;
+    }
+    if (n == 0) return sampling_trace_return(trace, sample_argmax(logits, n_vocab), rng);
 
     float probs[1024];
-    const float max_logit = vals[0];
+    max_logit = vals[0];
+    if (trace) trace->max_logit = max_logit;
     float sum = 0.0f;
     for (int i = 0; i < n; i++) {
         probs[i] = expf((vals[i] - max_logit) / temperature);
         sum += probs[i];
     }
-    if (sum <= 0.0f || !isfinite(sum)) return ids[0];
+    if (trace) trace->sum = sum;
+    if (sum <= 0.0f || !isfinite(sum)) return sampling_trace_return(trace, ids[0], rng);
 
     const float min_prob = (probs[0] / sum) * min_p;
     float filtered_sum = 0.0f;
@@ -15962,17 +16070,203 @@ static int sample_top_p_min_p(
         float p = probs[i] / sum;
         if (i > 0 && p < min_prob) break;
         filtered_sum += probs[i];
+        sampling_oracle_add_candidate(trace, ids[i], vals[i], probs[i], p);
         filtered++;
         if (filtered_sum / sum >= top_p) break;
     }
-    if (filtered <= 0) return ids[0];
+    if (trace) trace->filtered_sum = filtered_sum;
+    if (filtered <= 0) return sampling_trace_return(trace, ids[0], rng);
 
-    float r = sample_rng_f32(rng) * filtered_sum;
+    const float rng_unit = sample_rng_f32(rng);
+    if (trace) {
+        trace->rng_unit = rng_unit;
+        trace->rng_after = *rng;
+    }
+    float r = rng_unit * filtered_sum;
     for (int i = 0; i < filtered; i++) {
         r -= probs[i];
-        if (r <= 0.0f) return ids[i];
+        if (r <= 0.0f) return sampling_trace_return(trace, ids[i], rng);
     }
-    return ids[filtered - 1];
+    return sampling_trace_return(trace, ids[filtered - 1], rng);
+}
+
+static int sample_top_p_min_p(
+        const float *logits,
+        uint32_t     n_vocab,
+        float        temperature,
+        int          top_k,
+        float        top_p,
+        float        min_p,
+        uint64_t    *rng) {
+    return sample_top_p_min_p_trace(logits, n_vocab, temperature,
+                                    top_k, top_p, min_p, rng, NULL);
+}
+
+typedef struct {
+    const char *name;
+    const char *source;
+    const float *logits;
+    uint32_t n_vocab;
+    float temperature;
+    int top_k;
+    float top_p;
+    float min_p;
+    uint64_t seed;
+} sampling_oracle_case;
+
+static DS4_ORACLE_NO_OPT bool sampling_f32_is_nan(float v) {
+    volatile float vv = v;
+    uint32_t bits = 0;
+    memcpy(&bits, (const void *)&vv, sizeof(bits));
+    return (bits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000) &&
+           (bits & UINT32_C(0x007fffff)) != 0;
+}
+
+static float sampling_f32_from_bits(uint32_t bits) {
+    float v = 0.0f;
+    memcpy(&v, &bits, sizeof(v));
+    return v;
+}
+
+static DS4_ORACLE_NO_OPT bool sampling_f32_is_inf(float v) {
+    volatile float vv = v;
+    uint32_t bits = 0;
+    memcpy(&bits, (const void *)&vv, sizeof(bits));
+    return (bits & UINT32_C(0x7fffffff)) == UINT32_C(0x7f800000);
+}
+
+static void sampling_oracle_json_string(FILE *fp, const char *s) {
+    fputc('"', fp);
+    for (const unsigned char *p = (const unsigned char *)(s ? s : ""); *p; p++) {
+        if (*p == '"' || *p == '\\') {
+            fputc('\\', fp);
+            fputc(*p, fp);
+        } else if (*p == '\n') {
+            fputs("\\n", fp);
+        } else if (*p == '\r') {
+            fputs("\\r", fp);
+        } else if (*p == '\t') {
+            fputs("\\t", fp);
+        } else if (*p < 0x20) {
+            fprintf(fp, "\\u%04x", (unsigned)*p);
+        } else {
+            fputc(*p, fp);
+        }
+    }
+    fputc('"', fp);
+}
+
+static void sampling_oracle_json_f32(FILE *fp, float v) {
+    if (sampling_f32_is_nan(v)) {
+        fputs("\"nan\"", fp);
+    } else if (sampling_f32_is_inf(v)) {
+        fputs(signbit(v) ? "\"-inf\"" : "\"inf\"", fp);
+    } else {
+        fprintf(fp, "%.9g", v);
+    }
+}
+
+static void sampling_oracle_trace_free(sampling_oracle_trace *t) {
+    free(t->filtered);
+    t->filtered = NULL;
+    t->filtered_count = 0;
+}
+
+static sampling_oracle_trace sampling_oracle_trace_case(const sampling_oracle_case *tc) {
+    sampling_oracle_trace t = {
+        .selected = -1,
+        .actual_selected = -1,
+        .rng_before = tc->seed,
+        .rng_after = tc->seed,
+        .actual_rng_after = tc->seed,
+        .effective_top_k = tc->top_k,
+        .effective_top_p = tc->top_p,
+        .effective_min_p = tc->min_p,
+        .max_logit = DS4_NEG_INF,
+    };
+
+    uint64_t rng = tc->seed;
+    sample_top_p_min_p_trace(tc->logits, tc->n_vocab,
+                             tc->temperature, tc->top_k,
+                             tc->top_p, tc->min_p, &rng, &t);
+
+    uint64_t actual_rng = tc->seed;
+    t.actual_selected = sample_top_p_min_p(tc->logits, tc->n_vocab,
+                                           tc->temperature, tc->top_k,
+                                           tc->top_p, tc->min_p, &actual_rng);
+    t.actual_rng_after = actual_rng;
+    t.matches_actual = t.selected == t.actual_selected &&
+                       t.rng_after == t.actual_rng_after;
+    return t;
+}
+
+static void sampling_oracle_write_logits(FILE *fp, const float *logits, uint32_t n_vocab) {
+    fputc('[', fp);
+    for (uint32_t i = 0; i < n_vocab; i++) {
+        if (i) fputc(',', fp);
+        fprintf(fp, "{\"id\":%u,\"value\":", i);
+        sampling_oracle_json_f32(fp, logits[i]);
+        fputc('}', fp);
+    }
+    fputc(']', fp);
+}
+
+static void sampling_oracle_write_trace(FILE *fp, const sampling_oracle_case *tc, bool first) {
+    sampling_oracle_trace t = sampling_oracle_trace_case(tc);
+    if (!first) fputs(",\n", fp);
+    fputs("    {\"name\":", fp);
+    sampling_oracle_json_string(fp, tc->name);
+    fputs(",\"source\":", fp);
+    sampling_oracle_json_string(fp, tc->source);
+    fprintf(fp, ",\"n_vocab\":%u,\"params\":{\"temperature\":", tc->n_vocab);
+    sampling_oracle_json_f32(fp, tc->temperature);
+    fprintf(fp, ",\"top_k\":%d,\"top_p\":", tc->top_k);
+    sampling_oracle_json_f32(fp, tc->top_p);
+    fputs(",\"min_p\":", fp);
+    sampling_oracle_json_f32(fp, tc->min_p);
+    fprintf(fp, ",\"seed\":%" PRIu64 "}", tc->seed);
+    fputs(",\"effective\":{\"top_k\":", fp);
+    fprintf(fp, "%d,\"top_p\":", t.effective_top_k);
+    sampling_oracle_json_f32(fp, t.effective_top_p);
+    fputs(",\"min_p\":", fp);
+    sampling_oracle_json_f32(fp, t.effective_min_p);
+    fputc('}', fp);
+    fputs(",\"logits\":", fp);
+    sampling_oracle_write_logits(fp, tc->logits, tc->n_vocab);
+    fprintf(fp,
+            ",\"selected\":%d,\"actual_selected\":%d,\"matches_actual\":%s"
+            ",\"rng_before\":%" PRIu64 ",\"rng_after\":%" PRIu64
+            ",\"actual_rng_after\":%" PRIu64 ",\"greedy\":%s"
+            ",\"finite_count\":%u,\"filtered_count\":%u,\"max_logit\":",
+            t.selected,
+            t.actual_selected,
+            t.matches_actual ? "true" : "false",
+            t.rng_before,
+            t.rng_after,
+            t.actual_rng_after,
+            t.greedy ? "true" : "false",
+            t.finite_count,
+            t.filtered_count);
+    sampling_oracle_json_f32(fp, t.max_logit);
+    fputs(",\"sum\":", fp);
+    sampling_oracle_json_f32(fp, t.sum);
+    fputs(",\"filtered_sum\":", fp);
+    sampling_oracle_json_f32(fp, t.filtered_sum);
+    fputs(",\"rng_unit\":", fp);
+    sampling_oracle_json_f32(fp, t.rng_unit);
+    fputs(",\"filtered_candidates\":[", fp);
+    for (uint32_t i = 0; i < t.filtered_count; i++) {
+        if (i) fputc(',', fp);
+        fprintf(fp, "{\"id\":%d,\"logit\":", t.filtered[i].id);
+        sampling_oracle_json_f32(fp, t.filtered[i].logit);
+        fputs(",\"weight\":", fp);
+        sampling_oracle_json_f32(fp, t.filtered[i].weight);
+        fputs(",\"normalized_prob\":", fp);
+        sampling_oracle_json_f32(fp, t.filtered[i].normalized_prob);
+        fputc('}', fp);
+    }
+    fputs("]}", fp);
+    sampling_oracle_trace_free(&t);
 }
 
 static void print_top_logits(
@@ -16336,6 +16630,25 @@ ds4_think_mode ds4_think_mode_for_context(ds4_think_mode mode, int ctx_size) {
         return DS4_THINK_HIGH;
     }
     return mode;
+}
+
+ds4_sampling_params ds4_sampling_params_defaults(void) {
+    return (ds4_sampling_params){
+        .temperature = DS4_DEFAULT_TEMPERATURE,
+        .top_k = 0,
+        .top_p = DS4_DEFAULT_TOP_P,
+        .min_p = DS4_DEFAULT_MIN_P,
+    };
+}
+
+void ds4_sampling_params_apply_thinking_defaults(ds4_sampling_params *p) {
+    if (!p) return;
+    *p = ds4_sampling_params_defaults();
+}
+
+void ds4_sampling_params_apply_dsml_structural(ds4_sampling_params *p) {
+    if (!p) return;
+    p->temperature = 0.0f;
 }
 
 static void ds4_release_instance_lock(void) {
@@ -18427,6 +18740,131 @@ int ds4_session_token_logprob(ds4_session *s, int token, ds4_token_score *out) {
     out->logit = s->logits[token];
     out->logprob = isfinite(out->logit) ? (float)((double)out->logit - logsum) : DS4_NEG_INF;
     return 1;
+}
+
+static void sampling_oracle_fill_session_logits(float *dst, const float *src, uint32_t n_vocab) {
+    for (uint32_t i = 0; i < DS4_N_VOCAB; i++) dst[i] = DS4_NEG_INF;
+    for (uint32_t i = 0; i < n_vocab && i < DS4_N_VOCAB; i++) dst[i] = src[i];
+}
+
+static void sampling_oracle_write_score(FILE *fp, const ds4_token_score *score) {
+    fprintf(fp, "{\"id\":%d,\"logit\":", score->id);
+    sampling_oracle_json_f32(fp, score->logit);
+    fputs(",\"logprob\":", fp);
+    sampling_oracle_json_f32(fp, score->logprob);
+    fputc('}', fp);
+}
+
+static void sampling_oracle_write_logprob_case(FILE *fp, const char *name,
+                                               const char *source,
+                                               const float *logits,
+                                               uint32_t n_vocab,
+                                               int k,
+                                               const int *token_queries,
+                                               int n_token_queries,
+                                               bool first) {
+    float *full_logits = xmalloc((size_t)DS4_N_VOCAB * sizeof(full_logits[0]));
+    sampling_oracle_fill_session_logits(full_logits, logits, n_vocab);
+    /* Logprob APIs currently read only logits; this fixture should fail fast if
+     * they start depending on more session state. */
+    ds4_session fake = {.logits = full_logits};
+    ds4_token_score *scores = xcalloc((size_t)k, sizeof(scores[0]));
+    int nscore = ds4_session_top_logprobs(&fake, scores, k);
+
+    if (!first) fputs(",\n", fp);
+    fputs("    {\"name\":", fp);
+    sampling_oracle_json_string(fp, name);
+    fputs(",\"source\":", fp);
+    sampling_oracle_json_string(fp, source);
+    fprintf(fp, ",\"n_vocab\":%u,\"background_logit\":", n_vocab);
+    sampling_oracle_json_f32(fp, DS4_NEG_INF);
+    fprintf(fp, ",\"top_k\":%d,\"returned\":%d,\"logits\":", k, nscore);
+    sampling_oracle_write_logits(fp, logits, n_vocab);
+    fputs(",\"scores\":[", fp);
+    for (int i = 0; i < k; i++) {
+        if (i) fputc(',', fp);
+        sampling_oracle_write_score(fp, &scores[i]);
+    }
+    fputs("],\"token_logprobs\":[", fp);
+    for (int i = 0; i < n_token_queries; i++) {
+        ds4_token_score score = {0};
+        int ok = ds4_session_token_logprob(&fake, token_queries[i], &score);
+        if (i) fputc(',', fp);
+        fprintf(fp, "{\"token\":%d,\"ok\":%s,\"score\":",
+                token_queries[i], ok ? "true" : "false");
+        sampling_oracle_write_score(fp, &score);
+        fputc('}', fp);
+    }
+    fputs("]}", fp);
+    free(scores);
+    free(full_logits);
+}
+
+int ds4_dump_sampling_oracle_json(FILE *fp) {
+    const float neg_inf = sampling_f32_from_bits(UINT32_C(0xff800000));
+    const float pos_inf = sampling_f32_from_bits(UINT32_C(0x7f800000));
+    static const float base_logits[] = {0.0f, 1.25f, 0.25f, 3.5f, 2.0f, -0.5f};
+    static const float tie_logits[] = {1.0f, 2.0f, 2.0f, -3.0f};
+    const float nonfinite_logits[] = {neg_inf, 0.25f, -1.0f, pos_inf, 0.5f};
+    static const float wide_logits[] = {4.0f, 3.5f, 3.0f, 2.5f, 2.0f, 1.5f, 1.0f, 0.5f, 0.0f};
+    const ds4_sampling_params request_defaults = ds4_sampling_params_defaults();
+    ds4_sampling_params thinking_defaults = request_defaults;
+    ds4_sampling_params_apply_thinking_defaults(&thinking_defaults);
+    ds4_sampling_params dsml_structural = request_defaults;
+    ds4_sampling_params_apply_dsml_structural(&dsml_structural);
+    const sampling_oracle_case cases[] = {
+        {"greedy_tie_first_max", "ds4.c:sample_argmax", tie_logits, 4, 0.0f, 0, 1.0f, 0.05f, UINT64_C(0x1111111111111111)},
+        {"non_finite_logits", "ds4.c:sample_top_p_min_p", nonfinite_logits, 5, 0.7f, 0, 1.0f, 0.0f, UINT64_C(0x2222222222222222)},
+        {"full_vocab_min_p", "ds4.c:sample_full_vocab top_p>=1", base_logits, 6, 0.75f, 0, 1.0f, 0.2f, UINT64_C(0x3333333333333333)},
+        {"full_vocab_top_p", "ds4.c:sample_full_vocab top_p<1", base_logits, 6, 0.9f, 0, 0.65f, 0.05f, UINT64_C(0x4444444444444444)},
+        {"top_p_clamped_zero", "ds4.c:sample_top_p_min_p top_p clamp", base_logits, 6, 0.9f, 0, 0.0f, 0.05f, UINT64_C(0x5555555555555555)},
+        {"negative_min_p_clamped", "ds4.c:sample_top_p_min_p min_p clamp", base_logits, 6, 0.9f, 0, 1.0f, -0.5f, UINT64_C(0x6666666666666666)},
+        {"top_k_filter", "ds4.c:sample_top_p_min_p top_k", base_logits, 6, 0.8f, 3, 0.8f, 0.05f, UINT64_C(0x7777777777777777)},
+        {"top_k_capped_to_vocab", "ds4.c:sample_top_p_min_p top_k cap", base_logits, 6, 0.8f, 99, 1.0f, 0.0f, UINT64_C(0x8888888888888888)},
+        {"seeded_rng_draw", "ds4.c:sample_rng_next/sample_rng_f32", wide_logits, 9, 1.1f, 4, 0.95f, 0.0f, UINT64_C(0x0123456789abcdef)},
+        {"request_cli_default_ds4_cli_c", "ds4_cli.c:run_sampled_generation", base_logits, 6, request_defaults.temperature, request_defaults.top_k, request_defaults.top_p, request_defaults.min_p, UINT64_C(0x0c11000000000001)},
+        {"request_openai_chat_default_ds4_server_c", "ds4_server.c:request_init/openai chat", base_logits, 6, request_defaults.temperature, request_defaults.top_k, request_defaults.top_p, request_defaults.min_p, UINT64_C(0x0c11000000000002)},
+        {"request_openai_responses_default_ds4_server_c", "ds4_server.c:request_init/responses", base_logits, 6, request_defaults.temperature, request_defaults.top_k, request_defaults.top_p, request_defaults.min_p, UINT64_C(0x0c11000000000003)},
+        {"request_anthropic_default_ds4_server_c", "ds4_server.c:request_init/anthropic", base_logits, 6, request_defaults.temperature, request_defaults.top_k, request_defaults.top_p, request_defaults.min_p, UINT64_C(0x0c11000000000004)},
+        {"request_agent_default_ds4_agent_c", "ds4_agent.c:agent_config defaults", base_logits, 6, request_defaults.temperature, request_defaults.top_k, request_defaults.top_p, request_defaults.min_p, UINT64_C(0x0c11000000000005)},
+        {"request_thinking_default_ds4_server_c", "ds4_server.c:thinking sampling override", base_logits, 6, thinking_defaults.temperature, thinking_defaults.top_k, thinking_defaults.top_p, thinking_defaults.min_p, UINT64_C(0x0c11000000000006)},
+        {"request_dsml_structural_greedy_ds4_server_c", "ds4_server.c:DSML structural sampling override", base_logits, 6, dsml_structural.temperature, dsml_structural.top_k, dsml_structural.top_p, dsml_structural.min_p, UINT64_C(0x0c11000000000007)},
+    };
+    const float logprob_sparse[] = {0.0f, 1.25f, -2.0f, 3.5f, 2.0f, -0.5f, neg_inf, 3.5f};
+    static const float logprob_ties[] = {2.0f, 2.0f, 1.0f, 0.0f};
+    const float logprob_nonfinite[] = {neg_inf, pos_inf, neg_inf};
+    static const int sparse_queries[] = {3, 7, 6, 120};
+    static const int tie_queries[] = {0, 1, 3};
+    static const int nonfinite_queries[] = {0, 2};
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.sampling_oracle.v1\",\n", fp);
+    fputs("  \"source\": \"current-c-fixed-logits\",\n", fp);
+    fprintf(fp, "  \"n_vocab_full\": %u,\n", (unsigned)DS4_N_VOCAB);
+    fprintf(fp, "  \"defaults\": {\"temperature\": %.9g, \"top_k\": %d, \"top_p\": %.9g, \"min_p\": %.9g},\n",
+            request_defaults.temperature, request_defaults.top_k,
+            request_defaults.top_p, request_defaults.min_p);
+    fputs("  \"sampling_cases\": [\n", fp);
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        sampling_oracle_write_trace(fp, &cases[i], i == 0);
+    }
+    fputs("\n  ],\n", fp);
+    fputs("  \"logprob_cases\": [\n", fp);
+    sampling_oracle_write_logprob_case(fp, "top_logprobs_sparse",
+                                       "ds4.c:ds4_session_top_logprobs sparse",
+                                       logprob_sparse, 8, 6,
+                                       sparse_queries, 4, true);
+    sampling_oracle_write_logprob_case(fp, "top_logprobs_tie_order",
+                                       "ds4.c:ds4_session_top_logprobs tie order",
+                                       logprob_ties, 4, 4,
+                                       tie_queries, 3, false);
+    sampling_oracle_write_logprob_case(fp, "top_logprobs_nonfinite",
+                                       "ds4.c:ds4_session_top_logprobs nonfinite",
+                                       logprob_nonfinite, 3, 3,
+                                       nonfinite_queries, 2, false);
+    fputs("\n  ]\n", fp);
+    fputs("}\n", fp);
+    return ferror(fp) ? 1 : 0;
 }
 
 static int ds4_session_eval_internal(ds4_session *s, int token, bool probe_mtp,

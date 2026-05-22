@@ -54,6 +54,13 @@ typedef struct {
 #define DS4_DEFAULT_TOP_P 1.0f
 #define DS4_DEFAULT_MIN_P 0.05f
 
+typedef struct {
+    float temperature;
+    int top_k;
+    float top_p;
+    float min_p;
+} ds4_sampling_params;
+
 typedef struct ds4_engine ds4_engine;
 typedef struct ds4_session ds4_session;
 
@@ -101,6 +108,9 @@ const char *ds4_think_mode_name(ds4_think_mode mode);
 const char *ds4_think_max_prefix(void);
 uint32_t ds4_think_max_min_context(void);
 ds4_think_mode ds4_think_mode_for_context(ds4_think_mode mode, int ctx_size);
+ds4_sampling_params ds4_sampling_params_defaults(void);
+void ds4_sampling_params_apply_thinking_defaults(ds4_sampling_params *p);
+void ds4_sampling_params_apply_dsml_structural(ds4_sampling_params *p);
 ds4_context_memory ds4_context_memory_estimate(ds4_backend backend, int ctx_size);
 bool ds4_log_is_tty(FILE *fp);
 void ds4_log(FILE *fp, ds4_log_type type, const char *fmt, ...);
@@ -131,6 +141,7 @@ int ds4_engine_metal_graph_prompt_test(ds4_engine *e, const ds4_tokens *prompt, 
 #define DS4_METADATA_DUMP_VALIDATE_LAYOUT_ONLY 4u
 int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *fp);
 int ds4_dump_metadata_json_ex(const char *model_path, const char *mtp_path, FILE *fp, unsigned flags);
+int ds4_dump_sampling_oracle_json(FILE *fp);
 
 void ds4_tokens_push(ds4_tokens *tv, int token);
 void ds4_tokens_free(ds4_tokens *tv);

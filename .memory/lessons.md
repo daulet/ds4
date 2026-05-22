@@ -86,3 +86,18 @@ available directly from the repo.
   `tests/test-vectors/official.vec` and the raw official JSON, and treat the
   M0.3 B300 log as evidence that the C runtime enforced that fixture on the
   recorded model/backend.
+
+## 2026-05-22: Fast-Math Can Break Non-Finite Oracle JSON Helpers
+
+- Symptom: the first M6.2 sampling oracle dump emitted bare `inf`/`-inf`,
+  which made the JSON invalid even though the helper intended to quote
+  non-finite float values.
+- Root cause: local C builds use `-ffast-math`; under those flags, ordinary
+  non-finite checks around `float` parameters can be optimized under finite
+  assumptions. The sampler's `isfinite` behavior is still the current C oracle,
+  but the JSON serialization helper needed to classify raw float bits without
+  those optimizations.
+- Permanent rule: no-model oracle dumpers that need to serialize non-finite
+  float fixtures should use raw bit fixtures plus an unoptimized bit-classifier
+  helper for JSON output, then run `python3 -m json.tool` or an equivalent
+  parser before committing the baseline.

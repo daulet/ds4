@@ -612,7 +612,7 @@
 
 ### M6.2: C Fixed-Logits Sampling And Logprob Oracle
 
-- Status: pending
+- Status: done
 - Goal: expose current C sampling and logprob math through a deterministic
   no-model oracle dump over fixed logits arrays.
 - Source evidence needed: `sample_argmax`, `sample_rng_next`,
@@ -644,6 +644,32 @@
   `git diff --check`.
 - Owner path: C oracle dump surface, `ds4-parity/`,
   `ds4-parity/baselines/sampling/`, `.memory/status.md`.
+
+### M6.3: Rust Sampler And Logprob Math
+
+- Status: pending
+- Goal: port C sampler, RNG, top-logprob, and token-logprob math to Rust
+  without depending on model execution.
+- Source evidence needed: M6.2 fixed-logits C oracle dump,
+  `sample_argmax`, `sample_rng_next`, `sample_top_p_min_p`,
+  `ds4_session_top_logprobs`, `ds4_session_token_logprob`, and the M6.2
+  checker's source-named request-surface parameter tuples.
+- Oracle: the M6.2 fixed-logits C oracle dump.
+- Comparator: C/Rust comparison for selected token, RNG state, candidate
+  filtering, top-logprob ordering, per-token logprob, and numeric tolerance.
+- Fixture: the committed M6.2 synthetic logits fixture set.
+- Acceptance: greedy choices and sampled choices match exactly for every seeded
+  fixture, including source-named resolved request-surface sampling parameter
+  tuples; logprob values match within the explicit M6 numeric tolerance.
+- Drift policy: no selection drift; any stricter non-finite handling must be
+  source-proven and named by fixture.
+- Review gate: ask Claude to review Rust numeric edge cases, candidate
+  filtering order, RNG semantics, and allocation behavior.
+- Validation needed: Rust tests, sampler comparator with negative tests,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: Rust sampler/logprob module, `ds4-parity/`,
+  `.memory/status.md`.
 
 ## Later Items
 
