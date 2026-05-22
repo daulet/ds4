@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.4 Current-C Session Logits And Logprob Fixture Oracle
-- Last validated source commit: M6.3 Rust sampler/logprob parity commit once
-  committed; prior pushed source commit
-  `b1b637978779700fb6ce7250e67eaa3eb23c19c6`
+- Active item: M6.5 Rust Fixed-Logits Model-Slice Comparator
+- Last validated source commit: M6.4 current-C session logits fixture commit
+  once committed; prior pushed source commit
+  `fea2ea3de57a260474d349d2536527bf2c16927a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -535,3 +535,50 @@
   Non-blocking notes: top-p/full-vocab tied-logit fixture coverage is latent,
   Rust faithfully recomputes full-vocab weights during roulette like C, and
   greedy mode intentionally leaves effective params unclamped to match C.
+- M6.3 implementation commit:
+  `fea2ea3de57a260474d349d2536527bf2c16927a`.
+- M6.4 added `./ds4-logits-dump`, a current-C model-backed oracle helper that
+  runs official-vector prompts through `ds4_session_sync`,
+  `ds4_session_argmax`, `ds4_session_top_logprobs`,
+  `ds4_session_token_logprob`, and `ds4_session_eval`, then records selected
+  tokens, token bytes, top-logprob slices, official-top deltas, and per-step
+  full-logits SHA256s. The helper requires a 64-character lowercase
+  `--model-sha256` and verifies the actual model file via `sha256sum` or
+  `shasum -a 256` before opening the engine.
+- M6.4 exposes `ds4_session_logits_data` so the dump helper can write a
+  contiguous f32 logits blob without moving model execution into the helper.
+- M6.4 captured B300 current-C artifacts on `ds4-rust-port-b300` in
+  `hou2-prod1/default` after refreshing source into `/workspace/ds4` and
+  building `make ds4-logits-dump CUDA_ARCH=native`. Capture command wrote
+  `ds4-parity/baselines/sampling/m6.4/current-c.json` with size 19,535 bytes
+  and SHA256
+  `5343e5aa855305ca2092943e155a359db50a28216d44927d450d2e0cce82efd0`,
+  plus `ds4-parity/baselines/sampling/m6.4/logits.f32le` with size
+  4,654,080 bytes and SHA256
+  `972636c24ff63534d3a7fb7b1360e78786dee0bdd111f1fde813aa758e1f1928`.
+- M6.4 fixture contains 9 scored steps across `short_italian_fact`,
+  `short_code_completion`, and `short_reasoning_plain`. `long_memory_archive`
+  remains explicitly skipped for the existing API/official-graph mismatch, and
+  `long_code_audit` is explicitly skipped because repeated B300 CUDA captures
+  produced byte-different long-context logits even with deterministic-kernel
+  probes.
+- M6.4 added `python3 ds4-parity/check_session_logits_dump.py`, whose schema
+  and hash checker validates model/backend identity, case coverage, prompt
+  hashes, selected-token matches, top-logprob shape, selected/top scores
+  recomputed from the f32le logits blob, official-top local matches and delta
+  tolerances, contiguous per-step logits ranges, per-step logits SHA256s,
+  whole-blob manifest SHA256 plus n_vocab/step counts, and exact
+  temp-kubeconfig/context refresh commands.
+- M6.4 validation passed for `arch -arm64 make ds4-logits-dump`,
+  `python3 -m py_compile ds4-parity/check_session_logits_dump.py`, B300
+  `make ds4-logits-dump CUDA_ARCH=native`, B300 capture with
+  `./ds4-logits-dump --backend cuda -m /workspace/ds4/ds4flash.gguf -v
+  tests/test-vectors/official.vec -o
+  ds4-parity/baselines/sampling/m6.4/current-c.json -l
+  ds4-parity/baselines/sampling/m6.4/logits.f32le --model-sha256
+  efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`,
+  local and B300 checker runs with `session logits schema: PASS, 2356 checks`,
+  `session logits manifest: PASS, 20 checks`, and `session logits negative
+  tests: PASS, 11 checks`, `python3 ds4-parity/compare_logprob_numeric.py`
+  with `summary: 5/5 sections passed, 528 checks`, `arch -arm64 make cpu`,
+  and `git diff --check`.

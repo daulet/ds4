@@ -1,0 +1,42 @@
+{
+  "schema": "ds4.session_logits_manifest.v1",
+  "milestone": "M6.4",
+  "oracle": "current C B300 session logits and top-logprob slices",
+  "skipped_cases": {
+    "long_memory_archive": "API/official graph mismatch",
+    "long_code_audit": "B300 CUDA long-context logits are not byte-deterministic across repeated captures"
+  },
+  "capture": {
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig",
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "workdir": "/workspace/ds4",
+    "model_path": "/workspace/ds4/ds4flash.gguf",
+    "model_sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "artifacts": {
+    "current_c": {
+      "path": "current-c.json",
+      "size": 19535,
+      "sha256": "5343e5aa855305ca2092943e155a359db50a28216d44927d450d2e0cce82efd0"
+    },
+    "logits_blob": {
+      "path": "logits.f32le",
+      "size": 4654080,
+      "sha256": "972636c24ff63534d3a7fb7b1360e78786dee0bdd111f1fde813aa758e1f1928",
+      "format": "f32le",
+      "n_vocab": 129280,
+      "steps": 9
+    }
+  },
+  "refresh_commands": [
+    "cp ~/.kube/config /tmp/ds4-hou2-prod1.kubeconfig && chmod 600 /tmp/ds4-hou2-prod1.kubeconfig",
+    "tar -cf - Makefile ds4.c ds4.h ds4_logits_dump.c ds4-parity/check_session_logits_dump.py ds4-parity/baselines/sampling/m6.4/manifest.json tests/test-vectors | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-logits-dump CUDA_ARCH=native; mkdir -p ds4-parity/baselines/sampling/m6.4; rm -f ds4-parity/baselines/sampling/m6.4/current-c.json ds4-parity/baselines/sampling/m6.4/logits.f32le; ./ds4-logits-dump --backend cuda -m /workspace/ds4/ds4flash.gguf -v tests/test-vectors/official.vec -o ds4-parity/baselines/sampling/m6.4/current-c.json -l ds4-parity/baselines/sampling/m6.4/logits.f32le --model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668; python3 ds4-parity/check_session_logits_dump.py ds4-parity/baselines/sampling/m6.4/current-c.json --logits ds4-parity/baselines/sampling/m6.4/logits.f32le --manifest ds4-parity/baselines/sampling/m6.4/manifest.json --negative-test'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/sampling/m6.4/current-c.json ds4-parity/baselines/sampling/m6.4/current-c.json",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/sampling/m6.4/logits.f32le ds4-parity/baselines/sampling/m6.4/logits.f32le",
+    "python3 ds4-parity/check_session_logits_dump.py ds4-parity/baselines/sampling/m6.4/current-c.json --logits ds4-parity/baselines/sampling/m6.4/logits.f32le --manifest ds4-parity/baselines/sampling/m6.4/manifest.json --negative-test"
+  ]
+}

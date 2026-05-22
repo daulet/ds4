@@ -673,7 +673,7 @@
 
 ### M6.4: Current-C Session Logits And Logprob Fixture Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture model-backed current-C session logits and top-logprob slices
   for official-vector prompt cases without requiring Rust runtime execution.
 - Source evidence needed: `RUST_PORT_ROADMAP.md` M6.4, M0.3 official-vector
@@ -688,6 +688,9 @@
   payloads or logits hashes for each scored step, top-logprob slices,
   token-byte renderings, context settings, backend, model identity, and exact
   B300 refresh commands.
+- Skips: `long_memory_archive` remains skipped for the existing API/official
+  graph mismatch; `long_code_audit` is skipped because repeated B300 CUDA
+  captures produce byte-different long-context logits.
 - Acceptance: selected greedy tokens match the existing official-vector
   contract, top-logprob slices are deterministic for the recorded backend, and
   the fixture is small enough to commit or explicitly shards large binary
@@ -701,6 +704,34 @@
   checker with negative tests, skipped local refresh evidence, and
   `git diff --check`.
 - Owner path: C logits fixture dump surface, `ds4-parity/baselines/sampling/`,
+  `.memory/status.md`.
+
+### M6.5: Rust Fixed-Logits Model-Slice Comparator
+
+- Status: pending
+- Goal: run Rust sampler and logprob math over the M6.4 captured model logits
+  slices and compare token presentation against current C.
+- Coverage caveat: M6.4 intentionally omits `long_code_audit` logits because
+  repeated B300 CUDA long-context captures drift byte-wise. Add a later
+  long-context tolerance oracle or CPU-backed reference before claiming full
+  official-vector long-context sampler coverage.
+- Source evidence needed: M6.4 current-C session logits and top-logprob
+  fixture, M6.3 Rust sampler/logprob module, and the tokenizer identity fixture
+  already used by Milestone 5.
+- Oracle: M6.4 current-C session logits and top-logprob fixture.
+- Fixture: committed M6.4 logits payloads plus the tokenizer identity fixture
+  already used by Milestone 5.
+- Comparator: Rust fixed-logits dump compared to C selected token,
+  top-logprob order, logprob values, token IDs, and token bytes.
+- Acceptance: Rust chooses the same greedy token for every model-backed step,
+  computes the same top-logprob ordering, and renders token bytes identically.
+- Drift policy: no token, ordering, or byte drift; numeric differences must
+  stay within the M6 tolerance and report max absolute delta.
+- Review gate: ask Claude to review fixture loading, token-byte conversion, and
+  tolerance reporting.
+- Validation needed: model-slice comparator with negative tests, Rust tests,
+  `cargo test --workspace`, and `git diff --check`.
+- Owner path: Rust model-slice comparator, `ds4-parity/`,
   `.memory/status.md`.
 
 ## Later Items

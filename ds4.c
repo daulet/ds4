@@ -18683,6 +18683,11 @@ int ds4_session_sample(ds4_session *s, float temperature, int top_k, float top_p
     return sample_top_p_min_p(s->logits, DS4_N_VOCAB, temperature, top_k, top_p, min_p, rng);
 }
 
+const float *ds4_session_logits_data(const ds4_session *s, uint32_t *n_vocab) {
+    if (n_vocab) *n_vocab = s ? DS4_N_VOCAB : 0;
+    return s ? s->logits : NULL;
+}
+
 int ds4_session_top_logprobs(ds4_session *s, ds4_token_score *out, int k) {
     if (!s || !out || k <= 0) return 0;
     if (k > (int)DS4_N_VOCAB) k = (int)DS4_N_VOCAB;
