@@ -50,3 +50,7 @@ path = "src/bin/ds4-session-payload-dump-rs.rs"
 [[bin]]
 name = "ds4-kv-replay-dump-rs"
 path = "src/bin/ds4-kv-replay-dump-rs.rs"
+
+[[bin]]
+name = "ds4-cli-parse-rs"
+path = "src/bin/ds4-cli-parse-rs.rs"

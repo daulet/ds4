@@ -1272,7 +1272,7 @@
 
 ### M8.3: Rust CLI Parse And Error Parity
 
-- Status: pending
+- Status: done
 - Goal: implement Rust CLI parsing for the M8.2 no-model surface.
 - Source evidence needed: committed M8.2 current-C CLI parse/error fixture,
   existing Rust workspace layout, current `ds4_cli.c` parser, and CLI binary
@@ -1287,10 +1287,39 @@
   documented by the comparator.
 - Review gate: ask Claude to review parser compatibility and whether any C
   parser branch remains uncovered.
-- Validation needed: Rust CLI parser tests, comparator with negative tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: `cargo fmt --all -- --check`, `python3 -m py_compile
+  ds4-parity/compare_cli_parse.py`, `cargo test -p ds4-gguf cli_parse`
+  (3 parser tests passed), `python3 ds4-parity/compare_cli_parse.py
+  --negative-test` (`CLI parse C fixture preconditions: PASS, 224 checks`;
+  `CLI parse C/Rust comparator: PASS, 244 checks`; negative tests `PASS, 5
+  checks`), `cargo test --workspace`, and `git diff --check`.
 - Owner path: Rust CLI parser, CLI parse comparator, `ds4-parity/`,
   `.memory/status.md`.
+
+### M8.4: Current-C CLI Token And Prompt Diagnostic Oracle
+
+- Status: pending
+- Goal: capture current-C CLI prompt ingestion and token-dump behavior.
+- Source evidence needed: `ds4_cli.c` prompt-source handling, `--dump-tokens`
+  path, thinking controls, prompt rendering/tokenizer milestones, and B300
+  model/tokenizer availability.
+- Oracle: current `./ds4 --dump-tokens` with the recorded B300 model/tokenizer.
+- Fixture: `-p`, `--prompt-file`, rendered-chat prompt passthrough, custom
+  system prompt, empty system prompt, `--think`, `--think-max` with below/above
+  threshold contexts, and `--nothink`.
+- Comparator: schema/hash checker for token IDs, token bytes, prompt-file byte
+  hashes, thinking-mode warning categories, and exact B300 refresh commands.
+- Acceptance: prompt bytes, selected thinking mode, token sequence, and warning
+  category match the current CLI fixture; raw large prompt files are represented
+  by hashes when needed.
+- Drift policy: model path and B300 workspace may be normalized; prompt bytes,
+  token IDs, token bytes, thinking controls, and warning categories are exact.
+- Review gate: ask Claude to review prompt-source and thinking-control coverage
+  against `ds4_cli.c`.
+- Validation needed: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+- Owner path: CLI token/prompt oracle artifacts, `ds4-parity/`,
+  `ds4-parity/baselines/cli/`, `.memory/status.md`.
 
 ## Later Items
 

@@ -258,3 +258,13 @@ numeric and backend values, duplicate prompt sources, removed/deprecated flags,
 `--dump-tokens` without a prompt, imatrix option coupling, prompt-file open
 errors, and `--perplexity-file` prompt-source rejection. These cases must remain
 local and model-free.
+
+Compare the M8.3 Rust parser-only CLI surface against that oracle:
+
+```sh
+python3 ds4-parity/compare_cli_parse.py --negative-test
+```
+
+The comparator builds `ds4-cli-parse-rs`, runs it against the M8.2 argument
+matrix, and compares exit status, stdout/stderr emptiness, stable help anchors,
+stderr category anchors, and no-model-load markers.

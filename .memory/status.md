@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.3 Rust CLI Parse And Error Parity
-- Last validated source commit: M8.2 current-C CLI parse/error oracle in this
+- Active item: M8.4 Current-C CLI Token And Prompt Diagnostic Oracle
+- Last validated source commit: M8.3 Rust CLI parse/error parity in this
   commit; prior pushed source commit
-  `2b1df299d66051d8eb5e893ba28f3a2e2e8d4af4`
+  `ef84608b9a7e5490682fc1c8d5854a30d173ef0b`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -908,4 +908,21 @@
   ds4-parity/baselines/cli/m8.2/manifest.json --negative-test` (`CLI parse
   oracle: PASS, 369 checks`; manifest `PASS, 11 checks`; negative tests `PASS,
   7 checks`), `python3 -m json.tool` for both M8.2 JSON files, and
+  `git diff --check`.
+- M8.3 adds `rust/ds4-gguf/src/cli_parse.rs` and `ds4-cli-parse-rs`, a
+  parser-only Rust CLI surface for the committed M8.2 no-model argument matrix.
+  It emits the same exit categories for help, parser errors, removed/deprecated
+  flags, imatrix/perplexity coupling, and `--dump-tokens` without a prompt, and
+  deliberately exits with an unsupported parser-only status if a model-backed
+  path is reached outside the M8.3 fixture.
+- M8.3 adds `python3 ds4-parity/compare_cli_parse.py`, which builds
+  `ds4-cli-parse-rs`, validates the M8.2 C fixture preconditions, and compares
+  Rust exit status, stdout/stderr emptiness, stable help anchors, stderr
+  category anchors, and no-model-load markers.
+- M8.3 validation passed for `cargo fmt --all -- --check`, `python3 -m
+  py_compile ds4-parity/compare_cli_parse.py`, `cargo test -p ds4-gguf
+  cli_parse` (3 parser tests passed), `python3
+  ds4-parity/compare_cli_parse.py --negative-test` (`CLI parse C fixture
+  preconditions: PASS, 224 checks`; `CLI parse C/Rust comparator: PASS, 244
+  checks`; negative tests `PASS, 5 checks`), `cargo test --workspace`, and
   `git diff --check`.

@@ -2,6 +2,7 @@ use std::fmt;
 use std::str;
 
 pub mod agent_dsml;
+pub mod cli_parse;
 pub mod decode_policy;
 pub mod dsml;
 pub mod kv_policy;
