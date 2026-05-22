@@ -3,6 +3,7 @@ use std::str;
 
 pub mod agent_dsml;
 pub mod cli_parse;
+pub mod cli_token_dump;
 pub mod decode_policy;
 pub mod dsml;
 pub mod kv_policy;

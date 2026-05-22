@@ -192,6 +192,13 @@ impl Ds4Tokenizer {
         out
     }
 
+    pub fn token_text_bytes(&self, token: u32) -> &[u8] {
+        self.tokens
+            .get(token as usize)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
     fn special_token_at(&self, bytes: &[u8], pos: usize) -> Option<(u32, usize)> {
         let special = self.special;
         let specials: [(&[u8], u32); 7] = [
@@ -769,6 +776,7 @@ mod tests {
     fn token_text_decodes_gpt2_byte_mapping() {
         let tokenizer = toy_tokenizer();
         assert_eq!(tokenizer.token_bytes(16), b" ");
+        assert_eq!(tokenizer.token_text_bytes(16), "\u{0120}".as_bytes());
     }
 
     #[test]

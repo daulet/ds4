@@ -1,3 +1,5 @@
+use std::{fs, str};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliParseAction {
     Exit,
@@ -12,10 +14,26 @@ pub struct CliParseResult {
     pub stderr: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CliConfig {
+    pub model_path: String,
+    pub prompt: Option<String>,
+    pub dump_tokens: bool,
+}
+
+impl Default for CliConfig {
+    fn default() -> Self {
+        Self {
+            model_path: "ds4flash.gguf".to_string(),
+            prompt: None,
+            dump_tokens: false,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct CliState {
-    prompt: Option<String>,
-    dump_tokens: bool,
+    config: CliConfig,
     imatrix_dataset: Option<String>,
     imatrix_out: Option<String>,
     perplexity_file: Option<String>,
@@ -96,44 +114,59 @@ where
     I: IntoIterator<Item = S>,
     S: Into<String>,
 {
+    match parse_cli_config(args) {
+        Ok(_) => CliParseResult {
+            action: CliParseAction::Continue,
+            exit_code: 99,
+            stdout: String::new(),
+            stderr: "ds4-rs: M8.3 parser-only implementation reached model-backed path\n"
+                .to_string(),
+        },
+        Err(result) => result,
+    }
+}
+
+pub fn parse_cli_config<I, S>(args: I) -> Result<CliConfig, CliParseResult>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
     let argv: Vec<String> = args.into_iter().map(Into::into).collect();
     let mut state = CliState::default();
     let mut i = 0usize;
     while i < argv.len() {
         let arg = argv[i].as_str();
         match arg {
-            "-h" | "--help" => return exit(0, HELP, ""),
+            "-h" | "--help" => return Err(exit(0, HELP, "")),
             "-p" | "--prompt" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
-                if state.prompt.is_some() {
-                    return exit(2, "", "ds4: specify only one prompt source\n");
+                if state.config.prompt.is_some() {
+                    return Err(exit(2, "", "ds4: specify only one prompt source\n"));
                 }
-                state.prompt = Some(value.to_string());
+                state.config.prompt = Some(value.to_string());
             }
             "--prompt-file" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
-                if state.prompt.is_some() {
-                    return exit(2, "", "ds4: specify only one prompt source\n");
+                if state.config.prompt.is_some() {
+                    return Err(exit(2, "", "ds4: specify only one prompt source\n"));
                 }
-                if std::fs::read_to_string(value).is_err() {
-                    return exit(
-                        2,
-                        "",
-                        &format!("ds4: failed to open prompt file: {value}\n"),
-                    );
-                }
-                state.prompt = Some(String::new());
+                state.config.prompt = Some(read_prompt_file(value)?);
+            }
+            "-m" | "--model" => {
+                let value = match need_arg(&argv, &mut i, arg) {
+                    Ok(value) => value.to_string(),
+                    Err(result) => return Err(result),
+                };
+                state.config.model_path = value;
             }
             "-sys"
             | "--system"
-            | "-m"
-            | "--model"
             | "--mtp"
             | "--dir-steering-file"
             | "--dump-logprobs"
@@ -142,7 +175,7 @@ where
             | "--imatrix-out" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value.to_string(),
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 match arg {
                     "--perplexity-file" => state.perplexity_file = Some(value),
@@ -163,71 +196,95 @@ where
             | "--imatrix-max-tokens" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 if parse_positive_i32(value).is_none() {
-                    return exit(2, "", &format!("ds4: invalid value for {arg}: {value}\n"));
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
                 }
             }
             "--seed" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 if parse_positive_u64(value).is_none() {
-                    return exit(2, "", &format!("ds4: invalid value for {arg}: {value}\n"));
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
                 }
             }
             "--mtp-margin" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 if parse_float_range(value, 0.0, 1000.0).is_none() {
-                    return exit(2, "", &format!("ds4: invalid value for {arg}: {value}\n"));
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
                 }
             }
             "--temp" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 if parse_float_range(value, 0.0, 100.0).is_none() {
-                    return exit(2, "", &format!("ds4: invalid value for {arg}: {value}\n"));
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
                 }
             }
             "--top-p" | "--min-p" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 if parse_float_range(value, 0.0, 1.0).is_none() {
-                    return exit(2, "", &format!("ds4: invalid value for {arg}: {value}\n"));
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
                 }
             }
             "--dir-steering-ffn" | "--dir-steering-attn" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 if parse_float_range(value, -100.0, 100.0).is_none() {
-                    return exit(2, "", &format!("ds4: invalid value for {arg}: {value}\n"));
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
                 }
             }
             "--backend" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
-                    Err(result) => return result,
+                    Err(result) => return Err(result),
                 };
                 if !matches!(value, "metal" | "cuda" | "cpu") {
-                    return exit(
+                    return Err(exit(
                         2,
                         "",
                         &format!(
                             "ds4: invalid backend: {value}\n\
                              ds4: valid backends are: metal, cuda, cpu\n"
                         ),
-                    );
+                    ));
                 }
             }
             "--cpu"
@@ -246,47 +303,56 @@ where
             | "--inspect"
             | "--warm-weights" => {
                 if arg == "--dump-tokens" {
-                    state.dump_tokens = true;
+                    state.config.dump_tokens = true;
                 }
             }
             "--metal-graph-generate" => {
-                return exit(
+                return Err(exit(
                     2,
                     "",
                     "ds4: --metal-graph-generate was removed; --metal is the graph path\n",
-                );
+                ));
             }
-            "--server" => return exit(2, "", "ds4: use ds4-server for the HTTP server\n"),
+            "--server" => {
+                return Err(exit(2, "", "ds4: use ds4-server for the HTTP server\n"));
+            }
             _ => {
-                return exit(2, "", &format!("ds4: unknown option: {arg}\n{HELP}"));
+                return Err(exit(2, "", &format!("ds4: unknown option: {arg}\n{HELP}")));
             }
         }
         i += 1;
     }
 
     if state.imatrix_out.is_some() && state.imatrix_dataset.is_none() {
-        return exit(2, "", "ds4: --imatrix-out requires --imatrix-dataset\n");
+        return Err(exit(
+            2,
+            "",
+            "ds4: --imatrix-out requires --imatrix-dataset\n",
+        ));
     }
     if state.imatrix_dataset.is_some() && state.imatrix_out.is_none() {
-        return exit(2, "", "ds4: --imatrix-dataset requires --imatrix-out\n");
+        return Err(exit(
+            2,
+            "",
+            "ds4: --imatrix-dataset requires --imatrix-out\n",
+        ));
     }
-    if state.perplexity_file.is_some() && state.prompt.is_some() {
-        return exit(
+    if state.perplexity_file.is_some() && state.config.prompt.is_some() {
+        return Err(exit(
             2,
             "",
             "ds4: --perplexity-file does not use -p/--prompt-file\n",
-        );
+        ));
     }
-    if state.dump_tokens && state.prompt.is_none() {
-        return exit(2, "", "ds4: --dump-tokens requires -p or --prompt-file\n");
+    if state.config.dump_tokens && state.config.prompt.is_none() {
+        return Err(exit(
+            2,
+            "",
+            "ds4: --dump-tokens requires -p or --prompt-file\n",
+        ));
     }
 
-    CliParseResult {
-        action: CliParseAction::Continue,
-        exit_code: 99,
-        stdout: String::new(),
-        stderr: "ds4-rs: M8.3 parser-only implementation reached model-backed path\n".to_string(),
-    }
+    Ok(state.config)
 }
 
 fn need_arg<'a>(argv: &'a [String], idx: &mut usize, opt: &str) -> Result<&'a str, CliParseResult> {
@@ -295,6 +361,14 @@ fn need_arg<'a>(argv: &'a [String], idx: &mut usize, opt: &str) -> Result<&'a st
     }
     *idx += 1;
     Ok(argv[*idx].as_str())
+}
+
+fn read_prompt_file(path: &str) -> Result<String, CliParseResult> {
+    let bytes = fs::read(path)
+        .map_err(|_| exit(2, "", &format!("ds4: failed to open prompt file: {path}\n")))?;
+    let text = str::from_utf8(&bytes)
+        .map_err(|_| exit(2, "", &format!("ds4: failed to read prompt file: {path}\n")))?;
+    Ok(text.to_string())
 }
 
 fn parse_positive_i32(s: &str) -> Option<i32> {
@@ -367,5 +441,26 @@ mod tests {
             result.stderr,
             "ds4: --dump-tokens requires -p or --prompt-file\n"
         );
+    }
+
+    #[test]
+    fn config_retains_model_prompt_and_dump_tokens() {
+        let config = parse_cli_config([
+            "--dump-tokens",
+            "-m",
+            "tokenizer.gguf",
+            "-p",
+            "prompt text",
+            "--think-max",
+            "--ctx",
+            "393216",
+            "--system",
+            "ignored",
+        ])
+        .expect("valid dump-token config");
+
+        assert_eq!(config.model_path, "tokenizer.gguf");
+        assert_eq!(config.prompt.as_deref(), Some("prompt text"));
+        assert!(config.dump_tokens);
     }
 }

@@ -284,3 +284,15 @@ both context thresholds, and `--nothink`. `--dump-tokens` exits before the
 normal prompt builder and thinking warning path, so the system/thinking cases
 are expected to produce byte-identical token dumps to the base prompt with empty
 stderr.
+
+Compare the M8.5 Rust CLI token-dump path against that oracle:
+
+```sh
+python3 ds4-parity/compare_cli_token_dump.py --negative-test
+```
+
+The comparator builds `ds4-cli-token-dump-rs`, substitutes the small M5.3
+tokenizer GGUF for the B300 model path, and requires exact C/Rust stdout bytes,
+stderr bytes, exit status, and parsed token IDs for every M8.4 case. The Rust
+diagnostic writer intentionally prints raw tokenizer table text, matching
+current C `dump_tokens_fp`, rather than decoded token bytes.

@@ -1331,10 +1331,10 @@
 
 ### M8.5: Rust CLI Token And Prompt Diagnostic Parity
 
-- Status: pending
+- Status: done
 - Goal: implement Rust CLI behavior for `--dump-tokens` and prompt-source
   diagnostics.
-- Source evidence needed: committed M8.4 current-C token/prompt diagnostic
+- Source evidence used: committed M8.4 current-C token/prompt diagnostic
   fixture, M8.3 Rust CLI parser, Rust tokenizer text path, and `ds4_cli.c`
   dump-token early-exit behavior.
 - Oracle: committed M8.4 current-C token/prompt diagnostic fixture.
@@ -1349,10 +1349,47 @@
   normalized; token and prompt surfaces are exact.
 - Review gate: ask Claude to review CLI-to-tokenizer plumbing and normalization
   boundaries.
-- Validation needed: comparator with negative tests, targeted Rust CLI tests,
+- Validation passed: `cargo fmt --all -- --check`, `cargo test -p ds4-gguf
+  cli_parse`, `cargo test -p ds4-gguf token_text_decodes_gpt2_byte_mapping`,
+  `python3 -m py_compile ds4-parity/compare_cli_token_dump.py`, `python3
+  ds4-parity/compare_cli_token_dump.py --skip-build --negative-test` (`CLI
+  token dump tokenizer fixture: PASS, 3 checks`; C fixture preconditions `PASS,
+  166 checks`; C/Rust comparator `PASS, 65 checks`; negative tests `PASS, 5
+  checks`), `python3 ds4-parity/compare_cli_parse.py --skip-build
+  --negative-test` (`CLI parse C fixture preconditions: PASS, 224 checks`;
+  C/Rust comparator `PASS, 244 checks`; negative tests `PASS, 5 checks`),
   `cargo test --workspace`, and `git diff --check`.
 - Owner path: Rust CLI token dump path, CLI token comparator, `ds4-parity/`,
   `.memory/status.md`.
+
+### M8.6: Current-C CLI Logprob And Perplexity Oracle
+
+- Status: pending
+- Goal: capture current-C CLI machine-readable diagnostic outputs that require
+  model execution.
+- Source evidence needed: `ds4_cli.c` `--dump-logprobs` and
+  `--perplexity-file` dispatch, M6 score-tolerance policy, prompt-file handling,
+  and B300 model/backend availability.
+- Oracle: current `./ds4 --dump-logprobs` and `./ds4 --perplexity-file` on the
+  recorded B300 model.
+- Fixture: fixed short prompt, prompt-file variant, `--logprobs-top-k`, greedy
+  token limit, invalid output path category, and a fixed raw-text perplexity
+  file.
+- Comparator: schema/numeric checker for JSON logprob shape, selected tokens,
+  top-logprob ordering, score tolerances from M6, perplexity text fields, file
+  hashes, and exact B300 refresh commands.
+- Acceptance: selected tokens and top-logprob ordering match exactly; score
+  values stay within the M6 model-logits tolerance; perplexity scalar fields
+  match within documented numeric tolerances.
+- Drift policy: timing/progress stderr and workspace paths may be normalized;
+  CLI JSON fields, selected tokens, score tolerances, and output file hashes are
+  exact.
+- Review gate: ask Claude to review diagnostic output coverage and numeric
+  tolerance reuse from M6.
+- Validation needed: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+- Owner path: CLI diagnostic oracle artifacts, `ds4-parity/`,
+  `ds4-parity/baselines/cli/`, `.memory/status.md`.
 
 ## Later Items
 

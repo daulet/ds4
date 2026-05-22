@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.5 Rust CLI Token And Prompt Diagnostic Parity
-- Last validated source commit: M8.4 current-C CLI token/prompt diagnostic
-  oracle in this commit; prior pushed source commit
-  `dbaf2090fb37a94305e0e7c8251d58c865ab3007`
+- Active item: M8.6 Current-C CLI Logprob And Perplexity Oracle
+- Last validated source commit: M8.5 Rust CLI token/prompt diagnostic parity
+  in this commit; prior pushed source commit
+  `6b756ebbb0b505683d1567a14661dc4d5ad458d3`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -942,3 +942,27 @@
   ds4-parity/baselines/cli/m8.4/manifest.json --negative-test` (`CLI token dump
   oracle: PASS, 306 checks`; manifest `PASS, 18 checks`; negative tests `PASS,
   8 checks`).
+- M8.5 refactors `rust/ds4-gguf/src/cli_parse.rs` to expose the parsed model
+  path, prompt text, and `--dump-tokens` flag while preserving the M8.3
+  parser-only surface. It adds `ds4-cli-token-dump-rs`, which loads the M5.3
+  tokenizer GGUF, tokenizes the raw prompt with `tokenize_rendered_chat`, and
+  writes the C diagnostic format.
+- M8.5 adds `Ds4Tokenizer::token_text_bytes` for diagnostics that need raw
+  tokenizer table bytes. The C `dump_tokens_fp` output uses those raw token text
+  bytes (`Ġtoken` style), not decoded token bytes (` token` style); existing
+  decoded `token_bytes` behavior is unchanged.
+- M8.5 adds `python3 ds4-parity/compare_cli_token_dump.py`, which validates the
+  M8.4 C fixture, checks the M5.3 tokenizer fixture hash, substitutes that
+  tokenizer fixture for the B300 model path, and compares Rust/C exit status,
+  stdout bytes, stderr bytes, and token IDs exactly.
+- M8.5 validation passed for `cargo fmt --all -- --check`, `cargo test -p
+  ds4-gguf cli_parse` (4 parser tests passed), `cargo test -p ds4-gguf
+  token_text_decodes_gpt2_byte_mapping` (1 tokenizer diagnostic test passed),
+  `python3 -m py_compile ds4-parity/compare_cli_token_dump.py`, `python3
+  ds4-parity/compare_cli_token_dump.py --skip-build --negative-test` (`CLI
+  token dump tokenizer fixture: PASS, 3 checks`; C fixture preconditions `PASS,
+  166 checks`; C/Rust comparator `PASS, 65 checks`; negative tests `PASS, 5
+  checks`), `python3 ds4-parity/compare_cli_parse.py --skip-build
+  --negative-test` (`CLI parse C fixture preconditions: PASS, 224 checks`;
+  C/Rust comparator `PASS, 244 checks`; negative tests `PASS, 5 checks`), and
+  `cargo test --workspace`.
