@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.1 Sampling And Logprob Work Item Breakdown
-- Last validated source commit: M5.7 text parity report commit once committed;
-  prior pushed source commit
-  `d6bade1d5bde4c72280bed0395322d85dfc30d5e`
+- Active item: M6.2 C Fixed-Logits Sampling And Logprob Oracle
+- Last validated source commit: M6.1 sampling/logprob split commit once
+  committed; prior pushed source commit
+  `3223f6e3a09f066873c5b8afc1b855adabad068d`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -446,3 +446,21 @@
 - M5.7 Claude review returned `NO BLOCKERS` after checking report
   integration, failure output, B300 refresh command fidelity, JSON/text output
   shape, status/TODO consistency, and accidental local model dependencies.
+- M5.7 implementation commit:
+  `3223f6e3a09f066873c5b8afc1b855adabad068d`.
+- M6.1 split Milestone 6 into M6.2 through M6.7, including M6.6a/M6.6b,
+  after reading the public sampling/logprob APIs in `ds4.h`, current C sampler
+  and logprob math
+  (`sample_argmax`, `sample_rng_next`, `sample_top_p_min_p`,
+  `ds4_session_top_logprobs`, and `ds4_session_token_logprob`), CLI
+  `--dump-logprobs` and perplexity surfaces, server decode stop handling,
+  agent sampling, M0.3 official-vector tests, and M1.4 numeric comparator
+  conventions.
+- M6.1 defined separate oracle surfaces for no-model fixed-logits sampler math,
+  Rust sampler/logprob math, B300 current-C session logits capture, Rust
+  fixed-logits model-slice comparison, C decode stop policy fixtures, Rust
+  decode stop policy comparison, and report integration.
+- M6.1 validation passed for `git diff --check`; Claude review returned
+  `NO BLOCKERS` after tightening M6.2 fixture ownership for source-named
+  request-surface sampling tuples and splitting decode stop policy into M6.6a
+  C oracle fixtures plus M6.6b Rust policy comparison.

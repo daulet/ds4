@@ -711,6 +711,168 @@ Acceptance:
 - Top-logprob ordering and token bytes match.
 - Logprob values match within an explicit tolerance for floating-point output.
 
+### Milestone 6 Work Item Adjustment
+
+Milestone 6 spans pure sampler math, model-backed logits capture, token-byte
+presentation, and request-surface stop policy. Split it before implementation
+so no commit mixes no-model fixed-logit fixtures with B300 model recapture or
+server/CLI finish semantics.
+
+#### M6.2: C Fixed-Logits Sampling And Logprob Oracle
+
+- Goal: expose current C sampling and logprob math through a deterministic
+  no-model oracle dump over fixed logits arrays.
+- Oracle: `sample_argmax`, `sample_rng_next`, `sample_top_p_min_p`,
+  `ds4_session_top_logprobs`, and `ds4_session_token_logprob` behavior in the
+  current C implementation.
+- Fixture: synthetic logits arrays covering greedy ties, non-finite logits,
+  temperature normalization, `top_p` clamping, `top_k` caps, `min_p`
+  thresholds, full-vocab sampling, seeded RNG draws, top-logprob ordering, and
+  per-token logprob requests. The fixture also includes source-named resolved
+  request-surface sampling tuples for CLI defaults, OpenAI chat/responses
+  defaults, Anthropic defaults, agent defaults, thinking-mode sampling defaults,
+  and deterministic structural DSML sampling defaults, recorded as explicit
+  `temperature`, `top_k`, `top_p`, `min_p`, and seed inputs where applicable.
+- Comparator: schema checker and negative tests for the C oracle dump.
+- Acceptance: oracle output is deterministic, local, no-model, and records
+  selected token, consumed RNG state, filtered candidate set, logits,
+  logprobs, and first-failure paths for drift.
+- Drift policy: no sampler or logprob behavior changes; fixture formatting may
+  normalize paths and timestamps only.
+- Review gate: ask Claude to review fixture coverage against C sampler and
+  logprob source.
+- Validation gate: build the C oracle helper, run schema and negative checks,
+  and run `git diff --check`.
+
+#### M6.3: Rust Sampler And Logprob Math
+
+- Goal: port C sampler, RNG, top-logprob, and token-logprob math to Rust
+  without depending on model execution.
+- Oracle: the M6.2 fixed-logits C oracle dump.
+- Fixture: the committed M6.2 synthetic logits fixture set.
+- Comparator: C/Rust comparison for selected token, RNG state, candidate
+  filtering, top-logprob ordering, per-token logprob, and numeric tolerance.
+- Acceptance: greedy choices and sampled choices match exactly for every seeded
+  fixture, including direct parameter combinations used by request surfaces
+  after they resolve defaults, thinking-mode sampling defaults, and
+  deterministic structural DSML sampling to explicit `temperature`, `top_k`,
+  `top_p`, and `min_p` values; logprob values match within the explicit M6
+  numeric tolerance.
+- Drift policy: no selection drift; any stricter non-finite handling must be
+  source-proven and named by fixture.
+- Review gate: ask Claude to review Rust numeric edge cases, candidate
+  filtering order, RNG semantics, and allocation behavior.
+- Validation gate: Rust tests, sampler comparator with negative tests,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M6.4: Current-C Session Logits And Logprob Fixture Oracle
+
+- Goal: capture model-backed current-C session logits and top-logprob slices
+  for official-vector prompt cases without requiring Rust runtime execution.
+- Oracle: current C `ds4_session_sync`, `ds4_session_argmax`,
+  `ds4_session_top_logprobs`, `ds4_session_token_logprob`, and
+  `ds4_session_eval` on the B300 q2-imatrix model.
+- Fixture: official-vector prompt cases, selected continuation tokens, full
+  logits or hashed logits payloads for each scored step, top-logprob slices,
+  token-byte renderings, context settings, backend, model identity, and exact
+  B300 refresh commands.
+- Comparator: schema/hash checker that validates the committed model-backed
+  logits fixture and records skipped local refresh with B300 rerun commands.
+- Acceptance: selected greedy tokens match the existing official-vector
+  contract, top-logprob slices are deterministic for the recorded backend, and
+  the fixture is small enough to commit or explicitly shards large binary
+  payloads with hashes.
+- Drift policy: model path and capture workspace may be normalized; logits
+  bytes or hashes, selected token IDs/bytes, top-logprob order, token bytes,
+  backend, and model hash are exact.
+- Review gate: ask Claude to review capture schema, artifact size policy, and
+  B300 refresh command fidelity.
+- Validation gate: B300 capture or exact blocked rerun command, local
+  schema/hash checks, existing M0.3 logprob comparator, and
+  `git diff --check`.
+
+#### M6.5: Rust Fixed-Logits Model-Slice Comparator
+
+- Goal: run Rust sampler and logprob math over the M6.4 captured model logits
+  slices and compare token presentation against current C.
+- Oracle: M6.4 current-C session logits and top-logprob fixture.
+- Fixture: committed M6.4 logits payloads plus the tokenizer identity fixture
+  already used by Milestone 5.
+- Comparator: Rust fixed-logits dump compared to C selected token, top-logprob
+  order, logprob values, token IDs, and token bytes.
+- Acceptance: Rust chooses the same greedy token for every model-backed step,
+  computes the same top-logprob ordering, and renders token bytes identically.
+- Drift policy: no token, ordering, or byte drift; numeric differences must
+  stay within the M6 tolerance and report max absolute delta.
+- Review gate: ask Claude to review fixture loading, token-byte conversion, and
+  tolerance reporting.
+- Validation gate: model-slice comparator with negative tests, Rust tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M6.6a: Decode Stop Policy C Oracle Fixtures
+
+- Goal: expose request-surface decode stop policy through deterministic
+  no-model C fixtures before any Rust policy port.
+- Oracle: current C CLI, server, and agent decode-loop behavior around EOS,
+  `max_tokens`, user stop sequences, UTF-8 stream-safe holding, and API finish
+  reason mapping.
+- Fixture: generated-token/text schedules plus request option records for CLI,
+  OpenAI chat/responses, Anthropic, and agent defaults. Tool-call schedules
+  cover only the decode-loop finish transition after a complete DSML tool-call
+  boundary has already been identified.
+- Comparator: schema checker and negative tests for a C oracle dump covering
+  finish reason, emitted visible text, held streaming tail, session
+  invalidation requirement, and stop boundary offsets.
+- Acceptance: EOS, length, stop sequence, UTF-8 boundary, and complete
+  tool-call finish outcomes match C for every fixture.
+- Drift policy: no finish-reason or emitted-text drift; policy-only
+  normalizations must not hide token/text boundary changes.
+- Distinct from M5.6: M5.6 owns DSML byte formatting and parser state; this
+  item owns only the decode loop decision once parser/tracker state reports a
+  complete tool-call boundary.
+- Review gate: ask Claude to review stop sequence coverage and the boundary
+  between sampler math, M5 DSML parsing, and API finish semantics.
+- Validation gate: C policy oracle checker with negative tests, existing
+  server tests, and `git diff --check`.
+
+#### M6.6b: Rust Decode Stop Policy Port
+
+- Goal: port the request-surface decode stop policy over no-model
+  generated-token/text schedules without implementing Rust CLI/server runtime.
+- Oracle: the M6.6a C decode stop policy oracle dump.
+- Fixture: committed M6.6a stop-policy schedules and request option records.
+- Comparator: C/Rust policy comparison for finish reason, emitted visible text,
+  held streaming tail, session invalidation requirement, and stop boundary
+  offsets.
+- Acceptance: Rust policy output matches C for every EOS, length, stop
+  sequence, UTF-8 boundary, and complete tool-call fixture.
+- Drift policy: no finish-reason, emitted-text, held-tail, or boundary-offset
+  drift.
+- Review gate: ask Claude to review the Rust policy boundary and make sure it
+  does not reimplement M5 DSML parsing or require model execution.
+- Validation gate: policy comparator with negative tests, Rust tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M6.7: Sampling And Logprob Report Integration
+
+- Goal: wire M6 local comparators and B300 refresh records into the parity
+  reports.
+- Oracle: committed M6 fixed-logits, model-backed logits, and decode-policy
+  fixtures.
+- Fixture: M6.2 through M6.6b manifest entries and refresh commands.
+- Comparator: a Milestone 6 report that runs all local sampling/logprob
+  comparators, summarizes numeric tolerances and first drift paths, and skips
+  only model-backed recapture with exact B300 commands; the unified parity
+  report includes that M6 report.
+- Acceptance: local report passes without the model, JSON output is machine
+  readable, failure output names fixture/field/expected/got, and B300 refreshes
+  are reproducible from the report.
+- Drift policy: report normalizes only capture paths and timestamps.
+- Review gate: ask Claude to review report integration and failure output.
+- Validation gate: M6 report, unified parity report, `py_compile`,
+  `cargo test --workspace`, and `git diff --check`.
+
 ## Milestone 7: KV Store and Snapshot Parity
 
 Port disk KV and in-memory snapshot handling with format comparison first.

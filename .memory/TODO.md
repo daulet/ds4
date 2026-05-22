@@ -586,7 +586,7 @@
 
 ### M6.1: Sampling And Logprob Work Item Breakdown
 
-- Status: pending
+- Status: done
 - Goal: split Milestone 6 sampling and logprob parity into reviewable work
   items before adding Rust sampler or logits-processing code.
 - Source evidence needed: `RUST_PORT_ROADMAP.md` Milestone 6, current C
@@ -609,6 +609,41 @@
 - Validation needed: `git diff --check`.
 - Owner path: `.memory/TODO.md`, `.memory/status.md`,
   `RUST_PORT_ROADMAP.md` source evidence.
+
+### M6.2: C Fixed-Logits Sampling And Logprob Oracle
+
+- Status: pending
+- Goal: expose current C sampling and logprob math through a deterministic
+  no-model oracle dump over fixed logits arrays.
+- Source evidence needed: `sample_argmax`, `sample_rng_next`,
+  `sample_top_p_min_p`, `ds4_session_top_logprobs`,
+  `ds4_session_token_logprob`, public `ds4.h` session API declarations,
+  `ds4_cli.c` CLI default resolution, `ds4_server.c` OpenAI, responses, and
+  Anthropic request default resolution plus DSML structural-sampling override,
+  `ds4_agent.c` agent default resolution, and existing M0.3/M1.4 logprob
+  comparator conventions.
+- Oracle: current C sampler, RNG, top-logprob, and token-logprob behavior.
+- Comparator: schema checker and negative tests for a deterministic fixed-logits
+  C oracle dump.
+- Fixture: synthetic logits arrays covering greedy ties, non-finite logits,
+  temperature normalization, `top_p` clamping, `top_k` caps, `min_p`
+  thresholds, full-vocab sampling, seeded RNG draws, top-logprob ordering, and
+  per-token logprob requests. The fixture also includes source-named resolved
+  request-surface sampling tuples for CLI defaults, OpenAI chat/responses
+  defaults, Anthropic defaults, agent defaults, thinking-mode sampling defaults,
+  and deterministic structural DSML sampling defaults, recorded as explicit
+  `temperature`, `top_k`, `top_p`, `min_p`, and seed inputs where applicable.
+- Acceptance: oracle output is deterministic, local, no-model, and records
+  selected token, consumed RNG state, filtered candidate set, logits, logprobs,
+  and drift paths.
+- Drift policy: no sampler or logprob behavior changes; fixture formatting may
+  normalize paths and timestamps only.
+- Review gate: ask Claude to review fixture coverage against C sampler and
+  logprob source.
+- Validation needed: C oracle helper build, schema/negative checks, and
+  `git diff --check`.
+- Owner path: C oracle dump surface, `ds4-parity/`,
+  `ds4-parity/baselines/sampling/`, `.memory/status.md`.
 
 ## Later Items
 
