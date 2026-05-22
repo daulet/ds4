@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.1 Tokenization Work Item Breakdown
-- Last validated source commit: `4ca3bf0df2bbf8f8a5fef56c0cf9e9c3e1881361`
+- Active item: M5.2 C Token And Prompt Dump Oracle
+- Last validated source commit: `b7a485ca1b18471a048c022b9e790650dc918322`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -236,3 +236,15 @@
   `compare_metadata_validation.py --negative-test`, and
   `compare_tensor_bindings.py --negative-test`), `python3 -m py_compile` for
   all involved comparators, and `cargo test --workspace`.
+- M5.1 split Milestone 5 into M5.2 through M5.7 after reading tokenizer source
+  (`vocab_load`, JoyAI `bpe_tokenize_text`, rendered-chat special tokenization,
+  `ds4_token_text`, and `ds4_dump_text_tokenization`), CLI prompt paths
+  (`--dump-tokens`, `build_prompt`, and REPL append functions), server prompt
+  and API paths (`parse_chat_request`, `render_chat_prompt_text`,
+  `render_live_tool_tail`, and DSML formatting/parsing helpers), the agent DSML
+  streaming parser, and existing M0.3/M0.4/M0.5 fixtures.
+- M5.1 validation passed for `git diff --check` and non-interactive Claude
+  review after tightening tokenizer identity, server-vs-CLI prompt oracles,
+  token decoding ownership, DSML chunk/EOF parser schedules, tool-schema
+  fixture variants, and request body hashing; final Claude review returned
+  `NO BLOCKERS`.

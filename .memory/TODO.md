@@ -339,7 +339,7 @@
 
 ### M5.1: Tokenization Work Item Breakdown
 
-- Status: pending
+- Status: done
 - Goal: split Milestone 5 tokenization, prompt rendering, and DSML parity into
   reviewable Rust port work items before adding runtime-facing text code.
 - Source evidence needed: current C tokenizer loading/encoding/decoding, chat
@@ -353,6 +353,207 @@
 - Validation needed: `git diff --check`.
 - Owner path: `.memory/TODO.md`, `.memory/status.md`,
   `RUST_PORT_ROADMAP.md` source evidence.
+
+### M5.2: C Token And Prompt Dump Oracle
+
+- Status: pending
+- Goal: add a deterministic current-C oracle that dumps tokenizer vocabulary
+  identity, text tokenization, rendered chat prompt bytes, rendered prompt token
+  IDs, CLI chat-construction token streams, token pieces, and request fixture
+  identity without running inference.
+- Source evidence needed: `vocab_load`, `bpe_tokenize_text`,
+  `tokenize_rendered_chat_vocab`, `ds4_dump_text_tokenization`,
+  `render_chat_prompt_text`, `parse_chat_request`, `ds4_chat_begin`,
+  `ds4_chat_append_message`, `ds4_chat_append_assistant_prefix`, CLI
+  `build_prompt`, `special_token_at`, `vocab_token_is_literal_special`, M0.3
+  official vectors, and M0.4/M0.5 server request fixtures and traces.
+- Oracle: current C tokenizer and prompt renderer on the B300 q2-imatrix model,
+  using `/workspace/ds4/ds4flash.gguf` and the recorded model SHA256.
+- Comparator: schema checker for committed token/prompt dumps, including a
+  canonical tokenizer identity section with token count, sha256 over ordered
+  token byte strings, merge count, sha256 over ordered merge pairs/ranks, and a
+  sorted `special_token_at` name/id table plus a sorted
+  `vocab_token_is_literal_special` id/bytes table for literal-special decoding.
+  `vocab_load` reads only `tokenizer.ggml.tokens` and `tokenizer.ggml.merges`
+  into `ds4_vocab`, so token type/score metadata is intentionally outside this
+  tokenizer identity surface. Negative tests cover missing fixture records,
+  token-count drift, token-bytes hash drift, merge hash drift, special-token ID
+  drift, literal-special decoding table drift, prompt-byte drift, token ID
+  drift, and token-piece drift; the CLI fixture family records per-step append
+  operations and final token streams without a unified rendered-prompt byte
+  field.
+- Acceptance: committed fixtures cover plain text, rendered chat specials,
+  thinking enabled/disabled/max, system/developer text, tool/function results,
+  OpenAI tools, existing M0.4 server requests, and CLI direct-token prompt
+  construction variants; tokenizer identity fields are present and hash only
+  canonical ordered token bytes and ordered merge records, not capture paths or
+  timestamps.
+- Drift policy: model path and capture workspace may be normalized; rendered
+  server prompt bytes, server token IDs, CLI append operation sequences, CLI
+  token streams, token pieces, request fixture names, model identity, token byte
+  hash, merge hash, and special-token table are exact. Server trace timestamps,
+  request IDs, host/port strings, and process IDs may be normalized; request
+  fixture names and sha256 over exact request body bytes as received, with no
+  JSON re-serialization, are exact.
+- Review gate: ask Claude to review fixture coverage and dump schema against
+  tokenizer and prompt-rendering source.
+- Validation needed: B300 capture command, schema/negative checks, local build
+  of the dump helper, and `git diff --check`.
+- Owner path: `ds4.c`, `ds4.h`, a dump helper or `ds4-parity/` capture script,
+  `ds4-parity/baselines/tokenization/`, `.memory/status.md`.
+
+### M5.3: Rust Vocabulary Loader And JoyAI BPE
+
+- Status: pending
+- Goal: port tokenizer metadata loading, byte-level GPT-2 encoding/decoding,
+  JoyAI pre-tokenization, BPE merge ranking, and plain text tokenization into
+  Rust without prompt rendering yet.
+- Source evidence needed: `vocab_load`, `byte_encode`,
+  `bpe_emit_piece`, `bpe_tokenize_text`, `ds4_token_text`, tokenizer metadata
+  in the M4.6 baseline, M5.2 tokenizer identity fields, and M5.2 text-token
+  fixtures.
+- Oracle: M5.2 C text-tokenization fixture outputs.
+- Comparator: C/Rust text tokenization comparison for token IDs and token
+  pieces, plus generated negative fixtures for missing token table, missing
+  merges, M5.2 token-bytes hash drift, M5.2 merge hash drift, missing required
+  special token, invalid UTF-8 token string, and merge-rank drift.
+- Acceptance: Rust plain text token IDs and decoded token pieces match C for
+  ASCII, whitespace, numbers split into 1-3 digit groups, punctuation/newline
+  groups, code snippets, CJK/kana, accented UTF-8, and byte fallback cases.
+  This item owns generic `ds4_token_text` byte/UTF-8 piece decoding for ordinary
+  tokenizer IDs; rendered special-token literal decoding is owned by M5.4.
+- Drift policy: no token ID or decoded-piece drift; any stricter tokenizer
+  metadata rejection must be source-proven and named by fixture.
+- Review gate: ask Claude to review JoyAI split rules, byte encode/decode, and
+  allocation/error boundaries.
+- Validation needed: Rust unit tests, C/Rust tokenizer comparator, negative
+  tests, `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: `rust/ds4-gguf/` or a new Rust tokenizer crate/module,
+  `ds4-parity/`, `.memory/status.md`.
+
+### M5.4: Rust Rendered Chat Special Tokenization
+
+- Status: pending
+- Goal: port rendered-chat tokenization, special token recognition, and token
+  text decoding for the exact `special_token_at` rendered-control table:
+  `<｜begin▁of▁sentence｜>`, `<｜end▁of▁sentence｜>`, `<｜User｜>`,
+  `<｜Assistant｜>`, `<think>`, `</think>`, and `｜DSML｜`.
+- Source evidence needed: `special_token_at`, `tokenize_span`,
+  `tokenize_rendered_chat_vocab`, `vocab_token_is_literal_special`,
+  `ds4_token_text`, M5.2 rendered-chat fixtures, and M0.4 traces containing
+  rendered prompts and token windows.
+- Oracle: M5.2 C rendered-chat fixture outputs.
+- Comparator: C/Rust rendered-chat comparison for prompt bytes, token IDs, and
+  token pieces, including literal special-looking text inside ordinary user
+  content vs trusted rendered control text.
+- Acceptance: rendered special markers become the exact C special token IDs;
+  ordinary spans still use JoyAI BPE; `ds4_token_text`-equivalent decoding
+  preserves literal strings for every M5.2
+  `vocab_token_is_literal_special` table entry. Generic byte-fallback and UTF-8
+  token-piece decoding remains owned by M5.3.
+- Drift policy: no special token, DSML marker, or token text drift.
+- Review gate: ask Claude to review special-token scanning order and the trust
+  boundary between rendered prompts and user-supplied plain content.
+- Validation needed: rendered-chat comparator, Rust tests, `cargo test
+  --workspace`, and `git diff --check`.
+- Owner path: Rust tokenizer module, `ds4-parity/`, `.memory/status.md`.
+
+### M5.5: Prompt Renderer Parity
+
+- Status: pending
+- Goal: port `render_chat_prompt_text` and CLI chat construction semantics for
+  thinking modes, Think Max prefix, system/developer messages, user/tool/function
+  messages, assistant content/reasoning, tool schemas, and assistant prefixes.
+- Source evidence needed: `render_chat_prompt_text`, `render_live_tool_tail`,
+  `append_tools_prompt_text`, `role_is_system`, `role_is_user_like`,
+  `ds4_chat_begin`, `ds4_chat_append_message`,
+  `ds4_chat_append_assistant_prefix`, CLI `build_prompt`, and M0.4/M0.5
+  request/trace fixtures.
+- Oracle: M5.2 C prompt fixture outputs and M0.4 server traces.
+- Comparator: C/Rust prompt renderer comparison for rendered bytes and
+  rendered token IDs for basic chat, stream chat, thinking disabled, thinking
+  high, Think Max, system/developer content, multi-turn assistant history,
+  tool/function results, and tool schemas before system text; CLI-path fixtures
+  compare the direct `ds4_chat_*` append operation sequence and final token
+  stream without requiring a synthetic rendered byte stream.
+- Acceptance: server rendered prompt bytes and token IDs match for every
+  committed server fixture; CLI direct-token prompt construction matches C token
+  streams for the committed CLI fixtures; pending assistant prefixes use
+  `<think>` or `</think>` exactly as C does. Tool-schema fixtures cover zero,
+  one, and multiple tools; absent `tools`/`functions` fields vs explicit empty
+  arrays; duplicate tool names; OpenAI `tools` and legacy `functions` inputs;
+  missing and empty descriptions; required and optional parameters; nested JSON
+  schema fragments; property ordering; and placement before system/developer
+  text.
+- Drift policy: no server prompt-byte drift; no server or CLI token ID drift;
+  any normalized request metadata must be outside the prompt byte/token
+  comparison.
+- Review gate: ask Claude to review role handling, thinking-mode branches, and
+  fixture coverage against server and CLI source.
+- Validation needed: prompt comparator, CLI token-stream comparator, Rust
+  tests, existing `./ds4_test --server`, CLI prompt construction fixture run,
+  `cargo test --workspace`, and `git diff --check`.
+- Owner path: Rust prompt module, `ds4-parity/`, `.memory/status.md`.
+
+### M5.6: DSML Formatting And Parse Parity
+
+- Status: pending
+- Goal: port DSML tool-call formatting, raw DSML replay, parameter ordering,
+  string/JSON parameter rendering, delimiter escaping, and generated DSML parse
+  boundaries.
+- Source evidence needed: `append_dsml_tool_calls_text`,
+  `append_dsml_arguments_from_json`, `append_dsml_parameter_text`,
+  `append_dsml_json_literal`, `append_tool_result_text`,
+  `parse_generated_message_ex`, `agent_dsml_parse`, M0.4 tool-call fixture, and
+  server unit tests around DSML escaping/replay and incremental parser chunk
+  boundaries.
+- Oracle: C DSML formatting/parsing behavior captured by M5.2 fixtures and
+  focused generated DSML fixtures.
+- Comparator: C/Rust byte comparison for rendered DSML blocks and parsed tool
+  call JSON, including raw sampled DSML replay, schema property order, string
+  vs JSON parameters, `</｜DSML｜parameter>` escaping, tool-result escaping, and
+  DSML before/after `</think>`; a chunk-split fixture runner replays each
+  generated DSML fixture through both C parser surfaces and their Rust ports
+  under whole-message, one-byte, marker-prefix, escaped-delimiter,
+  parameter-boundary, `</think>`, and truncated-at-EOF split schedules for
+  unterminated tool-call, invoke, parameter, and think blocks.
+- Acceptance: exact DSML block bytes match. For `parse_generated_message_ex`,
+  parsed tool-call names, ids, arguments, order, finish categories, and final
+  assistant content match C for every committed chunk-split and
+  truncated-at-EOF schedule, including no promotion of partial executable tool
+  calls when C rejects or buffers them. For `agent_dsml_parse`, streaming state
+  transitions, emitted tool-call events, buffered text, and final parser state
+  match C for every committed chunk-split and truncated-at-EOF schedule.
+- Drift policy: no DSML byte drift; no parser broadening that turns ordinary
+  prose into executable tool calls; stricter parser errors require fixtures.
+- Review gate: ask Claude to review escaping, parameter ordering, and parser
+  state categories for over-broad matching.
+- Validation needed: DSML comparator, Rust tests, existing `./ds4_test
+  --server`, `cargo test --workspace`, and `git diff --check`.
+- Owner path: Rust DSML module, `ds4-parity/`, `.memory/status.md`.
+
+### M5.7: Request Fixture Integration And Text Parity Report
+
+- Status: pending
+- Goal: wire tokenization, rendered prompt, and DSML comparators into a single
+  Milestone 5 text parity report that runs locally from committed fixtures and
+  records exact B300 refresh commands for model-backed recapture.
+- Source evidence needed: M5.2 through M5.6 comparators, M0.4/M0.5 request
+  fixture manifests, and current unified parity report conventions.
+- Oracle: committed M5 token/prompt/DSML fixtures captured from current C.
+- Comparator: a report that runs all local text comparators, summarizes fixture
+  counts and first drift paths, and skips only model-backed recapture with exact
+  B300 rerun commands.
+- Acceptance: local static report passes without the model; failure output names
+  fixture, field, expected/got, and rerun command where applicable.
+- Drift policy: report normalizes only capture paths/timestamps; rendered
+  prompt bytes, token IDs, token pieces, DSML bytes, and parsed tool-call
+  structures remain exact.
+- Review gate: ask Claude to review report integration and failure output.
+- Validation needed: text parity report, unified parity report if wired there,
+  py_compile, `cargo test --workspace`, and `git diff --check`.
+- Owner path: `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items
 
