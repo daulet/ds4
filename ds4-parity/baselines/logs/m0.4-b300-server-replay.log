@@ -1,0 +1,14 @@
+command: run M0.4 traced ds4-server replay
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+started_utc: 2026-05-22T02:15:58Z
+chat_basic endpoint=/v1/chat/completions fixture=ds4-parity/baselines/server-fixtures/m0.4/chat_basic.json http_code=200 response=responses/chat_basic.json bytes=334 started_utc=2026-05-22T02:16:13Z finished_utc=2026-05-22T02:16:14Z
+chat_stream endpoint=/v1/chat/completions fixture=ds4-parity/baselines/server-fixtures/m0.4/chat_stream.json http_code=200 response=responses/chat_stream.sse bytes=972 started_utc=2026-05-22T02:16:14Z finished_utc=2026-05-22T02:16:14Z
+chat_tool_call endpoint=/v1/chat/completions fixture=ds4-parity/baselines/server-fixtures/m0.4/chat_tool_call.json http_code=200 response=responses/chat_tool_call.json bytes=478 started_utc=2026-05-22T02:16:14Z finished_utc=2026-05-22T02:16:15Z
+chat_thinking_disabled endpoint=/v1/chat/completions fixture=ds4-parity/baselines/server-fixtures/m0.4/chat_thinking_disabled.json http_code=200 response=responses/chat_thinking_disabled.json bytes=325 started_utc=2026-05-22T02:16:15Z finished_utc=2026-05-22T02:16:16Z
+chat_cache_seed endpoint=/v1/chat/completions fixture=ds4-parity/baselines/server-fixtures/m0.4/chat_cache_seed.json http_code=200 response=responses/chat_cache_seed.json bytes=331 started_utc=2026-05-22T02:16:16Z finished_utc=2026-05-22T02:16:16Z
+chat_cache_continuation endpoint=/v1/chat/completions fixture=ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json http_code=200 response=responses/chat_cache_continuation.json bytes=335 started_utc=2026-05-22T02:16:16Z finished_utc=2026-05-22T02:16:16Z
+finished_utc: 2026-05-22T02:16:19Z
+exit_status: 0

@@ -1,0 +1,11 @@
+command: sha256sum ds4-server && file ds4-server
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+source_commit: 3d87577962abeac1ab0d80e9c21d0012bfc53afb
+started_utc: 2026-05-22T02:12:47Z
+8b03ac65417e5481ff4a0cad44657284e9c567d3c3edf2602e92d7a04f3f87d2  ds4-server
+ds4-server: ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=e2ff102f7520078bf97398ad65a006d011406bb4, for GNU/Linux 3.2.0, with debug_info, not stripped
+finished_utc: 2026-05-22T02:12:48Z
+exit_status: 0

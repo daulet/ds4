@@ -1,0 +1,17 @@
+{
+  "model": "deepseek-chat",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You answer with the shortest exact phrase requested by the user."
+    },
+    {
+      "role": "user",
+      "content": "Cache baseline prompt alpha beta gamma delta epsilon zeta eta theta iota kappa lambda. Return exactly: cache ready"
+    }
+  ],
+  "temperature": 0,
+  "seed": 17,
+  "max_tokens": 8,
+  "stream": false
+}

@@ -1,0 +1,36 @@
+{
+  "model": "deepseek-v4-flash",
+  "messages": [
+    {
+      "role": "user",
+      "content": "List the files in the current directory. Use the provided tool; do not answer in prose."
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "list_files",
+        "description": "List files in a directory.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory path to list."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto",
+  "think": false,
+  "temperature": 0,
+  "seed": 23,
+  "max_tokens": 192,
+  "stream": false
+}

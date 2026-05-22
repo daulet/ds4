@@ -1,0 +1,17 @@
+{
+  "model": "deepseek-v4-flash",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is two plus two? Answer with one digit."
+    }
+  ],
+  "thinking": {
+    "type": "disabled",
+    "budget_tokens": 1024
+  },
+  "temperature": 0,
+  "seed": 13,
+  "max_tokens": 4,
+  "stream": false
+}

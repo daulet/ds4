@@ -1,0 +1,16 @@
+command: make clean ds4-server
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+source_commit: 3d87577962abeac1ab0d80e9c21d0012bfc53afb
+started_utc: 2026-05-22T02:11:41Z
+rm -f ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4_cpu ds4_native ds4_server_test ds4_test *.o tests/cuda_long_context_smoke tests/cuda_long_context_smoke.o
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_server.o ds4_server.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_kvstore.o ds4_kvstore.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o rax.o rax.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4.o ds4.c
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math  -Xcompiler -march=native -Xcompiler -pthread -c -o ds4_cuda.o ds4_cuda.cu
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math  -Xcompiler -march=native -Xcompiler -pthread -o ds4-server ds4_server.o ds4_kvstore.o rax.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+finished_utc: 2026-05-22T02:12:36Z
+exit_status: 0

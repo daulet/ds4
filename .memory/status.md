@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M0.4 Server Trace Baselines
-- Last validated source commit: `9e35378f7f759fb63d3591641d6e9b65a9f0672b`
+- Active item: M0.5 KV And Snapshot Baselines
+- Last validated source commit: `3d87577962abeac1ab0d80e9c21d0012bfc53afb`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -12,7 +12,8 @@
 - B300 node: `c1v17-b300n1-nic1`
 - B300 temp kubeconfig: `/tmp/ds4-hou2-prod1.kubeconfig` for this local
   session; regenerate a temp copy in future sessions instead of treating this
-  path as durable.
+  path as durable, and pass `--context hou2-prod1` explicitly because the temp
+  kubeconfig can contain other contexts.
 - Known local validation constraint: `ds4flash.gguf` is not present in the
   workspace, so model-backed tests and benchmark baselines need a model path or
   remote B300 execution.
@@ -39,3 +40,11 @@
 - M0.3 B300 validation downloaded q2-imatrix, recorded model hash/size, built
   `ds4_test`, and captured `./ds4_test --logprob-vectors` exit 0 with
   `logprob-vectors: OK`.
+- M0.4 B300 validation refreshed source commit
+  `3d87577962abeac1ab0d80e9c21d0012bfc53afb`, built `ds4-server`, and replayed
+  six server fixtures from `ds4-parity/baselines/server-fixtures/m0.4/` with
+  HTTP 200 for all requests.
+- M0.4 artifacts live under `ds4-parity/baselines/server-traces/m0.4/`; the
+  final trace records non-streaming chat, SSE chat, DSML-to-OpenAI tool calls,
+  explicit thinking-disabled chat, and cache continuation with
+  `cache_source=memory-token`, `cached_tokens=41`, `cache_write_tokens=9`.

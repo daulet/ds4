@@ -46,7 +46,7 @@
 
 ### M0.4: Server Trace Baselines
 
-- Status: in-progress
+- Status: done
 - Goal: capture representative current server request behavior.
 - Source evidence needed: `ds4_server.c`, `tests/ds4_test.c`, server CLI help,
   request/trace fixtures to be created under `ds4-parity/baselines/`.
@@ -58,6 +58,20 @@
   identity, and normalization rules.
 - Owner path: `ds4-parity/baselines/`, `.memory/status.md`.
 
+### M0.5: KV And Snapshot Baselines
+
+- Status: in-progress
+- Goal: capture current KV-cache and session-restore behavior for prompt reuse.
+- Source evidence needed: `ds4_server.c`, KV-store helpers and tests in
+  `tests/ds4_test.c`, existing M0.4 cache trace, and model-backed B300
+  workspace state.
+- Oracle: current C KV store and session snapshot implementation.
+- Comparator: binary file hashes and trace-normalized cache decisions.
+- Validation needed: generate prompt inputs, cache directory, KV files, trace
+  output, and manifest entries describing cache hit, cache miss, prefix match,
+  and restore behavior.
+- Owner path: `ds4-parity/baselines/`, `.memory/status.md`.
+
 ## Later Items
 
-Add later Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.4 completes.
+Add later Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.5 completes.

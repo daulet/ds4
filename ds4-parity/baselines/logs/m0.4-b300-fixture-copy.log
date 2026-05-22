@@ -1,0 +1,14 @@
+command: copy server fixtures to B300 pod
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+started_utc: 2026-05-22T02:15:21Z
+ds4-parity/baselines/server-fixtures/m0.4/chat_basic.json
+ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json
+ds4-parity/baselines/server-fixtures/m0.4/chat_cache_seed.json
+ds4-parity/baselines/server-fixtures/m0.4/chat_stream.json
+ds4-parity/baselines/server-fixtures/m0.4/chat_thinking_disabled.json
+ds4-parity/baselines/server-fixtures/m0.4/chat_tool_call.json
+finished_utc: 2026-05-22T02:15:25Z
+exit_status: 0

@@ -1,0 +1,1 @@
+{"id":"chatcmpl-5","object":"chat.completion","created":1779416176,"model":"deepseek-chat","choices":[{"index":0,"message":{"role":"assistant","content":"cache ready"},"finish_reason":"stop"}],"usage":{"prompt_tokens":39,"completion_tokens":2,"total_tokens":41,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":39}}}

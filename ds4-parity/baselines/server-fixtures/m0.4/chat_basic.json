@@ -1,0 +1,13 @@
+{
+  "model": "deepseek-chat",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Return exactly this text: baseline ready"
+    }
+  ],
+  "temperature": 0,
+  "seed": 7,
+  "max_tokens": 8,
+  "stream": false
+}

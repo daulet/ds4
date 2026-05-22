@@ -1,0 +1,415 @@
+
+===== request 1 2026-05-22 02:16:13 =====
+kind: chat
+model: deepseek-chat
+stream: 0
+tools: 0
+think_mode: none
+prompt_tokens: 11
+effective_prompt_tokens: 11
+cached_tokens: 0
+max_tokens: 8
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.050
+seed: 7
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 0
+prompt_tokens: 11
+live_prompt_common: 0
+memory_token_reusable: 0
+memory_miss_reason: no-live-checkpoint
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+--- raw request json ---
+{  "model": "deepseek-chat",  "messages": [    {      "role": "user",      "content": "Return exactly this text: baseline ready"    }  ],  "temperature": 0,  "seed": 7,  "max_tokens": 8,  "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜><｜User｜>Return exactly this text: baseline ready<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=8 ctx_room=32757 ---
+
+baseline ready
+
+--- parsed message ---
+finish: stop
+generated_tokens: 3
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.523
+
+content:
+baseline ready
+
+===== end request 1 =====
+
+===== request 2 2026-05-22 02:16:14 =====
+kind: chat
+model: deepseek-chat
+stream: 1
+tools: 0
+think_mode: none
+prompt_tokens: 11
+effective_prompt_tokens: 11
+cached_tokens: 0
+max_tokens: 8
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.050
+seed: 11
+stream_include_usage: 1
+
+--- cache decision ---
+live_tokens_before: 14
+prompt_tokens: 11
+live_prompt_common: 7
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+first_mismatch_token: 7
+token_window: [0..14)
+      0 ==          live 0 "<｜begin▁of▁sentence｜>" | prompt 0 "<｜begin▁of▁sentence｜>"
+      1 ==          live 128803 "<｜User｜>" | prompt 128803 "<｜User｜>"
+      2 ==          live 25529 "Return" | prompt 25529 "Return"
+      3 ==          live 9045 " exactly" | prompt 9045 " exactly"
+      4 ==          live 566 " this" | prompt 566 " this"
+      5 ==          live 3051 " text" | prompt 3051 " text"
+      6 ==          live 28 ":" | prompt 28 ":"
+      7 !=          live 22648 " baseline" | prompt 8007 " stream"
+      8 !=          live 7692 " ready" | prompt 22648 " baseline"
+      9 ==          live 128804 "<｜Assistant｜>" | prompt 128804 "<｜Assistant｜>"
+     10 ==          live 128822 "</think>" | prompt 128822 "</think>"
+     11 live-only   live 22677 "bas" | prompt - <none>
+     12 live-only   live 7988 "eline" | prompt - <none>
+     13 live-only   live 7692 " ready" | prompt - <none>
+
+--- raw request json ---
+{  "model": "deepseek-chat",  "messages": [    {      "role": "user",      "content": "Return exactly this text: stream baseline"    }  ],  "temperature": 0,  "seed": 11,  "max_tokens": 8,  "stream": true,  "stream_options": {    "include_usage": true  }}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜><｜User｜>Return exactly this text: stream baseline<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=8 ctx_room=32757 ---
+
+stream baseline
+
+--- parsed message ---
+finish: stop
+generated_tokens: 2
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.095
+
+content:
+stream baseline
+
+===== end request 2 =====
+
+===== request 3 2026-05-22 02:16:14 =====
+kind: chat
+model: deepseek-v4-flash
+stream: 0
+tools: 1
+think_mode: none
+prompt_tokens: 394
+effective_prompt_tokens: 394
+cached_tokens: 0
+max_tokens: 192
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.050
+seed: 23
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 13
+prompt_tokens: 394
+live_prompt_common: 1
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+first_mismatch_token: 1
+token_window: [0..10)
+      0 ==          live 0 "<｜begin▁of▁sentence｜>" | prompt 0 "<｜begin▁of▁sentence｜>"
+      1 !=          live 128803 "<｜User｜>" | prompt 372 "##"
+      2 !=          live 25529 "Return" | prompt 27193 " Tools"
+      3 !=          live 9045 " exactly" | prompt 271 "\n\n"
+      4 !=          live 566 " this" | prompt 3476 "You"
+      5 !=          live 3051 " text" | prompt 611 " have"
+      6 !=          live 28 ":" | prompt 3278 " access"
+      7 !=          live 8007 " stream" | prompt 304 " to"
+      8 !=          live 22648 " baseline" | prompt 260 " a"
+      9 !=          live 128804 "<｜Assistant｜>" | prompt 1341 " set"
+
+--- raw request json ---
+{  "model": "deepseek-v4-flash",  "messages": [    {      "role": "user",      "content": "List the files in the current directory. Use the provided tool; do not answer in prose."    }  ],  "tools": [    {      "type": "function",      "function": {        "name": "list_files",        "description": "List files in a directory.",        "parameters": {          "type": "object",          "properties": {            "path": {              "type": "string",              "description": "Directory path to list."            }          },          "required": [            "path"          ]        }      }    }  ],  "tool_choice": "auto",  "think": false,  "temperature": 0,  "seed": 23,  "max_tokens": 192,  "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>## Tools
+
+You have access to a set of tools to help answer the user question. You can invoke tools by writing a "<｜DSML｜tool_calls>" block like the following:
+
+<｜DSML｜tool_calls>
+<｜DSML｜invoke name="$TOOL_NAME">
+<｜DSML｜parameter name="$PARAMETER_NAME" string="true|false">$PARAMETER_VALUE</｜DSML｜parameter>
+...
+</｜DSML｜invoke>
+<｜DSML｜invoke name="$TOOL_NAME2">
+...
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>
+
+String parameters should be specified as raw text and set `string="true"`. Preserve characters such as `>`, `&`, and `&&` exactly; never replace normal string characters with XML or HTML entity escapes. Only if a string value itself contains the exact closing parameter tag `</｜DSML｜parameter>`, write that tag as `&lt;/｜DSML｜parameter>` inside the value. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string="false"`.
+
+If thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.
+
+Otherwise, output directly after </think> with tool calls or final response.
+
+### Available Tool Schemas
+
+{        "name": "list_files",        "description": "List files in a directory.",        "parameters": {          "type": "object",          "properties": {            "path": {              "type": "string",              "description": "Directory path to list."            }          },          "required": [            "path"          ]        }      }
+
+You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls. Use the exact parameter names from the schemas.<｜User｜>List the files in the current directory. Use the provided tool; do not answer in prose.<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=192 ctx_room=32374 ---
+
+
+
+<｜DSML｜tool_calls>
+
+
+--- trace: entered tool-call block after 7 generated tokens ---
+
+<｜DSML｜invoke name="list_files">
+<｜DSML｜parameter name="path" string="true">.</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>
+
+--- trace: closed tool-call block after 42 generated tokens ---
+
+
+
+--- parsed message ---
+finish: tool_calls
+generated_tokens: 42
+dsml_start: 1
+dsml_end: 1
+elapsed_sec: 1.397
+
+tool_call[0]:
+id: call_74afa558e9694448bc8aef7aae54150d
+name: list_files
+arguments:
+{"path": "."}
+
+===== end request 3 =====
+
+===== request 4 2026-05-22 02:16:15 =====
+kind: chat
+model: deepseek-v4-flash
+stream: 0
+tools: 0
+think_mode: none
+prompt_tokens: 15
+effective_prompt_tokens: 15
+cached_tokens: 0
+max_tokens: 4
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.050
+seed: 13
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 436
+prompt_tokens: 15
+live_prompt_common: 1
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+first_mismatch_token: 1
+token_window: [0..10)
+      0 ==          live 0 "<｜begin▁of▁sentence｜>" | prompt 0 "<｜begin▁of▁sentence｜>"
+      1 !=          live 372 "##" | prompt 128803 "<｜User｜>"
+      2 !=          live 27193 " Tools" | prompt 3085 "What"
+      3 !=          live 271 "\n\n" | prompt 344 " is"
+      4 !=          live 3476 "You" | prompt 1234 " two"
+      5 !=          live 611 " have" | prompt 5582 " plus"
+      6 !=          live 3278 " access" | prompt 1234 " two"
+      7 !=          live 304 " to" | prompt 33 "?"
+      8 !=          live 260 " a" | prompt 9361 " Answer"
+      9 !=          live 1341 " set" | prompt 418 " with"
+
+--- raw request json ---
+{  "model": "deepseek-v4-flash",  "messages": [    {      "role": "user",      "content": "What is two plus two? Answer with one digit."    }  ],  "thinking": {    "type": "disabled",    "budget_tokens": 1024  },  "temperature": 0,  "seed": 13,  "max_tokens": 4,  "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜><｜User｜>What is two plus two? Answer with one digit.<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=4 ctx_room=32753 ---
+
+2
+
+--- parsed message ---
+finish: stop
+generated_tokens: 1
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.083
+
+content:
+2
+
+===== end request 4 =====
+
+===== request 5 2026-05-22 02:16:16 =====
+kind: chat
+model: deepseek-chat
+stream: 0
+tools: 0
+think_mode: none
+prompt_tokens: 39
+effective_prompt_tokens: 39
+cached_tokens: 0
+max_tokens: 8
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.050
+seed: 17
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 16
+prompt_tokens: 39
+live_prompt_common: 1
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+first_mismatch_token: 1
+token_window: [0..10)
+      0 ==          live 0 "<｜begin▁of▁sentence｜>" | prompt 0 "<｜begin▁of▁sentence｜>"
+      1 !=          live 128803 "<｜User｜>" | prompt 3476 "You"
+      2 !=          live 3085 "What" | prompt 3287 " answer"
+      3 !=          live 344 " is" | prompt 418 " with"
+      4 !=          live 1234 " two" | prompt 270 " the"
+      5 !=          live 5582 " plus" | prompt 45287 " shortest"
+      6 !=          live 1234 " two" | prompt 6319 " exact"
+      7 !=          live 33 "?" | prompt 17132 " phrase"
+      8 !=          live 9361 " Answer" | prompt 21361 " requested"
+      9 !=          live 418 " with" | prompt 513 " by"
+
+--- raw request json ---
+{  "model": "deepseek-chat",  "messages": [    {      "role": "system",      "content": "You answer with the shortest exact phrase requested by the user."    },    {      "role": "user",      "content": "Cache baseline prompt alpha beta gamma delta epsilon zeta eta theta iota kappa lambda. Return exactly: cache ready"    }  ],  "temperature": 0,  "seed": 17,  "max_tokens": 8,  "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You answer with the shortest exact phrase requested by the user.<｜User｜>Cache baseline prompt alpha beta gamma delta epsilon zeta eta theta iota kappa lambda. Return exactly: cache ready<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=8 ctx_room=32729 ---
+
+cache ready
+
+--- parsed message ---
+finish: stop
+generated_tokens: 2
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.180
+
+content:
+cache ready
+
+===== end request 5 =====
+
+===== request 6 2026-05-22 02:16:16 =====
+kind: chat
+model: deepseek-chat
+stream: 0
+tools: 0
+think_mode: none
+prompt_tokens: 50
+effective_prompt_tokens: 50
+cached_tokens: 41
+max_tokens: 8
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.050
+seed: 19
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 41
+prompt_tokens: 50
+live_prompt_common: 41
+memory_token_reusable: 1
+memory_miss_reason: live-prefix-match
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: memory-token
+cached_tokens: 41
+disk_cached_tokens: 0
+
+--- raw request json ---
+{  "model": "deepseek-chat",  "messages": [    {      "role": "system",      "content": "You answer with the shortest exact phrase requested by the user."    },    {      "role": "user",      "content": "Cache baseline prompt alpha beta gamma delta epsilon zeta eta theta iota kappa lambda. Return exactly: cache ready"    },    {      "role": "assistant",      "content": "cache ready"    },    {      "role": "user",      "content": "Return exactly: cache continued"    }  ],  "temperature": 0,  "seed": 19,  "max_tokens": 8,  "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You answer with the shortest exact phrase requested by the user.<｜User｜>Cache baseline prompt alpha beta gamma delta epsilon zeta eta theta iota kappa lambda. Return exactly: cache ready<｜Assistant｜></think>cache ready<｜end▁of▁sentence｜><｜User｜>Return exactly: cache continued<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=8 ctx_room=32718 ---
+
+cache continued
+
+--- parsed message ---
+finish: stop
+generated_tokens: 2
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.102
+
+content:
+cache continued
+
+===== end request 6 =====

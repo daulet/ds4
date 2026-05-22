@@ -1,0 +1,9 @@
+capture_utc=2026-05-22T02:15:59Z
+source_commit=3d87577962abeac1ab0d80e9c21d0012bfc53afb
+model_path=/workspace/ds4/ds4flash.gguf
+resolved_model_path=/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+model_sha256=efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668
+model_size_bytes=86720111488
+ds4_server_sha256=8b03ac65417e5481ff4a0cad44657284e9c567d3c3edf2602e92d7a04f3f87d2
+gpu=NVIDIA B300 SXM6 AC, GPU-81f6bd2a-3404-6445-1788-365264243aab
+server_command=./ds4-server -m /workspace/ds4/ds4flash.gguf --cuda --ctx 32768 --tokens 64 --host 127.0.0.1 --port 18080 --trace ds4-parity/baselines/server-traces/m0.4/traces/server.trace --kv-disk-dir ds4-parity/baselines/server-traces/m0.4/kv --kv-disk-space-mb 512 --kv-cache-min-tokens 512 --kv-cache-cold-max-tokens 30000 --kv-cache-continued-interval-tokens 0
