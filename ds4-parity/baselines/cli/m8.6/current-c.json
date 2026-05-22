@@ -1,0 +1,399 @@
+{
+  "schema": "ds4.cli_diagnostics_oracle.v1",
+  "source": "current-c-cli-diagnostics",
+  "binary": "./ds4",
+  "model": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "size": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "numeric_policy": {
+    "score_abs_tolerance_for_future_comparators": 1e-05,
+    "source": "M6 model-logits comparator ordinary absolute tolerance"
+  },
+  "cases": [
+    {
+      "id": "logprobs_inline_top3",
+      "kind": "dump_logprobs",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "512",
+        "--tokens",
+        "2",
+        "--logprobs-top-k",
+        "3",
+        "--dump-logprobs",
+        "/tmp/ds4-cli-m8.6/logprobs_inline_top3.json",
+        "-p",
+        "M8.6 logprob inline prompt."
+      ],
+      "exit_code": 0,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgNTAuNDEgTWlCIChjdHg9NTEyLCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9NTEyLCByYXdfa3Zfcm93cz01MTIsIGNvbXByZXNzZWRfa3Zfcm93cz0xMzApCmRzNDogQ1VEQSBiYWNrZW5kIGluaXRpYWxpemVkIG9uIE5WSURJQSBCMzAwIFNYTTYgQUMgKHNtXzEwMykKZHM0OiBDVURBIGhvc3QgcmVnaXN0cmF0aW9uIHNraXBwZWQ6IG9wZXJhdGlvbiBub3Qgc3VwcG9ydGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgaW50byBkZXZpY2UgY2FjaGUKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAxNi4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMzIuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDQ4LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA2NC4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgODAuMDQgR2lCIGNhY2hlZApkczQ6IENVREEgc3RhcnR1cCBtb2RlbCBjYWNoZSBwcmVwYXJlZCA4MC43NiBHaUIgb2YgdGVuc29yIHNwYW5zIGluIDEyLjg1NXMKZHM0OiBjdWRhIGJhY2tlbmQgaW5pdGlhbGl6ZWQgZm9yIGdyYXBoIGRpYWdub3N0aWNzCg==",
+        "bytes": 661,
+        "sha256": "db3565135bc14c276c54dcc90b73e8c14b79a773562ab4b3fef04682bd2171ec"
+      },
+      "stderr_anchors": [
+        "ds4: context buffers"
+      ],
+      "stdout_kind": "empty",
+      "expected_steps": 2,
+      "expected_top_k": 3,
+      "output_file": {
+        "path": "/tmp/ds4-cli-m8.6/logprobs_inline_top3.json",
+        "raw": {
+          "base64": "ewogICJzb3VyY2UiOiJkczQiLAogICJwcm9tcHRfdG9rZW5zIjoxOCwKICAiY3R4Ijo1MTIsCiAgInRvcF9rIjozLAogICJzdGVwcyI6WwogICAgeyJzdGVwIjowLCJzZWxlY3RlZCI6eyJpZCI6MjU4MSwidGV4dCI6IldlIiwiYnl0ZXMiOls4NywxMDFdfSwidG9wX2xvZ3Byb2JzIjpbeyJ0b2tlbiI6eyJpZCI6MjU4MSwidGV4dCI6IldlIiwiYnl0ZXMiOls4NywxMDFdfSwibG9naXQiOjMzLjUzNDM4MTksImxvZ3Byb2IiOi0wLjAwMDI1MzQyNzI3OX0seyJ0b2tlbiI6eyJpZCI6MTM1MCwidGV4dCI6IiBXZSIsImJ5dGVzIjpbMzIsODcsMTAxXX0sImxvZ2l0IjoyNC44MTY1MzIxLCJsb2dwcm9iIjotOC43MTgxMDM0MX0seyJ0b2tlbiI6eyJpZCI6NDIsInRleHQiOiJIIiwiYnl0ZXMiOls3Ml19LCJsb2dpdCI6MjMuNjQ0NzU0NCwibG9ncHJvYiI6LTkuODg5ODgxMTN9XX0sCiAgICB7InN0ZXAiOjEsInNlbGVjdGVkIjp7ImlkIjoxMzA5LCJ0ZXh0IjoiIG5lZWQiLCJieXRlcyI6WzMyLDExMCwxMDEsMTAxLDEwMF19LCJ0b3BfbG9ncHJvYnMiOlt7InRva2VuIjp7ImlkIjoxMzA5LCJ0ZXh0IjoiIG5lZWQiLCJieXRlcyI6WzMyLDExMCwxMDEsMTAxLDEwMF19LCJsb2dpdCI6MzUuODI3MzkyNiwibG9ncHJvYiI6LTAuMTU1ODQ3MTYyfSx7InRva2VuIjp7ImlkIjo0NzcsInRleHQiOiIgYXJlIiwiYnl0ZXMiOlszMiw5NywxMTQsMTAxXX0sImxvZ2l0IjozNC4wNDE1NDU5LCJsb2dwcm9iIjotMS45NDE2OTM5fSx7InRva2VuIjp7ImlkIjo0NzUwLCJ0ZXh0IjoiJ3JlIiwiYnl0ZXMiOlszOSwxMTQsMTAxXX0sImxvZ2l0IjoyOC4zOTUyMDY1LCJsb2dwcm9iIjotNy41ODgwMzMyfV19CiAgXQp9Cg==",
+          "bytes": 850,
+          "sha256": "731df65fcca0364339171ac002144fdbf6d37c601c3033a894c11b8270bbe408"
+        },
+        "json": {
+          "source": "ds4",
+          "prompt_tokens": 18,
+          "ctx": 512,
+          "top_k": 3,
+          "steps": [
+            {
+              "step": 0,
+              "selected": {
+                "id": 2581,
+                "text": "We",
+                "bytes": [
+                  87,
+                  101
+                ]
+              },
+              "top_logprobs": [
+                {
+                  "token": {
+                    "id": 2581,
+                    "text": "We",
+                    "bytes": [
+                      87,
+                      101
+                    ]
+                  },
+                  "logit": 33.5343819,
+                  "logprob": -0.000253427279
+                },
+                {
+                  "token": {
+                    "id": 1350,
+                    "text": " We",
+                    "bytes": [
+                      32,
+                      87,
+                      101
+                    ]
+                  },
+                  "logit": 24.8165321,
+                  "logprob": -8.71810341
+                },
+                {
+                  "token": {
+                    "id": 42,
+                    "text": "H",
+                    "bytes": [
+                      72
+                    ]
+                  },
+                  "logit": 23.6447544,
+                  "logprob": -9.88988113
+                }
+              ]
+            },
+            {
+              "step": 1,
+              "selected": {
+                "id": 1309,
+                "text": " need",
+                "bytes": [
+                  32,
+                  110,
+                  101,
+                  101,
+                  100
+                ]
+              },
+              "top_logprobs": [
+                {
+                  "token": {
+                    "id": 1309,
+                    "text": " need",
+                    "bytes": [
+                      32,
+                      110,
+                      101,
+                      101,
+                      100
+                    ]
+                  },
+                  "logit": 35.8273926,
+                  "logprob": -0.155847162
+                },
+                {
+                  "token": {
+                    "id": 477,
+                    "text": " are",
+                    "bytes": [
+                      32,
+                      97,
+                      114,
+                      101
+                    ]
+                  },
+                  "logit": 34.0415459,
+                  "logprob": -1.9416939
+                },
+                {
+                  "token": {
+                    "id": 4750,
+                    "text": "'re",
+                    "bytes": [
+                      39,
+                      114,
+                      101
+                    ]
+                  },
+                  "logit": 28.3952065,
+                  "logprob": -7.5880332
+                }
+              ]
+            }
+          ]
+        },
+        "summary": {
+          "prompt_tokens": 18,
+          "ctx": 512,
+          "top_k": 3,
+          "steps": 2,
+          "selected_ids": [
+            2581,
+            1309
+          ]
+        }
+      }
+    },
+    {
+      "id": "logprobs_prompt_file_top5",
+      "kind": "dump_logprobs",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "512",
+        "--tokens",
+        "1",
+        "--logprobs-top-k",
+        "5",
+        "--dump-logprobs",
+        "/tmp/ds4-cli-m8.6/logprobs_prompt_file_top5.json",
+        "--prompt-file",
+        "ds4-parity/baselines/cli-fixtures/m8.6/logprob_prompt_file.txt"
+      ],
+      "exit_code": 0,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgNTAuNDEgTWlCIChjdHg9NTEyLCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9NTEyLCByYXdfa3Zfcm93cz01MTIsIGNvbXByZXNzZWRfa3Zfcm93cz0xMzApCmRzNDogQ1VEQSBiYWNrZW5kIGluaXRpYWxpemVkIG9uIE5WSURJQSBCMzAwIFNYTTYgQUMgKHNtXzEwMykKZHM0OiBDVURBIGhvc3QgcmVnaXN0cmF0aW9uIHNraXBwZWQ6IG9wZXJhdGlvbiBub3Qgc3VwcG9ydGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgaW50byBkZXZpY2UgY2FjaGUKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAxNi4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMzIuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDQ4LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA2NC4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgODAuMDQgR2lCIGNhY2hlZApkczQ6IENVREEgc3RhcnR1cCBtb2RlbCBjYWNoZSBwcmVwYXJlZCA4MC43NiBHaUIgb2YgdGVuc29yIHNwYW5zIGluIDEyLjk0MHMKZHM0OiBjdWRhIGJhY2tlbmQgaW5pdGlhbGl6ZWQgZm9yIGdyYXBoIGRpYWdub3N0aWNzCg==",
+        "bytes": 661,
+        "sha256": "ad765d964ea5e91bba1805495eaad154d10264aabb2ecef3b296e7237ed56a71"
+      },
+      "stderr_anchors": [
+        "ds4: context buffers"
+      ],
+      "stdout_kind": "empty",
+      "expected_steps": 1,
+      "expected_top_k": 5,
+      "output_file": {
+        "path": "/tmp/ds4-cli-m8.6/logprobs_prompt_file_top5.json",
+        "raw": {
+          "base64": "ewogICJzb3VyY2UiOiJkczQiLAogICJwcm9tcHRfdG9rZW5zIjoxNiwKICAiY3R4Ijo1MTIsCiAgInRvcF9rIjo1LAogICJzdGVwcyI6WwogICAgeyJzdGVwIjowLCJzZWxlY3RlZCI6eyJpZCI6MjU4MSwidGV4dCI6IldlIiwiYnl0ZXMiOls4NywxMDFdfSwidG9wX2xvZ3Byb2JzIjpbeyJ0b2tlbiI6eyJpZCI6MjU4MSwidGV4dCI6IldlIiwiYnl0ZXMiOls4NywxMDFdfSwibG9naXQiOjM0LjMyMzEyNzcsImxvZ3Byb2IiOi0wLjAwMDMwODQ2NjQwNn0seyJ0b2tlbiI6eyJpZCI6NDIsInRleHQiOiJIIiwiYnl0ZXMiOls3Ml19LCJsb2dpdCI6MjUuMzMyMTk5MSwibG9ncHJvYiI6LTguOTkxMjM2Njl9LHsidG9rZW4iOnsiaWQiOjY3MSwidGV4dCI6IlRoZSIsImJ5dGVzIjpbODQsMTA0LDEwMV19LCJsb2dpdCI6MjUuMDM4MjY5LCJsb2dwcm9iIjotOS4yODUxNjY3NH0seyJ0b2tlbiI6eyJpZCI6MTM1MCwidGV4dCI6IiBXZSIsImJ5dGVzIjpbMzIsODcsMTAxXX0sImxvZ2l0IjoyNC41OTk2MTg5LCJsb2dwcm9iIjotOS43MjM4MTY4N30seyJ0b2tlbiI6eyJpZCI6NDMsInRleHQiOiJJIiwiYnl0ZXMiOls3M119LCJsb2dpdCI6MjMuMTE2MDUwNywibG9ncHJvYiI6LTExLjIwNzM4NTF9XX0KICBdCn0K",
+          "bytes": 627,
+          "sha256": "20585a3206aa5919ac9ef4e1a6d598fb343e684aad0a7613a3f73680f388f49d"
+        },
+        "json": {
+          "source": "ds4",
+          "prompt_tokens": 16,
+          "ctx": 512,
+          "top_k": 5,
+          "steps": [
+            {
+              "step": 0,
+              "selected": {
+                "id": 2581,
+                "text": "We",
+                "bytes": [
+                  87,
+                  101
+                ]
+              },
+              "top_logprobs": [
+                {
+                  "token": {
+                    "id": 2581,
+                    "text": "We",
+                    "bytes": [
+                      87,
+                      101
+                    ]
+                  },
+                  "logit": 34.3231277,
+                  "logprob": -0.000308466406
+                },
+                {
+                  "token": {
+                    "id": 42,
+                    "text": "H",
+                    "bytes": [
+                      72
+                    ]
+                  },
+                  "logit": 25.3321991,
+                  "logprob": -8.99123669
+                },
+                {
+                  "token": {
+                    "id": 671,
+                    "text": "The",
+                    "bytes": [
+                      84,
+                      104,
+                      101
+                    ]
+                  },
+                  "logit": 25.038269,
+                  "logprob": -9.28516674
+                },
+                {
+                  "token": {
+                    "id": 1350,
+                    "text": " We",
+                    "bytes": [
+                      32,
+                      87,
+                      101
+                    ]
+                  },
+                  "logit": 24.5996189,
+                  "logprob": -9.72381687
+                },
+                {
+                  "token": {
+                    "id": 43,
+                    "text": "I",
+                    "bytes": [
+                      73
+                    ]
+                  },
+                  "logit": 23.1160507,
+                  "logprob": -11.2073851
+                }
+              ]
+            }
+          ]
+        },
+        "summary": {
+          "prompt_tokens": 16,
+          "ctx": 512,
+          "top_k": 5,
+          "steps": 1,
+          "selected_ids": [
+            2581
+          ]
+        }
+      }
+    },
+    {
+      "id": "logprobs_bad_output_path",
+      "kind": "dump_logprobs_error",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "512",
+        "--tokens",
+        "1",
+        "--logprobs-top-k",
+        "3",
+        "--dump-logprobs",
+        "/tmp/ds4-cli-m8.6/missing-dir/out.json",
+        "-p",
+        "M8.6 bad output path."
+      ],
+      "exit_code": 1,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgNTAuNDEgTWlCIChjdHg9NTEyLCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9NTEyLCByYXdfa3Zfcm93cz01MTIsIGNvbXByZXNzZWRfa3Zfcm93cz0xMzApCmRzNDogQ1VEQSBiYWNrZW5kIGluaXRpYWxpemVkIG9uIE5WSURJQSBCMzAwIFNYTTYgQUMgKHNtXzEwMykKZHM0OiBDVURBIGhvc3QgcmVnaXN0cmF0aW9uIHNraXBwZWQ6IG9wZXJhdGlvbiBub3Qgc3VwcG9ydGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgaW50byBkZXZpY2UgY2FjaGUKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAxNi4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMzIuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDQ4LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA2NC4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgODAuMDQgR2lCIGNhY2hlZApkczQ6IENVREEgc3RhcnR1cCBtb2RlbCBjYWNoZSBwcmVwYXJlZCA4MC43NiBHaUIgb2YgdGVuc29yIHNwYW5zIGluIDEzLjYwOXMKZHM0OiBjdWRhIGJhY2tlbmQgaW5pdGlhbGl6ZWQgZm9yIGdyYXBoIGRpYWdub3N0aWNzCmRzNDogZmFpbGVkIHRvIG9wZW4gLS1kdW1wLWxvZ3Byb2JzIGZpbGU6IC90bXAvZHM0LWNsaS1tOC42L21pc3NpbmctZGlyL291dC5qc29uCg==",
+        "bytes": 742,
+        "sha256": "03cdbbdc6543486d5159e250c15b44b06bc7368787143426d10bf29dbe52e4dc"
+      },
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "ds4: failed to open --dump-logprobs file:"
+      ],
+      "stdout_kind": "empty",
+      "expected_steps": 0,
+      "expected_top_k": 0,
+      "output_file": null
+    },
+    {
+      "id": "perplexity_basic",
+      "kind": "perplexity",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "64",
+        "--tokens",
+        "4",
+        "--perplexity-file",
+        "ds4-parity/baselines/cli-fixtures/m8.6/perplexity_text.txt"
+      ],
+      "exit_code": 0,
+      "stdout": {
+        "base64": "dG9rZW5zPTY5IHNjb3JlZD00IG5sbD0wLjE1ODMxMDIxNiBhdmdfbmxsPTAuMDM5NTc3NTU0IHBwbD0xLjA0MDM3MTE4MQo=",
+        "bytes": 71,
+        "sha256": "1c94604386859884fdeed2b90bb5ca3382c592d943b8db9ad381392a69a1e448"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjIuNTEgTWlCIChjdHg9NjQsIGJhY2tlbmQ9Y3VkYSwgcHJlZmlsbF9jaHVuaz02NCwgcmF3X2t2X3Jvd3M9MjU2LCBjb21wcmVzc2VkX2t2X3Jvd3M9MTgpCmRzNDogQ1VEQSBiYWNrZW5kIGluaXRpYWxpemVkIG9uIE5WSURJQSBCMzAwIFNYTTYgQUMgKHNtXzEwMykKZHM0OiBDVURBIGhvc3QgcmVnaXN0cmF0aW9uIHNraXBwZWQ6IG9wZXJhdGlvbiBub3Qgc3VwcG9ydGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgaW50byBkZXZpY2UgY2FjaGUKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAxNi4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMzIuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDQ4LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA2NC4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgODAuMDQgR2lCIGNhY2hlZApkczQ6IENVREEgc3RhcnR1cCBtb2RlbCBjYWNoZSBwcmVwYXJlZCA4MC43NiBHaUIgb2YgdGVuc29yIHNwYW5zIGluIDEzLjgxMnMKZHM0OiBjdWRhIGJhY2tlbmQgaW5pdGlhbGl6ZWQgZm9yIGdyYXBoIGRpYWdub3N0aWNzCmRzNDogcGVycGxleGl0eSBzY29yZWQgNC80DQo=",
+        "bytes": 686,
+        "sha256": "8e4d00feb31699c7787e089a0d21150cc8d2b9dc9c80cd2afcf9d119e39b3642"
+      },
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "ds4: perplexity scored 4/4"
+      ],
+      "stdout_kind": "perplexity",
+      "expected_steps": 0,
+      "expected_top_k": 0,
+      "output_file": null,
+      "perplexity": {
+        "parse_ok": true,
+        "tokens": 69,
+        "scored": 4,
+        "nll": 0.158310216,
+        "avg_nll": 0.039577554,
+        "ppl": 1.040371181
+      }
+    }
+  ]
+}

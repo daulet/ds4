@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.6 Current-C CLI Logprob And Perplexity Oracle
-- Last validated source commit: M8.5 Rust CLI token/prompt diagnostic parity
+- Active item: M8.7 Rust CLI Logprob And Perplexity Parity
+- Last validated source commit: M8.6 current-C CLI logprob/perplexity oracle
   in this commit; prior pushed source commit
-  `6b756ebbb0b505683d1567a14661dc4d5ad458d3`
+  `80a9f03cbd7af5c31590ff028f1e8c3edcf25f8b`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -966,3 +966,23 @@
   --negative-test` (`CLI parse C fixture preconditions: PASS, 224 checks`;
   C/Rust comparator `PASS, 244 checks`; negative tests `PASS, 5 checks`), and
   `cargo test --workspace`.
+- M8.6 adds `python3 ds4-parity/check_cli_diagnostics_dump.py`, fixtures under
+  `ds4-parity/baselines/cli-fixtures/m8.6/`, and the current-C diagnostic
+  artifact at `ds4-parity/baselines/cli/m8.6/current-c.json`.
+- M8.6 captures four B300 CLI diagnostic cases: inline `--dump-logprobs`
+  (`top_k=3`, 2 generated steps, selected IDs 2581 and 1309), prompt-file
+  `--dump-logprobs` (`top_k=5`, 1 generated step, selected ID 2581), a bad
+  logprob output path error, and `--perplexity-file` (`tokens=69`, `scored=4`,
+  `nll=0.158310216`, `avg_nll=0.039577554`, `ppl=1.040371181`).
+- M8.6 committed `ds4-parity/baselines/cli/m8.6/current-c.json` is 16,161 bytes
+  with SHA256 `838646513c85069db6ecc34ae5b8729257ecd89e7a6b28002e5e6e4f3edc429c`.
+- M8.6 B300 validation passed after refreshing `/workspace/ds4` on
+  `ds4-rust-port-b300`, building `make ds4 CUDA_ARCH=native`, capturing the
+  baseline, and running `python3 ds4-parity/check_cli_diagnostics_dump.py
+  ds4-parity/baselines/cli/m8.6/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.6/manifest.json --negative-test` (`CLI
+  diagnostics oracle: PASS, 267 checks`; manifest `PASS, 12 checks`; negative
+  tests `PASS, 7 checks`). Local revalidation of the copied artifact reported
+  the same PASS counts; `python3 -m py_compile
+  ds4-parity/check_cli_diagnostics_dump.py`, `python3 -m json.tool` for both
+  M8.6 JSON files, and `git diff --check` also passed.

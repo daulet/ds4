@@ -1364,10 +1364,10 @@
 
 ### M8.6: Current-C CLI Logprob And Perplexity Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture current-C CLI machine-readable diagnostic outputs that require
   model execution.
-- Source evidence needed: `ds4_cli.c` `--dump-logprobs` and
+- Source evidence used: `ds4_cli.c` `--dump-logprobs` and
   `--perplexity-file` dispatch, M6 score-tolerance policy, prompt-file handling,
   and B300 model/backend availability.
 - Oracle: current `./ds4 --dump-logprobs` and `./ds4 --perplexity-file` on the
@@ -1386,10 +1386,38 @@
   exact.
 - Review gate: ask Claude to review diagnostic output coverage and numeric
   tolerance reuse from M6.
-- Validation needed: B300 capture or exact skipped recapture command, local
-  checker with negative tests, and `git diff --check`.
+- Validation passed: B300 capture on `ds4-rust-port-b300` after `make ds4
+  CUDA_ARCH=native`, `python3 ds4-parity/check_cli_diagnostics_dump.py
+  ds4-parity/baselines/cli/m8.6/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.6/manifest.json --negative-test` (`CLI
+  diagnostics oracle: PASS, 267 checks`; manifest `PASS, 12 checks`; negative
+  tests `PASS, 7 checks`), local revalidation with the same PASS counts,
+  `python3 -m py_compile ds4-parity/check_cli_diagnostics_dump.py`, `python3
+  -m json.tool` for both M8.6 JSON files, and `git diff --check`.
 - Owner path: CLI diagnostic oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/cli/`, `.memory/status.md`.
+
+### M8.7: Rust CLI Logprob And Perplexity Parity
+
+- Status: pending
+- Goal: implement Rust CLI parity for logprob and perplexity diagnostic modes.
+- Source evidence needed: committed M8.6 current-C CLI diagnostic fixture, M6
+  sampler/logprob Rust APIs, Rust tokenizer/prompt rendering, and any available
+  model-logit fixture limits for local comparison.
+- Oracle: committed M8.6 current-C CLI diagnostic fixture.
+- Fixture: same `--dump-logprobs` and `--perplexity-file` cases as M8.6.
+- Comparator: C/Rust comparator for JSON shape, selected tokens, top-logprob
+  ordering, score tolerances, perplexity text fields, and error categories.
+- Acceptance: Rust emits the same machine-readable diagnostic surface and
+  preserves M6 numeric tolerance policy.
+- Drift policy: path and progress-stderr normalization only.
+- Review gate: ask Claude to review model-backed CLI diagnostic parity and
+  failure categories.
+- Validation needed: comparator with negative tests, targeted Rust tests, B300
+  refresh if required by the comparator, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: Rust CLI diagnostic paths, CLI diagnostic comparator,
+  `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items
 

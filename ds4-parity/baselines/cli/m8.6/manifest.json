@@ -1,0 +1,33 @@
+{
+  "schema": "ds4.cli_diagnostics_manifest.v1",
+  "milestone": "M8.6",
+  "oracle": "current C CLI --dump-logprobs and --perplexity-file diagnostics",
+  "artifact": {
+    "path": "current-c.json",
+    "size_bytes": 16161,
+    "sha256": "838646513c85069db6ecc34ae5b8729257ecd89e7a6b28002e5e6e4f3edc429c"
+  },
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig"
+  },
+  "model": {
+    "link_path": "/workspace/ds4/ds4flash.gguf",
+    "size_bytes": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "capture_commands": [
+    "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4 CUDA_ARCH=native; python3 ds4-parity/check_cli_diagnostics_dump.py --write-baseline ds4-parity/baselines/cli/m8.6/current-c.json --write-manifest ds4-parity/baselines/cli/m8.6/manifest.json --binary ./ds4; python3 ds4-parity/check_cli_diagnostics_dump.py ds4-parity/baselines/cli/m8.6/current-c.json --manifest ds4-parity/baselines/cli/m8.6/manifest.json --negative-test'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/cli/m8.6/current-c.json ds4-parity/baselines/cli/m8.6/current-c.json",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/cli/m8.6/manifest.json ds4-parity/baselines/cli/m8.6/manifest.json"
+  ],
+  "normalization": {
+    "stderr": "context/progress stderr is retained as captured; future comparators may anchor categories instead of byte-comparing timing-free progress",
+    "logprob_scores": "selected token order and top-logprob order are exact; future Rust score values use the M6 ordinary absolute tolerance",
+    "perplexity": "stdout scalar fields are parsed from the current C printf format"
+  }
+}

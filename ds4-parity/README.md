@@ -296,3 +296,18 @@ tokenizer GGUF for the B300 model path, and requires exact C/Rust stdout bytes,
 stderr bytes, exit status, and parsed token IDs for every M8.4 case. The Rust
 diagnostic writer intentionally prints raw tokenizer table text, matching
 current C `dump_tokens_fp`, rather than decoded token bytes.
+
+Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
+
+```sh
+python3 ds4-parity/check_cli_diagnostics_dump.py \
+  ds4-parity/baselines/cli/m8.6/current-c.json \
+  --manifest ds4-parity/baselines/cli/m8.6/manifest.json \
+  --negative-test
+```
+
+The fixture covers `--dump-logprobs` with inline and prompt-file prompts,
+`--logprobs-top-k`, a bad logprob output path, and `--perplexity-file` over a
+fixed raw text file. The artifact stores raw stdout/stderr bytes, emitted
+logprob JSON bytes plus parsed summaries, perplexity scalar fields, and the M6
+score tolerance policy for future Rust comparisons.
