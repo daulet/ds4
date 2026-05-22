@@ -1,0 +1,28 @@
+{
+  "schema": "ds4.restore_manifest.v1",
+  "milestone": "M7.8",
+  "oracle": "current C B300 disk payload and in-memory session snapshot restore",
+  "capture": {
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig",
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "model_path": "/workspace/ds4/ds4flash.gguf",
+    "model_sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "artifacts": {
+    "current_c": {
+      "path": "current-c.json",
+      "size": 15715,
+      "sha256": "5a50459507e7750179f187a1ea177ac8f0f44c8e2c41ea6a08ee922e861e7574"
+    }
+  },
+  "refresh_commands": [
+    "cp ~/.kube/config /tmp/ds4-hou2-prod1.kubeconfig && chmod 600 /tmp/ds4-hou2-prod1.kubeconfig",
+    "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-restore-dump CUDA_ARCH=native; mkdir -p ds4-parity/baselines/kv/m7.8 ds4-parity/baselines/kv/m7.8/raw; ./ds4-restore-dump --backend cuda -m /workspace/ds4/ds4flash.gguf --model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668 --seed-prompt ds4-parity/baselines/kv-fixtures/m7.8/restore_seed_prompt.txt --seed-assistant ds4-parity/baselines/kv-fixtures/m7.8/restore_seed_assistant.txt --continuation-user ds4-parity/baselines/kv-fixtures/m7.8/restore_continuation_user.txt --payload-dir ds4-parity/baselines/kv/m7.8/raw -o ds4-parity/baselines/kv/m7.8/current-c.json; python3 ds4-parity/check_restore_dump.py ds4-parity/baselines/kv/m7.8/current-c.json --negative-test'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/kv/m7.8/current-c.json ds4-parity/baselines/kv/m7.8/current-c.json",
+    "python3 ds4-parity/check_restore_dump.py ds4-parity/baselines/kv/m7.8/current-c.json --manifest ds4-parity/baselines/kv/m7.8/manifest.json --negative-test"
+  ]
+}

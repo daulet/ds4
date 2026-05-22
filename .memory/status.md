@@ -3,9 +3,9 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.8 B300 Disk KV And In-Memory Snapshot Restore Oracle
-- Last validated source commit: M7.7 KV replay comparator in this commit;
-  prior pushed source commit `be50ecc61d853e56fbc216cf38793deeeaac9dc3`
+- Active item: M7.9 KV And Snapshot Report Integration
+- Last validated source commit: M7.8 B300 restore oracle in this commit;
+  prior pushed source commit `c778d6659d988291266e248284b805663ba6f3a4`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -829,3 +829,32 @@
   `PASS, 6 checks`; negative tests `PASS, 6 checks`), `cargo test -p
   ds4-gguf kv_policy`, `cargo test -p ds4-gguf --bin
   ds4-kv-replay-dump-rs`, `cargo test --workspace`, and `git diff --check`.
+- M7.8 adds `./ds4-restore-dump`, a current-C model-backed restore oracle
+  helper for the recorded B300 model. It captures disk DSV4 payload restore and
+  in-memory `ds4_session_snapshot` restore for seed and continuation prompts,
+  recording selected tokens, top-20 logprob slices, max score deltas, payload
+  sizes, payload/snapshot hashes, header prefixes, fixture hashes, backend
+  identity, and raw-payload non-commit policy.
+- M7.8 B300 validation on `ds4-rust-port-b300` in `hou2-prod1` refreshed the
+  uncommitted M7.8 source delta into `/workspace/ds4`, built
+  `ds4-restore-dump` with `CUDA_ARCH=native`, opened
+  `/workspace/ds4/ds4flash.gguf` with SHA256
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`, and
+  captured `ds4-parity/baselines/kv/m7.8/current-c.json`.
+- M7.8 committed `current-c.json` is 15,715 bytes with SHA256
+  `5a50459507e7750179f187a1ea177ac8f0f44c8e2c41ea6a08ee922e861e7574`;
+  raw restore bodies remain uncommitted on the capture workspace and are
+  represented by hashes plus exact B300 refresh commands in
+  `ds4-parity/baselines/kv/m7.8/manifest.json`.
+- M7.8 validation passed on B300 for `python3
+  ds4-parity/check_restore_dump.py
+  ds4-parity/baselines/kv/m7.8/current-c.json --negative-test` (`restore
+  oracle schema: PASS, 1448 checks`; negative tests `PASS, 6 checks`).
+- M7.8 local validation passed for `arch -arm64 make ds4-restore-dump`,
+  `python3 -m py_compile ds4-parity/check_restore_dump.py`, manifest generation
+  with `--write-manifest`, `python3 ds4-parity/check_restore_dump.py
+  ds4-parity/baselines/kv/m7.8/current-c.json --manifest
+  ds4-parity/baselines/kv/m7.8/manifest.json --negative-test` (`restore oracle
+  schema: PASS, 1448 checks`; manifest `PASS, 13 checks`; negative tests
+  `PASS, 6 checks`), `python3 -m json.tool` for both committed M7.8 JSON files,
+  `arch -arm64 make cpu`, and `git diff --check`.

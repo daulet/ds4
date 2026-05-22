@@ -1133,7 +1133,7 @@
 
 ### M7.8: B300 Disk KV And In-Memory Snapshot Restore Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture model-backed current-C evidence for both disk KV/session
   payload restore and in-memory `ds4_session_snapshot` restore.
 - Source evidence needed: current C server/session save and restore paths on
@@ -1163,10 +1163,46 @@
 - Review gate: ask Claude to review B300 command fidelity, artifact-size
   policy, disk-vs-memory snapshot separation, and distribution-comparison
   tolerance.
-- Validation needed: B300 capture or exact skipped recapture command, local
-  schema/hash checker with negative tests, and `git diff --check`.
+- Validation passed: B300 `ds4-rust-port-b300` capture built
+  `ds4-restore-dump` with `CUDA_ARCH=native`, captured
+  `ds4-parity/baselines/kv/m7.8/current-c.json`, and passed
+  `python3 ds4-parity/check_restore_dump.py
+  ds4-parity/baselines/kv/m7.8/current-c.json --negative-test` on the pod
+  (`restore oracle schema: PASS, 1448 checks`; negative tests `PASS, 6
+  checks`). Local validation passed for `arch -arm64 make ds4-restore-dump`,
+  `python3 -m py_compile ds4-parity/check_restore_dump.py`, manifest generation
+  via `--write-manifest`, `python3 ds4-parity/check_restore_dump.py
+  ds4-parity/baselines/kv/m7.8/current-c.json --manifest
+  ds4-parity/baselines/kv/m7.8/manifest.json --negative-test` (`restore
+  oracle schema: PASS, 1448 checks`; manifest `PASS, 13 checks`; negative tests
+  `PASS, 6 checks`), `python3 -m json.tool` for `current-c.json` and
+  `manifest.json`, `arch -arm64 make cpu`, and `git diff --check`.
 - Owner path: B300 restore oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
+### M7.9: KV And Snapshot Report Integration
+
+- Status: pending
+- Goal: wire M7 local comparators and B300 restore refresh records into the
+  parity reports.
+- Source evidence needed: committed M7.2 through M7.8 fixtures, manifest
+  entries, local comparator commands, M0.5 baseline artifacts, and B300 restore
+  recapture records.
+- Oracle: committed M7.2 through M7.8 fixtures and refresh commands.
+- Fixture: M7 manifest entries, local comparator commands, M0.5 baseline
+  artifacts, and B300 restore recapture records.
+- Comparator: a Milestone 7 report that runs all local KV/snapshot comparators,
+  summarizes first drift paths, and skips only model-backed B300 recapture with
+  exact commands; the unified parity report includes that M7 report.
+- Acceptance: local report passes without the model, JSON output is machine
+  readable, failure output names fixture/field/expected/got, and B300 refreshes
+  are reproducible from the report.
+- Drift policy: report normalizes only capture paths and timestamps.
+- Review gate: ask Claude to review report integration and skipped-B300 command
+  fidelity.
+- Validation needed: M7 report, unified parity report, `py_compile`,
+  `cargo test --workspace`, and `git diff --check`.
+- Owner path: parity report integration, `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items
 

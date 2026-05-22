@@ -214,3 +214,19 @@ trace artifacts, checks M5 prompt-rendering fixture hashes as preconditions,
 runs `ds4-kv-replay-dump-rs`, and compares cache source, cached/write token
 counts, disk KV reason/key fields, rendered text hashes, token-prefix records,
 DSML tool-call records, and effective prompt suffix bytes.
+
+Validate the M7.8 B300 current-C restore oracle:
+
+```sh
+python3 ds4-parity/check_restore_dump.py \
+  ds4-parity/baselines/kv/m7.8/current-c.json \
+  --manifest ds4-parity/baselines/kv/m7.8/manifest.json \
+  --negative-test
+```
+
+The artifact is captured from the recorded B300 model and covers disk DSV4
+payload restore plus in-memory `ds4_session_snapshot` restore for seed and
+continuation prompts. Raw payload/snapshot bodies are larger than 1 MiB and are
+not committed; the JSON records hashes, header prefixes, selected tokens, top-20
+logprob ordering, score deltas, model/backend identity, fixture hashes, and the
+exact B300 refresh commands.
