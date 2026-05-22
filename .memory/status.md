@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.3 Rust KV Header And Policy Parser
-- Last validated source commit: M7.2 C KV header and policy oracle in this
+- Active item: M7.4a Generic KVC Full-File Round Trip
+- Last validated source commit: M7.3 Rust KV header and policy parser in this
   commit; prior pushed source commit
-  `777e2159b9e182c534b71d4100f0fe40c4188593`
+  `6d352d152be502bf8e0d5e8a551771c4c22303e4`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -684,3 +684,24 @@
   `arch -arm64 make cpu`, deterministic CPU-regenerated dump comparison
   against the committed M7.2 artifact, `arch -arm64 make ds4_test`,
   `./ds4_test --server`, and `git diff --check`.
+- M7.3 adds `rust/ds4-gguf/src/kv_policy.rs` for no-model KVC header
+  parsing/writing, reason/key-kind helpers, SHA/path helpers, file-size
+  budgeting, store-boundary selection, chat-anchor selection,
+  continued-store target selection, byte-prefix matching, eviction scoring,
+  and text-prefix entry selection.
+- M7.3 adds `ds4-kv-policy-dump-rs`, which emits the same deterministic
+  synthetic no-model policy fixture as the M7.2 C oracle with a Rust schema and
+  source label.
+- M7.3 adds `python3 ds4-parity/compare_kv_policy.py`, which runs the Rust
+  dump and recursively compares it to the committed M7.2 C oracle while
+  allowing only the schema/source labels to differ. It checks header bytes,
+  decoded fields, reason and extension flags, SHA/path helpers, policy
+  decisions, eviction scores, text-prefix selections, and M0.5 header rows.
+- M7.3 local validation passed for `python3 -m py_compile
+  ds4-parity/compare_kv_policy.py`, `python3
+  ds4-parity/compare_kv_policy.py --negative-test` (`KV policy C/Rust
+  comparator: PASS, 1488 checks`; negative tests `PASS, 8 checks`), `python3
+  ds4-parity/check_kv_policy_dump.py --negative-test` (`451` schema checks,
+  `11` manifest checks, `7` negative checks), `cargo fmt --all -- --check`,
+  `cargo test -p ds4-gguf kv_policy`, `cargo test -p ds4-gguf --bin
+  ds4-kv-policy-dump-rs`, and `cargo test --workspace`.

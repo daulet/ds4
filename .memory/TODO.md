@@ -907,7 +907,7 @@
 
 ### M7.3: Rust KV Header And Policy Parser
 
-- Status: pending
+- Status: done
 - Goal: port the KVC header parser/writer and no-model KV policy decisions to
   Rust without loading model sessions.
 - Source evidence needed: M7.2 current-C KV policy oracle dump,
@@ -926,10 +926,52 @@
   versioned format change is not allowed in this item.
 - Review gate: ask Claude to review byte-order handling, integer overflow
   checks, timestamp normalization boundaries, and policy tie-break behavior.
-- Validation needed: KV comparator with negative tests, Rust unit tests,
-  `cargo fmt --all -- --check`, `cargo test --workspace`, and
-  `git diff --check`.
+- Validation passed: `python3 -m py_compile
+  ds4-parity/compare_kv_policy.py`, `python3
+  ds4-parity/compare_kv_policy.py --negative-test` (`KV policy C/Rust
+  comparator: PASS, 1488 checks`; negative tests `PASS, 8 checks`), `python3
+  ds4-parity/check_kv_policy_dump.py --negative-test` (`451` schema checks,
+  `11` manifest checks, `7` negative checks), `cargo fmt --all -- --check`,
+  `cargo test -p ds4-gguf kv_policy`, `cargo test -p ds4-gguf --bin
+  ds4-kv-policy-dump-rs`, `cargo test --workspace`, and `git diff --check`.
 - Owner path: Rust KV policy module, `ds4-parity/`,
+  `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
+### M7.4a: Generic KVC Full-File Round Trip
+
+- Status: pending
+- Goal: compare full KVC file construction, generic optional trailer bytes,
+  file-size budgeting, and cross-reader acceptance without restoring model
+  tensors.
+- Source evidence needed: M7.3 Rust KVC header writer and no-model policy
+  comparator, `ds4_kvstore.c`, `ds4_kvstore.h`,
+  `ds4_kvstore_trailer_hooks`, current C entry-file reader behavior, and M0.5
+  KVC artifact records.
+- Oracle: current C fixed-header/text/payload file layout,
+  `ds4_kvstore_trailer_hooks`, current C entry-file reader behavior, and C
+  `ds4_kvstore_file_size_fits` for the produced file sizes.
+- Fixture: synthetic cache text, opaque payload bytes, fixed timestamps,
+  option records, generic extension-flag combinations, opaque trailer bytes,
+  and truncated/corrupted header, text, payload, and trailer data.
+- Comparator: C writer versus Rust writer byte comparison for the complete
+  KVC file, Rust reader acceptance of C-written files, C reader acceptance of
+  Rust-written files, and negative tests for malformed header/text/payload and
+  trailer boundaries.
+- Acceptance: full files are byte-identical for the fixed-header, text,
+  payload, and trailer fixture; C can read Rust-written metadata/trailer files;
+  Rust can read C-written metadata/trailer files; malformed files fail at the
+  same boundary category; Rust writer output size equals the C policy
+  `file_size_fits` budget input for each fixture.
+- Drift policy: no KVC full-file byte drift, extension-flag drift,
+  trailer-size drift, or cross-reader acceptance drift; opaque payload bytes
+  remain uninterpreted in this item.
+- Review gate: ask Claude to review generic trailer-hook coverage, full-file
+  byte identity, file-size budget cross-checks, and C-reads-Rust/Rust-reads-C
+  round-trip evidence.
+- Validation needed: full-file comparator with negative tests, C helper build,
+  Rust tests, `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: C/Rust KVC file fixture helpers, `ds4-parity/`,
   `ds4-parity/baselines/kv/`, `.memory/status.md`.
 
 ### M7.5: C Session Payload Shape Oracle
