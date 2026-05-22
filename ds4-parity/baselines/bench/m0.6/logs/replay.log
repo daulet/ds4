@@ -1,0 +1,3 @@
+b300-short command=ds4-bench ctx_start=2048 ctx_max=8192 step_incr=2048 gen_tokens=32 exit=0 csv=csv/b300-short.csv rows=4 header=ctx_tokens\,prefill_tokens\,prefill_tps\,gen_tokens\,gen_tps\,kvcache_bytes started_utc=2026-05-22T02:52:49Z finished_utc=2026-05-22T02:53:14Z
+b300-long command=ds4-bench ctx_start=16384 ctx_max=32768 step_incr=8192 gen_tokens=32 exit=0 csv=csv/b300-long.csv rows=3 header=ctx_tokens\,prefill_tokens\,prefill_tps\,gen_tokens\,gen_tps\,kvcache_bytes started_utc=2026-05-22T02:53:14Z finished_utc=2026-05-22T02:53:57Z
+finished_utc=2026-05-22T02:53:57Z

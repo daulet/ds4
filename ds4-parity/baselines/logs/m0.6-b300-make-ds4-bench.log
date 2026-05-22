@@ -1,0 +1,14 @@
+command: make clean ds4-bench
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+source_commit: add2c507f81aa2e363809213771134c282c50bf2
+started_utc: 2026-05-22T02:49:37Z
+rm -f ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4_cpu ds4_native ds4_server_test ds4_test *.o tests/cuda_long_context_smoke tests/cuda_long_context_smoke.o
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_bench.o ds4_bench.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4.o ds4.c
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math  -Xcompiler -march=native -Xcompiler -pthread -c -o ds4_cuda.o ds4_cuda.cu
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math  -Xcompiler -march=native -Xcompiler -pthread -o ds4-bench ds4_bench.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+finished_utc: 2026-05-22T02:50:08Z
+exit_status: 0

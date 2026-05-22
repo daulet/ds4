@@ -1,0 +1,2 @@
+380c3299214a25cd5492e9272e5edabcbf047dc7ecd58cc874c05c1f647793d2  ./ds4-bench
+./ds4-bench: ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=119925e9ce4ea03cc1b45a0cde87a8b555e719b0, for GNU/Linux 3.2.0, with debug_info, not stripped

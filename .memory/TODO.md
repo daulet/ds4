@@ -74,7 +74,7 @@
 
 ### M0.6: Benchmark CSV Baselines
 
-- Status: in-progress
+- Status: done
 - Goal: capture at least one short-context and one long-context `ds4-bench`
   CSV for the reference backend.
 - Source evidence needed: `ds4-bench` CLI behavior, model-backed B300
@@ -88,7 +88,21 @@
   backend, and normalization/performance comparison policy.
 - Owner path: `ds4-parity/baselines/bench/`, `.memory/status.md`.
 
+### M1.1: Parity Harness Work Item Breakdown
+
+- Status: in-progress
+- Goal: split Milestone 1 into reviewable work items in `RUST_PORT_ROADMAP.md`
+  before adding Rust harness code.
+- Source evidence needed: Milestone 0 manifest sections and artifact layout,
+  existing build/test commands, and the roadmap's Milestone 1 deliverables.
+- Oracle: Milestone 0 baseline artifacts.
+- Comparator: documentation-only change; no source behavior changes.
+- Validation needed: `git diff --check`, review that each proposed Milestone 1
+  item has a tangible goal, oracle, comparator, acceptance rule, and validation
+  gate.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
+
 ## Later Items
 
-Add later post-Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.6
-completes.
+Add later post-Milestone 1 items from `RUST_PORT_ROADMAP.md` when the Milestone
+1 work item breakdown completes.

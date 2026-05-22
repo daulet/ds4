@@ -1,0 +1,13 @@
+0e1ce482444d66e3805de85c16fcfec9f4d22233e2ca40dd9e9e5fdab762819a  ds4-parity/baselines/bench/m0.6/csv/b300-long.csv
+65b784c6e97831ad4dfa2377a7667e6ed6ae702c47fc96f452938a7802c10458  ds4-parity/baselines/bench/m0.6/csv/b300-short.csv
+aff74c39a1b42a2d76c8c2a625d4359dd11523c79b26df8b26fad416f5f19195  ds4-parity/baselines/bench/m0.6/logs/b300-long.stderr.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ds4-parity/baselines/bench/m0.6/logs/b300-long.stdout.log
+75bf1dd91793b11f391ad6f1848bed0ce9a58301adc164de9332cbd39d90569d  ds4-parity/baselines/bench/m0.6/logs/b300-short.stderr.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ds4-parity/baselines/bench/m0.6/logs/b300-short.stdout.log
+43771ae73ffd5d6532f7d3163551ee6b22df8857a64ad3cb5c9bac06fe978b6c  ds4-parity/baselines/bench/m0.6/logs/capture-env.txt
+ef56f35f9ca9e63d637bb9219d39205d4b931ef2e7dba2114b8174a61c31cd32  ds4-parity/baselines/bench/m0.6/logs/csv-summary.json
+cd4d235a17910125c7e13c97455f7f19fd397da210dbe449cef070dc219e4a42  ds4-parity/baselines/bench/m0.6/logs/ds4-bench-help.txt
+c94a660a3166e63a1009007e087be0966b872bf0374c1a830071af40ca11b5a0  ds4-parity/baselines/bench/m0.6/logs/ds4-bench-sha256.txt
+e14b1877bfb725b63408664b236a675cf72e406cc1bc5838833eceaedc515ed7  ds4-parity/baselines/bench/m0.6/logs/nvidia-smi.txt
+107f1f0c2dff496566a99ceb71211ea1a156de604a7e28c6f3c4aa2dec479aac  ds4-parity/baselines/bench/m0.6/logs/prompt-sha256.txt
+300974bc18fb773a77542f176a2abd1afc0125fca9f18a2cb5185ac7df2f76c9  ds4-parity/baselines/bench/m0.6/logs/replay.log

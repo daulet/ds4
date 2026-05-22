@@ -53,3 +53,12 @@ available directly from the repo.
   headers, full hashes, and timestamp-normalized hashes, but leaves raw `.kv`
   binaries out of git unless a later milestone explicitly needs binary fixtures
   checked in.
+
+## 2026-05-22: Avoid `status` As A zsh Wrapper Variable
+
+- Symptom: an M0.6 source-refresh wrapper exited before copying source and
+  logged `zsh: read-only variable: status`.
+- Root cause: zsh reserves `status`; assigning to it fails even though the same
+  pattern would work with an ordinary shell variable name.
+- Permanent rule: local capture wrappers should use `rc` or another neutral
+  variable for command exit codes.

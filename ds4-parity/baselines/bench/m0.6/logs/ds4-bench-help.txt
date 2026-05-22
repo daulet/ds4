@@ -1,0 +1,34 @@
+Usage: ds4-bench --prompt-file FILE [options]
+
+Benchmarks instantaneous prefill and generation throughput at context
+frontiers such as 2048, 4096, 6144, ... . Generation is always greedy,
+runs for exactly --gen-tokens tokens, and skips EOS so every row is
+comparable.
+
+Input:
+  --prompt-file FILE
+      Raw benchmark text. The fixed token sequence is sliced at each frontier.
+  --chat-prompt-file FILE
+      Render FILE as one no-thinking chat user message, then slice that sequence.
+  -sys, --system TEXT
+      System prompt used only with --chat-prompt-file.
+
+Model and backend:
+  -m, --model FILE       GGUF model path. Default: ds4flash.gguf
+  --metal | --cuda | --cpu | --backend NAME
+      Select backend explicitly. Defaults to Metal on macOS, CUDA elsewhere.
+  -t, --threads N        CPU helper threads.
+  --quality              Prefer exact kernels where applicable.
+  --warm-weights         Touch mapped tensor pages before benchmarking.
+
+Sweep:
+  --ctx-start N          First measured frontier. Default: 2048
+  --ctx-max N            Last measured frontier. Default: 32768
+  --ctx-alloc N          Allocated context. Default: ctx-max + gen-tokens + 1
+  --step-mul F           Multiplicative step. Default: 1
+  --step-incr N          Linear step when --step-mul is 1. Default: 2048
+  --gen-tokens N         Greedy decode tokens per frontier. Default: 128
+
+Output:
+  --csv FILE             Write CSV there instead of stdout.
+  -h, --help             Show this help.

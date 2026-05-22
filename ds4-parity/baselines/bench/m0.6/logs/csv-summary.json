@@ -1,0 +1,62 @@
+[
+  {
+    "csv": "b300-long.csv",
+    "rows": 3,
+    "ctx_tokens": [
+      16384,
+      24576,
+      32768
+    ],
+    "prefill_tokens": [
+      16384,
+      8192,
+      8192
+    ],
+    "gen_tokens": [
+      32,
+      32,
+      32
+    ],
+    "min_prefill_tps": 1261.96,
+    "max_prefill_tps": 1411.0,
+    "min_gen_tps": 32.55,
+    "max_gen_tps": 35.09,
+    "kvcache_bytes": [
+      249505164,
+      362259852,
+      475014540
+    ]
+  },
+  {
+    "csv": "b300-short.csv",
+    "rows": 4,
+    "ctx_tokens": [
+      2048,
+      4096,
+      6144,
+      8192
+    ],
+    "prefill_tokens": [
+      2048,
+      2048,
+      2048,
+      2048
+    ],
+    "gen_tokens": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "min_prefill_tps": 1427.04,
+    "max_prefill_tps": 1467.3,
+    "min_gen_tps": 35.28,
+    "max_gen_tps": 36.87,
+    "kvcache_bytes": [
+      52184460,
+      80373132,
+      108561804,
+      136750476
+    ]
+  }
+]

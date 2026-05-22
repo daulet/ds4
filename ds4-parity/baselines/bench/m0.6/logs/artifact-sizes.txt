@@ -1,0 +1,14 @@
+     186 ds4-parity/baselines/bench/m0.6/csv/b300-long.csv
+     217 ds4-parity/baselines/bench/m0.6/csv/b300-short.csv
+     673 ds4-parity/baselines/bench/m0.6/logs/b300-long.stderr.log
+       0 ds4-parity/baselines/bench/m0.6/logs/b300-long.stdout.log
+     672 ds4-parity/baselines/bench/m0.6/logs/b300-short.stderr.log
+       0 ds4-parity/baselines/bench/m0.6/logs/b300-short.stdout.log
+    1131 ds4-parity/baselines/bench/m0.6/logs/capture-env.txt
+     917 ds4-parity/baselines/bench/m0.6/logs/csv-summary.json
+    1475 ds4-parity/baselines/bench/m0.6/logs/ds4-bench-help.txt
+     321 ds4-parity/baselines/bench/m0.6/logs/ds4-bench-sha256.txt
+    1682 ds4-parity/baselines/bench/m0.6/logs/nvidia-smi.txt
+     136 ds4-parity/baselines/bench/m0.6/logs/prompt-sha256.txt
+     580 ds4-parity/baselines/bench/m0.6/logs/replay.log
+    7990 total

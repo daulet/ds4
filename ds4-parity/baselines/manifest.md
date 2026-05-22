@@ -322,3 +322,71 @@ context size, payload byte count, rendered text bytes, and rendered text hash.
 | parse generated `.kv` headers and rendered text | B300 pod, `/workspace/ds4` | 0 | `kv-artifacts/m0.5/logs/kv-header.tsv` | All generated cache files parse as version 1 `KVC` files with the recorded reason, token, hit, context, payload, rendered-text, and size fields. |
 | `jq empty` over fixture and response JSON files | local repo | 0 | command output not persisted | All request fixtures and JSON responses parse. |
 | `sha256sum -c kv-artifacts/m0.5/logs/artifact-sha256.txt` | local repo | 0 | command output not persisted | Committed non-raw-KV artifacts match the recorded hashes. |
+
+# M0.6 Benchmark CSV Baselines
+
+## Capture Scope
+
+- Work item: M0.6 Benchmark CSV Baselines
+- Source oracle commit: `add2c507f81aa2e363809213771134c282c50bf2`
+- Oracle: current C/CUDA `./ds4-bench` throughput benchmark.
+- Prompt fixture: `speed-bench/promessi_sposi.txt`
+- Prompt SHA256:
+  `f53e0d80cb2d4492d24ebd63c7000c397b16ae70f9bf09b3763e5d8323ec209f`
+- Prompt size: 1,329,139 bytes.
+- Artifact directory: `bench/m0.6/`
+- Comparator: rerun the listed `ds4-bench` commands on the same B300 class,
+  model, backend, prompt, context sweep, and generation-token count; then
+  compare CSV schema, context frontiers, prefill interval sizes, generation
+  token counts, KV snapshot byte counts, and throughput ratios.
+- Acceptance: short-context CSV contains rows at 2048, 4096, 6144, and 8192
+  tokens; long-context CSV contains rows at 16384, 24576, and 32768 tokens; all
+  rows use 32 greedy generation tokens; CSV headers match
+  `ctx_tokens,prefill_tokens,prefill_tps,gen_tokens,gen_tps,kvcache_bytes`;
+  benchmark commands exit 0 and artifact hashes verify.
+- Drift policy: CSV schema, workload parameters, prompt hash, model hash,
+  backend, context frontiers, generation-token counts, and `kvcache_bytes` are
+  exact comparison surface. `prefill_tps` and `gen_tps` are performance surface:
+  compare only on the same machine class and treat regressions larger than 10%
+  as requiring explicit review unless a later milestone defines a different
+  threshold.
+
+## B300 Benchmark Fixture
+
+- Context: `hou2-prod1`
+- Namespace: `default`
+- Pod: `ds4-rust-port-b300`
+- Node: `c1v17-b300n1-nic1`
+- GPU: NVIDIA B300 SXM6 AC, UUID
+  `GPU-81f6bd2a-3404-6445-1788-365264243aab`
+- Driver: 580.126.16
+- Reported power limit: 1100.00 W
+- Model path: `/workspace/ds4/ds4flash.gguf`
+- Resolved model path:
+  `/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf`
+- Model SHA256:
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`
+- Model size: 86,720,111,488 bytes.
+- `ds4-bench` SHA256:
+  `380c3299214a25cd5492e9272e5edabcbf047dc7ecd58cc874c05c1f647793d2`
+- Capture environment: `bench/m0.6/logs/capture-env.txt`
+- CSV summary: `bench/m0.6/logs/csv-summary.json`
+- Artifact hashes: `bench/m0.6/logs/artifact-sha256.txt`
+- Artifact byte sizes: `bench/m0.6/logs/artifact-sizes.txt`
+
+| CSV | Command | Rows | Expected behavioral marker |
+| --- | --- | ---: | --- |
+| `bench/m0.6/csv/b300-short.csv` | `./ds4-bench -m /workspace/ds4/ds4flash.gguf --cuda --prompt-file speed-bench/promessi_sposi.txt --ctx-start 2048 --ctx-max 8192 --step-incr 2048 --gen-tokens 32 --csv ds4-parity/baselines/bench/m0.6/csv/b300-short.csv` | 4 | Context frontiers 2048/4096/6144/8192; each row prefills a 2048-token interval, decodes 32 tokens, and records KV snapshot bytes from 52,184,460 to 136,750,476. |
+| `bench/m0.6/csv/b300-long.csv` | `./ds4-bench -m /workspace/ds4/ds4flash.gguf --cuda --prompt-file speed-bench/promessi_sposi.txt --ctx-start 16384 --ctx-max 32768 --step-incr 8192 --gen-tokens 32 --csv ds4-parity/baselines/bench/m0.6/csv/b300-long.csv` | 3 | Context frontiers 16384/24576/32768; rows prefill 16384 then two 8192-token intervals, decode 32 tokens, and record KV snapshot bytes from 249,505,164 to 475,014,540. |
+
+## Command Entries
+
+| Command | Environment | Exit | Log | Acceptance |
+| --- | --- | ---: | --- | --- |
+| refresh `/workspace/ds4` from `git archive HEAD` | local to B300 pod, explicit `--context hou2-prod1` | 0 | `logs/m0.6-b300-source-refresh.log` | Pod source matches the source oracle commit and prompt fixture hash. |
+| `make clean ds4-bench` | B300 pod, `/workspace/ds4` | 0 | `logs/m0.6-b300-make-ds4-bench.log` | CUDA benchmark binary is rebuilt from the source oracle commit. |
+| short-context `ds4-bench` run | B300 pod, `/workspace/ds4` | 0 | `bench/m0.6/logs/b300-short.stderr.log`, `bench/m0.6/logs/replay.log` | Writes `bench/m0.6/csv/b300-short.csv` with four rows and the expected CSV schema. |
+| long-context `ds4-bench` run | B300 pod, `/workspace/ds4` | 0 | `bench/m0.6/logs/b300-long.stderr.log`, `bench/m0.6/logs/replay.log` | Writes `bench/m0.6/csv/b300-long.csv` with three rows and the expected CSV schema. |
+| CSV parser and summary check | B300 pod, `/workspace/ds4` | 0 | `bench/m0.6/logs/csv-summary.json` | Both CSVs parse with the expected header, non-empty row sets, and `gen_tokens=32` in every row. |
+| local CSV parser check | local repo | 0 | command output not persisted | CSV headers, context rows, prefill intervals, generation-token counts, and positive throughput values match the manifest. |
+| `sha256sum -c bench/m0.6/logs/artifact-sha256.txt` | local repo | 0 | command output not persisted | Committed benchmark artifacts match the recorded hashes. |
