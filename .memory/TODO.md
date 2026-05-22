@@ -708,7 +708,7 @@
 
 ### M6.5: Rust Fixed-Logits Model-Slice Comparator
 
-- Status: pending
+- Status: done
 - Goal: run Rust sampler and logprob math over the M6.4 captured model logits
   slices and compare token presentation against current C.
 - Coverage caveat: M6.4 intentionally omits `long_code_audit` logits because
@@ -729,8 +729,13 @@
   stay within the M6 tolerance and report max absolute delta.
 - Review gate: ask Claude to review fixture loading, token-byte conversion, and
   tolerance reporting.
-- Validation needed: model-slice comparator with negative tests, Rust tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: `python3 -m py_compile
+  ds4-parity/compare_model_logits.py`, `python3
+  ds4-parity/compare_model_logits.py --negative-test` (`2982` comparator
+  checks, max abs logit/logprob delta about `5.0e-08`; `6` negative checks),
+  `cargo fmt --all -- --check`, `cargo test -p ds4-gguf --bin
+  ds4-model-logits-dump-rs`, `cargo test --workspace`, and
+  `git diff --check`.
 - Owner path: Rust model-slice comparator, `ds4-parity/`,
   `.memory/status.md`.
 

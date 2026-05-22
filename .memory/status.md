@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.5 Rust Fixed-Logits Model-Slice Comparator
-- Last validated source commit: M6.4 current-C session logits fixture commit
-  once committed; prior pushed source commit
-  `fea2ea3de57a260474d349d2536527bf2c16927a`
+- Active item: M6.6a Decode Stop Policy C Oracle Fixtures
+- Last validated source commit: M6.5 Rust fixed-logits model-slice comparator
+  commit once committed; prior pushed source commit
+  `24aa0e667d41b2c287bab09546d08f2e435b6691`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -582,3 +582,20 @@
   tests: PASS, 11 checks`, `python3 ds4-parity/compare_logprob_numeric.py`
   with `summary: 5/5 sections passed, 528 checks`, `arch -arm64 make cpu`,
   and `git diff --check`.
+- M6.5 adds `ds4-model-logits-dump-rs`, which reads the committed M6.4
+  `logits.f32le` blob as contiguous f32 vocab slices, loads the M5.3
+  tokenizer GGUF, runs Rust `sample_argmax` and `top_logprobs`, and emits a
+  flat per-slice JSON dump with selected token IDs, rendered token bytes, and
+  top-logprob scores.
+- M6.5 adds `python3 ds4-parity/compare_model_logits.py`, which maps those
+  flat Rust slices back to the M6.4 current-C case/step records and compares
+  selected token, selected bytes, expected bytes, logits offsets, top-logprob
+  ordering, top token IDs, token bytes, logits, and logprobs.
+- M6.5 validation passed with `python3 -m py_compile
+  ds4-parity/compare_model_logits.py`, `python3
+  ds4-parity/compare_model_logits.py --negative-test` (`model logits C/Rust
+  comparator: PASS, 2982 checks, max_abs_logit_delta=5.00000041e-08,
+  max_abs_logprob_delta=5.00000006e-08`; negative tests `PASS, 6 checks`),
+  `cargo fmt --all -- --check`, `cargo test -p ds4-gguf --bin
+  ds4-model-logits-dump-rs`, `cargo test --workspace`, and
+  `git diff --check`.
