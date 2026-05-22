@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M3.1 Backend ABI Wrapper Parity
-- Last validated source commit: `8f11bac65319ae6d429a6ce3d2c225a46ff73f31`
+- Active item: M4.1 Model Metadata Work Item Breakdown
+- Last validated source commit: `c931c89945d8a9b103fe4c85e0438dcd37e3f7ef`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -99,3 +99,18 @@
   wrappers, and wired `make rust-test`. Validation passed for `cargo fmt`,
   `cargo test --workspace`, `make rust-test`, sequential `arch -arm64 make`,
   sequential `arch -arm64 make cpu`, and the unified parity report.
+- M3.1 added safe Rust `Tensor`, `TensorView`, and `CommandBatch` wrappers over
+  the existing `ds4_gpu.h` tensor/command ABI without changing the C ABI. The
+  macOS `ds4-gpu` build script compiles the current `ds4.c` and `ds4_metal.m`
+  backend objects into a test archive so Rust tests call the real Metal
+  implementation rather than a mock.
+- M3.1 Rust ABI parity validation passed with
+  `cargo test -p ds4-gpu safe_tensor_wrapper_matches_direct_c_abi -- --nocapture`;
+  the test compares safe-wrapper and direct-C paths for allocation, byte-size
+  queries, write/read, fill, view writes, command-batched copy, flush/end,
+  synchronize, and out-of-bounds write/copy failures.
+- M3.1 full validation passed for `cargo fmt --all -- --check`,
+  `cargo test --workspace`, `make rust-test`, `git diff --check`, sequential
+  `arch -arm64 make clean`, sequential `arch -arm64 make`, sequential
+  `arch -arm64 make clean`, sequential `arch -arm64 make cpu`, and
+  `python3 ds4-parity/run_parity_report.py` with 9 passed, 4 skipped, 0 failed.

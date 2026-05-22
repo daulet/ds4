@@ -199,7 +199,7 @@
 
 ### M3.1: Backend ABI Wrapper Parity
 
-- Status: in-progress
+- Status: done
 - Goal: port the first safe Rust wrapper slice around `ds4_gpu.h` without
   changing the C backend ABI.
 - Source evidence needed: `ds4_gpu.h`, existing C backend implementations,
@@ -211,6 +211,24 @@
   byte-for-byte for simple tensor operations; error cases return equivalent
   failure categories; existing C tests still pass.
 - Owner path: `rust/ds4-gpu/`, `rust/ds4-gpu-sys/`.
+
+### M4.1: Model Metadata Work Item Breakdown
+
+- Status: pending
+- Goal: split Milestone 4 into commit-sized GGUF/model-metadata parity work
+  items before adding Rust parser or runtime code.
+- Source evidence needed: Milestone 4 roadmap text, current C loader and model
+  metadata structures, available local/B300 model fixtures, and existing parity
+  harness conventions.
+- Oracle: current C loader behavior and any C metadata dump contract selected
+  for Milestone 4.
+- Comparator: documentation-only work item list that defines the metadata dump
+  comparison contract for later executable items.
+- Validation needed: `RUST_PORT_ROADMAP.md` and `.memory/` changes only; each
+  proposed Milestone 4 item has a tangible goal, oracle, comparator,
+  acceptance rule, and validation gate; `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
 
 ## Later Items
 
