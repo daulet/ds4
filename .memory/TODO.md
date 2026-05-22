@@ -214,7 +214,7 @@
 
 ### M4.1: Model Metadata Work Item Breakdown
 
-- Status: pending
+- Status: done
 - Goal: split Milestone 4 into commit-sized GGUF/model-metadata parity work
   items before adding Rust parser or runtime code.
 - Source evidence needed: Milestone 4 roadmap text, current C loader and model
@@ -230,7 +230,27 @@
 - Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
   `.memory/status.md`.
 
+### M4.2: C Metadata Dump Oracle
+
+- Status: pending
+- Goal: add a current-C metadata dump helper that opens GGUF through the
+  existing loader and emits deterministic machine-readable metadata without
+  running inference.
+- Source evidence needed: `model_open`, `parse_metadata`, `parse_tensors`,
+  `model_summary`, `config_validate_model`, `weights_bind`,
+  `mtp_weights_bind`, the B300 q2-imatrix model identity, and any small GGUF
+  fixture needs.
+- Oracle: direct current C loader and binding behavior.
+- Comparator: a `ds4-parity` checker that parses the dump JSON and validates
+  schema, deterministic ordering, selected metadata values, tensor directory
+  summaries, type histograms, and bound semantic tensor names.
+- Validation needed: helper builds, local small-fixture dump passes schema
+  checks, supported-model capture is run on B300 or recorded with an exact
+  rerun command, and `git diff --check`.
+- Owner path: C dump helper surface, `ds4-parity/`,
+  `ds4-parity/baselines/metadata/`, `.memory/status.md`.
+
 ## Later Items
 
-Add later Milestone 1 items from `RUST_PORT_ROADMAP.md` as each active item
+Add later roadmap items from `RUST_PORT_ROADMAP.md` as each active item
 completes.

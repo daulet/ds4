@@ -445,6 +445,166 @@ Acceptance:
 - Unsupported models fail at the same validation boundary or with a stricter
   Rust error that is documented in the fixture.
 
+### Milestone 4 Work Items
+
+Milestone 4 must keep metadata parsing separate from runtime execution. The
+first Rust parser should compare against a stable C dump before it feeds any
+generation path.
+
+#### M4.1: Model Metadata Work Item Breakdown
+
+- Goal: split Milestone 4 into reviewable GGUF/model-metadata parity work
+  items before adding parser code.
+- Oracle: the Milestone 4 roadmap, `ds4.c` GGUF loader, metadata validators,
+  and tensor binding code.
+- Fixture: source evidence from `model_open`, `parse_metadata`,
+  `parse_tensors`, `config_validate_model`, `weights_bind`, and
+  `mtp_weights_bind`.
+- Comparator: documentation-only review; no source behavior changes.
+- Acceptance: each Milestone 4 implementation item names a tangible goal,
+  oracle, fixture, comparator, acceptance rule, drift policy, review gate, and
+  validation gate.
+- Drift policy: no implementation or fixture-format drift allowed.
+- Review gate: ask Claude to review the roadmap split for oversized or missing
+  metadata parity work.
+- Validation gate: `git diff --check`.
+
+#### M4.2: C Metadata Dump Oracle
+
+- Goal: add a current-C metadata dump helper that opens GGUF through the
+  existing loader and emits deterministic machine-readable metadata without
+  running inference.
+- Oracle: current `model_open`, `parse_metadata`, `parse_tensors`,
+  `config_validate_model`, `weights_bind`, and, when an MTP path is supplied,
+  `mtp_weights_bind`.
+- Fixture: the B300 q2-imatrix model identity from `.memory/status.md`, plus
+  any small synthetic GGUF fixtures needed to exercise loader failures.
+- Comparator: a `ds4-parity` checker that parses the C dump JSON and validates
+  schema, deterministic ordering, selected required metadata values, tensor
+  directory summaries, tensor type histograms, and bound semantic tensor names.
+- Acceptance: the dump includes GGUF version, metadata count, tensor count,
+  alignment, tensor data offset, model size, selected required scalars and
+  arrays, tensor type histogram, all tensor descriptors, and the bound base/MTP
+  tensor table needed by later Rust comparisons.
+- Drift policy: the dump is an oracle format; schema changes must be
+  append-only or update the comparator and fixtures in the same commit.
+- Review gate: ask Claude to review the dump schema against the C loader and
+  binding code for missing semantic fields.
+- Validation gate: build the helper, run it on any local small fixtures, route
+  supported-model capture to B300 when needed, run the schema checker, and run
+  `git diff --check`.
+
+#### M4.3: Rust GGUF Directory Parser
+
+- Goal: add a `ds4-gguf` parser for GGUF v3 header, metadata descriptors,
+  scalar/array value decoding, tensor directory parsing, alignment, absolute
+  offsets, and tensor byte sizing.
+- Oracle: M4.2 C metadata dumps for the same GGUF files.
+- Fixture: committed small GGUF fixtures for header/directory coverage and the
+  supported-model dump captured by M4.2.
+- Comparator: Rust dump output compared to the C dump for version, counts,
+  key/type/value summaries, tensor names, dims, types, relative/absolute
+  offsets, byte sizes, and type histograms.
+- Acceptance: supported fixtures match exactly; malformed header, truncated
+  metadata, unsupported type, offset overflow, and out-of-file tensor cases
+  fail with the same normalized category as the C loader.
+- Drift policy: this item does not port DS4-specific semantic validation; it
+  only matches the generic GGUF directory surface already parsed by C.
+- Review gate: ask Claude to review parser bounds checks, overflow handling,
+  value decoding, and C/Rust dump comparison coverage.
+- Validation gate: run Rust parser tests, C-vs-Rust dump comparison, negative
+  fixture checks, `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M4.4: DS4 Metadata Validation Parity
+
+- Goal: port DS4-specific metadata validation from `config_validate_model`,
+  including required key lookup, numeric type coercions, compression ratio
+  arrays, SwiGLU clamp arrays, RoPE constants, HC constants, and expert
+  routing constants.
+- Oracle: C validation behavior and first-failure messages from the M4.2 dump
+  helper.
+- Fixture: supported-model metadata plus generated mutations for missing keys,
+  wrong value types, wrong scalar values, short arrays, negative compression
+  ratios, and float values outside the C tolerance.
+- Comparator: C and Rust validation runs compared by pass/fail, normalized
+  first failing key, expected/got category, and tolerance policy.
+- Acceptance: supported metadata passes; every negative fixture fails at the
+  same semantic boundary or has a documented stricter Rust rejection.
+- Drift policy: Rust may not relax required metadata keys or numeric
+  tolerances; stricter failures must name the fixture and reason.
+- Review gate: ask Claude to review the key list, coercion rules, array
+  handling, and tolerance choices against `ds4.c`.
+- Validation gate: run metadata validation comparator, negative tests,
+  workspace Rust tests, and `git diff --check`.
+
+#### M4.5: Tensor Binding And Layout Parity
+
+- Goal: port the semantic tensor binding and layout checks from `weights_bind`,
+  `mtp_weights_bind`, `weights_validate_layout`, and
+  `mtp_weights_validate_layout`.
+- Oracle: C bound tensor table and layout validation from the M4.2 dump helper.
+- Fixture: supported model tensor directory, optional MTP model dump when
+  available, and generated mutations for missing tensors, wrong dims, wrong
+  quant types, bad routed expert types, mismatched gate/up expert types, and
+  out-of-range offsets.
+- Comparator: compare bound semantic tensor names to tensor descriptor
+  identity, dims, type, offsets, byte size, optional-vs-required status, and
+  normalized first failure.
+- Acceptance: all base model layer bindings match; hash-layer-only tensors,
+  compression-ratio-dependent tensors, optional `exp_probs_b`, routed expert
+  quant types, and MTP-required tensors follow the C rules.
+- Drift policy: optional and required tensor semantics must not drift; any MTP
+  fixture gap must be recorded as blocked rather than silently skipped.
+- Review gate: ask Claude to review the generated tensor name matrix and
+  optional/conditional binding rules against `ds4.c`.
+- Validation gate: run tensor binding comparator, negative tests, workspace
+  Rust tests, and `git diff --check`.
+
+#### M4.6: Metadata Baselines And Unified Report Integration
+
+- Goal: commit supported-model metadata baselines and wire metadata comparison
+  into the unified parity report.
+- Oracle: current C metadata dump captured on the B300 q2-imatrix model with
+  the recorded model path, size, and SHA256.
+- Fixture: `ds4-parity/baselines/metadata/m4.6/` JSON dumps, schema metadata,
+  artifact hashes, model identity, and rerun commands.
+- Comparator: a metadata comparator that self-compares committed baselines,
+  compares candidate C/Rust dumps, and detects scalar, array, tensor shape,
+  tensor type, binding, and offset drift.
+- Acceptance: local static comparison passes without the model; the unified
+  report includes metadata comparison and records exact B300 refresh commands
+  for model-backed recapture.
+- Drift policy: model path, timestamps, and temporary workspace paths may be
+  normalized; semantic metadata, tensor descriptors, and binding tables are
+  exact.
+- Review gate: ask Claude to review baseline size, normalization rules, and
+  report integration for actionable failure output.
+- Validation gate: run metadata comparator self-checks, negative tests,
+  unified parity report, any required B300 capture command, and
+  `git diff --check`.
+
+#### M4.7: Unsupported GGUF Negative Fixtures
+
+- Goal: lock down unsupported and malformed GGUF behavior before Rust metadata
+  is used by runtime code.
+- Oracle: current C loader and validation failures from the M4.2 dump helper.
+- Fixture: small generated GGUF fixtures for invalid magic, unsupported
+  version, truncation, missing required metadata, wrong metadata type, bad
+  array length, unsupported tensor type, bad tensor dimension, and tensor data
+  outside the file.
+- Comparator: C and Rust validator runs compared by exit status and normalized
+  first error category/key.
+- Acceptance: every negative fixture fails before runtime execution; Rust
+  matches the C failure boundary or documents a stricter rejection in the
+  fixture manifest.
+- Drift policy: negative fixtures must not be weakened to pass; any accepted
+  behavior change requires an explicit fixture and comparator update.
+- Review gate: ask Claude to review fixture construction and normalized error
+  categories for over-broad matching.
+- Validation gate: run negative fixture generation/comparison, workspace Rust
+  tests, and `git diff --check`.
+
 ## Milestone 5: Tokenization, Prompt Rendering, and DSML Parity
 
 Port text handling before runtime execution.

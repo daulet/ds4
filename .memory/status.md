@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M4.1 Model Metadata Work Item Breakdown
-- Last validated source commit: `c931c89945d8a9b103fe4c85e0438dcd37e3f7ef`
+- Active item: M4.2 C Metadata Dump Oracle
+- Last validated source commit: `47080b14527d207f0c09dcf2611ca93a164c2e41`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -114,3 +114,7 @@
   `arch -arm64 make clean`, sequential `arch -arm64 make`, sequential
   `arch -arm64 make clean`, sequential `arch -arm64 make cpu`, and
   `python3 ds4-parity/run_parity_report.py` with 9 passed, 4 skipped, 0 failed.
+- M4.1 split Milestone 4 into concrete GGUF/model-metadata work items after
+  reading `ds4.c` loader, summary, metadata validation, base tensor binding,
+  and MTP tensor binding surfaces. The next executable item is the current-C
+  metadata dump oracle.
