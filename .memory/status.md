@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M4.5 Tensor Binding And Layout Parity
-- Last validated source commit: `24f4061e02e891d16244bf8c6006178f79764851`
+- Active item: M4.6 Metadata Baselines And Unified Report Integration
+- Last validated source commit: `da12244d15fde251196e3fcc4faa4a7552693ae0`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -186,3 +186,21 @@
   `cargo test -p ds4-gguf` with 4 tests, `python3
   ds4-parity/compare_metadata_validation.py --negative-test` with 41 checks,
   and `python3 -m py_compile ds4-parity/compare_metadata_validation.py`.
+- M4.5 added `./ds4-metadata-dump --validate-layout-only`, which runs current C
+  metadata validation plus base/MTP tensor binding and layout validation from
+  GGUF directories while skipping tensor payload range checks for synthetic
+  local fixtures.
+- M4.5 added Rust base and MTP tensor binding/layout validation in `ds4-gguf`,
+  including required, optional, compression-ratio-dependent, hash-layer-only,
+  plain F16/F32 MTP, routed expert quant-type, routed gate/up type equality,
+  and fixed tensor dimension rules.
+- M4.5 added `python3 ds4-parity/compare_tensor_bindings.py`, whose synthetic
+  fixtures compare C and Rust layout dumps for base plus MTP bindings and
+  negative cases for missing required tensors, wrong types, wrong dimensions,
+  optional tensor type drift, routed expert type drift, routed gate/up type
+  mismatch, missing compressor/indexer tensors, MTP plain-type rejection, and
+  missing required MTP tensors.
+- M4.5 focused validation passed for `arch -arm64 make ds4-metadata-dump`,
+  `cargo test -p ds4-gguf` with 4 tests, `python3
+  ds4-parity/compare_tensor_bindings.py --negative-test` with 33 checks, and
+  `python3 -m py_compile ds4-parity/compare_tensor_bindings.py`.

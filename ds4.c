@@ -916,6 +916,7 @@ typedef struct {
     int fd;
     const uint8_t *map;
     uint64_t size;
+    bool skip_tensor_data_bounds;
 
     uint32_t version;
     uint64_t n_kv;
@@ -1181,7 +1182,8 @@ static void parse_tensors(ds4_model *m, ds4_cursor *c) {
             ds4_die("tensor offset overflow");
         }
         t->abs_offset = m->tensor_data_pos + t->rel_offset;
-        if (t->bytes != 0 &&
+        if (!m->skip_tensor_data_bounds &&
+            t->bytes != 0 &&
             (t->abs_offset > m->size || t->bytes > m->size - t->abs_offset))
         {
             ds4_die("tensor points outside GGUF file");
@@ -1193,10 +1195,11 @@ static void parse_tensors(ds4_model *m, ds4_cursor *c) {
  * MTLBuffers; CPU uses a private read-only mapping to avoid Darwin VM stress.
  * Tokenizer-only callers pass prefetch_cpu=false so inspecting tokens never
  * walks the huge tensor payload. */
-static void model_open(ds4_model *m, const char *path, bool metal_mapping,
-                       bool prefetch_cpu) {
+static void model_open_ex(ds4_model *m, const char *path, bool metal_mapping,
+                          bool prefetch_cpu, bool skip_tensor_data_bounds) {
     memset(m, 0, sizeof(*m));
     m->fd = -1;
+    m->skip_tensor_data_bounds = skip_tensor_data_bounds;
 
     int fd = open(path, O_RDONLY);
     if (fd == -1) ds4_die_errno("cannot open model", path);
@@ -1239,6 +1242,11 @@ static void model_open(ds4_model *m, const char *path, bool metal_mapping,
     parse_tensors(m, &c);
 
     if (!metal_mapping && prefetch_cpu) model_prefetch_cpu_mapping(m);
+}
+
+static void model_open(ds4_model *m, const char *path, bool metal_mapping,
+                       bool prefetch_cpu) {
+    model_open_ex(m, path, metal_mapping, prefetch_cpu, false);
 }
 
 static void print_size(uint64_t bytes) {
@@ -3181,10 +3189,15 @@ static void metadata_emit_mtp_bindings(FILE *fp, const ds4_mtp_weights *w, bool 
 int ds4_dump_metadata_json_ex(const char *model_path, const char *mtp_path, FILE *fp, unsigned flags) {
     const bool directory_only = (flags & DS4_METADATA_DUMP_DIRECTORY_ONLY) != 0;
     const bool validate_config_only = (flags & DS4_METADATA_DUMP_VALIDATE_CONFIG_ONLY) != 0;
-    if (directory_only && validate_config_only) ds4_die("metadata dump modes are mutually exclusive");
+    const bool validate_layout_only = (flags & DS4_METADATA_DUMP_VALIDATE_LAYOUT_ONLY) != 0;
+    if ((directory_only && validate_config_only) ||
+        (directory_only && validate_layout_only) ||
+        (validate_config_only && validate_layout_only)) {
+        ds4_die("metadata dump modes are mutually exclusive");
+    }
 
     ds4_model model;
-    model_open(&model, model_path, false, false);
+    model_open_ex(&model, model_path, false, false, validate_layout_only);
 
     ds4_weights weights = {0};
     if (!directory_only) {
@@ -3198,7 +3211,7 @@ int ds4_dump_metadata_json_ex(const char *model_path, const char *mtp_path, FILE
     ds4_mtp_weights mtp_weights = {0};
     const bool has_mtp = !directory_only && !validate_config_only && mtp_path && mtp_path[0];
     if (has_mtp) {
-        model_open(&mtp_model, mtp_path, false, false);
+        model_open_ex(&mtp_model, mtp_path, false, false, validate_layout_only);
         mtp_weights_bind(&mtp_weights, &mtp_model);
     }
 

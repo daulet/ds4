@@ -126,6 +126,7 @@ int ds4_engine_metal_graph_full_test(ds4_engine *e, const ds4_tokens *prompt);
 int ds4_engine_metal_graph_prompt_test(ds4_engine *e, const ds4_tokens *prompt, int ctx_size);
 #define DS4_METADATA_DUMP_DIRECTORY_ONLY 1u
 #define DS4_METADATA_DUMP_VALIDATE_CONFIG_ONLY 2u
+#define DS4_METADATA_DUMP_VALIDATE_LAYOUT_ONLY 4u
 int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *fp);
 int ds4_dump_metadata_json_ex(const char *model_path, const char *mtp_path, FILE *fp, unsigned flags);
 

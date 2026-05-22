@@ -18,6 +18,8 @@ static void usage(FILE *fp) {
         "  --directory-only   Parse GGUF metadata/tensor directory without DS4 validation\n"
         "  --validate-config-only\n"
         "                     Run DS4 metadata validation without tensor binding\n"
+        "  --validate-layout-only\n"
+        "                     Run DS4 tensor binding/layout validation from directories only\n"
         "  -o, --output FILE  Write JSON to FILE instead of stdout\n"
         "  -h, --help         Show this help\n");
 }
@@ -49,6 +51,8 @@ int main(int argc, char **argv) {
             flags |= DS4_METADATA_DUMP_DIRECTORY_ONLY;
         } else if (!strcmp(arg, "--validate-config-only")) {
             flags |= DS4_METADATA_DUMP_VALIDATE_CONFIG_ONLY;
+        } else if (!strcmp(arg, "--validate-layout-only")) {
+            flags |= DS4_METADATA_DUMP_VALIDATE_LAYOUT_ONLY;
         } else if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
             if (++i >= argc) {
                 usage(stderr);

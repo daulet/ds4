@@ -73,6 +73,12 @@ pub struct TensorInfo {
     pub bytes: u64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoundTensor {
+    pub role: String,
+    pub tensor: Option<TensorInfo>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GgufError {
     message: String,
@@ -155,6 +161,13 @@ const DS4_ROPE_YARN_BETA_FAST: f32 = 32.0;
 const DS4_ROPE_YARN_BETA_SLOW: f32 = 1.0;
 const DS4_COMPRESS_ROPE_FREQ_BASE: f32 = 160000.0;
 const DS4_ROPE_ORIG_CTX: u64 = 65536;
+const DS4_TENSOR_F32: u32 = 0;
+const DS4_TENSOR_F16: u32 = 1;
+const DS4_TENSOR_Q8_0: u32 = 8;
+const DS4_TENSOR_Q2_K: u32 = 10;
+const DS4_TENSOR_Q4_K: u32 = 12;
+const DS4_TENSOR_IQ2_XXS: u32 = 16;
+const DS4_TENSOR_I32: u32 = 26;
 
 pub fn validate_ds4_metadata(gguf: &Gguf) -> Result<(), Ds4ValidationError> {
     let n_layer = required_u32(gguf, "deepseek4.block_count")?;
@@ -277,7 +290,172 @@ pub fn validate_ds4_metadata(gguf: &Gguf) -> Result<(), Ds4ValidationError> {
     Ok(())
 }
 
+pub fn bind_ds4_tensors(gguf: &Gguf) -> Result<Vec<BoundTensor>, Ds4ValidationError> {
+    validate_ds4_metadata(gguf)?;
+
+    let hc_dim = u64::from(DS4_N_EMBD) * u64::from(DS4_N_HC);
+    let hc_mix_dim = 2 * u64::from(DS4_N_HC) + u64::from(DS4_N_HC) * u64::from(DS4_N_HC);
+    let q_dim = u64::from(DS4_N_HEAD) * u64::from(DS4_N_HEAD_DIM);
+    let out_low_dim = u64::from(DS4_N_OUT_GROUP) * u64::from(DS4_N_LORA_O);
+    let mut out = Vec::new();
+
+    bind_layout(
+        &mut out,
+        gguf,
+        "base.token_embd",
+        "token_embd.weight",
+        DS4_TENSOR_F16,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_VOCAB)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "base.output_hc_base",
+        "output_hc_base.weight",
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_HC)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "base.output_hc_fn",
+        "output_hc_fn.weight",
+        DS4_TENSOR_F16,
+        &[hc_dim, u64::from(DS4_N_HC)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "base.output_hc_scale",
+        "output_hc_scale.weight",
+        DS4_TENSOR_F32,
+        &[1],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "base.output_norm",
+        "output_norm.weight",
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "base.output",
+        "output.weight",
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_VOCAB)],
+    )?;
+
+    for layer in 0..DS4_N_LAYER {
+        bind_layer_tensors(
+            &mut out,
+            gguf,
+            "base",
+            layer,
+            hc_dim,
+            hc_mix_dim,
+            q_dim,
+            out_low_dim,
+        )?;
+    }
+
+    Ok(out)
+}
+
+pub fn bind_ds4_mtp_tensors(gguf: &Gguf) -> Result<Vec<BoundTensor>, Ds4ValidationError> {
+    let hc_dim = u64::from(DS4_N_EMBD) * u64::from(DS4_N_HC);
+    let hc_mix_dim = 2 * u64::from(DS4_N_HC) + u64::from(DS4_N_HC) * u64::from(DS4_N_HC);
+    let q_dim = u64::from(DS4_N_HEAD) * u64::from(DS4_N_HEAD_DIM);
+    let out_low_dim = u64::from(DS4_N_OUT_GROUP) * u64::from(DS4_N_LORA_O);
+    let mut out = Vec::new();
+
+    bind_layout(
+        &mut out,
+        gguf,
+        "mtp.e_proj",
+        "mtp.0.e_proj.weight",
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "mtp.h_proj",
+        "mtp.0.h_proj.weight",
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "mtp.enorm",
+        "mtp.0.enorm.weight",
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "mtp.hnorm",
+        "mtp.0.hnorm.weight",
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "mtp.norm",
+        "mtp.0.norm.weight",
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "mtp.hc_head_base",
+        "mtp.0.hc_head_base.weight",
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_HC)],
+    )?;
+    bind_plain_layout(
+        &mut out,
+        gguf,
+        "mtp.hc_head_fn",
+        "mtp.0.hc_head_fn.weight",
+        &[hc_dim, u64::from(DS4_N_HC)],
+    )?;
+    bind_layout(
+        &mut out,
+        gguf,
+        "mtp.hc_head_scale",
+        "mtp.0.hc_head_scale.weight",
+        DS4_TENSOR_F32,
+        &[1],
+    )?;
+
+    bind_mtp_block_tensors(
+        &mut out,
+        gguf,
+        "mtp.block",
+        hc_dim,
+        hc_mix_dim,
+        q_dim,
+        out_low_dim,
+    )?;
+    Ok(out)
+}
+
 pub fn parse_gguf(bytes: &[u8]) -> Result<Gguf, GgufError> {
+    parse_gguf_inner(bytes, false)
+}
+
+pub fn parse_gguf_allowing_missing_tensor_data(bytes: &[u8]) -> Result<Gguf, GgufError> {
+    parse_gguf_inner(bytes, true)
+}
+
+fn parse_gguf_inner(bytes: &[u8], skip_tensor_data_bounds: bool) -> Result<Gguf, GgufError> {
     let mut cursor = Cursor::new(bytes);
     let magic = cursor.u32()?;
     if magic != GGUF_MAGIC {
@@ -362,7 +540,8 @@ pub fn parse_gguf(bytes: &[u8]) -> Result<Gguf, GgufError> {
         tensor.abs_offset = tensor_data_offset
             .checked_add(tensor.rel_offset)
             .ok_or_else(|| GgufError::new("tensor offset overflow"))?;
-        if tensor.bytes != 0
+        if !skip_tensor_data_bounds
+            && tensor.bytes != 0
             && (tensor.abs_offset > file_size || tensor.bytes > file_size - tensor.abs_offset)
         {
             return Err(GgufError::new("tensor points outside GGUF file"));
@@ -566,6 +745,713 @@ fn tensor_type(type_id: u32) -> Option<TensorType> {
         _ => return None,
     };
     Some(info)
+}
+
+fn bind_layer_tensors(
+    out: &mut Vec<BoundTensor>,
+    gguf: &Gguf,
+    prefix: &str,
+    layer: u32,
+    hc_dim: u64,
+    hc_mix_dim: u64,
+    q_dim: u64,
+    out_low_dim: u64,
+) -> Result<(), Ds4ValidationError> {
+    let ratio = ds4_layer_compress_ratio(layer);
+    let role = |field: &str| format!("{prefix}.layer.{layer}.{field}");
+    let name = |field: &str| format!("blk.{layer}.{field}.weight");
+
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_attn_fn"),
+        &name("hc_attn_fn"),
+        DS4_TENSOR_F16,
+        &[hc_dim, hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_attn_scale"),
+        &name("hc_attn_scale"),
+        DS4_TENSOR_F32,
+        &[3],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_attn_base"),
+        &name("hc_attn_base"),
+        DS4_TENSOR_F32,
+        &[hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_norm"),
+        &name("attn_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_q_a"),
+        &name("attn_q_a"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_LORA_Q)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_q_a_norm"),
+        &name("attn_q_a_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_LORA_Q)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_q_b"),
+        &name("attn_q_b"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_LORA_Q), q_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_kv"),
+        &name("attn_kv"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_HEAD_DIM)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_kv_a_norm"),
+        &name("attn_kv_a_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_HEAD_DIM)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_sinks"),
+        &name("attn_sinks"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_HEAD)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_output_a"),
+        &name("attn_output_a"),
+        DS4_TENSOR_Q8_0,
+        &[
+            u64::from(DS4_N_HEAD_DIM) * (u64::from(DS4_N_HEAD) / u64::from(DS4_N_OUT_GROUP)),
+            out_low_dim,
+        ],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_output_b"),
+        &name("attn_output_b"),
+        DS4_TENSOR_Q8_0,
+        &[out_low_dim, u64::from(DS4_N_EMBD)],
+    )?;
+
+    if ratio == 0 {
+        push_absent(out, role("attn_compressor_ape"));
+        push_absent(out, role("attn_compressor_kv"));
+        push_absent(out, role("attn_compressor_gate"));
+        push_absent(out, role("attn_compressor_norm"));
+    } else {
+        let coff = if ratio == 4 { 2u64 } else { 1u64 };
+        let comp_width = coff * u64::from(DS4_N_HEAD_DIM);
+        bind_layout(
+            out,
+            gguf,
+            &role("attn_compressor_ape"),
+            &name("attn_compressor_ape"),
+            DS4_TENSOR_F16,
+            &[comp_width, u64::from(ratio)],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("attn_compressor_kv"),
+            &name("attn_compressor_kv"),
+            DS4_TENSOR_F16,
+            &[u64::from(DS4_N_EMBD), comp_width],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("attn_compressor_gate"),
+            &name("attn_compressor_gate"),
+            DS4_TENSOR_F16,
+            &[u64::from(DS4_N_EMBD), comp_width],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("attn_compressor_norm"),
+            &name("attn_compressor_norm"),
+            DS4_TENSOR_F32,
+            &[u64::from(DS4_N_HEAD_DIM)],
+        )?;
+    }
+
+    if ratio == 4 {
+        let index_q_dim = u64::from(DS4_N_INDEXER_HEAD) * u64::from(DS4_N_INDEXER_HEAD_DIM);
+        let index_width = 2 * u64::from(DS4_N_INDEXER_HEAD_DIM);
+        bind_layout(
+            out,
+            gguf,
+            &role("indexer_attn_q_b"),
+            &format!("blk.{layer}.indexer.attn_q_b.weight"),
+            DS4_TENSOR_F16,
+            &[u64::from(DS4_N_LORA_Q), index_q_dim],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("indexer_proj"),
+            &format!("blk.{layer}.indexer.proj.weight"),
+            DS4_TENSOR_F16,
+            &[u64::from(DS4_N_EMBD), u64::from(DS4_N_INDEXER_HEAD)],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("indexer_compressor_ape"),
+            &name("indexer_compressor_ape"),
+            DS4_TENSOR_F16,
+            &[index_width, u64::from(ratio)],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("indexer_compressor_kv"),
+            &name("indexer_compressor_kv"),
+            DS4_TENSOR_F16,
+            &[u64::from(DS4_N_EMBD), index_width],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("indexer_compressor_gate"),
+            &name("indexer_compressor_gate"),
+            DS4_TENSOR_F16,
+            &[u64::from(DS4_N_EMBD), index_width],
+        )?;
+        bind_layout(
+            out,
+            gguf,
+            &role("indexer_compressor_norm"),
+            &name("indexer_compressor_norm"),
+            DS4_TENSOR_F32,
+            &[u64::from(DS4_N_INDEXER_HEAD_DIM)],
+        )?;
+    } else {
+        push_absent(out, role("indexer_attn_q_b"));
+        push_absent(out, role("indexer_proj"));
+        push_absent(out, role("indexer_compressor_ape"));
+        push_absent(out, role("indexer_compressor_kv"));
+        push_absent(out, role("indexer_compressor_gate"));
+        push_absent(out, role("indexer_compressor_norm"));
+    }
+
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_ffn_fn"),
+        &name("hc_ffn_fn"),
+        DS4_TENSOR_F16,
+        &[hc_dim, hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_ffn_scale"),
+        &name("hc_ffn_scale"),
+        DS4_TENSOR_F32,
+        &[3],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_ffn_base"),
+        &name("hc_ffn_base"),
+        DS4_TENSOR_F32,
+        &[hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_norm"),
+        &name("ffn_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    if layer < DS4_N_HASH_LAYER {
+        bind_layout(
+            out,
+            gguf,
+            &role("ffn_gate_tid2eid"),
+            &name("ffn_gate_tid2eid"),
+            DS4_TENSOR_I32,
+            &[u64::from(DS4_N_EXPERT_USED), u64::from(DS4_N_VOCAB)],
+        )?;
+    } else {
+        push_absent(out, role("ffn_gate_tid2eid"));
+    }
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_gate_inp"),
+        &name("ffn_gate_inp"),
+        DS4_TENSOR_F16,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_EXPERT)],
+    )?;
+    bind_optional_layout(
+        out,
+        gguf,
+        &role("ffn_exp_probs_b"),
+        &format!("blk.{layer}.exp_probs_b.bias"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EXPERT)],
+    )?;
+    let gate_type = bind_routed_layout(
+        out,
+        gguf,
+        &role("ffn_gate_exps"),
+        &name("ffn_gate_exps"),
+        &[
+            u64::from(DS4_N_EMBD),
+            u64::from(DS4_N_FF_EXP),
+            u64::from(DS4_N_EXPERT),
+        ],
+    )?;
+    let up_type = bind_routed_layout(
+        out,
+        gguf,
+        &role("ffn_up_exps"),
+        &name("ffn_up_exps"),
+        &[
+            u64::from(DS4_N_EMBD),
+            u64::from(DS4_N_FF_EXP),
+            u64::from(DS4_N_EXPERT),
+        ],
+    )?;
+    bind_routed_layout(
+        out,
+        gguf,
+        &role("ffn_down_exps"),
+        &name("ffn_down_exps"),
+        &[
+            u64::from(DS4_N_FF_EXP),
+            u64::from(DS4_N_EMBD),
+            u64::from(DS4_N_EXPERT),
+        ],
+    )?;
+    if gate_type != up_type {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: routed gate/up experts use different quant types in layer {layer}"
+        )));
+    }
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_gate_shexp"),
+        &name("ffn_gate_shexp"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_FF_EXP)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_up_shexp"),
+        &name("ffn_up_shexp"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_FF_EXP)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_down_shexp"),
+        &name("ffn_down_shexp"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_FF_EXP), u64::from(DS4_N_EMBD)],
+    )?;
+    Ok(())
+}
+
+fn bind_mtp_block_tensors(
+    out: &mut Vec<BoundTensor>,
+    gguf: &Gguf,
+    prefix: &str,
+    hc_dim: u64,
+    hc_mix_dim: u64,
+    q_dim: u64,
+    out_low_dim: u64,
+) -> Result<(), Ds4ValidationError> {
+    let role = |field: &str| format!("{prefix}.{field}");
+    let name = |field: &str| format!("mtp.0.{field}.weight");
+
+    bind_plain_layout(
+        out,
+        gguf,
+        &role("hc_attn_fn"),
+        &name("hc_attn_fn"),
+        &[hc_dim, hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_attn_scale"),
+        &name("hc_attn_scale"),
+        DS4_TENSOR_F32,
+        &[3],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_attn_base"),
+        &name("hc_attn_base"),
+        DS4_TENSOR_F32,
+        &[hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_norm"),
+        &name("attn_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_q_a"),
+        &name("attn_q_a"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_LORA_Q)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_q_a_norm"),
+        &name("attn_q_a_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_LORA_Q)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_q_b"),
+        &name("attn_q_b"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_LORA_Q), q_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_kv"),
+        &name("attn_kv"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_HEAD_DIM)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_kv_a_norm"),
+        &name("attn_kv_a_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_HEAD_DIM)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_sinks"),
+        &name("attn_sinks"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_HEAD)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_output_a"),
+        &name("attn_output_a"),
+        DS4_TENSOR_Q8_0,
+        &[
+            u64::from(DS4_N_HEAD_DIM) * (u64::from(DS4_N_HEAD) / u64::from(DS4_N_OUT_GROUP)),
+            out_low_dim,
+        ],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("attn_output_b"),
+        &name("attn_output_b"),
+        DS4_TENSOR_Q8_0,
+        &[out_low_dim, u64::from(DS4_N_EMBD)],
+    )?;
+    bind_plain_layout(
+        out,
+        gguf,
+        &role("hc_ffn_fn"),
+        &name("hc_ffn_fn"),
+        &[hc_dim, hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_ffn_scale"),
+        &name("hc_ffn_scale"),
+        DS4_TENSOR_F32,
+        &[3],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("hc_ffn_base"),
+        &name("hc_ffn_base"),
+        DS4_TENSOR_F32,
+        &[hc_mix_dim],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_norm"),
+        &name("ffn_norm"),
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EMBD)],
+    )?;
+    bind_plain_layout(
+        out,
+        gguf,
+        &role("ffn_gate_inp"),
+        &name("ffn_gate_inp"),
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_EXPERT)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_exp_probs_b"),
+        "mtp.0.exp_probs_b.bias",
+        DS4_TENSOR_F32,
+        &[u64::from(DS4_N_EXPERT)],
+    )?;
+    let gate_type = bind_routed_layout(
+        out,
+        gguf,
+        &role("ffn_gate_exps"),
+        &name("ffn_gate_exps"),
+        &[
+            u64::from(DS4_N_EMBD),
+            u64::from(DS4_N_FF_EXP),
+            u64::from(DS4_N_EXPERT),
+        ],
+    )?;
+    let up_type = bind_routed_layout(
+        out,
+        gguf,
+        &role("ffn_up_exps"),
+        &name("ffn_up_exps"),
+        &[
+            u64::from(DS4_N_EMBD),
+            u64::from(DS4_N_FF_EXP),
+            u64::from(DS4_N_EXPERT),
+        ],
+    )?;
+    bind_routed_layout(
+        out,
+        gguf,
+        &role("ffn_down_exps"),
+        &name("ffn_down_exps"),
+        &[
+            u64::from(DS4_N_FF_EXP),
+            u64::from(DS4_N_EMBD),
+            u64::from(DS4_N_EXPERT),
+        ],
+    )?;
+    if gate_type != up_type {
+        return Err(Ds4ValidationError::new(
+            "ds4: MTP routed gate/up experts use different quant types",
+        ));
+    }
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_gate_shexp"),
+        &name("ffn_gate_shexp"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_FF_EXP)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_up_shexp"),
+        &name("ffn_up_shexp"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_EMBD), u64::from(DS4_N_FF_EXP)],
+    )?;
+    bind_layout(
+        out,
+        gguf,
+        &role("ffn_down_shexp"),
+        &name("ffn_down_shexp"),
+        DS4_TENSOR_Q8_0,
+        &[u64::from(DS4_N_FF_EXP), u64::from(DS4_N_EMBD)],
+    )?;
+    Ok(())
+}
+
+fn bind_layout(
+    out: &mut Vec<BoundTensor>,
+    gguf: &Gguf,
+    role: &str,
+    name: &str,
+    type_id: u32,
+    dims: &[u64],
+) -> Result<(), Ds4ValidationError> {
+    let tensor = required_tensor(gguf, name)?;
+    expect_tensor_layout(tensor, type_id, dims)?;
+    out.push(BoundTensor {
+        role: role.to_owned(),
+        tensor: Some(tensor.clone()),
+    });
+    Ok(())
+}
+
+fn bind_optional_layout(
+    out: &mut Vec<BoundTensor>,
+    gguf: &Gguf,
+    role: &str,
+    name: &str,
+    type_id: u32,
+    dims: &[u64],
+) -> Result<(), Ds4ValidationError> {
+    if let Some(tensor) = tensor_by_name(gguf, name) {
+        expect_tensor_layout(tensor, type_id, dims)?;
+        out.push(BoundTensor {
+            role: role.to_owned(),
+            tensor: Some(tensor.clone()),
+        });
+    } else {
+        push_absent(out, role.to_owned());
+    }
+    Ok(())
+}
+
+fn bind_plain_layout(
+    out: &mut Vec<BoundTensor>,
+    gguf: &Gguf,
+    role: &str,
+    name: &str,
+    dims: &[u64],
+) -> Result<(), Ds4ValidationError> {
+    let tensor = required_tensor(gguf, name)?;
+    expect_plain_layout(tensor, dims)?;
+    out.push(BoundTensor {
+        role: role.to_owned(),
+        tensor: Some(tensor.clone()),
+    });
+    Ok(())
+}
+
+fn bind_routed_layout(
+    out: &mut Vec<BoundTensor>,
+    gguf: &Gguf,
+    role: &str,
+    name: &str,
+    dims: &[u64],
+) -> Result<u32, Ds4ValidationError> {
+    let tensor = required_tensor(gguf, name)?;
+    expect_routed_layout(tensor, dims)?;
+    let type_id = tensor.type_id;
+    out.push(BoundTensor {
+        role: role.to_owned(),
+        tensor: Some(tensor.clone()),
+    });
+    Ok(type_id)
+}
+
+fn push_absent(out: &mut Vec<BoundTensor>, role: String) {
+    out.push(BoundTensor { role, tensor: None });
+}
+
+fn tensor_by_name<'a>(gguf: &'a Gguf, name: &str) -> Option<&'a TensorInfo> {
+    gguf.tensors.iter().find(|tensor| tensor.name == name)
+}
+
+fn required_tensor<'a>(gguf: &'a Gguf, name: &str) -> Result<&'a TensorInfo, Ds4ValidationError> {
+    tensor_by_name(gguf, name)
+        .ok_or_else(|| Ds4ValidationError::new(format!("ds4: required tensor is missing: {name}")))
+}
+
+fn expect_tensor_layout(
+    tensor: &TensorInfo,
+    type_id: u32,
+    dims: &[u64],
+) -> Result<(), Ds4ValidationError> {
+    if tensor.type_id != type_id {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: tensor {} has type {}, expected {}",
+            tensor.name,
+            tensor_type_name(tensor.type_id),
+            tensor_type_name(type_id)
+        )));
+    }
+    expect_tensor_dims(tensor, dims)
+}
+
+fn expect_plain_layout(tensor: &TensorInfo, dims: &[u64]) -> Result<(), Ds4ValidationError> {
+    if tensor.type_id != DS4_TENSOR_F16 && tensor.type_id != DS4_TENSOR_F32 {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: tensor {} has type {}, expected F16 or F32",
+            tensor.name,
+            tensor_type_name(tensor.type_id)
+        )));
+    }
+    expect_tensor_dims(tensor, dims)
+}
+
+fn expect_routed_layout(tensor: &TensorInfo, dims: &[u64]) -> Result<(), Ds4ValidationError> {
+    if !matches!(
+        tensor.type_id,
+        DS4_TENSOR_IQ2_XXS | DS4_TENSOR_Q2_K | DS4_TENSOR_Q4_K
+    ) {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: tensor {} has type {} ({}), expected a routed expert quant type",
+            tensor.name,
+            tensor.type_id,
+            tensor_type_name(tensor.type_id)
+        )));
+    }
+    expect_tensor_dims(tensor, dims)
+}
+
+fn expect_tensor_dims(tensor: &TensorInfo, dims: &[u64]) -> Result<(), Ds4ValidationError> {
+    if tensor.dims.len() != dims.len() {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: tensor {} has {} dimensions, expected {}",
+            tensor.name,
+            tensor.dims.len(),
+            dims.len()
+        )));
+    }
+    for (idx, (got, expected)) in tensor.dims.iter().zip(dims.iter()).enumerate() {
+        if got != expected {
+            return Err(Ds4ValidationError::new(format!(
+                "ds4: tensor {} has dim[{}]={}, expected {}",
+                tensor.name, idx, got, expected
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn validate_compress_ratio_metadata(gguf: &Gguf) -> Result<(), Ds4ValidationError> {

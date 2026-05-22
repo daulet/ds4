@@ -1,6 +1,7 @@
 use ds4_gguf::{
-    parse_gguf, tensor_type_name, validate_ds4_metadata, value_type_name, Gguf, MetadataValue,
-    MAX_REPORTED_TENSOR_TYPE_ID,
+    bind_ds4_mtp_tensors, bind_ds4_tensors, parse_gguf, parse_gguf_allowing_missing_tensor_data,
+    tensor_type_name, validate_ds4_metadata, value_type_name, BoundTensor, Gguf, MetadataValue,
+    TensorInfo, MAX_REPORTED_TENSOR_TYPE_ID,
 };
 use std::collections::BTreeMap;
 use std::env;
@@ -59,37 +60,104 @@ const SELECTED_METADATA_KEYS: &[&str] = &[
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = parse_args()?;
     let bytes = fs::read(&args.path)?;
-    let gguf = parse_gguf(&bytes)?;
-    if args.validate_ds4_metadata {
+    let gguf = if args.validate_ds4_layout {
+        parse_gguf_allowing_missing_tensor_data(&bytes)?
+    } else {
+        parse_gguf(&bytes)?
+    };
+
+    let mut bound_tensors = Vec::new();
+    let mut config_validated = false;
+    let mut weights_validated = false;
+    let mut mtp_weights_validated = false;
+    if args.validate_ds4_layout {
+        match bind_ds4_tensors(&gguf) {
+            Ok(bindings) => bound_tensors.extend(bindings),
+            Err(err) => {
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        }
+        config_validated = true;
+        weights_validated = true;
+        if let Some(mtp_path) = &args.mtp_path {
+            let mtp_bytes = fs::read(mtp_path)?;
+            let mtp_gguf = parse_gguf_allowing_missing_tensor_data(&mtp_bytes)?;
+            match bind_ds4_mtp_tensors(&mtp_gguf) {
+                Ok(bindings) => bound_tensors.extend(bindings),
+                Err(err) => {
+                    eprintln!("{err}");
+                    std::process::exit(1);
+                }
+            }
+            mtp_weights_validated = true;
+        }
+    } else if args.validate_ds4_metadata {
         if let Err(err) = validate_ds4_metadata(&gguf) {
             eprintln!("{err}");
             std::process::exit(1);
         }
+        config_validated = true;
     }
 
     let mut out = io::BufWriter::new(io::stdout());
-    write_dump(&mut out, &args.path, &gguf, args.validate_ds4_metadata)?;
+    write_dump(
+        &mut out,
+        &args.path,
+        &gguf,
+        ValidationStatus {
+            config: config_validated,
+            weights: weights_validated,
+            mtp_weights: mtp_weights_validated,
+        },
+        &bound_tensors,
+    )?;
     Ok(())
 }
 
 struct Args {
     path: PathBuf,
+    mtp_path: Option<PathBuf>,
     validate_ds4_metadata: bool,
+    validate_ds4_layout: bool,
+}
+
+struct ValidationStatus {
+    config: bool,
+    weights: bool,
+    mtp_weights: bool,
 }
 
 fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
     let mut args = env::args_os();
     let program = args.next().unwrap_or_default();
     let mut validate_ds4_metadata = false;
+    let mut validate_ds4_layout = false;
+    let mut mtp_path = None;
     let mut path = None;
-    for arg in args {
+    while let Some(arg) = args.next() {
         if arg == "--validate-ds4-metadata" {
             validate_ds4_metadata = true;
             continue;
         }
+        if arg == "--validate-ds4-layout" {
+            validate_ds4_layout = true;
+            continue;
+        }
+        if arg == "--mtp" {
+            let Some(value) = args.next() else {
+                eprintln!(
+                    "usage: {} [--validate-ds4-metadata|--validate-ds4-layout] [--mtp FILE] FILE",
+                    PathBuf::from(&program).display()
+                );
+                std::process::exit(2);
+            };
+            mtp_path = Some(PathBuf::from(value));
+            continue;
+        }
         if path.is_some() {
             eprintln!(
-                "usage: {} [--validate-ds4-metadata] FILE",
+                "usage: {} [--validate-ds4-metadata|--validate-ds4-layout] [--mtp FILE] FILE",
                 PathBuf::from(program).display()
             );
             std::process::exit(2);
@@ -98,14 +166,24 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
     }
     let Some(path) = path else {
         eprintln!(
-            "usage: {} [--validate-ds4-metadata] FILE",
+            "usage: {} [--validate-ds4-metadata|--validate-ds4-layout] [--mtp FILE] FILE",
             PathBuf::from(program).display()
         );
         std::process::exit(2);
     };
+    if validate_ds4_metadata && validate_ds4_layout {
+        eprintln!("--validate-ds4-metadata and --validate-ds4-layout are mutually exclusive");
+        std::process::exit(2);
+    }
+    if mtp_path.is_some() && !validate_ds4_layout {
+        eprintln!("--mtp requires --validate-ds4-layout");
+        std::process::exit(2);
+    }
     Ok(Args {
         path,
+        mtp_path,
         validate_ds4_metadata,
+        validate_ds4_layout,
     })
 }
 
@@ -113,7 +191,8 @@ fn write_dump<W: Write>(
     out: &mut W,
     path: &PathBuf,
     gguf: &Gguf,
-    config_validated: bool,
+    validation: ValidationStatus,
+    bound_tensors: &[BoundTensor],
 ) -> io::Result<()> {
     writeln!(out, "{{")?;
     writeln!(out, "  \"schema\": \"ds4.metadata.v1\",")?;
@@ -135,14 +214,27 @@ fn write_dump<W: Write>(
     writeln!(out, "  }},")?;
     writeln!(
         out,
-        "  \"validation\": {{\"config\": \"{}\", \"weights\": \"skipped\", \"mtp_weights\": \"skipped\"}},",
-        if config_validated { "passed" } else { "skipped" }
+        "  \"validation\": {{\"config\": \"{}\", \"weights\": \"{}\", \"mtp_weights\": \"{}\"}},",
+        if validation.config {
+            "passed"
+        } else {
+            "skipped"
+        },
+        if validation.weights {
+            "passed"
+        } else {
+            "skipped"
+        },
+        if validation.mtp_weights {
+            "passed"
+        } else {
+            "skipped"
+        }
     )?;
     write_selected_metadata(out, gguf)?;
     write_tensor_types(out, gguf)?;
     write_tensors(out, gguf)?;
-    writeln!(out, "  \"bound_tensors\": [")?;
-    writeln!(out, "  ]")?;
+    write_bound_tensors(out, bound_tensors)?;
     writeln!(out, "}}")?;
     Ok(())
 }
@@ -211,26 +303,54 @@ fn write_tensors<W: Write>(out: &mut W, gguf: &Gguf) -> io::Result<()> {
         if idx != 0 {
             writeln!(out, ",")?;
         }
-        write!(out, "    {{\"index\": {idx}, \"name\": ")?;
-        write_json_string(out, &tensor.name)?;
-        write!(out, ", \"type\": {}, \"type_name\": ", tensor.type_id)?;
-        write_json_string(out, tensor_type_name(tensor.type_id))?;
-        write!(out, ", \"ndim\": {}, \"dims\": [", tensor.dims.len())?;
-        for (dim_idx, dim) in tensor.dims.iter().enumerate() {
-            if dim_idx != 0 {
-                write!(out, ", ")?;
-            }
-            write!(out, "{dim}")?;
-        }
-        write!(
-            out,
-            "], \"elements\": {}, \"bytes\": {}, \"rel_offset\": {}, \"abs_offset\": {}}}",
-            tensor.elements, tensor.bytes, tensor.rel_offset, tensor.abs_offset
-        )?;
+        write!(out, "    {{\"index\": {idx}, ")?;
+        write_tensor_ref(out, tensor)?;
+        write!(out, "}}")?;
     }
     writeln!(out)?;
     writeln!(out, "  ],")?;
     Ok(())
+}
+
+fn write_bound_tensors<W: Write>(out: &mut W, bound_tensors: &[BoundTensor]) -> io::Result<()> {
+    writeln!(out, "  \"bound_tensors\": [")?;
+    for (idx, binding) in bound_tensors.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write!(out, "    {{\"role\": ")?;
+        write_json_string(out, &binding.role)?;
+        match &binding.tensor {
+            Some(tensor) => {
+                write!(out, ", \"present\": true, ")?;
+                write_tensor_ref(out, tensor)?;
+            }
+            None => write!(out, ", \"present\": false")?,
+        }
+        write!(out, "}}")?;
+    }
+    writeln!(out)?;
+    writeln!(out, "  ]")?;
+    Ok(())
+}
+
+fn write_tensor_ref<W: Write>(out: &mut W, tensor: &TensorInfo) -> io::Result<()> {
+    write!(out, "\"name\": ")?;
+    write_json_string(out, &tensor.name)?;
+    write!(out, ", \"type\": {}, \"type_name\": ", tensor.type_id)?;
+    write_json_string(out, tensor_type_name(tensor.type_id))?;
+    write!(out, ", \"ndim\": {}, \"dims\": [", tensor.dims.len())?;
+    for (dim_idx, dim) in tensor.dims.iter().enumerate() {
+        if dim_idx != 0 {
+            write!(out, ", ")?;
+        }
+        write!(out, "{dim}")?;
+    }
+    write!(
+        out,
+        "], \"elements\": {}, \"bytes\": {}, \"rel_offset\": {}, \"abs_offset\": {}",
+        tensor.elements, tensor.bytes, tensor.rel_offset, tensor.abs_offset
+    )
 }
 
 fn write_scalar_value<W: Write>(out: &mut W, value: &MetadataValue) -> io::Result<()> {

@@ -289,7 +289,7 @@
 
 ### M4.5: Tensor Binding And Layout Parity
 
-- Status: pending
+- Status: done
 - Goal: port the semantic tensor binding and layout checks from `weights_bind`,
   `mtp_weights_bind`, `weights_validate_layout`, and
   `mtp_weights_validate_layout`.
@@ -303,6 +303,24 @@
 - Validation needed: tensor binding comparator, negative fixtures, workspace
   Rust tests, and `git diff --check`.
 - Owner path: `rust/ds4-gguf/`, `ds4-parity/`, `.memory/status.md`.
+
+### M4.6: Metadata Baselines And Unified Report Integration
+
+- Status: pending
+- Goal: commit supported-model metadata baselines and wire metadata comparison
+  into the unified parity report.
+- Source evidence needed: M4.2 B300 metadata dump, M4.3 through M4.5 C/Rust
+  metadata comparators, recorded B300 model path, size, SHA256, and exact B300
+  refresh commands.
+- Oracle: current C metadata dump captured on the B300 q2-imatrix model with
+  the recorded model path, size, and SHA256.
+- Comparator: a metadata comparator that self-compares committed baselines,
+  compares candidate C/Rust dumps, and detects scalar, array, tensor shape,
+  tensor type, binding, and offset drift.
+- Validation needed: metadata comparator self-checks, negative tests, unified
+  parity report, any required B300 capture command, and `git diff --check`.
+- Owner path: `ds4-parity/baselines/metadata/`, `ds4-parity/`,
+  `.memory/status.md`.
 
 ## Later Items
 
