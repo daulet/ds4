@@ -184,7 +184,7 @@
 
 ### M2.1: Rust Workspace And FFI Skeleton
 
-- Status: in-progress
+- Status: done
 - Goal: add Rust workspace and crate skeletons without changing existing C
   binary behavior.
 - Source evidence needed: Milestone 2 roadmap, current `Makefile`, existing C
@@ -196,6 +196,21 @@
   build and test independently without requiring `ds4flash.gguf`; `git
   diff --check`.
 - Owner path: Rust workspace files to be introduced, `Makefile`.
+
+### M3.1: Backend ABI Wrapper Parity
+
+- Status: in-progress
+- Goal: port the first safe Rust wrapper slice around `ds4_gpu.h` without
+  changing the C backend ABI.
+- Source evidence needed: `ds4_gpu.h`, existing C backend implementations,
+  `tests/ds4_test.c`, and the M2 Rust workspace crates.
+- Oracle: direct calls to the current C backend ABI.
+- Comparator: small tensor fixtures for allocation, fill, copy, read/write,
+  byte-size queries, command flushing, and error paths.
+- Validation needed: Rust wrapper tests match direct C ABI results
+  byte-for-byte for simple tensor operations; error cases return equivalent
+  failure categories; existing C tests still pass.
+- Owner path: `rust/ds4-gpu/`, `rust/ds4-gpu-sys/`.
 
 ## Later Items
 

@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M2.1 Rust Workspace And FFI Skeleton
-- Last validated source commit: `15b7304d4278a2ec08f780bc68ad1fe501378533`
+- Active item: M3.1 Backend ABI Wrapper Parity
+- Last validated source commit: `8f11bac65319ae6d429a6ce3d2c225a46ff73f31`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -94,3 +94,8 @@
   `--kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1` rerun
   commands. The local report passed with 9 executed items and 4 B300 refreshes
   skipped by design.
+- M2.1 added a Rust workspace with `ds4-gpu-sys` and `ds4-gpu`, seeded core
+  tensor/command/model-map FFI declarations, added smoke-only safe status
+  wrappers, and wired `make rust-test`. Validation passed for `cargo fmt`,
+  `cargo test --workspace`, `make rust-test`, sequential `arch -arm64 make`,
+  sequential `arch -arm64 make cpu`, and the unified parity report.

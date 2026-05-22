@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "rust/ds4-gpu",
+    "rust/ds4-gpu-sys",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+version = "0.0.0"
+publish = false
