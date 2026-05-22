@@ -124,6 +124,42 @@ pub struct FileSizeDecision {
     pub required_bytes: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KvcFile {
+    pub header: KvHeader,
+    pub text: Vec<u8>,
+    pub payload: Vec<u8>,
+    pub trailer: Vec<u8>,
+    pub file_size: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KvcFileError {
+    Header(KvHeaderError),
+    TextTooLarge,
+    PayloadLengthMismatch,
+    SizeOverflow,
+    PayloadTooLarge,
+    TruncatedText,
+    TruncatedPayload,
+}
+
+impl fmt::Display for KvcFileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Header(err) => write!(f, "{err}"),
+            Self::TextTooLarge => f.write_str("KVC text too large"),
+            Self::PayloadLengthMismatch => f.write_str("KVC payload length mismatch"),
+            Self::SizeOverflow => f.write_str("KVC file size overflow"),
+            Self::PayloadTooLarge => f.write_str("KVC payload too large"),
+            Self::TruncatedText => f.write_str("truncated KVC text"),
+            Self::TruncatedPayload => f.write_str("truncated KVC payload"),
+        }
+    }
+}
+
+impl std::error::Error for KvcFileError {}
+
 pub fn reason_code(reason: Option<&str>) -> u8 {
     match reason {
         Some("cold") => REASON_COLD,
@@ -211,6 +247,60 @@ pub fn read_header(bytes: &[u8]) -> Result<DecodedHeader, KvHeaderError> {
             payload_bytes: u64::from_le_bytes(bytes[40..48].try_into().expect("slice length")),
         },
         text_bytes: u32::from_le_bytes(bytes[48..52].try_into().expect("slice length")),
+    })
+}
+
+pub fn write_kvc_file(
+    header: &KvHeader,
+    text: &[u8],
+    payload: &[u8],
+    trailer: &[u8],
+) -> Result<Vec<u8>, KvcFileError> {
+    if text.len() > u32::MAX as usize {
+        return Err(KvcFileError::TextTooLarge);
+    }
+    if payload.len() as u64 != header.payload_bytes {
+        return Err(KvcFileError::PayloadLengthMismatch);
+    }
+    let total = FIXED_HEADER
+        .checked_add(4)
+        .and_then(|n| n.checked_add(text.len()))
+        .and_then(|n| n.checked_add(payload.len()))
+        .and_then(|n| n.checked_add(trailer.len()))
+        .ok_or(KvcFileError::SizeOverflow)?;
+    let mut out = Vec::with_capacity(total);
+    out.extend_from_slice(&header.to_bytes());
+    out.extend_from_slice(&(text.len() as u32).to_le_bytes());
+    out.extend_from_slice(text);
+    out.extend_from_slice(payload);
+    out.extend_from_slice(trailer);
+    Ok(out)
+}
+
+pub fn read_kvc_file(bytes: &[u8]) -> Result<KvcFile, KvcFileError> {
+    let decoded = read_header(bytes).map_err(KvcFileError::Header)?;
+    let text_len = decoded.text_bytes as usize;
+    let text_start = FIXED_HEADER + 4;
+    let text_end = text_start
+        .checked_add(text_len)
+        .ok_or(KvcFileError::SizeOverflow)?;
+    if bytes.len() < text_end {
+        return Err(KvcFileError::TruncatedText);
+    }
+    let payload_len =
+        usize::try_from(decoded.header.payload_bytes).map_err(|_| KvcFileError::PayloadTooLarge)?;
+    let payload_end = text_end
+        .checked_add(payload_len)
+        .ok_or(KvcFileError::SizeOverflow)?;
+    if bytes.len() < payload_end {
+        return Err(KvcFileError::TruncatedPayload);
+    }
+    Ok(KvcFile {
+        header: decoded.header,
+        text: bytes[text_start..text_end].to_vec(),
+        payload: bytes[text_end..payload_end].to_vec(),
+        trailer: bytes[payload_end..].to_vec(),
+        file_size: bytes.len() as u64,
     })
 }
 
@@ -584,5 +674,47 @@ mod tests {
                 required_bytes: 386,
             })
         );
+    }
+
+    #[test]
+    fn kvc_full_file_roundtrip_keeps_trailer_opaque() {
+        let header = KvHeader {
+            quant_bits: 4,
+            reason: REASON_CONTINUED,
+            ext_flags: EXT_TOOL_MAP,
+            tokens: 2048,
+            hits: 7,
+            ctx_size: 65536,
+            created_at: 1700000100,
+            last_used: 1700000200,
+            payload_bytes: 3,
+        };
+        let bytes = write_kvc_file(&header, b"text", &[1, 2, 3], b"xyz").expect("write KVC");
+        let parsed = read_kvc_file(&bytes).expect("read KVC");
+        assert_eq!(parsed.header, header);
+        assert_eq!(parsed.text, b"text");
+        assert_eq!(parsed.payload, [1, 2, 3]);
+        assert_eq!(parsed.trailer, b"xyz");
+        assert_eq!(parsed.file_size, bytes.len() as u64);
+    }
+
+    #[test]
+    fn kvc_full_file_rejects_truncated_payload() {
+        let header = KvHeader {
+            quant_bits: 2,
+            reason: REASON_COLD,
+            ext_flags: 0,
+            tokens: 1,
+            hits: 0,
+            ctx_size: 4096,
+            created_at: 1,
+            last_used: 1,
+            payload_bytes: 4,
+        };
+        let mut bytes = Vec::from(header.to_bytes());
+        bytes.extend_from_slice(&3_u32.to_le_bytes());
+        bytes.extend_from_slice(b"abc");
+        bytes.extend_from_slice(&[1, 2]);
+        assert_eq!(read_kvc_file(&bytes), Err(KvcFileError::TruncatedPayload));
     }
 }

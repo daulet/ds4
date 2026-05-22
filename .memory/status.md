@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.4a Generic KVC Full-File Round Trip
-- Last validated source commit: M7.3 Rust KV header and policy parser in this
+- Active item: M7.4b KV Extension Trailer Payload Coverage
+- Last validated source commit: M7.4a generic KVC full-file round trip in this
   commit; prior pushed source commit
-  `6d352d152be502bf8e0d5e8a551771c4c22303e4`
+  `eb331100047ca97a845d879d4eb4d4c6828ab9cf`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -705,3 +705,30 @@
   `11` manifest checks, `7` negative checks), `cargo fmt --all -- --check`,
   `cargo test -p ds4-gguf kv_policy`, `cargo test -p ds4-gguf --bin
   ds4-kv-policy-dump-rs`, and `cargo test --workspace`.
+- M7.4a adds `./ds4-kvc-file-dump`, a deterministic no-model current-C oracle
+  for complete generic KVC file bytes: fixed header, text length, rendered-text
+  bytes, opaque payload bytes, and opaque trailer bytes.
+- M7.4a fixture `ds4-parity/baselines/kv/m7.4a/current-c.json` covers
+  no-trailer, opaque trailer, visible-transcript flag without payload, empty
+  text with trailer, no-budget/fitting-budget/over-budget size decisions, and
+  malformed header/text/payload/trailer boundary records. The artifact is
+  6,445 bytes with SHA256
+  `ff37ba4a359b10d66199928a1936b10ec0adc43a17ceb7ba49c0ad3e02c8b7d7`.
+- M7.4a adds Rust generic KVC full-file helpers in
+  `rust/ds4-gguf/src/kv_policy.rs`; the reader keeps payload and trailer bytes
+  opaque and treats all bytes after fixed header, text, and declared payload as
+  generic trailer data.
+- M7.4a adds `python3 ds4-parity/compare_kvc_file.py`, which runs
+  `ds4-kvc-file-dump-rs` and compares complete file hex, read metadata,
+  file-size budget records, malformed case outcomes, and trailer-size records
+  against the committed C oracle.
+- M7.4a local validation passed for `arch -arm64 make ds4-kvc-file-dump`,
+  `./ds4-kvc-file-dump ds4-parity/baselines/kv/m7.4a/current-c.json`,
+  `python3 -m json.tool ds4-parity/baselines/kv/m7.4a/current-c.json`,
+  `python3 -m py_compile ds4-parity/compare_kvc_file.py`, `python3
+  ds4-parity/compare_kvc_file.py --negative-test` (`KVC file C/Rust
+  comparator: PASS, 277 checks`; negative tests `PASS, 8 checks`), `cargo
+  fmt --all -- --check`, `cargo test -p ds4-gguf kvc`, `cargo test -p
+  ds4-gguf --bin ds4-kvc-file-dump-rs`, `cargo test --workspace`, `arch
+  -arm64 make cpu`, CPU-regenerated `./ds4-kvc-file-dump` comparison against
+  the committed M7.4a artifact, and `git diff --check`.

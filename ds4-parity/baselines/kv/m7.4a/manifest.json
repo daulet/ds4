@@ -1,0 +1,40 @@
+{
+  "schema": "ds4.kvc_file_manifest.v1",
+  "milestone": "M7.4a",
+  "artifact": {
+    "path": "current-c.json",
+    "sha256": "ff37ba4a359b10d66199928a1936b10ec0adc43a17ceb7ba49c0ad3e02c8b7d7",
+    "size_bytes": 6445
+  },
+  "oracle": "current C ds4_kvstore generic KVC file layout helpers",
+  "fixture": {
+    "model": "no model is loaded for this oracle",
+    "payload": "opaque synthetic bytes",
+    "trailer": "opaque synthetic bytes"
+  },
+  "comparator": "python3 ds4-parity/compare_kvc_file.py --negative-test",
+  "acceptance": [
+    "Rust writes byte-identical KVC files for fixed-header, text, opaque payload, and opaque trailer fixtures",
+    "Rust reader accepts the same generic file boundaries and exposes remaining bytes as opaque trailer data",
+    "C read-entry metadata and Rust read metadata match for every valid fixture",
+    "Malformed header, text, payload, and declared trailer boundaries produce the same accepted/rejected fixture outcome",
+    "File-size budget calculations match for no-budget, fitting-budget, and over-budget cases"
+  ],
+  "drift_policy": "No KVC full-file byte drift, extension-flag drift, trailer-size drift, or cross-reader acceptance drift; opaque payload bytes remain uninterpreted.",
+  "notes": [
+    "Generic trailer truncation is represented as a deterministic expected-total mismatch because ds4_kvstore_read_entry_file intentionally accepts any bytes beyond fixed header, text, and payload.",
+    "C-reader and Rust-reader cross-acceptance is proven by exact file-byte identity plus matching C and Rust read metadata for those bytes."
+  ],
+  "validation": [
+    "arch -arm64 make ds4-kvc-file-dump",
+    "./ds4-kvc-file-dump ds4-parity/baselines/kv/m7.4a/current-c.json",
+    "python3 -m json.tool ds4-parity/baselines/kv/m7.4a/current-c.json",
+    "python3 -m py_compile ds4-parity/compare_kvc_file.py",
+    "python3 ds4-parity/compare_kvc_file.py --negative-test",
+    "cargo fmt --all -- --check",
+    "cargo test -p ds4-gguf kvc",
+    "cargo test -p ds4-gguf --bin ds4-kvc-file-dump-rs",
+    "cargo test --workspace",
+    "git diff --check"
+  ]
+}

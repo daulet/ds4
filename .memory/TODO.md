@@ -939,7 +939,7 @@
 
 ### M7.4a: Generic KVC Full-File Round Trip
 
-- Status: pending
+- Status: done
 - Goal: compare full KVC file construction, generic optional trailer bytes,
   file-size budgeting, and cross-reader acceptance without restoring model
   tensors.
@@ -968,11 +968,54 @@
 - Review gate: ask Claude to review generic trailer-hook coverage, full-file
   byte identity, file-size budget cross-checks, and C-reads-Rust/Rust-reads-C
   round-trip evidence.
-- Validation needed: full-file comparator with negative tests, C helper build,
-  Rust tests, `cargo fmt --all -- --check`, `cargo test --workspace`, and
+- Validation passed: `arch -arm64 make ds4-kvc-file-dump`,
+  `./ds4-kvc-file-dump ds4-parity/baselines/kv/m7.4a/current-c.json`,
+  `python3 -m json.tool ds4-parity/baselines/kv/m7.4a/current-c.json`,
+  `python3 -m py_compile ds4-parity/compare_kvc_file.py`, `python3
+  ds4-parity/compare_kvc_file.py --negative-test` (`KVC file C/Rust
+  comparator: PASS, 277 checks`; negative tests `PASS, 8 checks`),
+  `cargo fmt --all -- --check`, `cargo test -p ds4-gguf kvc`,
+  `cargo test -p ds4-gguf --bin ds4-kvc-file-dump-rs`,
+  `cargo test --workspace`, `arch -arm64 make cpu`, CPU-regenerated
+  `./ds4-kvc-file-dump` comparison against the committed M7.4a artifact, and
   `git diff --check`.
 - Owner path: C/Rust KVC file fixture helpers, `ds4-parity/`,
   `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
+### M7.4b: KV Extension Trailer Payload Coverage
+
+- Status: pending
+- Goal: compare server-owned KVC extension payloads and extension-flag
+  semantics separately from the generic full-file round trip.
+- Source evidence needed: server tool-map trailer format (`KTM` version 1),
+  `DS4_KVSTORE_EXT_TOOL_MAP`, `DS4_KVSTORE_EXT_RESPONSES_VISIBLE`,
+  `DS4_KVSTORE_EXT_THINKING_VISIBLE`, current C trailer write/load helper
+  behavior, M7.4a generic full-file comparator, and server protocol fixture
+  conventions.
+- Oracle: server tool-map trailer format (`KTM` version 1),
+  `DS4_KVSTORE_EXT_TOOL_MAP`, `DS4_KVSTORE_EXT_RESPONSES_VISIBLE`,
+  `DS4_KVSTORE_EXT_THINKING_VISIBLE`, and current C trailer write/load helper
+  behavior.
+- Fixture: tool-map trailer entries with boundary cases for zero entries,
+  multiple entries, UTF-8 bytes, long IDs, long DSML records,
+  duplicate-shaped entries, visible-transcript extension flags without payload
+  bytes, and truncated/corrupted trailer data.
+- Comparator: C/Rust comparison for extension flags, serialized trailer byte
+  size, trailer bytes, decoded tool-map entries, visible-transcript flag
+  handling, and malformed trailer rejection.
+- Acceptance: Rust emits and decodes the same extension flags and tool-map
+  trailer bytes as C, visible transcript flags do not imply extra payload
+  bytes, and malformed extension data fails at the same boundary category.
+- Drift policy: no extension-flag, trailer-byte, decoded-entry, or malformed
+  rejection drift.
+- Review gate: ask Claude to review per-extension payload coverage and make
+  sure server-owned trailer semantics are not hidden inside generic KVC
+  parsing.
+- Validation needed: extension trailer comparator with negative tests, C
+  helper build, Rust tests, `cargo fmt --all -- --check`,
+  `cargo test --workspace`, and `git diff --check`.
+- Owner path: server trailer fixture helpers, Rust KVC extension parser,
+  `ds4-parity/`, `ds4-parity/baselines/kv/`, `.memory/status.md`.
 
 ### M7.5: C Session Payload Shape Oracle
 
