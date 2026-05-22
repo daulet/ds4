@@ -37,6 +37,114 @@ Every milestone should define these fields before implementation starts:
 
 If a phase cannot fill in those fields, it should be split into a smaller phase.
 
+## Execution Work Items
+
+Each work item must be small enough to review independently and must name the
+execution-behavior oracle before implementation starts. A commit may contain one
+or more work items only when they share the same oracle and validation command.
+
+Required fields for every work item:
+
+- Goal: the tangible behavior, artifact, or ownership boundary completed by the
+  commit.
+- Oracle: the exact C binary, C ABI path, captured artifact, fixture, benchmark,
+  or reference command used as truth.
+- Comparator: the command, script, or manual check that compares Rust or port
+  artifacts to the oracle.
+- Acceptance: the equality rule, tolerance, response shape rule, or documented
+  no-behavior-change condition.
+- Review gate: a non-interactive Claude review prompt that states the commit
+  goal, diff summary, oracle, comparator, and validation evidence.
+- Validation gate: commands that must pass before commit and before push.
+
+### Milestone 0 Work Items
+
+Milestone 0 is split because it creates the long-lived oracle and fixture
+contract used by later milestones. These items must land in order.
+
+#### M0.1: Port Execution Protocol
+
+- Goal: add project-local port protocol, active board, parity status, and
+  lessons log; document these work-item rules in this roadmap.
+- Oracle: current checked-out C implementation at the starting commit.
+- Fixture: repository state, `AGENT.md`, `CONTRIBUTING.md`, and this roadmap.
+- Comparator: no source behavior changes; `git diff --name-only` lists only
+  roadmap and `.memory/` files, and `git diff --check` reports no whitespace
+  errors.
+- Acceptance: protocol names the validation ladder, reviewer policy, commit
+  policy, debugging ledger policy, and B300 validation rule; active board names
+  the next executable item.
+- Drift policy: no implementation or fixture-format drift allowed.
+
+#### M0.2: Baseline Build Command Capture
+
+- Goal: capture reproducible baseline command lines and logs for `make`,
+  `make test`, `make cpu`, and backend-specific regression commands available
+  on the target machine.
+- Oracle: current C build products from the checked-out commit.
+- Fixture: machine/backend record, compiler versions, command environment, and
+  captured build/test logs under `ds4-parity/baselines/`.
+- Comparator: rerun baseline commands and compare exit status plus declared
+  output artifacts against the recorded manifest.
+- Acceptance: each command has a manifest entry with exact command, cwd,
+  commit, environment overrides, exit status, output log path, and whether it is
+  runnable locally or requires the B300 pod.
+- Drift policy: no Rust behavior exists yet; this records the C oracle exactly.
+
+#### M0.3: Official Vector Logprob Baseline
+
+- Goal: capture the current implementation's output for
+  `tests/test-vectors/official.vec`.
+- Oracle: current `./ds4_test --logprob-vectors` path.
+- Fixture: official vector file, model path or model hash, backend, and
+  captured stdout/stderr.
+- Comparator: baseline manifest entry plus later replay through `ds4-parity`.
+- Acceptance: either the run passes and records the exact artifact, or the
+  missing model/backend requirement is recorded as blocked with the exact
+  command needed on the B300 pod.
+- Drift policy: future Rust must match selected greedy tokens exactly and
+  numeric logprob output within the fixture tolerance.
+
+#### M0.4: Server Trace Baselines
+
+- Goal: capture representative current server request behavior.
+- Oracle: current `./ds4-server` binary with trace enabled.
+- Fixture: fixed request JSON files for non-streaming chat, streaming chat,
+  tool call rendering, thinking controls, and cache-related requests.
+- Comparator: request replay records response JSON or event stream plus trace
+  files; later Rust server responses compare after approved normalization.
+- Acceptance: request fixtures, command lines, response artifacts, trace paths,
+  model identity, backend, and normalization rules are recorded.
+- Drift policy: response shape, prompt rendering, tool-call records, and cache
+  decisions must match unless a later milestone explicitly documents a change.
+
+#### M0.5: KV And Snapshot Baselines
+
+- Goal: capture current KV-cache and session-restore behavior for prompt reuse.
+- Oracle: current C KV store and session snapshot implementation.
+- Fixture: prompt inputs, cache directory, generated KV files, trace output, and
+  manifest entries describing cache hit, cache miss, prefix match, and restore.
+- Comparator: binary file hashes and trace-normalized cache decisions.
+- Acceptance: artifacts can be regenerated from the manifest and compared
+  byte-for-byte where timestamps or paths are not part of the format.
+- Drift policy: Rust-written KV files must remain byte-identical until a
+  versioned format change is explicitly introduced.
+
+#### M0.6: Benchmark CSV Baselines
+
+- Goal: capture at least one short-context and one long-context `ds4-bench`
+  CSV for the reference backend.
+- Oracle: current `./ds4-bench` binary on the same machine, model, backend,
+  context settings, and power state.
+- Fixture: prompt file, model identity, backend, command line, machine record,
+  and CSV output under `ds4-parity/baselines/bench/`.
+- Comparator: CSV schema and selected throughput fields compared by later
+  `ds4-parity` helpers.
+- Acceptance: CSV artifacts and machine/backend metadata are recorded; any
+  unavailable local run is routed to the B300 pod for CUDA validation.
+- Drift policy: speed comparisons must use the same fixture and machine class;
+  regressions beyond an agreed threshold require explicit documentation.
+
 ## Proposed Workspace Shape
 
 Introduce a Rust workspace beside the current C implementation:
