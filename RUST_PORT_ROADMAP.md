@@ -633,6 +633,58 @@ Acceptance:
 - Exact DSML replay cases match byte-for-byte.
 - Deterministic fallback DSML rendering matches fixture output.
 
+### Milestone 5 Work Item Adjustment
+
+The original DSML item spans two parser surfaces with different oracle shapes:
+server generated-message parsing and agent incremental streaming parsing. Split
+the DSML work before implementation so each commit has one focused comparator.
+
+#### M5.6a: Server DSML Formatting And Generated-Message Parse Parity
+
+- Goal: port server DSML tool-call formatting, raw sampled DSML replay,
+  parameter ordering, string/JSON parameter rendering, delimiter escaping, tool
+  result escaping, and `parse_generated_message_ex` boundaries.
+- Oracle: current `ds4-server` DSML formatter/parser helpers, exposed through a
+  deterministic no-model DSML oracle dump.
+- Fixture: focused DSML formatting and generated-message inputs covering
+  canonical and short markers, raw replay, schema property order, string vs JSON
+  parameters, escaped `</｜DSML｜parameter>`, tool results, malformed invokes,
+  and DSML before/after `</think>`.
+- Comparator: C/Rust byte comparison for rendered DSML blocks and parsed
+  generated-message JSON.
+- Acceptance: exact DSML block bytes match; parsed server tool-call names, ids,
+  argument JSON, ordering, reasoning/content split, and accepted/rejected
+  generated-message boundaries match C.
+- Drift policy: no DSML byte drift and no parser broadening that turns ordinary
+  prose or pre-`</think>` text into executable tool calls.
+- Review gate: ask Claude to review escaping, parameter ordering, raw replay,
+  and generated-message parser boundaries.
+- Validation gate: run the DSML oracle checker/comparator, Rust tests,
+  existing `./ds4_test --server`, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M5.6b: Agent DSML Streaming Parse Parity
+
+- Goal: port `agent_dsml_parse` streaming behavior for incremental generated
+  DSML, including parser states, buffering, emitted calls, and error/truncated
+  boundaries.
+- Oracle: current `ds4_agent.c` streaming parser behavior exposed through a
+  deterministic no-model oracle dump or fixture runner.
+- Fixture: the M5.6a DSML generated-message cases plus chunk schedules for
+  whole-message, one-byte, marker-prefix, escaped-delimiter,
+  parameter-boundary, `</think>`, malformed tag, and truncated-at-EOF inputs for
+  unterminated tool-call, invoke, parameter, and think blocks.
+- Comparator: C/Rust state-transition and event comparison for every fixture
+  and chunk schedule.
+- Acceptance: streaming transitions, emitted tool-call events, buffered text,
+  error categories, and final parser state match C for every committed schedule.
+- Drift policy: no streaming parser broadening; partial or malformed DSML must
+  stay buffered or rejected wherever C does.
+- Review gate: ask Claude to review chunk coverage, EOF semantics, and parser
+  state categories for over-broad matching.
+- Validation gate: run the agent DSML comparator, Rust tests,
+  `cargo test --workspace`, and `git diff --check`.
+
 ## Milestone 6: Sampling and Logprob Parity
 
 Port logits post-processing and token selection.

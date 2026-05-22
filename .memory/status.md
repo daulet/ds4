@@ -3,7 +3,7 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.6 DSML Formatting And Parse Parity
+- Active item: M5.6a Server DSML Formatting And Generated-Message Parse Parity
 - Last validated source commit: `5fb8442e08ef3ecc9b1752064ccbd4d72031c3c6`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
@@ -361,3 +361,11 @@
 - M5.5 Claude review returned `NO BLOCKERS` after checking Rust prompt
   rendering against C role handling, thinking branches, DSML/tool-result
   escaping, CLI token construction, and comparator coverage.
+- M5.6 was split into M5.6a and M5.6b before implementation because server
+  generated-message DSML parsing and agent incremental DSML streaming have
+  different oracle surfaces and comparator shapes. M5.6a owns server DSML
+  formatting plus `parse_generated_message_ex`; M5.6b owns `agent_dsml_parse`
+  chunk schedules and streaming state/event parity.
+- M5.6 split validation passed for docs-only `git diff --name-only`, `git
+  diff --check`, and non-interactive Claude review. Claude returned
+  `NO BLOCKERS`.
