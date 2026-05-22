@@ -1441,20 +1441,58 @@
 
 ### M8.9: Rust CLI Inspect Output Parity
 
+- Status: split into M8.9a and M8.9b before implementation
+- Goal: the original Rust CLI inspect parity item required an engine-open and
+  engine-summary boundary that the Rust tree does not yet expose. M8.9a owns
+  the Rust inspect runtime boundary prerequisite; M8.9b owns the CLI inspect
+  output surface that runs on top of it. See `RUST_PORT_ROADMAP.md`
+  M8.9/M8.9a/M8.9b.
+- Drift policy: no source behavior changed by this split; no fake summary or
+  artifact replay is accepted as execution parity.
+- Owner path: Rust CLI inspect path, CLI inspect comparator, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M8.9a: Rust Inspect Runtime Boundary Prerequisite
+
 - Status: pending
-- Goal: implement Rust CLI parity for `--inspect`.
-- Precondition: Rust must expose at least an engine-open and engine-summary
-  boundary. If that boundary is absent, split this item before implementation.
-- Source evidence needed: committed M8.8 current-C inspect fixture, Rust CLI
-  parse/dispatch code, and Rust engine-summary boundary evidence.
-- Oracle: committed M8.8 current-C inspect fixture.
-- Fixture: same model/backend inspect cases as M8.8.
+- Goal: introduce or expose a Rust-accessible engine-open and engine-summary
+  boundary sufficient to load the M8.8 model/backend and emit the same summary
+  surface without entering generation, REPL, perplexity, or imatrix paths.
+- Source evidence needed: C `ds4_engine_open`/`ds4_engine_summary`, committed
+  M8.8 inspect fixture, Rust FFI/build boundary, and Rust lifecycle ownership
+  evidence.
+- Oracle: current C `ds4_engine_open` and `ds4_engine_summary` on the M8.8
+  inspect fixture.
+- Fixture: the same plain inspect and prompt/control inspect cases captured by
+  M8.8.
+- Comparator: C/Rust runtime-boundary comparator for exit status, parsed summary
+  fields, stdout identity, backend identity anchors, and forbidden-path stderr
+  markers.
+- Acceptance: Rust can execute the inspect runtime boundary against the same
+  model/backend and match current-C summary fields and dispatch exclusivity.
+- Drift policy: path, backend progress, and startup-timing normalization only.
+- Review gate: ask Claude to review FFI ownership, unsafe boundaries,
+  lifecycle/cleanup behavior, and comparator coverage.
+- Validation needed: B300 runtime comparator with negative tests, targeted Rust
+  tests, `cargo test --workspace`, and `git diff --check`.
+- Owner path: Rust inspect runtime boundary, CLI inspect comparator,
+  `ds4-parity/`, `.memory/status.md`.
+
+### M8.9b: Rust CLI Inspect Output Surface
+
+- Status: pending
+- Goal: route Rust CLI `--inspect` handling through the M8.9a runtime boundary.
+- Source evidence needed: committed M8.8 inspect fixture, M8.9a runtime
+  comparator, and Rust CLI parse/dispatch code.
+- Oracle: committed M8.8 current-C inspect fixture plus the M8.9a
+  runtime-boundary comparator.
+- Fixture: same M8.8 CLI cases.
 - Comparator: C/Rust inspect comparator for normalized summary output, model
-  identity, backend identity, and exit status.
+  identity, backend identity, exit status, and forbidden-path stderr markers.
 - Acceptance: Rust enters only the inspect path and matches the committed C
-  summary surface within documented normalization.
-- Drift policy: path, volatile-address, backend progress, and startup-timing
-  normalization only.
+  summary surface within documented normalization, without using the M8.8 JSON
+  artifact as a substitute for model execution.
+- Drift policy: path, backend progress, and startup-timing normalization only.
 - Review gate: ask Claude to review dispatch exclusivity and output
   normalization.
 - Validation needed: comparator with negative tests, targeted Rust CLI tests,

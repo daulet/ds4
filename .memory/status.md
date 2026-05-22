@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.9 Rust CLI Inspect Output Parity
-- Last validated source commit: M8.8 current-C CLI inspect oracle in this
-  commit; prior pushed source commit
-  `dcd02faaf38b59a72746fea6269f59a3508d73eb`
+- Active item: M8.9a Rust Inspect Runtime Boundary Prerequisite
+- Last validated source commit: M8.9 inspect parity split/runtime blocker
+  documentation in this commit; prior pushed source commit
+  `03e004aa6a8e4d08659307516575a79e8d813055`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1014,3 +1014,10 @@
   counts; `python3 -m py_compile ds4-parity/check_cli_inspect_dump.py`,
   `python3 -m json.tool` for both M8.8 JSON files, and `git diff --check` also
   passed.
+- M8.9 is not implemented as inspect parity because the Rust tree only accepts
+  `--inspect` as a recognized parser option and still returns the parser-only
+  model-backed-path stub from `parse_cli`; there is no Rust engine-open or
+  engine-summary boundary.
+- M8.9 has been split in `RUST_PORT_ROADMAP.md` into an inspect runtime-boundary
+  prerequisite and the actual CLI inspect output surface item. The original
+  M8.9 is blocked until the runtime-boundary prerequisite exists.

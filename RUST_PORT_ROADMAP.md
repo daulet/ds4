@@ -1400,19 +1400,62 @@ Work items:
 - Validation gate: B300 capture or exact skipped recapture command, local
   checker with negative tests, and `git diff --check`.
 
-#### M8.9: Rust CLI Inspect Output Parity
+#### M8.9: Rust CLI Inspect Output Parity Split
 
-- Goal: implement Rust CLI parity for `--inspect`.
-- Precondition: Rust must expose at least an engine-open and engine-summary
-  boundary. If that boundary is still absent after M8.8, split this item into a
-  smaller inspect runtime-boundary prerequisite before implementation.
-- Oracle: committed M8.8 current-C inspect fixture.
-- Fixture: same model/backend inspect cases as M8.8.
+- Goal: split the original Rust CLI `--inspect` parity item because the Rust
+  tree currently recognizes the option in parser code but has no engine-open or
+  engine-summary boundary that can produce the committed M8.8 model summary.
+- Oracle: repository evidence that `rust/ds4-gguf/src/cli_parse.rs` accepts
+  `--inspect` only as a parse-through flag while `parse_cli` still returns the
+  parser-only model-backed-path stub, and `rust/ds4-gpu*` expose tensor/cache
+  primitives but no `ds4_engine_open`/`ds4_engine_summary` equivalent.
+- Comparator: roadmap/board review against `rust/ds4-gguf/src/cli_parse.rs`,
+  `rust/ds4-gpu/src/lib.rs`, `rust/ds4-gpu-sys/src/lib.rs`, and the committed
+  M8.8 current-C inspect fixture.
+- Acceptance: the original inspect parity claim is not implemented by a fake
+  summary or artifact replay; it is decomposed into a runtime-boundary
+  prerequisite and the CLI parity surface that runs on top of it.
+- Drift policy: no source behavior changes; this is roadmap scope control.
+- Review gate: ask Claude to review whether the split keeps inspect parity
+  verifiable against the M8.8 current-C oracle without overstating Rust runtime
+  support.
+- Validation gate: inspect the cited Rust paths, `git diff --check`, and
+  review.
+
+#### M8.9a: Rust Inspect Runtime Boundary Prerequisite
+
+- Goal: introduce or expose a Rust-accessible engine-open and engine-summary
+  boundary sufficient to load the M8.8 model/backend and emit the same summary
+  surface without entering generation, REPL, perplexity, or imatrix paths. A
+  thin FFI-backed boundary over current C is acceptable for this milestone if a
+  future Rust-owned implementation can be held to the same comparator.
+- Oracle: current C `ds4_engine_open` and `ds4_engine_summary` on the M8.8
+  inspect fixture.
+- Fixture: the same plain inspect and prompt/control inspect cases captured by
+  M8.8.
+- Comparator: C/Rust runtime-boundary comparator for exit status, parsed summary
+  fields, stdout identity, backend identity anchors, and forbidden-path stderr
+  markers.
+- Acceptance: Rust can execute the inspect runtime boundary against the same
+  model/backend and match current-C summary fields and dispatch exclusivity.
+- Drift policy: path, backend progress, and startup-timing normalization only.
+- Review gate: ask Claude to review FFI ownership, unsafe boundaries,
+  lifecycle/cleanup behavior, and comparator coverage.
+- Validation gate: B300 runtime comparator with negative tests, targeted Rust
+  tests, `cargo test --workspace`, and `git diff --check`.
+
+#### M8.9b: Rust CLI Inspect Output Surface
+
+- Goal: route Rust CLI `--inspect` handling through the M8.9a runtime boundary.
+- Oracle: committed M8.8 current-C inspect fixture plus the M8.9a
+  runtime-boundary comparator.
+- Fixture: same M8.8 CLI cases.
 - Comparator: C/Rust inspect comparator for normalized summary output, model
-  identity, backend identity, and exit status.
+  identity, backend identity, exit status, and forbidden-path stderr markers.
 - Acceptance: Rust enters only the inspect path and matches the committed C
-  summary surface within documented normalization.
-- Drift policy: path and volatile-address normalization only.
+  summary surface within documented normalization, without using the M8.8 JSON
+  artifact as a substitute for model execution.
+- Drift policy: path, backend progress, and startup-timing normalization only.
 - Review gate: ask Claude to review dispatch exclusivity and output
   normalization.
 - Validation gate: comparator with negative tests, targeted Rust CLI tests,
