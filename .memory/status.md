@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.5 Prompt Renderer Parity
-- Last validated source commit: `4063fdd7fe8193f4a3e8c734ce1a41bb19b3a2cf`
+- Active item: M5.6 DSML Formatting And Parse Parity
+- Last validated source commit: `5fb8442e08ef3ecc9b1752064ccbd4d72031c3c6`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -335,3 +335,29 @@
 - M5.4 Claude review returned `NO BLOCKERS`; after adding Rust dump `mode`
   fields and pinning them in the comparator, the follow-up Claude review also
   returned `NO BLOCKERS`.
+- M5.5 added a Rust prompt renderer matching C `render_chat_prompt_text` for
+  the committed M5.2 server prompt cases: tool schemas before system text,
+  system/developer aggregation, user/tool/function message handling, assistant
+  history turns, thinking disabled/high/max prefixes, DSML tool-call rendering,
+  escaped tool-result closing tags, and pending assistant prefixes.
+- M5.5 added direct Rust CLI token construction for the M5.2 `ds4_chat_*`
+  operation fixtures, covering begin, Think Max prefix append, system/developer
+  direct text, user/tool/function messages, assistant content, and assistant
+  prefixes for high/max/none thinking modes.
+- M5.5 extended `ds4-tokenizer-dump` and
+  `python3 ds4-parity/compare_tokenizer_text.py` to compare every M5.2
+  `server_request_cases` prompt byte string, rendered token IDs, decoded token
+  pieces, CLI operation sequence, and CLI token stream. Negative checks now
+  include server prompt-byte drift, server token-ID drift, CLI operation drift,
+  and CLI token-piece drift.
+- M5.5 local validation passed for `cargo fmt --all -- --check`,
+  `cargo test -p ds4-gguf` with 11 tests, `cargo test --workspace`,
+  `./ds4_test --server`, `python3 -m py_compile
+  ds4-parity/compare_tokenizer_text.py`, `git diff --check`, and
+  `python3 ds4-parity/compare_tokenizer_text.py --manifest
+  ds4-parity/baselines/tokenization/m5.3/manifest.json --negative-test` with
+  `tokenizer text comparison: PASS, 154 checks`, `tokenizer manifest: PASS, 4
+  checks`, and `tokenizer negative tests: PASS, 13 checks`.
+- M5.5 Claude review returned `NO BLOCKERS` after checking Rust prompt
+  rendering against C role handling, thinking branches, DSML/tool-result
+  escaping, CLI token construction, and comparator coverage.

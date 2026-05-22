@@ -1,8 +1,12 @@
 use std::fmt;
 use std::str;
 
+pub mod prompt;
 mod tokenizer;
 
+pub use prompt::{
+    apply_cli_ops, render_chat_prompt_text, ChatMessage, CliOp, ThinkMode, ToolArgument, ToolCall,
+};
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 
 const GGUF_MAGIC: u32 = 0x4655_4747;

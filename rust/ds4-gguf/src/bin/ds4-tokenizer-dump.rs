@@ -1,4 +1,7 @@
-use ds4_gguf::{parse_gguf, Ds4Tokenizer};
+use ds4_gguf::{
+    apply_cli_ops, parse_gguf, render_chat_prompt_text, ChatMessage, CliOp, Ds4Tokenizer,
+    ThinkMode, ToolArgument, ToolCall,
+};
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -103,6 +106,24 @@ fn write_dump<W: Write>(out: &mut W, tokenizer: &Ds4Tokenizer) -> io::Result<()>
         }
         write_text_case(out, tokenizer, name, input, true)?;
     }
+    writeln!(out, "\n  ],")?;
+    writeln!(out, "  \"server_request_cases\": [")?;
+    let server_cases = server_prompt_cases();
+    for (idx, case) in server_cases.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_server_case(out, tokenizer, case)?;
+    }
+    writeln!(out, "\n  ],")?;
+    writeln!(out, "  \"cli_chat_cases\": [")?;
+    let cli_cases = cli_chat_cases();
+    for (idx, case) in cli_cases.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_cli_case(out, tokenizer, case)?;
+    }
     writeln!(out, "\n  ]")?;
     writeln!(out, "}}")?;
     Ok(())
@@ -167,6 +188,278 @@ fn write_text_case<W: Write>(
     write!(out, "]}}")?;
     Ok(())
 }
+
+struct ServerPromptCase {
+    name: &'static str,
+    messages: Vec<ChatMessage>,
+    tool_schemas: Option<&'static str>,
+    think_mode: ThinkMode,
+}
+
+struct CliCase {
+    name: &'static str,
+    ops: Vec<CliOp>,
+}
+
+fn write_server_case<W: Write>(
+    out: &mut W,
+    tokenizer: &Ds4Tokenizer,
+    case: &ServerPromptCase,
+) -> io::Result<()> {
+    let prompt = render_chat_prompt_text(&case.messages, case.tool_schemas, case.think_mode);
+    let tokens = tokenizer.tokenize_rendered_chat(&prompt);
+    write!(out, "    {{\"name\": ")?;
+    write_json_string(out, case.name)?;
+    write!(out, ", \"think_mode\": ")?;
+    write_json_string(out, case.think_mode.name())?;
+    write!(out, ", \"prompt_text\": ")?;
+    write_json_string(out, &prompt)?;
+    write!(out, ", \"token_count\": {}, \"tokens\": [", tokens.len())?;
+    write_tokens(out, tokenizer, &tokens)?;
+    write!(out, "]}}")?;
+    Ok(())
+}
+
+fn write_cli_case<W: Write>(
+    out: &mut W,
+    tokenizer: &Ds4Tokenizer,
+    case: &CliCase,
+) -> io::Result<()> {
+    let tokens = apply_cli_ops(tokenizer, &case.ops);
+    write!(out, "    {{\"name\": ")?;
+    write_json_string(out, case.name)?;
+    write!(out, ", \"operations\": [")?;
+    for (idx, op) in case.ops.iter().enumerate() {
+        if idx != 0 {
+            write!(out, ", ")?;
+        }
+        write_cli_op(out, op)?;
+    }
+    write!(out, "], \"token_count\": {}, \"tokens\": [", tokens.len())?;
+    write_tokens(out, tokenizer, &tokens)?;
+    write!(out, "]}}")?;
+    Ok(())
+}
+
+fn write_cli_op<W: Write>(out: &mut W, op: &CliOp) -> io::Result<()> {
+    match op {
+        CliOp::Begin => write!(out, "{{\"op\": \"begin\"}}"),
+        CliOp::MaxEffortPrefix => write!(out, "{{\"op\": \"max_effort_prefix\"}}"),
+        CliOp::AppendMessage { role, content } => {
+            write!(out, "{{\"op\": \"append_message\", \"role\": ")?;
+            write_json_string(out, role)?;
+            write!(out, ", \"content\": ")?;
+            write_json_string(out, content)?;
+            write!(out, "}}")
+        }
+        CliOp::AssistantPrefix { think_mode } => {
+            write!(out, "{{\"op\": \"assistant_prefix\", \"think_mode\": ")?;
+            write_json_string(out, think_mode.name())?;
+            write!(out, "}}")
+        }
+    }
+}
+
+fn write_tokens<W: Write>(out: &mut W, tokenizer: &Ds4Tokenizer, tokens: &[u32]) -> io::Result<()> {
+    for (idx, token) in tokens.iter().enumerate() {
+        if idx != 0 {
+            write!(out, ", ")?;
+        }
+        write!(out, "{{\"id\": {token}, \"bytes\": [")?;
+        let bytes = tokenizer.token_bytes(*token);
+        for (byte_idx, byte) in bytes.iter().enumerate() {
+            if byte_idx != 0 {
+                write!(out, ",")?;
+            }
+            write!(out, "{byte}")?;
+        }
+        write!(out, "]}}")?;
+    }
+    Ok(())
+}
+
+fn server_prompt_cases() -> Vec<ServerPromptCase> {
+    vec![
+        ServerPromptCase {
+            name: "m0.4/chat_basic",
+            messages: vec![ChatMessage::new(
+                "user",
+                "Return exactly this text: baseline ready",
+            )],
+            tool_schemas: None,
+            think_mode: ThinkMode::None,
+        },
+        ServerPromptCase {
+            name: "m0.4/chat_stream",
+            messages: vec![ChatMessage::new(
+                "user",
+                "Return exactly this text: stream baseline",
+            )],
+            tool_schemas: None,
+            think_mode: ThinkMode::None,
+        },
+        ServerPromptCase {
+            name: "m0.4/chat_tool_call",
+            messages: vec![ChatMessage::new(
+                "user",
+                "List the files in the current directory. Use the provided tool; do not answer in prose.",
+            )],
+            tool_schemas: Some(LIST_FILES_TOOL_SCHEMA),
+            think_mode: ThinkMode::None,
+        },
+        ServerPromptCase {
+            name: "m0.4/chat_thinking_disabled",
+            messages: vec![ChatMessage::new(
+                "user",
+                "What is two plus two? Answer with one digit.",
+            )],
+            tool_schemas: None,
+            think_mode: ThinkMode::None,
+        },
+        ServerPromptCase {
+            name: "m0.4/chat_cache_seed",
+            messages: vec![
+                ChatMessage::new(
+                    "system",
+                    "You answer with the shortest exact phrase requested by the user.",
+                ),
+                ChatMessage::new(
+                    "user",
+                    "Cache baseline prompt alpha beta gamma delta epsilon zeta eta theta iota kappa lambda. Return exactly: cache ready",
+                ),
+            ],
+            tool_schemas: None,
+            think_mode: ThinkMode::None,
+        },
+        ServerPromptCase {
+            name: "m0.4/chat_cache_continuation",
+            messages: vec![
+                ChatMessage::new(
+                    "system",
+                    "You answer with the shortest exact phrase requested by the user.",
+                ),
+                ChatMessage::new(
+                    "user",
+                    "Cache baseline prompt alpha beta gamma delta epsilon zeta eta theta iota kappa lambda. Return exactly: cache ready",
+                ),
+                ChatMessage::new("assistant", "cache ready"),
+                ChatMessage::new("user", "Return exactly: cache continued"),
+            ],
+            tool_schemas: None,
+            think_mode: ThinkMode::None,
+        },
+        ServerPromptCase {
+            name: "builtin_thinking_max_developer",
+            messages: vec![
+                ChatMessage::new("developer", "Use terse diagnostics."),
+                ChatMessage::new("user", "Explain tokenizer boundaries."),
+            ],
+            tool_schemas: None,
+            think_mode: ThinkMode::Max,
+        },
+        ServerPromptCase {
+            name: "builtin_function_result",
+            messages: vec![
+                ChatMessage::new("user", "run tool"),
+                ChatMessage::new("assistant", "").with_tool_calls(vec![ToolCall::new(
+                    "lookup",
+                    vec![ToolArgument::string("query", "ds4")],
+                )]),
+                ChatMessage::new("function", "result </tool_result> & raw"),
+            ],
+            tool_schemas: None,
+            think_mode: ThinkMode::High,
+        },
+        ServerPromptCase {
+            name: "builtin_empty_tools_arrays",
+            messages: vec![ChatMessage::new("user", "no tools")],
+            tool_schemas: None,
+            think_mode: ThinkMode::High,
+        },
+    ]
+}
+
+fn cli_chat_cases() -> Vec<CliCase> {
+    vec![
+        CliCase {
+            name: "cli_basic_high",
+            ops: vec![
+                CliOp::Begin,
+                CliOp::AppendMessage {
+                    role: "system".to_string(),
+                    content: "You are terse.".to_string(),
+                },
+                CliOp::AppendMessage {
+                    role: "user".to_string(),
+                    content: "Hello".to_string(),
+                },
+                CliOp::AssistantPrefix {
+                    think_mode: ThinkMode::High,
+                },
+            ],
+        },
+        CliCase {
+            name: "cli_developer_max",
+            ops: vec![
+                CliOp::Begin,
+                CliOp::MaxEffortPrefix,
+                CliOp::AppendMessage {
+                    role: "developer".to_string(),
+                    content: "Prefer exact token IDs.".to_string(),
+                },
+                CliOp::AppendMessage {
+                    role: "user".to_string(),
+                    content: "Why do chunks matter?".to_string(),
+                },
+                CliOp::AssistantPrefix {
+                    think_mode: ThinkMode::Max,
+                },
+            ],
+        },
+        CliCase {
+            name: "cli_tool_function_none",
+            ops: vec![
+                CliOp::Begin,
+                CliOp::AppendMessage {
+                    role: "user".to_string(),
+                    content: "Use the tool.".to_string(),
+                },
+                CliOp::AppendMessage {
+                    role: "assistant".to_string(),
+                    content: "done".to_string(),
+                },
+                CliOp::AppendMessage {
+                    role: "tool".to_string(),
+                    content: "tool output </tool_result>".to_string(),
+                },
+                CliOp::AppendMessage {
+                    role: "function".to_string(),
+                    content: "function output".to_string(),
+                },
+                CliOp::AssistantPrefix {
+                    think_mode: ThinkMode::None,
+                },
+            ],
+        },
+    ]
+}
+
+const LIST_FILES_TOOL_SCHEMA: &str = r#"{
+        "name": "list_files",
+        "description": "List files in a directory.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory path to list."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }"#;
 
 fn write_json_string<W: Write>(out: &mut W, value: &str) -> io::Result<()> {
     write!(out, "\"")?;

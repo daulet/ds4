@@ -461,7 +461,7 @@
 
 ### M5.5: Prompt Renderer Parity
 
-- Status: pending
+- Status: done
 - Goal: port `render_chat_prompt_text` and CLI chat construction semantics for
   thinking modes, Think Max prefix, system/developer messages, user/tool/function
   messages, assistant content/reasoning, tool schemas, and assistant prefixes.

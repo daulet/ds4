@@ -128,6 +128,16 @@ def compare_dumps(baseline: dict[str, Any], rust: dict[str, Any]) -> Report:
         {case.get("name"): case for case in rust.get("rendered_chat_cases", [])},
         "rendered chat",
     )
+    compare_prompt_cases(
+        report,
+        {case["name"]: case for case in baseline["server_request_cases"]},
+        {case.get("name"): case for case in rust.get("server_request_cases", [])},
+    )
+    compare_cli_cases(
+        report,
+        {case["name"]: case for case in baseline["cli_chat_cases"]},
+        {case.get("name"): case for case in rust.get("cli_chat_cases", [])},
+    )
     return report
 
 
@@ -158,6 +168,63 @@ def compare_case_family(
             report.check(
                 token_pieces_sha(got_tokens) == expected["token_pieces_sha256"],
                 f"{name}.token_pieces_sha256 drift",
+            )
+
+
+def compare_prompt_cases(
+    report: Report,
+    base_cases: dict[str, dict[str, Any]],
+    rust_cases: dict[str, dict[str, Any]],
+) -> None:
+    report.check(set(rust_cases) == set(base_cases), "server prompt case names drift")
+    for name, expected in base_cases.items():
+        got = rust_cases.get(name, {})
+        report.check(got.get("think_mode") == expected["think_mode"], f"{name}.think_mode drift")
+        report.check(got.get("prompt_text") == expected["prompt_text"], f"{name}.prompt_text drift")
+        report.check(got.get("token_count") == expected["token_count"], f"{name}.prompt token_count drift")
+        got_tokens = got.get("tokens", [])
+        expected_tokens = expected["tokens"]
+        report.check(
+            [token.get("id") for token in got_tokens] == [token["id"] for token in expected_tokens],
+            f"{name}.prompt token ids drift",
+        )
+        report.check(
+            [token.get("bytes") for token in got_tokens] == [token["bytes"] for token in expected_tokens],
+            f"{name}.prompt token bytes drift",
+        )
+        if isinstance(got_tokens, list):
+            report.check(token_ids_sha(got_tokens) == expected["token_ids_sha256"], f"{name}.prompt token_ids_sha256 drift")
+            report.check(
+                token_pieces_sha(got_tokens) == expected["token_pieces_sha256"],
+                f"{name}.prompt token_pieces_sha256 drift",
+            )
+
+
+def compare_cli_cases(
+    report: Report,
+    base_cases: dict[str, dict[str, Any]],
+    rust_cases: dict[str, dict[str, Any]],
+) -> None:
+    report.check(set(rust_cases) == set(base_cases), "CLI case names drift")
+    for name, expected in base_cases.items():
+        got = rust_cases.get(name, {})
+        report.check(got.get("operations") == expected["operations"], f"{name}.operations drift")
+        report.check(got.get("token_count") == expected["token_count"], f"{name}.cli token_count drift")
+        got_tokens = got.get("tokens", [])
+        expected_tokens = expected["tokens"]
+        report.check(
+            [token.get("id") for token in got_tokens] == [token["id"] for token in expected_tokens],
+            f"{name}.cli token ids drift",
+        )
+        report.check(
+            [token.get("bytes") for token in got_tokens] == [token["bytes"] for token in expected_tokens],
+            f"{name}.cli token bytes drift",
+        )
+        if isinstance(got_tokens, list):
+            report.check(token_ids_sha(got_tokens) == expected["token_ids_sha256"], f"{name}.cli token_ids_sha256 drift")
+            report.check(
+                token_pieces_sha(got_tokens) == expected["token_pieces_sha256"],
+                f"{name}.cli token_pieces_sha256 drift",
             )
 
 
@@ -291,6 +358,22 @@ def run_negative(tokenizer_path: Path, baseline: dict[str, Any]) -> Report:
     expect_compare_failure(
         "rendered-piece",
         lambda obj: obj["rendered_chat_cases"][1]["tokens"][2]["bytes"].append(0),
+    )
+    expect_compare_failure(
+        "server-prompt",
+        lambda obj: obj["server_request_cases"][0].__setitem__("prompt_text", obj["server_request_cases"][0]["prompt_text"] + "x"),
+    )
+    expect_compare_failure(
+        "server-token-id",
+        lambda obj: obj["server_request_cases"][0]["tokens"][0].__setitem__("id", 42),
+    )
+    expect_compare_failure(
+        "cli-operation",
+        lambda obj: obj["cli_chat_cases"][0]["operations"][0].__setitem__("op", "append_message"),
+    )
+    expect_compare_failure(
+        "cli-token-piece",
+        lambda obj: obj["cli_chat_cases"][0]["tokens"][0]["bytes"].append(0),
     )
     return report
 
