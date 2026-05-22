@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.4b KV Extension Trailer Payload Coverage
-- Last validated source commit: M7.4a generic KVC full-file round trip in this
-  commit; prior pushed source commit
-  `eb331100047ca97a845d879d4eb4d4c6828ab9cf`
+- Active item: M7.5 C Session Payload Shape Oracle
+- Last validated source commit: M7.4b KV extension trailer payload coverage in
+  this commit; prior pushed source commit
+  `4d09821cbed8304499ed464ec4a78bbb235fc947`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -732,3 +732,33 @@
   ds4-gguf --bin ds4-kvc-file-dump-rs`, `cargo test --workspace`, `arch
   -arm64 make cpu`, CPU-regenerated `./ds4-kvc-file-dump` comparison against
   the committed M7.4a artifact, and `git diff --check`.
+- M7.4b adds `./ds4-kv-trailer-dump`, a deterministic no-model current-C
+  oracle for server-owned KVC trailer payloads using the real
+  `kv_tool_map_serialized_size`, `kv_tool_map_write`, and
+  `kv_tool_map_load_from_pos` helpers from `ds4_server.c`.
+- M7.4b fixture `ds4-parity/baselines/kv/m7.4b/current-c.json` covers empty
+  tool-map output, single-block output, text filtering, duplicate-block
+  suppression, multiple IDs for one DSML block, UTF-8 bytes with a long ID,
+  disabled exact replay, visible-transcript extension flags without payload
+  bytes, and malformed trailer load/decode boundaries. The artifact is 13,232
+  bytes with SHA256
+  `c5f73f2ea0f712e5fa1f2ee57666e1907304324d5334f398356c90ca40401d73`.
+- M7.4b adds Rust tool-map trailer helpers in
+  `rust/ds4-gguf/src/kv_policy.rs`; the writer scans DSML tool-call blocks,
+  suppresses duplicate blocks, mirrors C's reverse insertion order for
+  multiple IDs on one block, and the reader preserves partial decoded entries
+  on malformed trailers.
+- M7.4b adds `python3 ds4-parity/compare_kv_trailer.py`, which runs
+  `ds4-kv-trailer-dump-rs` and compares trailer bytes, decoded entries,
+  load-count behavior, wanted-ID filtering, extension flag records, and
+  malformed trailer categories against the committed C oracle.
+- M7.4b local validation passed for `arch -arm64 make ds4-kv-trailer-dump`,
+  `./ds4-kv-trailer-dump ds4-parity/baselines/kv/m7.4b/current-c.json`,
+  `python3 -m json.tool ds4-parity/baselines/kv/m7.4b/current-c.json`,
+  `python3 -m py_compile ds4-parity/compare_kv_trailer.py`, `python3
+  ds4-parity/compare_kv_trailer.py --negative-test` (`KV trailer C/Rust
+  comparator: PASS, 432 checks`; negative tests `PASS, 8 checks`), `cargo
+  fmt --all -- --check`, `cargo test -p ds4-gguf tool_map`, `cargo test -p
+  ds4-gguf --bin ds4-kv-trailer-dump-rs`, `cargo test --workspace`, `arch
+  -arm64 make cpu`, CPU-regenerated `./ds4-kv-trailer-dump` comparison against
+  the committed M7.4b artifact, and `git diff --check`.

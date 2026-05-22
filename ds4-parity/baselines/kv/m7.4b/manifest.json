@@ -1,0 +1,36 @@
+{
+  "schema": "ds4.kv_trailer_manifest.v1",
+  "milestone": "M7.4b",
+  "artifact": {
+    "path": "current-c.json",
+    "sha256": "c5f73f2ea0f712e5fa1f2ee57666e1907304324d5334f398356c90ca40401d73",
+    "size_bytes": 13232
+  },
+  "oracle": "current C server-owned KVC trailer hooks",
+  "fixture": {
+    "model": "no model is loaded for this oracle",
+    "tool_map_magic": "KTM",
+    "tool_map_version": 1
+  },
+  "comparator": "python3 ds4-parity/compare_kv_trailer.py --negative-test",
+  "acceptance": [
+    "Rust serializes the same KTM tool-map trailer bytes as the current C server hooks",
+    "Rust decodes tool-map entries in the same order, including multiple IDs for one DSML block",
+    "Text filtering, duplicate-block suppression, wanted-ID load filtering, disabled replay, and UTF-8 bytes match C",
+    "Visible-transcript extension flags do not imply trailer payload bytes",
+    "Malformed trailer boundaries match the C loader's accepted loaded-count behavior and the oracle error categories"
+  ],
+  "drift_policy": "No extension-flag, trailer-byte, decoded-entry, load-count, or malformed rejection drift.",
+  "validation": [
+    "arch -arm64 make ds4-kv-trailer-dump",
+    "./ds4-kv-trailer-dump ds4-parity/baselines/kv/m7.4b/current-c.json",
+    "python3 -m json.tool ds4-parity/baselines/kv/m7.4b/current-c.json",
+    "python3 -m py_compile ds4-parity/compare_kv_trailer.py",
+    "python3 ds4-parity/compare_kv_trailer.py --negative-test",
+    "cargo fmt --all -- --check",
+    "cargo test -p ds4-gguf tool_map",
+    "cargo test -p ds4-gguf --bin ds4-kv-trailer-dump-rs",
+    "cargo test --workspace",
+    "git diff --check"
+  ]
+}

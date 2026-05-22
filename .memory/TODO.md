@@ -984,7 +984,7 @@
 
 ### M7.4b: KV Extension Trailer Payload Coverage
 
-- Status: pending
+- Status: done
 - Goal: compare server-owned KVC extension payloads and extension-flag
   semantics separately from the generic full-file round trip.
 - Source evidence needed: server tool-map trailer format (`KTM` version 1),
@@ -1011,9 +1011,17 @@
 - Review gate: ask Claude to review per-extension payload coverage and make
   sure server-owned trailer semantics are not hidden inside generic KVC
   parsing.
-- Validation needed: extension trailer comparator with negative tests, C
-  helper build, Rust tests, `cargo fmt --all -- --check`,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: `arch -arm64 make ds4-kv-trailer-dump`,
+  `./ds4-kv-trailer-dump ds4-parity/baselines/kv/m7.4b/current-c.json`,
+  `python3 -m json.tool ds4-parity/baselines/kv/m7.4b/current-c.json`,
+  `python3 -m py_compile ds4-parity/compare_kv_trailer.py`, `python3
+  ds4-parity/compare_kv_trailer.py --negative-test` (`KV trailer C/Rust
+  comparator: PASS, 432 checks`; negative tests `PASS, 8 checks`),
+  `cargo fmt --all -- --check`, `cargo test -p ds4-gguf tool_map`,
+  `cargo test -p ds4-gguf --bin ds4-kv-trailer-dump-rs`,
+  `cargo test --workspace`, `arch -arm64 make cpu`, CPU-regenerated
+  `./ds4-kv-trailer-dump` comparison against the committed M7.4b artifact,
+  and `git diff --check`.
 - Owner path: server trailer fixture helpers, Rust KVC extension parser,
   `ds4-parity/`, `ds4-parity/baselines/kv/`, `.memory/status.md`.
 

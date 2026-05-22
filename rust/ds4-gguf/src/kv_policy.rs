@@ -8,6 +8,11 @@ pub const MIN_EFFECTIVE_HITS: f64 = 0.01;
 pub const EXT_TOOL_MAP: u8 = 1 << 0;
 pub const EXT_RESPONSES_VISIBLE: u8 = 1 << 1;
 pub const EXT_THINKING_VISIBLE: u8 = 1 << 2;
+pub const TOOL_MAP_HEADER: usize = 8;
+pub const TOOL_MAP_VERSION: u8 = 1;
+pub const TOOL_MAP_MAX_ID_LEN: usize = 256;
+pub const TOOL_MAP_DEFAULT_MAX_ENTRIES: usize = 100_000;
+pub const TOOL_MAP_MAX_DSML_LEN: usize = 512 * 1024 * 1024;
 
 pub const REASON_UNKNOWN: u8 = 0;
 pub const REASON_COLD: u8 = 1;
@@ -160,6 +165,53 @@ impl fmt::Display for KvcFileError {
 
 impl std::error::Error for KvcFileError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolMapEntry {
+    pub id: String,
+    pub dsml: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolMapDecode {
+    pub entries: Vec<ToolMapEntry>,
+    pub declared_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolMapError {
+    ShortHeader,
+    BadHeader,
+    CountLimit,
+    ShortEntryHeader,
+    BadIdLen,
+    BadDsmlLen,
+    TruncatedId,
+    TruncatedDsml,
+}
+
+impl ToolMapError {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ShortHeader => "short-header",
+            Self::BadHeader => "bad-header",
+            Self::CountLimit => "count-limit",
+            Self::ShortEntryHeader => "short-entry-header",
+            Self::BadIdLen => "bad-id-len",
+            Self::BadDsmlLen => "bad-dsml-len",
+            Self::TruncatedId => "truncated-id",
+            Self::TruncatedDsml => "truncated-dsml",
+        }
+    }
+}
+
+impl fmt::Display for ToolMapError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::error::Error for ToolMapError {}
+
 pub fn reason_code(reason: Option<&str>) -> u8 {
     match reason {
         Some("cold") => REASON_COLD,
@@ -302,6 +354,183 @@ pub fn read_kvc_file(bytes: &[u8]) -> Result<KvcFile, KvcFileError> {
         trailer: bytes[payload_end..].to_vec(),
         file_size: bytes.len() as u64,
     })
+}
+
+pub fn find_dsml_tool_blocks(text: &[u8]) -> Vec<&[u8]> {
+    const FORMS: [(&[u8], &[u8]); 6] = [
+        (
+            "\n\n<｜DSML｜tool_calls>".as_bytes(),
+            "</｜DSML｜tool_calls>".as_bytes(),
+        ),
+        (
+            "<｜DSML｜tool_calls>".as_bytes(),
+            "</｜DSML｜tool_calls>".as_bytes(),
+        ),
+        (
+            "\n\n<DSML｜tool_calls>".as_bytes(),
+            "</DSML｜tool_calls>".as_bytes(),
+        ),
+        (
+            "<DSML｜tool_calls>".as_bytes(),
+            "</DSML｜tool_calls>".as_bytes(),
+        ),
+        (b"\n\n<tool_calls>", b"</tool_calls>"),
+        (b"<tool_calls>", b"</tool_calls>"),
+    ];
+    let mut blocks = Vec::new();
+    let mut pos = 0;
+    while pos < text.len() {
+        let mut best: Option<(usize, usize, &[u8])> = None;
+        for (start, end) in FORMS {
+            if let Some(rel_start) = find_bytes(&text[pos..], start) {
+                let start_abs = pos + rel_start;
+                if best.map_or(false, |(best_start, _, _)| start_abs >= best_start) {
+                    continue;
+                }
+                let after_start = start_abs + start.len();
+                if let Some(rel_end) = find_bytes(&text[after_start..], end) {
+                    best = Some((start_abs, after_start + rel_end + end.len(), end));
+                }
+            }
+        }
+        if let Some((start, end, _)) = best {
+            blocks.push(&text[start..end]);
+            pos = end;
+        } else {
+            break;
+        }
+    }
+    blocks
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+pub fn write_tool_map_trailer(
+    text: &[u8],
+    entries: &[ToolMapEntry],
+    disabled: bool,
+) -> Option<Vec<u8>> {
+    if disabled || text.is_empty() {
+        return Some(Vec::new());
+    }
+    let blocks = find_dsml_tool_blocks(text);
+    let mut selected: Vec<&ToolMapEntry> = Vec::new();
+    let mut seen_blocks: Vec<Vec<u8>> = Vec::new();
+    for block in blocks {
+        if seen_blocks.iter().any(|seen| seen.as_slice() == block) {
+            continue;
+        }
+        seen_blocks.push(block.to_vec());
+        let block_entries: Vec<&ToolMapEntry> = entries
+            .iter()
+            .filter(|entry| entry.dsml.as_slice() == block)
+            .collect();
+        for entry in block_entries.into_iter().rev() {
+            if entry.id.len() > u32::MAX as usize || entry.dsml.len() > u32::MAX as usize {
+                continue;
+            }
+            selected.push(entry);
+        }
+    }
+    if selected.is_empty() {
+        return Some(Vec::new());
+    }
+    if selected.len() > u32::MAX as usize {
+        return None;
+    }
+    let mut len = TOOL_MAP_HEADER;
+    for entry in &selected {
+        len = len
+            .checked_add(8)?
+            .checked_add(entry.id.len())?
+            .checked_add(entry.dsml.len())?;
+    }
+    let mut out = Vec::with_capacity(len);
+    out.extend_from_slice(b"KTM");
+    out.push(TOOL_MAP_VERSION);
+    out.extend_from_slice(&(selected.len() as u32).to_le_bytes());
+    for entry in selected {
+        out.extend_from_slice(&(entry.id.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(entry.dsml.len() as u32).to_le_bytes());
+        out.extend_from_slice(entry.id.as_bytes());
+        out.extend_from_slice(&entry.dsml);
+    }
+    Some(out)
+}
+
+pub fn read_tool_map_trailer(
+    bytes: &[u8],
+    max_entries: usize,
+) -> Result<ToolMapDecode, (ToolMapError, ToolMapDecode)> {
+    if bytes.is_empty() {
+        return Ok(ToolMapDecode {
+            entries: Vec::new(),
+            declared_count: 0,
+        });
+    }
+    if bytes.len() < TOOL_MAP_HEADER {
+        return Err((
+            ToolMapError::ShortHeader,
+            ToolMapDecode {
+                entries: Vec::new(),
+                declared_count: 0,
+            },
+        ));
+    }
+    if &bytes[0..3] != b"KTM" || bytes[3] != TOOL_MAP_VERSION {
+        return Err((
+            ToolMapError::BadHeader,
+            ToolMapDecode {
+                entries: Vec::new(),
+                declared_count: 0,
+            },
+        ));
+    }
+    let declared_count = u32::from_le_bytes(bytes[4..8].try_into().expect("slice length"));
+    let mut decode = ToolMapDecode {
+        entries: Vec::new(),
+        declared_count,
+    };
+    if declared_count as usize > max_entries.saturating_mul(4) {
+        return Err((ToolMapError::CountLimit, decode));
+    }
+    let mut pos = TOOL_MAP_HEADER;
+    for _ in 0..declared_count {
+        if bytes.len() - pos < 8 {
+            return Err((ToolMapError::ShortEntryHeader, decode));
+        }
+        let id_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().expect("slice length"));
+        let dsml_len =
+            u32::from_le_bytes(bytes[pos + 4..pos + 8].try_into().expect("slice length"));
+        pos += 8;
+        if id_len == 0 || id_len as usize > TOOL_MAP_MAX_ID_LEN {
+            return Err((ToolMapError::BadIdLen, decode));
+        }
+        if dsml_len == 0 || dsml_len as usize > TOOL_MAP_MAX_DSML_LEN {
+            return Err((ToolMapError::BadDsmlLen, decode));
+        }
+        let id_len = id_len as usize;
+        let dsml_len = dsml_len as usize;
+        if bytes.len() - pos < id_len {
+            return Err((ToolMapError::TruncatedId, decode));
+        }
+        let id = String::from_utf8_lossy(&bytes[pos..pos + id_len]).into_owned();
+        pos += id_len;
+        if bytes.len() - pos < dsml_len {
+            return Err((ToolMapError::TruncatedDsml, decode));
+        }
+        let dsml = bytes[pos..pos + dsml_len].to_vec();
+        pos += dsml_len;
+        decode.entries.push(ToolMapEntry { id, dsml });
+    }
+    Ok(decode)
 }
 
 pub fn sha1_bytes_hex(bytes: &[u8]) -> String {
@@ -716,5 +945,46 @@ mod tests {
         bytes.extend_from_slice(b"abc");
         bytes.extend_from_slice(&[1, 2]);
         assert_eq!(read_kvc_file(&bytes), Err(KvcFileError::TruncatedPayload));
+    }
+
+    #[test]
+    fn tool_map_writer_matches_server_block_order() {
+        let dsml = b"\n\n<tool_calls>\n</tool_calls>";
+        let entries = vec![
+            ToolMapEntry {
+                id: "call_a".to_string(),
+                dsml: dsml.to_vec(),
+            },
+            ToolMapEntry {
+                id: "call_b".to_string(),
+                dsml: dsml.to_vec(),
+            },
+        ];
+        let trailer = write_tool_map_trailer(dsml, &entries, false).expect("write trailer");
+        let decoded =
+            read_tool_map_trailer(&trailer, TOOL_MAP_DEFAULT_MAX_ENTRIES).expect("valid trailer");
+        assert_eq!(decoded.declared_count, 2);
+        assert_eq!(decoded.entries[0].id, "call_b");
+        assert_eq!(decoded.entries[1].id, "call_a");
+    }
+
+    #[test]
+    fn tool_map_reader_keeps_partial_success_count() {
+        let mut trailer = Vec::new();
+        trailer.extend_from_slice(b"KTM");
+        trailer.push(1);
+        trailer.extend_from_slice(&2_u32.to_le_bytes());
+        trailer.extend_from_slice(&6_u32.to_le_bytes());
+        trailer.extend_from_slice(&4_u32.to_le_bytes());
+        trailer.extend_from_slice(b"call_a");
+        trailer.extend_from_slice(b"dsml");
+        trailer.extend_from_slice(&4_u32.to_le_bytes());
+        trailer.extend_from_slice(&5_u32.to_le_bytes());
+        trailer.extend_from_slice(b"ca");
+        let (err, decode) =
+            read_tool_map_trailer(&trailer, TOOL_MAP_DEFAULT_MAX_ENTRIES).unwrap_err();
+        assert_eq!(err, ToolMapError::TruncatedId);
+        assert_eq!(decode.declared_count, 2);
+        assert_eq!(decode.entries.len(), 1);
     }
 }

@@ -38,3 +38,7 @@ path = "src/bin/ds4-kv-policy-dump-rs.rs"
 [[bin]]
 name = "ds4-kvc-file-dump-rs"
 path = "src/bin/ds4-kvc-file-dump-rs.rs"
+
+[[bin]]
+name = "ds4-kv-trailer-dump-rs"
+path = "src/bin/ds4-kv-trailer-dump-rs.rs"
