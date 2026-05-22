@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M1.6 Oracle Runner And Unified Report
-- Last validated source commit: `48ba21551ee46a64e79c5a79a37b020f9ce08f8d`
+- Active item: M2.1 Rust Workspace And FFI Skeleton
+- Last validated source commit: `15b7304d4278a2ec08f780bc68ad1fe501378533`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -88,3 +88,9 @@
   threshold use, requires exact workload shape and KV byte counts, and applies
   the documented 10% throughput regression threshold. Its negative test covers
   schema, context frontier, generation-token, cache-byte, and throughput drift.
+- M1.6 added `python3 ds4-parity/run_parity_report.py`, which runs local
+  no-model C oracles, invokes the M1.2 through M1.5 comparator commands, and
+  reports skipped B300/model-backed oracle refreshes with explicit
+  `--kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1` rerun
+  commands. The local report passed with 9 executed items and 4 B300 refreshes
+  skipped by design.

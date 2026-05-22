@@ -101,3 +101,18 @@ requires comparison failure:
 ```sh
 python3 ds4-parity/compare_bench_csv.py --negative-test
 ```
+
+Run the unified local parity report:
+
+```sh
+python3 ds4-parity/run_parity_report.py
+```
+
+The unified report runs local no-model C checks, then runs the M1.2 through
+M1.5 comparator commands. Model-backed B300 oracle refreshes are skipped by
+default, but each skip includes the temp-kubeconfig and explicit-context rerun
+command needed to reproduce the check. For a comparator-only report:
+
+```sh
+python3 ds4-parity/run_parity_report.py --skip-local-oracles
+```

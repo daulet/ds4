@@ -166,7 +166,7 @@
 
 ### M1.6: Oracle Runner And Unified Report
 
-- Status: in-progress
+- Status: done
 - Goal: add a single documented command that can run available current-C oracle
   checks and compare their outputs to Milestone 0 baselines.
 - Source evidence needed: current C binaries, Milestone 0 baselines, local
@@ -181,6 +181,21 @@
   skipped with exact reproduction commands; unified report has no unexpected
   baseline drift; `git diff --check`.
 - Owner path: `ds4-parity/`, `ds4-parity/baselines/`.
+
+### M2.1: Rust Workspace And FFI Skeleton
+
+- Status: in-progress
+- Goal: add Rust workspace and crate skeletons without changing existing C
+  binary behavior.
+- Source evidence needed: Milestone 2 roadmap, current `Makefile`, existing C
+  build/test commands, and `ds4_gpu.h` backend ABI.
+- Oracle: current C build and test commands.
+- Comparator: existing `make`, `make test`, `make cpu`, plus Rust workspace
+  tests that do not require a full model.
+- Validation needed: existing C targets still build/test as before; Rust crates
+  build and test independently without requiring `ds4flash.gguf`; `git
+  diff --check`.
+- Owner path: Rust workspace files to be introduced, `Makefile`.
 
 ## Later Items
 
