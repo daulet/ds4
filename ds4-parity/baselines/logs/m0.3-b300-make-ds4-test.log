@@ -1,0 +1,15 @@
+command: kubectl exec ds4-rust-port-b300 -- make ds4_test
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+source_commit: 9e35378f7f759fb63d3591641d6e9b65a9f0672b
+started_utc: 2026-05-22T01:34:12Z
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -Wno-unused-function -c -o ds4_test.o tests/ds4_test.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_kvstore.o ds4_kvstore.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o rax.o rax.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4.o ds4.c
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math  -Xcompiler -march=native -Xcompiler -pthread -c -o ds4_cuda.o ds4_cuda.cu
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math  -Xcompiler -march=native -Xcompiler -pthread -o ds4_test ds4_test.o ds4_kvstore.o rax.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+finished_utc: 2026-05-22T01:34:54Z
+exit_status: 0

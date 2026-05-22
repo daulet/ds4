@@ -1,0 +1,12 @@
+command: summarize remote /workspace/ds4/m0.3-download-q2-imatrix.log
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+captured_utc: 2026-05-22T01:36:28Z
+Downloading DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+from https://huggingface.co/antirez/deepseek-v4-gguf
+If the download stops, run the same command again to resume it.
+Linked ./ds4flash.gguf -> /workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+Done.
+exit_status: 0

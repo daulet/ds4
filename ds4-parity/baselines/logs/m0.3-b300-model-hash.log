@@ -1,0 +1,11 @@
+command: kubectl exec ds4-rust-port-b300 -- sha256sum ds4flash.gguf
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+source_commit: 9e35378f7f759fb63d3591641d6e9b65a9f0672b
+started_utc: 2026-05-22T01:32:14Z
+efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668  /workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+size_bytes=86720111488 path=/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+finished_utc: 2026-05-22T01:33:52Z
+exit_status: 0

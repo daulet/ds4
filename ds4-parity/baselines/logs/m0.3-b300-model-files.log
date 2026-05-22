@@ -1,0 +1,15 @@
+command: kubectl exec ds4-rust-port-b300 -- inspect ds4flash.gguf link and q2-imatrix file
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+source_commit: 9e35378f7f759fb63d3591641d6e9b65a9f0672b
+captured_utc: 2026-05-22T01:36:19Z
+lrwxrwxrwx. 1 root root 92 May 22 01:31 ds4flash.gguf -> /workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+
+gguf:
+total 81G
+-rw-r--r--. 1 root root 81G May 22 01:31 DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf
+81G	gguf
+exit_status: 0

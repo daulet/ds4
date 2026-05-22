@@ -76,3 +76,47 @@ Milestone 0 items.
 The exact blocker in both local and B300 environments is absence of
 `ds4flash.gguf`. M0.3 must either provide `DS4_TEST_MODEL` or record the model
 download/path/hash before claiming model-backed parity coverage.
+
+# M0.3 Official Vector Logprob Baseline
+
+## Capture Scope
+
+- Work item: M0.3 Official Vector Logprob Baseline
+- Source oracle commit: `9e35378f7f759fb63d3591641d6e9b65a9f0672b`
+- Oracle: current C/CUDA `./ds4_test --logprob-vectors` path.
+- Fixture: `tests/test-vectors/official.vec`
+- Fixture SHA256: `0223bbe1eaa3b626be87849df389af91c3f3f6e6b0d4436baf2dbb6ed624b1ac`
+- Fixture size: 1207 bytes.
+- Fixture hash log: `logs/m0.3-official-vec-hash.log`
+- Comparator: rerun the exact command below and compare exit status plus vector
+  case outcome lines.
+- Acceptance: command exits 0, `logprob-vectors: OK` appears, selected greedy
+  vector tokens match exactly, and the runner's documented
+  `long_memory_archive` official-graph mismatch skip remains explicit in the
+  log.
+- Drift policy: future Rust selected greedy tokens must match exactly; numeric
+  logprob slices use the tolerance defined by the later Rust parity harness.
+
+## B300 Model Fixture
+
+- Context: `hou2-prod1`
+- Namespace: `default`
+- Pod: `ds4-rust-port-b300`
+- Node: `c1v17-b300n1-nic1`
+- Model target: `q2-imatrix`
+- Model path: `/workspace/ds4/ds4flash.gguf`
+- Resolved model path:
+  `/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf`
+- Model SHA256:
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`
+- Model size: 86,720,111,488 bytes.
+
+| Command | Environment | Exit | Log | Acceptance |
+| --- | --- | ---: | --- | --- |
+| `shasum -a 256 tests/test-vectors/official.vec && wc -c tests/test-vectors/official.vec` | local repo | 0 | `logs/m0.3-official-vec-hash.log` | Fixture hash and size match the values above. |
+| refresh `/workspace/ds4` from `git archive HEAD` | local to B300 pod | 0 | `logs/m0.3-b300-source-refresh.log` | Pod source matches capture commit without local uncommitted artifacts. |
+| `DS4_GGUF_DIR=/workspace/ds4/gguf ./download_model.sh q2-imatrix` | B300 pod | 0 | `logs/m0.3-b300-download-wrapper.log`, `logs/m0.3-b300-download-summary.log` | q2-imatrix download completed and `ds4flash.gguf` was linked. |
+| inspect `ds4flash.gguf` and `gguf/` | B300 pod | 0 | `logs/m0.3-b300-model-files.log` | Symlink resolves to the q2-imatrix GGUF under `/workspace/ds4/gguf`. |
+| `sha256sum $(readlink -f ds4flash.gguf)` | B300 pod | 0 | `logs/m0.3-b300-model-hash.log` | Model hash and byte size match the values above. |
+| `make ds4_test` | B300 pod, `/workspace/ds4` | 0 | `logs/m0.3-b300-make-ds4-test.log` | CUDA test binary builds from the capture commit. |
+| `DS4_TEST_MODEL=/workspace/ds4/ds4flash.gguf DS4_TEST_VECTOR_FILE=tests/test-vectors/official.vec ./ds4_test --logprob-vectors` | B300 pod, CUDA backend | 0 | `logs/m0.3-b300-logprob-vectors.log` | Official-vector logprob baseline passes on NVIDIA B300 SXM6 AC (`sm_103`). |

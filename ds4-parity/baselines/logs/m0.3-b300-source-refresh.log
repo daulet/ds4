@@ -1,0 +1,5 @@
+command: refresh B300 source from git archive HEAD
+source_commit: 9e35378f7f759fb63d3591641d6e9b65a9f0672b
+started_utc: 2026-05-22T01:18:16Z
+finished_utc: 2026-05-22T01:18:21Z
+exit_status: 0

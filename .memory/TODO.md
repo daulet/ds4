@@ -32,7 +32,7 @@
 
 ### M0.3: Official Vector Logprob Baseline
 
-- Status: in-progress
+- Status: done
 - Goal: capture the current implementation's output for
   `tests/test-vectors/official.vec`.
 - Source evidence needed: `tests/test-vectors/README.md`,
@@ -44,6 +44,20 @@
   `DS4_TEST_VECTOR_FILE` or record the exact model acquisition blocker.
 - Owner path: `ds4-parity/baselines/`, `tests/test-vectors/`.
 
+### M0.4: Server Trace Baselines
+
+- Status: in-progress
+- Goal: capture representative current server request behavior.
+- Source evidence needed: `ds4_server.c`, `tests/ds4_test.c`, server CLI help,
+  request/trace fixtures to be created under `ds4-parity/baselines/`.
+- Oracle: current `./ds4-server` binary with trace enabled.
+- Comparator: request replay records response JSON or event stream plus trace
+  files; later Rust server responses compare after approved normalization.
+- Validation needed: build/run current server on B300 with the q2-imatrix model,
+  replay fixed request JSON fixtures, and record command, response, trace, model
+  identity, and normalization rules.
+- Owner path: `ds4-parity/baselines/`, `.memory/status.md`.
+
 ## Later Items
 
-Add later Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.3 completes.
+Add later Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.4 completes.

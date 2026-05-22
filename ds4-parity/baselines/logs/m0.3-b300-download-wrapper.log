@@ -1,0 +1,9 @@
+command: kubectl exec ds4-rust-port-b300 -- DS4_GGUF_DIR=/workspace/ds4/gguf ./download_model.sh q2-imatrix
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+source_commit: 9e35378f7f759fb63d3591641d6e9b65a9f0672b
+started_utc: 2026-05-22T01:18:46Z
+finished_utc: 2026-05-22T01:31:46Z
+exit_status: 0

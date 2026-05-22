@@ -1,0 +1,7 @@
+command: shasum -a 256 tests/test-vectors/official.vec && wc -c tests/test-vectors/official.vec
+cwd: /Users/dzhanguzin/dev/personal/ds4
+source_commit: 9e35378f7f759fb63d3591641d6e9b65a9f0672b
+captured_utc: 2026-05-22T01:38:37Z
+0223bbe1eaa3b626be87849df389af91c3f3f6e6b0d4436baf2dbb6ed624b1ac  tests/test-vectors/official.vec
+    1207 tests/test-vectors/official.vec
+exit_status: 0
