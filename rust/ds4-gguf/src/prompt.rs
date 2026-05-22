@@ -1,3 +1,4 @@
+use crate::dsml::{render_dsml_tool_calls, render_tool_result_text, DsmlArgument, DsmlRenderCall};
 use crate::Ds4Tokenizer;
 
 pub const THINK_MAX_PREFIX: &str =
@@ -32,6 +33,7 @@ pub struct ChatMessage {
     pub content: String,
     pub reasoning: String,
     pub tool_calls: Vec<ToolCall>,
+    pub raw_tool_calls_dsml: Option<String>,
 }
 
 impl ChatMessage {
@@ -41,11 +43,17 @@ impl ChatMessage {
             content: content.into(),
             reasoning: String::new(),
             tool_calls: Vec::new(),
+            raw_tool_calls_dsml: None,
         }
     }
 
     pub fn with_tool_calls(mut self, tool_calls: Vec<ToolCall>) -> Self {
         self.tool_calls = tool_calls;
+        self
+    }
+
+    pub fn with_raw_tool_calls_dsml(mut self, raw_dsml: impl Into<String>) -> Self {
+        self.raw_tool_calls_dsml = Some(raw_dsml.into());
         self
     }
 }
@@ -140,7 +148,7 @@ pub fn render_chat_prompt_text(
                 out.push_str("<｜User｜>");
             }
             out.push_str("<tool_result>");
-            append_tool_result_text(&mut out, &message.content);
+            out.push_str(&render_tool_result_text(&message.content));
             out.push_str("</tool_result>");
             pending_assistant = true;
             pending_tool_result = true;
@@ -160,7 +168,7 @@ pub fn render_chat_prompt_text(
                 }
             }
             out.push_str(&message.content);
-            append_dsml_tool_calls_text(&mut out, &message.tool_calls);
+            out.push_str(&render_message_tool_calls(message));
             out.push_str("<｜end▁of▁sentence｜>");
             pending_assistant = false;
             pending_tool_result = false;
@@ -240,6 +248,26 @@ fn chat_history_uses_tool_context(messages: &[ChatMessage], tool_schemas: Option
     })
 }
 
+fn render_message_tool_calls(message: &ChatMessage) -> String {
+    let calls: Vec<DsmlRenderCall> = message
+        .tool_calls
+        .iter()
+        .map(|call| DsmlRenderCall {
+            name: call.name.clone(),
+            arguments: call
+                .arguments
+                .iter()
+                .map(|arg| DsmlArgument {
+                    name: arg.name.clone(),
+                    value: arg.value.clone(),
+                    is_string: arg.is_string,
+                })
+                .collect(),
+        })
+        .collect();
+    render_dsml_tool_calls(message.raw_tool_calls_dsml.as_deref(), &calls)
+}
+
 fn append_tools_prompt_text(out: &mut String, tool_schemas: &str) {
     if tool_schemas.is_empty() {
         return;
@@ -267,80 +295,16 @@ Otherwise, output directly after </think> with tool calls or final response.\n\n
     );
 }
 
-fn append_tool_result_text(out: &mut String, text: &str) {
-    append_escaped_sentinel(out, text, "</tool_result>", "&lt;");
-}
-
-fn append_dsml_tool_calls_text(out: &mut String, calls: &[ToolCall]) {
-    if calls.is_empty() {
-        return;
-    }
-    out.push_str("\n\n<｜DSML｜tool_calls>\n");
-    for call in calls {
-        out.push_str("<｜DSML｜invoke name=\"");
-        append_dsml_attr_escaped(out, &call.name);
-        out.push_str("\">\n");
-        for arg in &call.arguments {
-            out.push_str("<｜DSML｜parameter name=\"");
-            append_dsml_attr_escaped(out, &arg.name);
-            out.push_str("\" string=\"");
-            out.push_str(if arg.is_string { "true" } else { "false" });
-            out.push_str("\">");
-            if arg.is_string {
-                append_dsml_parameter_text(out, &arg.value);
-            } else {
-                append_dsml_json_literal(out, &arg.value);
-            }
-            out.push_str("</｜DSML｜parameter>\n");
-        }
-        out.push_str("</｜DSML｜invoke>\n");
-    }
-    out.push_str("</｜DSML｜tool_calls>");
-}
-
-fn append_dsml_attr_escaped(out: &mut String, text: &str) {
-    for ch in text.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            ch => out.push(ch),
-        }
-    }
-}
-
-fn append_dsml_parameter_text(out: &mut String, text: &str) {
-    append_escaped_sentinel(out, text, "</｜DSML｜parameter>", "&lt;");
-}
-
-fn append_dsml_json_literal(out: &mut String, text: &str) {
-    append_escaped_sentinel(out, text, "</｜DSML｜parameter>", "\\u003c");
-}
-
-fn append_escaped_sentinel(out: &mut String, text: &str, sentinel: &str, replacement: &str) {
-    let mut rest = text;
-    while !rest.is_empty() {
-        if rest.starts_with(sentinel) {
-            out.push_str(replacement);
-            rest = &rest[1..];
-        } else {
-            let ch = rest.chars().next().expect("nonempty string has char");
-            out.push(ch);
-            rest = &rest[ch.len_utf8()..];
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn tool_result_escapes_only_closing_tag_start() {
-        let mut out = String::new();
-        append_tool_result_text(&mut out, "a </tool_result> & b");
-        assert_eq!(out, "a &lt;/tool_result> & b");
+        assert_eq!(
+            render_tool_result_text("a </tool_result> & b"),
+            "a &lt;/tool_result> & b"
+        );
     }
 
     #[test]

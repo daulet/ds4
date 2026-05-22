@@ -10,3 +10,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "ds4-gguf-dump"
 path = "src/bin/ds4-gguf-dump.rs"
+
+[[bin]]
+name = "ds4-dsml-dump"
+path = "src/bin/ds4-dsml-dump.rs"

@@ -1,9 +1,15 @@
 use std::fmt;
 use std::str;
 
+pub mod dsml;
 pub mod prompt;
 mod tokenizer;
 
+pub use dsml::{
+    parse_generated_message, parse_generated_message_for_response, render_dsml_tool_calls,
+    render_dsml_tool_calls_from_json, render_tool_result_text, DsmlArgument, DsmlJsonCall,
+    DsmlParseError, DsmlRenderCall, ParsedGeneratedMessage, ResponseParse,
+};
 pub use prompt::{
     apply_cli_ops, render_chat_prompt_text, ChatMessage, CliOp, ThinkMode, ToolArgument, ToolCall,
 };

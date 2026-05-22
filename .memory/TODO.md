@@ -507,7 +507,7 @@
 
 ### M5.6a: Server DSML Formatting And Generated-Message Parse Parity
 
-- Status: pending
+- Status: done
 - Goal: port server DSML tool-call formatting, raw sampled DSML replay,
   parameter ordering, string/JSON parameter rendering, delimiter escaping, tool
   result escaping, and `parse_generated_message_ex` boundaries.

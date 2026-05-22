@@ -3,8 +3,9 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.6a Server DSML Formatting And Generated-Message Parse Parity
-- Last validated source commit: `5fb8442e08ef3ecc9b1752064ccbd4d72031c3c6`
+- Active item: M5.6b Agent DSML Streaming Parse Parity
+- Last validated source commit: same commit as the M5.6a status entry once
+  committed
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -369,3 +370,28 @@
 - M5.6 split validation passed for docs-only `git diff --name-only`, `git
   diff --check`, and non-interactive Claude review. Claude returned
   `NO BLOCKERS`.
+- M5.6a added `./ds4-server --dump-dsml-oracle`, a no-model current-C DSML
+  oracle covering rendered tool-call blocks, raw sampled DSML replay, JSON and
+  string parameters, sentinel escaping, tool-result escaping,
+  `parse_generated_message_ex`, and recoverable response parsing. The committed
+  baseline lives at `ds4-parity/baselines/dsml/m5.6a/current-c.json` with size
+  17,016 bytes and SHA256
+  `3f20b4869a2035deab709e3299de91ccf151f46fa3524a8b389814ebbf880442`.
+- M5.6a added Rust DSML formatting/parsing in `ds4_gguf::dsml`, routed the Rust
+  prompt renderer's DSML and tool-result escaping through that module, and added
+  `ds4-dsml-dump` plus `python3 ds4-parity/compare_dsml.py`.
+- M5.6a validation passed for `arch -arm64 make ds4-server`,
+  `./ds4-server --dump-dsml-oracle /tmp/ds4-dsml-final-c.json` compared
+  byte-for-byte with the committed baseline,
+  `python3 ds4-parity/compare_dsml.py --manifest
+  ds4-parity/baselines/dsml/m5.6a/manifest.json --negative-test` with
+  `DSML comparison: PASS, 410 checks`, `python3 -m py_compile
+  ds4-parity/compare_dsml.py`, `cargo fmt --all -- --check`,
+  `cargo test -p ds4-gguf` with 14 tests, `cargo test --workspace`,
+  `./ds4_test --server`, `python3 ds4-parity/compare_tokenizer_text.py
+  --manifest ds4-parity/baselines/tokenization/m5.3/manifest.json
+  --negative-test`, and `git diff --check`.
+- M5.6a Claude review returned `NO BLOCKERS` after checking the Rust DSML
+  parser/formatter against C tool-start ordering, raw block boundaries,
+  sentinel escaping, entity escaping, JSON minification, response recovery,
+  raw DSML replay, prompt-renderer routing, and comparator coverage.

@@ -8352,6 +8352,311 @@ static void token_oracle_write_json_bytes(FILE *fp, const char *s, size_t n) {
     buf_free(&b);
 }
 
+static void dsml_oracle_write_json_nullable(FILE *fp, const char *s) {
+    if (s) token_oracle_write_json_cstr(fp, s);
+    else fputs("null", fp);
+}
+
+static void dsml_oracle_write_tool_call(FILE *fp, const tool_call *tc, bool first) {
+    if (!first) fputs(", ", fp);
+    fputs("{\"id\": ", fp);
+    dsml_oracle_write_json_nullable(fp, tc->id);
+    fputs(", \"name\": ", fp);
+    dsml_oracle_write_json_nullable(fp, tc->name);
+    fputs(", \"arguments\": ", fp);
+    dsml_oracle_write_json_nullable(fp, tc->arguments);
+    fputs("}", fp);
+}
+
+static void dsml_oracle_write_tool_calls(FILE *fp, const tool_calls *calls) {
+    fputs("[", fp);
+    if (calls) {
+        for (int i = 0; i < calls->len; i++) {
+            dsml_oracle_write_tool_call(fp, &calls->v[i], i == 0);
+        }
+    }
+    fputs("]", fp);
+}
+
+static void dsml_oracle_add_call(tool_calls *calls, const char *name, const char *arguments) {
+    tool_call tc = {0};
+    tc.name = xstrdup(name);
+    tc.arguments = xstrdup(arguments);
+    tool_calls_push(calls, tc);
+}
+
+static void dsml_oracle_dump_format_case(FILE *fp, const char *name,
+                                         const tool_calls *calls,
+                                         bool first) {
+    buf rendered = {0};
+    append_dsml_tool_calls_text(&rendered, calls);
+    if (!first) fputs(",\n", fp);
+    fputs("    {\"name\": ", fp);
+    token_oracle_write_json_cstr(fp, name);
+    fputs(", \"kind\": \"tool_calls\", \"rendered\": ", fp);
+    token_oracle_write_json_cstr(fp, rendered.ptr ? rendered.ptr : "");
+    fputs("}", fp);
+    buf_free(&rendered);
+}
+
+static void dsml_oracle_dump_tool_result_case(FILE *fp, const char *name,
+                                              const char *input,
+                                              bool first) {
+    buf rendered = {0};
+    append_tool_result_text(&rendered, input);
+    if (!first) fputs(",\n", fp);
+    fputs("    {\"name\": ", fp);
+    token_oracle_write_json_cstr(fp, name);
+    fputs(", \"kind\": \"tool_result\", \"input\": ", fp);
+    token_oracle_write_json_cstr(fp, input);
+    fputs(", \"rendered\": ", fp);
+    token_oracle_write_json_cstr(fp, rendered.ptr ? rendered.ptr : "");
+    fputs("}", fp);
+    buf_free(&rendered);
+}
+
+static void dsml_oracle_dump_parse_case(FILE *fp, const char *name,
+                                        const char *input,
+                                        bool require_thinking_closed,
+                                        bool has_tools,
+                                        bool saw_tool_start,
+                                        const char *finish,
+                                        bool first) {
+    char *content = NULL;
+    char *reasoning = NULL;
+    tool_calls calls = {0};
+    bool parse_ok = parse_generated_message_ex(input, require_thinking_closed,
+                                               &content, &reasoning, &calls);
+
+    char *response_content = NULL;
+    char *response_reasoning = NULL;
+    tool_calls response_calls = {0};
+    char err[128] = {0};
+    const char *finish_after = finish;
+    bool recovered = false;
+    bool response_ok = parse_generated_message_for_response(input,
+                                                            has_tools,
+                                                            saw_tool_start,
+                                                            require_thinking_closed,
+                                                            &finish_after,
+                                                            err,
+                                                            sizeof(err),
+                                                            &response_content,
+                                                            &response_reasoning,
+                                                            &response_calls,
+                                                            &recovered);
+
+    if (!first) fputs(",\n", fp);
+    fputs("    {\"name\": ", fp);
+    token_oracle_write_json_cstr(fp, name);
+    fputs(", \"require_thinking_closed\": ", fp);
+    fputs(require_thinking_closed ? "true" : "false", fp);
+    fputs(", \"input\": ", fp);
+    token_oracle_write_json_cstr(fp, input);
+    fputs(", \"parse_ok\": ", fp);
+    fputs(parse_ok ? "true" : "false", fp);
+    fputs(", \"content\": ", fp);
+    dsml_oracle_write_json_nullable(fp, content);
+    fputs(", \"reasoning\": ", fp);
+    dsml_oracle_write_json_nullable(fp, reasoning);
+    fputs(", \"raw_dsml\": ", fp);
+    dsml_oracle_write_json_nullable(fp, calls.raw_dsml);
+    fputs(", \"calls\": ", fp);
+    dsml_oracle_write_tool_calls(fp, &calls);
+    fputs(", \"response_parse_ok\": ", fp);
+    fputs(response_ok ? "true" : "false", fp);
+    fputs(", \"response_recovered\": ", fp);
+    fputs(recovered ? "true" : "false", fp);
+    fputs(", \"response_finish\": ", fp);
+    token_oracle_write_json_cstr(fp, finish_after ? finish_after : "");
+    fputs(", \"response_error\": ", fp);
+    token_oracle_write_json_cstr(fp, err);
+    fputs(", \"response_content\": ", fp);
+    dsml_oracle_write_json_nullable(fp, response_content);
+    fputs(", \"response_reasoning\": ", fp);
+    dsml_oracle_write_json_nullable(fp, response_reasoning);
+    fputs(", \"response_raw_dsml\": ", fp);
+    dsml_oracle_write_json_nullable(fp, response_calls.raw_dsml);
+    fputs(", \"response_calls\": ", fp);
+    dsml_oracle_write_tool_calls(fp, &response_calls);
+    fputs("}", fp);
+
+    free(content);
+    free(reasoning);
+    tool_calls_free(&calls);
+    free(response_content);
+    free(response_reasoning);
+    tool_calls_free(&response_calls);
+}
+
+static int dsml_oracle_dump_json(FILE *fp) {
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.dsml_oracle.v1\",\n", fp);
+    fputs("  \"format_cases\": [\n", fp);
+    bool first = true;
+    tool_calls calls = {0};
+
+    dsml_oracle_add_call(&calls, "bash",
+        "{\"description\":\"list files\",\"command\":\"ls -la\",\"timeout\":10}");
+    dsml_oracle_dump_format_case(fp, "ordered_string_and_json_parameters", &calls, first);
+    first = false;
+    tool_calls_free(&calls);
+
+    dsml_oracle_add_call(&calls, "bad<&\"name",
+        "{\"text\":\"a < b && c > d\",\"payload\":{\"end\":\"</｜DSML｜parameter>\"}}");
+    dsml_oracle_dump_format_case(fp, "attribute_and_json_sentinel_escape", &calls, first);
+    tool_calls_free(&calls);
+
+    dsml_oracle_add_call(&calls, "keys",
+        "{\"quote\\\"key\":\"line\\nvalue\",\"slash\\\\key\":true}");
+    dsml_oracle_dump_format_case(fp, "json_key_escaping", &calls, first);
+    tool_calls_free(&calls);
+
+    dsml_oracle_add_call(&calls, "fallback",
+        "not-json </｜DSML｜parameter> tail");
+    dsml_oracle_dump_format_case(fp, "invalid_arguments_fallback", &calls, first);
+    tool_calls_free(&calls);
+
+    calls.raw_dsml = xstrdup("<DSML｜tool_calls>\n<DSML｜invoke name=\"raw\">\n</DSML｜invoke>\n</DSML｜tool_calls>");
+    dsml_oracle_add_call(&calls, "ignored", "{\"x\":1}");
+    dsml_oracle_dump_format_case(fp, "raw_dsml_replay", &calls, first);
+    tool_calls_free(&calls);
+
+    dsml_oracle_dump_tool_result_case(fp, "tool_result_closing_sentinel",
+                                      "console.log('<tag>');\n</tool_result>\n& raw",
+                                      first);
+    fputs("\n  ],\n", fp);
+
+    fputs("  \"parse_cases\": [\n", fp);
+    first = true;
+    dsml_oracle_dump_parse_case(fp, "canonical_after_think",
+        "<think>need a shell check</think>\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"bash\">\n"
+        DS4_PARAM_START " name=\"command\" string=\"true\">pwd" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END,
+        true, true, true, "tool_calls", first);
+    first = false;
+
+    dsml_oracle_dump_parse_case(fp, "short_marker",
+        "<think>need a tool</think>"
+        "<DSML｜tool_calls>\n"
+        "<DSML｜invoke name=\"bash\">\n"
+        "<DSML｜parameter name=\"description\" string=\"true\">list files</DSML｜parameter>\n"
+        "<DSML｜parameter name=\"command\" string=\"true\">ls -la</DSML｜parameter>\n"
+        "</DSML｜invoke>\n"
+        "</DSML｜tool_calls>",
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "plain_xml_marker",
+        "done\n\n"
+        "<tool_calls>\n"
+        "<invoke name=\"plain\">\n"
+        "<parameter name=\"value\" string=\"true\">ok</parameter>\n"
+        "</invoke>\n"
+        "</tool_calls>",
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "loose_nested_parameters",
+        "review done\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"edit\">\n"
+        DS4_PARAM_START " name=\"path\">/private/tmp/tetris.c" DS4_PARAM_END "\n"
+        DS4_PARAM_START " name=\"edits\">\n"
+        DS4_PARAM_START " name=\"oldText\" string=\"true\">old &lt;text&gt;" DS4_PARAM_END "\n"
+        DS4_PARAM_START " name=\"newText\" string=\"true\">new text" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END,
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "thinking_dsml_ignored_before_close",
+        "<think>I might mention a tool:\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"bash\">\n"
+        DS4_PARAM_START " name=\"command\" string=\"true\">true" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END
+        "\nBut it is reasoning.</think>Final answer.",
+        true, true, true, "stop", first);
+
+    dsml_oracle_dump_parse_case(fp, "missing_think_close_ignored",
+        "<think>unfinished thought\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"bash\">\n"
+        DS4_PARAM_START " name=\"command\" string=\"true\">true" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END,
+        true, true, true, "length", first);
+
+    dsml_oracle_dump_parse_case(fp, "separator_whitespace_trim",
+        "<think>need a tool</think>I will inspect.\n\n\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"bash\">\n"
+        DS4_PARAM_START " name=\"command\" string=\"true\">ls -la" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END,
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "json_parameter_minified",
+        "need edit</think>\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"edit\">\n"
+        DS4_PARAM_START " name=\"path\" string=\"true\">/tmp/file" DS4_PARAM_END "\n"
+        DS4_PARAM_START " name=\"edits\" string=\"false\">"
+        "[{\"oldText\": \"status=created\", \"newText\": \"status=created\\nstatus2=resumed\"}]"
+        DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END,
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "multiple_invokes",
+        "done\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"first\">\n"
+        DS4_PARAM_START " name=\"value\" string=\"true\">one" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_INVOKE_START " name=\"second\">\n"
+        DS4_PARAM_START " name=\"value\" string=\"false\">2" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END,
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "default_string_attribute",
+        "done\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"bash\">\n"
+        DS4_PARAM_START " name=\"command\">echo &lt;ok&gt; &amp;&amp; true" DS4_PARAM_END "\n"
+        DS4_INVOKE_END "\n"
+        DS4_TOOL_CALLS_END,
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "malformed_missing_invoke_name",
+        "trying a tool\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START ">\n"
+        DS4_TOOL_CALLS_END,
+        false, true, true, "tool_calls", first);
+
+    dsml_oracle_dump_parse_case(fp, "malformed_error_finish",
+        "trying a tool\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START ">\n"
+        DS4_TOOL_CALLS_END,
+        false, true, true, "error", first);
+
+    dsml_oracle_dump_parse_case(fp, "truncated_parameter_length_finish",
+        "trying a tool\n\n"
+        DS4_TOOL_CALLS_START "\n"
+        DS4_INVOKE_START " name=\"bash\">\n"
+        DS4_PARAM_START " name=\"command\" string=\"true\">unterminated",
+        false, true, true, "length", first);
+
+    fputs("\n  ]\n", fp);
+    fputs("}\n", fp);
+    return ferror(fp) ? 1 : 0;
+}
+
 static char *token_oracle_read_file(const char *path, size_t *len_out) {
     if (len_out) *len_out = 0;
     FILE *fp = fopen(path, "rb");
@@ -11357,6 +11662,7 @@ typedef struct {
     const char *token_oracle_output_path;
     const char *token_oracle_fixture_dir;
     const char *token_oracle_model_sha256;
+    const char *dsml_oracle_output_path;
     const char *kv_disk_dir;
     uint64_t kv_disk_space_mb;
     kv_cache_options kv_cache;
@@ -11481,6 +11787,8 @@ static void usage(FILE *fp) {
         "      Write a human-readable session trace: prompts, cache decisions, output, tool calls.\n"
         "  --dump-token-oracle FILE\n"
         "      Dump tokenizer, rendered prompt, and CLI prompt token oracle JSON, then exit.\n"
+        "  --dump-dsml-oracle FILE\n"
+        "      Dump no-model DSML formatting and generated-message parse oracle JSON, then exit.\n"
         "  --token-oracle-fixture-dir DIR\n"
         "      Server request fixture directory for --dump-token-oracle. Default: ds4-parity/baselines/server-fixtures/m0.4\n"
         "  --token-oracle-model-sha256 HEX\n"
@@ -11602,6 +11910,8 @@ static server_config parse_options(int argc, char **argv) {
             c.trace_path = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--dump-token-oracle")) {
             c.token_oracle_output_path = need_arg(&i, argc, argv, arg);
+        } else if (!strcmp(arg, "--dump-dsml-oracle")) {
+            c.dsml_oracle_output_path = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--token-oracle-fixture-dir")) {
             c.token_oracle_fixture_dir = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--token-oracle-model-sha256")) {
@@ -11680,6 +11990,22 @@ int main(int argc, char **argv) {
         server_log(DS4_LOG_DEFAULT, "ds4-server: failed to chdir to %s: %s",
                    cfg.chdir_path, strerror(errno));
         return 1;
+    }
+
+    if (cfg.dsml_oracle_output_path) {
+        FILE *fp = fopen(cfg.dsml_oracle_output_path, "wb");
+        if (!fp) {
+            server_log(DS4_LOG_DEFAULT, "ds4-server: failed to open DSML oracle output %s: %s",
+                       cfg.dsml_oracle_output_path, strerror(errno));
+            return 1;
+        }
+        int rc = dsml_oracle_dump_json(fp);
+        if (fclose(fp) != 0 && rc == 0) {
+            server_log(DS4_LOG_DEFAULT, "ds4-server: failed to close DSML oracle output %s: %s",
+                       cfg.dsml_oracle_output_path, strerror(errno));
+            rc = 1;
+        }
+        return rc;
     }
 
     ds4_engine *engine = NULL;

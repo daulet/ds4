@@ -1,0 +1,26 @@
+{
+  "schema": "ds4.dsml_baseline.v1",
+  "milestone": "M5.6a",
+  "source_commit": "same commit as this manifest",
+  "captured_from_parent_commit": "9ae594606206b611b85587c9a90cb6110af1e1f9",
+  "captured_utc": "2026-05-22T07:56:45Z",
+  "dumps": {
+    "current_c": {
+      "path": "current-c.json",
+      "size_bytes": 17016,
+      "sha256": "3f20b4869a2035deab709e3299de91ccf151f46fa3524a8b389814ebbf880442",
+      "producer": "current-c-server-dsml-oracle",
+      "command": "./ds4-server --dump-dsml-oracle ds4-parity/baselines/dsml/m5.6a/current-c.json"
+    }
+  },
+  "refresh_commands": [
+    "arch -arm64 make ds4-server",
+    "./ds4-server --dump-dsml-oracle ds4-parity/baselines/dsml/m5.6a/current-c.json",
+    "python3 ds4-parity/compare_dsml.py --manifest ds4-parity/baselines/dsml/m5.6a/manifest.json --negative-test"
+  ],
+  "normalization": {
+    "format_cases": "exact rendered DSML/tool-result bytes",
+    "parse_cases": "exact generated-message parse fields, response recovery fields, raw DSML blocks, and parsed tool-call JSON strings",
+    "model": "no model is loaded for this oracle"
+  }
+}
