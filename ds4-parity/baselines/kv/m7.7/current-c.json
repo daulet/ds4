@@ -1,0 +1,411 @@
+{
+  "schema": "ds4.kv_replay_oracle.v1",
+  "source": "current-c-log-artifacts",
+  "fixture_hashes": [
+    {
+      "path": "ds4-parity/baselines/server-traces/m0.4/traces/server.trace",
+      "sha256": "7157dfeb6458ccde0059a0e01f12785e41f6b60aa8eba2838cc0fdfa6aa129cc",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/server-traces/m0.4/responses/chat_tool_call.json",
+      "sha256": "11d0fd4c4b6773eaf529f76328fd20fceed6662e9a4b46dda8c5c97c6d22b1ee",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/server-traces/m0.4/responses/chat_cache_seed.json",
+      "sha256": "7d214829e589548bc8d48552054a5197472c2018799d97324756a33e4a89349b",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/server-traces/m0.4/responses/chat_cache_continuation.json",
+      "sha256": "bf278c9134e91d6b50c1ad2da8e4c4b393bcf00a2125c17542535f4e3e5520e4",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/server-fixtures/m0.4/chat_cache_seed.json",
+      "sha256": "bb143a6b0525230d47fe81879cdd705e30d45fbc6a636d06e928041f563dc260",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json",
+      "sha256": "ce7615afadfe043c97dfc3fcbfc0a449fe3a6b246fba2ee9a992c61e73f5630b",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/logs/cache-decisions.txt",
+      "sha256": "152e5dd4085675877d194ec093c33dd5bc9c06d3f10243d3a2db430ec1bb3643",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/logs/kv-header.tsv",
+      "sha256": "be4bcf31df80a1f6fd70e9cb108108f1b8535fe5c7e0589dd1017d5222acab2c",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/responses/seed_miss.json",
+      "sha256": "381833e4224be5ee1253921f0b4d3e0a0bd040d310081a69e0f7eb8caa9b44e3",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/responses/seed_restore.json",
+      "sha256": "af5d39b9c3f2d446b1155ebcf55650451fdeb5bd5a4bb1568e01eb8ca487c0fa",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/responses/continuation_restore.json",
+      "sha256": "12a12ca489ed3a77bb1a96d3847ec8c0c2ade7a694930dc488b172680a626ea0",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/traces/server-a.trace",
+      "sha256": "4752e860c3db662972b87cd571cf20b70ee63c82f7da685f42bfd67c8858cffb",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/traces/server-b.trace",
+      "sha256": "d47a52450c1851257da1ee84194038fb4fd1674e45eb9a3b4d5a59f68164c4d9",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/traces/server-c.trace",
+      "sha256": "bed7874343e8e90e0eab6c9f9876e6ba74156f84fffd526cfa6d8957bbdcb1fd",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/0ab2314538b11686a11e296b7f697651fbd17e60.txt",
+      "sha256": "73adfe87d8950dde4b5a33d45b2fadb717c0370421ca05b3c4257360a8bbd1f1",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/a0cac6ff193696ccb5d7e9ae151d7255d39cf161.txt",
+      "sha256": "f179cc9e845ef94838bc456b24567c32aaa5d60b0e28f7d016fd1db598262a22",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-fixtures/m0.5/kv_seed.json",
+      "sha256": "06ab42040384c4b29c863345754ad9018d40bf0337f4eac7d745a552e82192db",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv-fixtures/m0.5/kv_continuation.json",
+      "sha256": "ef05ce870c1473ff309a5acb2cdb71dc3900bd30f6c5f572806f8a349212f93d",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/kv/m7.2/current-c.json",
+      "sha256": "f908b4bf059db500c1de6b4265491719083224d2bab703169ba0e585e9de6bcb",
+      "role": "replay-fixture"
+    },
+    {
+      "path": "ds4-parity/baselines/tokenization/m5.2/current-c.json",
+      "sha256": "b0689f47abe63750ab3191772d5661d5f0f433e954bcfd0de6a0e55a747489e9",
+      "role": "m5-precondition"
+    },
+    {
+      "path": "ds4-parity/baselines/tokenization/m5.2/manifest.json",
+      "sha256": "b8eebd2acc89ad29b1c35e9123e85044720fd380eb3a830248bccfb0d7ba4d52",
+      "role": "m5-precondition"
+    },
+    {
+      "path": "ds4-parity/baselines/dsml/m5.6a/current-c.json",
+      "sha256": "3f20b4869a2035deab709e3299de91ccf151f46fa3524a8b389814ebbf880442",
+      "role": "m5-precondition"
+    },
+    {
+      "path": "ds4-parity/baselines/dsml/m5.6a/manifest.json",
+      "sha256": "d62f3292ca27439df612382c914e1879d187439d6ab85429e6fd0c9683b0939f",
+      "role": "m5-precondition"
+    },
+    {
+      "path": "ds4-parity/baselines/dsml/m5.6b/current-c.json",
+      "sha256": "0b0f21728b0f5230dcbae5d3d2a99e272347ecdeac04fa57ca07ec00b9f00618",
+      "role": "m5-precondition"
+    },
+    {
+      "path": "ds4-parity/baselines/dsml/m5.6b/manifest.json",
+      "sha256": "0ea2ccab83b8f4ea332a08a6fec20ab2c8b3886a7e537f81c19d3ff80f802a3a",
+      "role": "m5-precondition"
+    }
+  ],
+  "replay_cases": [
+    {
+      "name": "m0_5_seed_miss",
+      "artifact_family": "m0.5",
+      "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_seed.json",
+      "response": "ds4-parity/baselines/kv-artifacts/m0.5/responses/seed_miss.json",
+      "model": "deepseek-chat",
+      "prompt_tokens": 550,
+      "effective_prompt_tokens": 550,
+      "live_tokens_before": 0,
+      "live_prompt_common": 0,
+      "memory_token_reusable": false,
+      "memory_miss_reason": "no-live-checkpoint",
+      "tool_replay": {
+        "mem": 0,
+        "disk": 0,
+        "canonical": 0,
+        "missing_ids": 0
+      },
+      "cache_source": "none",
+      "cached_tokens": 0,
+      "disk_cached_tokens": 0,
+      "cache_write_tokens": 550,
+      "disk_cache_file": null,
+      "disk_cache_reason_name": null,
+      "disk_cache_reason_code": null,
+      "disk_cache_ext_flags": null,
+      "disk_cache_key_kind": null,
+      "rendered_text_sha256": null,
+      "rendered_text_bytes": null,
+      "rendered_prompt_sha256": "73adfe87d8950dde4b5a33d45b2fadb717c0370421ca05b3c4257360a8bbd1f1",
+      "rendered_prompt_bytes": 2520,
+      "effective_suffix_hex": null,
+      "effective_suffix_bytes": null,
+      "response_finish_reason": "length",
+      "response_content": "I notice",
+      "response_prompt_tokens": 550,
+      "response_cached_tokens": 0,
+      "response_cache_write_tokens": 550,
+      "parsed_finish": "length",
+      "parsed_generated_tokens": 2,
+      "parsed_dsml_start": 0,
+      "parsed_dsml_end": 0
+    },
+    {
+      "name": "m0_5_seed_restore",
+      "artifact_family": "m0.5",
+      "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_seed.json",
+      "response": "ds4-parity/baselines/kv-artifacts/m0.5/responses/seed_restore.json",
+      "model": "deepseek-chat",
+      "prompt_tokens": 550,
+      "effective_prompt_tokens": 550,
+      "live_tokens_before": 0,
+      "live_prompt_common": 0,
+      "memory_token_reusable": false,
+      "memory_miss_reason": "no-live-checkpoint",
+      "tool_replay": {
+        "mem": 0,
+        "disk": 0,
+        "canonical": 0,
+        "missing_ids": 0
+      },
+      "cache_source": "disk-text",
+      "cached_tokens": 550,
+      "disk_cached_tokens": 550,
+      "cache_write_tokens": 0,
+      "disk_cache_file": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+      "disk_cache_reason_name": "cold",
+      "disk_cache_reason_code": 1,
+      "disk_cache_ext_flags": 0,
+      "disk_cache_key_kind": "token-text",
+      "rendered_text_sha256": "73adfe87d8950dde4b5a33d45b2fadb717c0370421ca05b3c4257360a8bbd1f1",
+      "rendered_text_bytes": 2520,
+      "rendered_prompt_sha256": "73adfe87d8950dde4b5a33d45b2fadb717c0370421ca05b3c4257360a8bbd1f1",
+      "rendered_prompt_bytes": 2520,
+      "effective_suffix_hex": "",
+      "effective_suffix_bytes": 0,
+      "response_finish_reason": "length",
+      "response_content": "I notice",
+      "response_prompt_tokens": 550,
+      "response_cached_tokens": 550,
+      "response_cache_write_tokens": 0,
+      "parsed_finish": "length",
+      "parsed_generated_tokens": 2,
+      "parsed_dsml_start": 0,
+      "parsed_dsml_end": 0
+    },
+    {
+      "name": "m0_5_continuation_restore",
+      "artifact_family": "m0.5",
+      "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_continuation.json",
+      "response": "ds4-parity/baselines/kv-artifacts/m0.5/responses/continuation_restore.json",
+      "model": "deepseek-chat",
+      "prompt_tokens": 561,
+      "effective_prompt_tokens": 561,
+      "live_tokens_before": 0,
+      "live_prompt_common": 0,
+      "memory_token_reusable": false,
+      "memory_miss_reason": "no-live-checkpoint",
+      "tool_replay": {
+        "mem": 0,
+        "disk": 0,
+        "canonical": 0,
+        "missing_ids": 0
+      },
+      "cache_source": "disk-text",
+      "cached_tokens": 552,
+      "disk_cached_tokens": 552,
+      "cache_write_tokens": 9,
+      "disk_cache_file": "a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv",
+      "disk_cache_reason_name": "shutdown",
+      "disk_cache_reason_code": 4,
+      "disk_cache_ext_flags": 0,
+      "disk_cache_key_kind": "token-text",
+      "rendered_text_sha256": "f179cc9e845ef94838bc456b24567c32aaa5d60b0e28f7d016fd1db598262a22",
+      "rendered_text_bytes": 2528,
+      "rendered_prompt_sha256": "72fefe4df49b22c4fd53ecfab918152b988bf39e231e1ccdd55ab1b4848a8e06",
+      "rendered_prompt_bytes": 2620,
+      "effective_suffix_hex": "3cefbd9c656e64e296816f66e2968173656e74656e6365efbd9c3e3cefbd9c55736572efbd9c3e52657475726e2065786163746c793a206b7620636f6e74696e7565643cefbd9c417373697374616e74efbd9c3e3c2f7468696e6b3e",
+      "effective_suffix_bytes": 92,
+      "response_finish_reason": "stop",
+      "response_content": "kv continued",
+      "response_prompt_tokens": 561,
+      "response_cached_tokens": 552,
+      "response_cache_write_tokens": 9,
+      "parsed_finish": "stop",
+      "parsed_generated_tokens": 2,
+      "parsed_dsml_start": 0,
+      "parsed_dsml_end": 0
+    },
+    {
+      "name": "m0_4_tool_call",
+      "artifact_family": "m0.4",
+      "fixture": "server-trace-request-3",
+      "response": "ds4-parity/baselines/server-traces/m0.4/responses/chat_tool_call.json",
+      "model": "deepseek-v4-flash",
+      "prompt_tokens": 394,
+      "effective_prompt_tokens": 394,
+      "live_tokens_before": 13,
+      "live_prompt_common": 1,
+      "memory_token_reusable": false,
+      "memory_miss_reason": "token-mismatch",
+      "tool_replay": {
+        "mem": 0,
+        "disk": 0,
+        "canonical": 0,
+        "missing_ids": 0
+      },
+      "cache_source": "none",
+      "cached_tokens": 0,
+      "disk_cached_tokens": 0,
+      "cache_write_tokens": 394,
+      "disk_cache_file": null,
+      "disk_cache_reason_name": null,
+      "disk_cache_reason_code": null,
+      "disk_cache_ext_flags": null,
+      "disk_cache_key_kind": null,
+      "rendered_text_sha256": null,
+      "rendered_text_bytes": null,
+      "rendered_prompt_sha256": "8050b1e4f35f8d3f2779f14e905cca9cdf4bb47bb970e606a4d21aaa7b9a2c39",
+      "rendered_prompt_bytes": 1838,
+      "effective_suffix_hex": null,
+      "effective_suffix_bytes": null,
+      "response_finish_reason": "tool_calls",
+      "response_content": "",
+      "response_prompt_tokens": 394,
+      "response_cached_tokens": 0,
+      "response_cache_write_tokens": 394,
+      "parsed_finish": "tool_calls",
+      "parsed_generated_tokens": 42,
+      "parsed_dsml_start": 1,
+      "parsed_dsml_end": 1,
+      "first_mismatch_token": 1,
+      "token_window_sha256": "104e465016255503c183c632c0a07da86335564de7bdc21a43680b53fbf49e72",
+      "token_window_lines": 10,
+      "token_window_range": "[0..10)"
+    },
+    {
+      "name": "m0_4_cache_seed",
+      "artifact_family": "m0.4",
+      "fixture": "ds4-parity/baselines/server-fixtures/m0.4/chat_cache_seed.json",
+      "response": "ds4-parity/baselines/server-traces/m0.4/responses/chat_cache_seed.json",
+      "model": "deepseek-chat",
+      "prompt_tokens": 39,
+      "effective_prompt_tokens": 39,
+      "live_tokens_before": 16,
+      "live_prompt_common": 1,
+      "memory_token_reusable": false,
+      "memory_miss_reason": "token-mismatch",
+      "tool_replay": {
+        "mem": 0,
+        "disk": 0,
+        "canonical": 0,
+        "missing_ids": 0
+      },
+      "cache_source": "none",
+      "cached_tokens": 0,
+      "disk_cached_tokens": 0,
+      "cache_write_tokens": 39,
+      "disk_cache_file": null,
+      "disk_cache_reason_name": null,
+      "disk_cache_reason_code": null,
+      "disk_cache_ext_flags": null,
+      "disk_cache_key_kind": null,
+      "rendered_text_sha256": null,
+      "rendered_text_bytes": null,
+      "rendered_prompt_sha256": "5f823dcf82c86cf44088e500260f0a289b1557d98ed639c81192b67f37a35f9f",
+      "rendered_prompt_bytes": 244,
+      "effective_suffix_hex": null,
+      "effective_suffix_bytes": null,
+      "response_finish_reason": "stop",
+      "response_content": "cache ready",
+      "response_prompt_tokens": 39,
+      "response_cached_tokens": 0,
+      "response_cache_write_tokens": 39,
+      "parsed_finish": "stop",
+      "parsed_generated_tokens": 2,
+      "parsed_dsml_start": 0,
+      "parsed_dsml_end": 0,
+      "first_mismatch_token": 1,
+      "token_window_sha256": "79a7b0757442be68b66cf7b2b1925b1fded44f21ab2bd5102093b4e1d066e63a",
+      "token_window_lines": 10,
+      "token_window_range": "[0..10)"
+    },
+    {
+      "name": "m0_4_cache_continuation",
+      "artifact_family": "m0.4",
+      "fixture": "ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json",
+      "response": "ds4-parity/baselines/server-traces/m0.4/responses/chat_cache_continuation.json",
+      "model": "deepseek-chat",
+      "prompt_tokens": 50,
+      "effective_prompt_tokens": 50,
+      "live_tokens_before": 41,
+      "live_prompt_common": 41,
+      "memory_token_reusable": true,
+      "memory_miss_reason": "live-prefix-match",
+      "tool_replay": {
+        "mem": 0,
+        "disk": 0,
+        "canonical": 0,
+        "missing_ids": 0
+      },
+      "cache_source": "memory-token",
+      "cached_tokens": 41,
+      "disk_cached_tokens": 0,
+      "cache_write_tokens": 9,
+      "disk_cache_file": null,
+      "disk_cache_reason_name": null,
+      "disk_cache_reason_code": null,
+      "disk_cache_ext_flags": null,
+      "disk_cache_key_kind": null,
+      "rendered_text_sha256": null,
+      "rendered_text_bytes": null,
+      "rendered_prompt_sha256": "98d37f51a0aaa4f43ceeb61a2b054bf5553817bfd09ba9155065f1896be722af",
+      "rendered_prompt_bytes": 350,
+      "effective_suffix_hex": "63616368652072656164793cefbd9c656e64e296816f66e2968173656e74656e6365efbd9c3e3cefbd9c55736572efbd9c3e52657475726e2065786163746c793a20636163686520636f6e74696e7565643cefbd9c417373697374616e74efbd9c3e3c2f7468696e6b3e",
+      "effective_suffix_bytes": 106,
+      "response_finish_reason": "stop",
+      "response_content": "cache continued",
+      "response_prompt_tokens": 50,
+      "response_cached_tokens": 41,
+      "response_cache_write_tokens": 9,
+      "parsed_finish": "stop",
+      "parsed_generated_tokens": 2,
+      "parsed_dsml_start": 0,
+      "parsed_dsml_end": 0
+    }
+  ],
+  "dsml_tool_call_cases": [
+    {
+      "name": "m0_4_tool_call",
+      "dsml_start": 1,
+      "dsml_end": 1,
+      "tool_call_count": 1,
+      "tool_call_id": "call_74afa558e9694448bc8aef7aae54150d",
+      "tool_call_name": "list_files",
+      "tool_call_arguments_sha256": "4ae486c3a48f8dc732af672b138b438a1d96960304cc334d46bbc2687d169cbb",
+      "tool_call_arguments_bytes": 12
+    }
+  ]
+}

@@ -3,10 +3,9 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.7 KV Replay And Prefix Decision Comparator
-- Last validated source commit: M7.6 Rust session payload header reader in
-  this commit; prior pushed source commit
-  `8089ffa4670a77313df0e6decf747dadea84c988`
+- Active item: M7.8 B300 Disk KV And In-Memory Snapshot Restore Oracle
+- Last validated source commit: M7.7 KV replay comparator in this commit;
+  prior pushed source commit `be50ecc61d853e56fbc216cf38793deeeaac9dc3`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -805,3 +804,28 @@
   ds4-gguf session_payload`, `cargo test -p ds4-gguf --bin
   ds4-session-payload-dump-rs`, `cargo test --workspace`, and
   `git diff --check`.
+- M7.7 adds Rust cache-replay helpers in `rust/ds4-gguf/src/kv_policy.rs`
+  for live-prefix reuse, disk-text restore accounting, cache write token
+  calculation, and byte-prefix effective prompt suffix construction.
+- M7.7 adds `ds4-kv-replay-dump-rs`, a no-model Rust replay fixture for the
+  committed M0.5 cold/disk restore cases and M0.4 DSML/cache-continuation
+  cases.
+- M7.7 adds `ds4-parity/baselines/kv/m7.7/current-c.json`, derived from the
+  committed M0.4/M0.5 traces and responses. It records M5 prompt-rendering
+  artifact hashes as fixture preconditions, six replay cases, disk-cache
+  reason/key/rendered-text fields, token-window hashes for mismatch cases,
+  DSML tool-call records, and effective prompt suffix byte hex for disk and
+  memory-prefix restores.
+- M7.7 adds `python3 ds4-parity/compare_kv_replay.py`, which regenerates the
+  C replay oracle from committed artifacts, fails M5 hash drift as a
+  precondition, compares Rust replay output, and checks the M7.3 Rust policy
+  dump's M0.5 KVC header rows.
+- M7.7 local validation passed for `cargo fmt --all -- --check`, `python3 -m
+  py_compile ds4-parity/compare_kv_replay.py`, JSON validation for
+  `ds4-parity/baselines/kv/m7.7/current-c.json` and `manifest.json`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test` (`KV replay C fixture
+  preconditions: PASS, 333 checks`; `KV replay C/Rust comparator: PASS, 273
+  checks`; `KV replay Rust policy precondition: PASS, 14 checks`; manifest
+  `PASS, 6 checks`; negative tests `PASS, 6 checks`), `cargo test -p
+  ds4-gguf kv_policy`, `cargo test -p ds4-gguf --bin
+  ds4-kv-replay-dump-rs`, `cargo test --workspace`, and `git diff --check`.

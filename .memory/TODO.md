@@ -1094,7 +1094,7 @@
 
 ### M7.7: KV Replay And Prefix Decision Comparator
 
-- Status: pending
+- Status: done
 - Goal: compare request-level cache hit, cache miss, prefix match, exact DSML
   replay, and effective prompt suffix construction against current C artifacts.
 - Oracle: M0.5 KV/cache traces, M0.4 server traces where DSML rendering is
@@ -1118,10 +1118,55 @@
   drift; trace timing and process paths may be normalized.
 - Review gate: ask Claude to review replay coverage at the boundary between KV
   policy, opaque Milestone 5 text fixtures, and future server runtime work.
-- Validation needed: replay comparator with negative tests, Milestone 5 fixture
-  hash precondition check, `cargo test --workspace`, and `git diff --check`.
+- Validation passed: `cargo fmt --all -- --check`, `python3 -m py_compile
+  ds4-parity/compare_kv_replay.py`, `python3 -m json.tool
+  ds4-parity/baselines/kv/m7.7/current-c.json`, `python3 -m json.tool
+  ds4-parity/baselines/kv/m7.7/manifest.json`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test` (`KV replay C fixture
+  preconditions: PASS, 333 checks`; `KV replay C/Rust comparator: PASS, 273
+  checks`; `KV replay Rust policy precondition: PASS, 14 checks`; manifest
+  `PASS, 6 checks`; negative tests `PASS, 6 checks`), `cargo test -p
+  ds4-gguf kv_policy`, `cargo test -p ds4-gguf --bin
+  ds4-kv-replay-dump-rs`, `cargo test --workspace`, and `git diff --check`.
 - Owner path: KV replay comparator, `ds4-parity/`, Rust KV policy helpers,
   `.memory/status.md`.
+
+### M7.8: B300 Disk KV And In-Memory Snapshot Restore Oracle
+
+- Status: pending
+- Goal: capture model-backed current-C evidence for both disk KV/session
+  payload restore and in-memory `ds4_session_snapshot` restore.
+- Source evidence needed: current C server/session save and restore paths on
+  the recorded B300 model, `ds4_session_save_payload`,
+  `ds4_session_load_payload`, `ds4_session_save_snapshot`,
+  `ds4_session_load_snapshot`, `ds4_session_top_logprobs`, and selected-token
+  output after restore.
+- Oracle: current C server/session save and restore paths on the recorded B300
+  model.
+- Fixture: fixed cache seed prompts, continuation prompts, cache directory
+  setup, selected disk restore points, selected in-memory snapshot points, raw
+  KV/payload hash records, snapshot metadata records, top-logprob slices,
+  selected tokens, model identity, backend identity, and exact B300 refresh
+  commands. Rust in-memory snapshot loading is deferred to Milestone 10 runtime
+  ownership; this item captures current-C oracle evidence only.
+- Comparator: schema/hash/top-logprob checker that validates committed restore
+  records locally and skips recapture only with exact B300 rerun commands.
+- Acceptance: restored and uninterrupted current-C sessions have matching
+  selected next token and top-logprob token ordering; logit/logprob score
+  values match within the M6 model-logits absolute tolerance of `1e-5` from
+  `ds4-parity/compare_model_logits.py`. Raw payloads larger than 1 MiB are
+  represented by hashes plus exact recapture commands instead of being
+  committed.
+- Drift policy: model path and capture workspace may be normalized; prompt
+  bytes, restore metadata, snapshot metadata, payload hashes, selected tokens,
+  top-logprob token IDs/order, and score tolerances are exact.
+- Review gate: ask Claude to review B300 command fidelity, artifact-size
+  policy, disk-vs-memory snapshot separation, and distribution-comparison
+  tolerance.
+- Validation needed: B300 capture or exact skipped recapture command, local
+  schema/hash checker with negative tests, and `git diff --check`.
+- Owner path: B300 restore oracle artifacts, `ds4-parity/`,
+  `ds4-parity/baselines/kv/`, `.memory/status.md`.
 
 ## Later Items
 

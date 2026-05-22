@@ -201,3 +201,16 @@ The comparator runs `ds4-session-payload-dump-rs`, checks that Rust decodes the
 same header fields, fixed layout, size accounting, trailing/truncated body
 boundaries, and structural rejection categories as C, and treats the M0.5
 payload records as fixture preconditions rather than raw body inputs.
+
+Compare the M7.7 Rust KV replay decisions against committed current-C replay
+artifacts:
+
+```sh
+python3 ds4-parity/compare_kv_replay.py --negative-test
+```
+
+The comparator derives its C oracle from the M0.4 server trace and M0.5 disk-KV
+trace artifacts, checks M5 prompt-rendering fixture hashes as preconditions,
+runs `ds4-kv-replay-dump-rs`, and compares cache source, cached/write token
+counts, disk KV reason/key fields, rendered text hashes, token-prefix records,
+DSML tool-call records, and effective prompt suffix bytes.

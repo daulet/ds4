@@ -1,0 +1,17 @@
+{
+  "schema": "ds4.kv_replay_manifest.v1",
+  "artifact": {
+    "path": "current-c.json",
+    "sha256": "731df193564f7a2d57d541ae54804b8bf094d7ae0a5cd5718358a20436e503bb",
+    "size_bytes": 15815
+  },
+  "oracle": "current C M0.4/M0.5 replay traces with M5 prompt fixture preconditions",
+  "validation": [
+    "python3 -m py_compile ds4-parity/compare_kv_replay.py",
+    "python3 ds4-parity/compare_kv_replay.py --negative-test",
+    "cargo test -p ds4-gguf kv_policy",
+    "cargo test -p ds4-gguf --bin ds4-kv-replay-dump-rs",
+    "cargo test --workspace",
+    "git diff --check"
+  ]
+}

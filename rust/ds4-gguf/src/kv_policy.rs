@@ -130,6 +130,16 @@ pub struct FileSizeDecision {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheReplayDecision {
+    pub cache_source: &'static str,
+    pub cached_tokens: u32,
+    pub cache_write_tokens: u32,
+    pub disk_cached_tokens: u32,
+    pub memory_token_reusable: bool,
+    pub memory_miss_reason: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KvcFile {
     pub header: KvHeader,
     pub text: Vec<u8>,
@@ -667,6 +677,63 @@ pub fn byte_prefix_match(text: &[u8], prefix: &[u8]) -> bool {
     prefix.len() <= text.len() && text.starts_with(prefix)
 }
 
+pub fn effective_prompt_suffix<'a>(prompt_text: &'a [u8], cached_text: &[u8]) -> Option<&'a [u8]> {
+    if byte_prefix_match(prompt_text, cached_text) {
+        Some(&prompt_text[cached_text.len()..])
+    } else {
+        None
+    }
+}
+
+pub fn cache_replay_decision(
+    live_tokens_before: u32,
+    prompt_tokens: u32,
+    live_prompt_common: u32,
+    disk_cached_tokens: u32,
+) -> CacheReplayDecision {
+    let memory_token_reusable = live_tokens_before > 0
+        && live_prompt_common == live_tokens_before
+        && prompt_tokens >= live_tokens_before;
+    let memory_miss_reason = if memory_token_reusable {
+        "live-prefix-match"
+    } else if live_tokens_before == 0 {
+        "no-live-checkpoint"
+    } else {
+        "token-mismatch"
+    };
+
+    if memory_token_reusable {
+        return CacheReplayDecision {
+            cache_source: "memory-token",
+            cached_tokens: live_tokens_before,
+            cache_write_tokens: prompt_tokens.saturating_sub(live_tokens_before),
+            disk_cached_tokens: 0,
+            memory_token_reusable,
+            memory_miss_reason,
+        };
+    }
+
+    if disk_cached_tokens > 0 {
+        return CacheReplayDecision {
+            cache_source: "disk-text",
+            cached_tokens: disk_cached_tokens,
+            cache_write_tokens: prompt_tokens.saturating_sub(disk_cached_tokens),
+            disk_cached_tokens,
+            memory_token_reusable,
+            memory_miss_reason,
+        };
+    }
+
+    CacheReplayDecision {
+        cache_source: "none",
+        cached_tokens: 0,
+        cache_write_tokens: prompt_tokens,
+        disk_cached_tokens: 0,
+        memory_token_reusable,
+        memory_miss_reason,
+    }
+}
+
 pub fn entry_eviction_score(entry: &KvEntry, protected_sha: Option<&str>, now: u64) -> f64 {
     if entry.file_size == 0 {
         return 0.0;
@@ -903,6 +970,56 @@ mod tests {
                 required_bytes: 386,
             })
         );
+    }
+
+    #[test]
+    fn cache_replay_decision_matches_server_cache_accounting() {
+        assert_eq!(
+            cache_replay_decision(0, 550, 0, 0),
+            CacheReplayDecision {
+                cache_source: "none",
+                cached_tokens: 0,
+                cache_write_tokens: 550,
+                disk_cached_tokens: 0,
+                memory_token_reusable: false,
+                memory_miss_reason: "no-live-checkpoint",
+            }
+        );
+        assert_eq!(
+            cache_replay_decision(0, 561, 0, 552),
+            CacheReplayDecision {
+                cache_source: "disk-text",
+                cached_tokens: 552,
+                cache_write_tokens: 9,
+                disk_cached_tokens: 552,
+                memory_token_reusable: false,
+                memory_miss_reason: "no-live-checkpoint",
+            }
+        );
+        assert_eq!(
+            cache_replay_decision(41, 50, 41, 0),
+            CacheReplayDecision {
+                cache_source: "memory-token",
+                cached_tokens: 41,
+                cache_write_tokens: 9,
+                disk_cached_tokens: 0,
+                memory_token_reusable: true,
+                memory_miss_reason: "live-prefix-match",
+            }
+        );
+        assert_eq!(
+            cache_replay_decision(16, 39, 1, 0).memory_miss_reason,
+            "token-mismatch"
+        );
+    }
+
+    #[test]
+    fn effective_prompt_suffix_requires_byte_prefix() {
+        assert_eq!(
+            effective_prompt_suffix(b"abcdef", b"abc"),
+            Some(&b"def"[..])
+        );
+        assert_eq!(effective_prompt_suffix(b"abcdef", b"abd"), None);
     }
 
     #[test]
