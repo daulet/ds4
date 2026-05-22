@@ -73,6 +73,9 @@ next sections.
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): correctness and speed regression testing
   guide for contributors. **Read this before sending a pull request**.
+- [RUST_PORT_ROADMAP.md](RUST_PORT_ROADMAP.md): staged plan for moving DS4 host
+  logic and runtime orchestration to Rust while keeping current GPU backends as
+  the initial oracle.
 - [gguf-tools/README.md](gguf-tools/README.md): offline GGUF generation,
   imatrix collection, quantization tooling, and quality checks.
 - [gguf-tools/imatrix/README.md](gguf-tools/imatrix/README.md): how the
