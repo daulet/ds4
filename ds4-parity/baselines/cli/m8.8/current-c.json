@@ -1,0 +1,218 @@
+{
+  "schema": "ds4.cli_inspect_oracle.v1",
+  "source": "current-c-cli-inspect",
+  "binary": "./ds4",
+  "model": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "size": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "source_evidence": {
+    "cli_dispatch": "ds4_cli.c main skips prompt/context diagnostics when cfg.inspect, opens ds4_engine, then calls ds4_engine_summary(engine)",
+    "summary_entry": "ds4.c ds4_engine_summary calls model_summary(&e->model)",
+    "summary_output": "ds4.c model_summary prints model metadata, tensor bytes, logical parameters, and tensor type counts"
+  },
+  "cases": [
+    {
+      "id": "cuda_inspect",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--inspect"
+      ],
+      "exit_code": 0,
+      "stdout": {
+        "base64": "bW9kZWw6IERlZXBTZWVrIFY0IEZsYXNoCmFyY2g6ICBkZWVwc2VlazQKZ2d1ZjogIHYzLCA2MiBtZXRhZGF0YSBrZXlzLCAxMzI4IHRlbnNvcnMKbGF5ZXJzOiA0MwphdHRlbnRpb246IGhlYWRzPTY0IGt2X2hlYWRzPTEgaGVhZF9kaW09NTEyIHN3YT0xMjgKaW5kZXhlcjogaGVhZHM9NjQgaGVhZF9kaW09MTI4IHRvcF9rPTUxMgpleHBlcnRzOiBjb3VudD0yNTYgdXNlZD02IGdyb3Vwcz0wIGdyb3Vwc191c2VkPTAKZmlsZSBzaXplOiA4MC43NiBHaUIKdGVuc29yIGJ5dGVzIGRlc2NyaWJlZCBieSBHR1VGOiA4MC43NiBHaUIKbG9naWNhbCBwYXJhbWV0ZXJzOiAyODQuMzMgQgp0ZW5zb3IgdHlwZXM6CiAgZjMyICAgICAgICA0OTIgdGVuc29ycywgMC4wMCBHaUIKICBmMTYgICAgICAgIDM1OSB0ZW5zb3JzLCAyLjA0IEdpQgogIHE4XzAgICAgICAgMzQ1IHRlbnNvcnMsIDYuMTUgR2lCCiAgcTJfayAgICAgICAgNDMgdGVuc29ycywgMjguMjIgR2lCCiAgaXEyX3h4cyAgICAgODYgdGVuc29ycywgNDQuMzQgR2lCCiAgaTMyICAgICAgICAgIDMgdGVuc29ycywgMC4wMSBHaUIK",
+        "bytes": 555,
+        "sha256": "01e26395f614c885e87ccbdc4fd8f8b5ceb9c06ed51a6d73238192cd7224e794"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuODAwcwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MK",
+        "bytes": 546,
+        "sha256": "11395090cb7641e176f8da2ed2dab5f3370e6ef0e43fa1dbc8c6539dbab7c931"
+      },
+      "stdout_anchors": [
+        "model: DeepSeek V4 Flash",
+        "arch:  deepseek4",
+        "tensor types:"
+      ],
+      "stderr_anchors": [
+        "ds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)",
+        "ds4: CUDA loading model tensors into device cache",
+        "ds4: CUDA startup model cache prepared 80.76 GiB",
+        "ds4: cuda backend initialized for graph diagnostics"
+      ],
+      "summary": {
+        "parse_ok": true,
+        "model": "DeepSeek V4 Flash",
+        "arch": "deepseek4",
+        "layers": 43,
+        "file_size": "80.76 GiB",
+        "tensor_bytes": "80.76 GiB",
+        "logical_parameters": "284.33 B",
+        "gguf_version": 3,
+        "metadata_keys": 62,
+        "tensors": 1328,
+        "attention": {
+          "heads": 64,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "swa": 128
+        },
+        "indexer": {
+          "heads": 64,
+          "head_dim": 128,
+          "top_k": 512
+        },
+        "experts": {
+          "count": 256,
+          "used": 6,
+          "groups": 0,
+          "groups_used": 0
+        },
+        "tensor_types": [
+          {
+            "type": "f32",
+            "count": 492,
+            "size": "0.00 GiB"
+          },
+          {
+            "type": "f16",
+            "count": 359,
+            "size": "2.04 GiB"
+          },
+          {
+            "type": "q8_0",
+            "count": 345,
+            "size": "6.15 GiB"
+          },
+          {
+            "type": "q2_k",
+            "count": 43,
+            "size": "28.22 GiB"
+          },
+          {
+            "type": "iq2_xxs",
+            "count": 86,
+            "size": "44.34 GiB"
+          },
+          {
+            "type": "i32",
+            "count": 3,
+            "size": "0.01 GiB"
+          }
+        ]
+      },
+      "same_stdout_as": null,
+      "dispatch_evidence": {
+        "inspect_skips_context_log": "ds4_cli.c main calls log_context_memory and cli_warn_think_max_downgraded only when !cfg.inspect",
+        "inspect_branch": "ds4_cli.c main calls ds4_engine_summary(engine) when cfg.inspect before generation/repl/perplexity/imatrix branches"
+      }
+    },
+    {
+      "id": "cuda_inspect_prompt_controls_ignored",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--inspect",
+        "--ctx",
+        "64",
+        "--tokens",
+        "1",
+        "--think-max",
+        "-p",
+        "M8.8 inspect must not generate from this prompt."
+      ],
+      "exit_code": 0,
+      "stdout": {
+        "base64": "bW9kZWw6IERlZXBTZWVrIFY0IEZsYXNoCmFyY2g6ICBkZWVwc2VlazQKZ2d1ZjogIHYzLCA2MiBtZXRhZGF0YSBrZXlzLCAxMzI4IHRlbnNvcnMKbGF5ZXJzOiA0MwphdHRlbnRpb246IGhlYWRzPTY0IGt2X2hlYWRzPTEgaGVhZF9kaW09NTEyIHN3YT0xMjgKaW5kZXhlcjogaGVhZHM9NjQgaGVhZF9kaW09MTI4IHRvcF9rPTUxMgpleHBlcnRzOiBjb3VudD0yNTYgdXNlZD02IGdyb3Vwcz0wIGdyb3Vwc191c2VkPTAKZmlsZSBzaXplOiA4MC43NiBHaUIKdGVuc29yIGJ5dGVzIGRlc2NyaWJlZCBieSBHR1VGOiA4MC43NiBHaUIKbG9naWNhbCBwYXJhbWV0ZXJzOiAyODQuMzMgQgp0ZW5zb3IgdHlwZXM6CiAgZjMyICAgICAgICA0OTIgdGVuc29ycywgMC4wMCBHaUIKICBmMTYgICAgICAgIDM1OSB0ZW5zb3JzLCAyLjA0IEdpQgogIHE4XzAgICAgICAgMzQ1IHRlbnNvcnMsIDYuMTUgR2lCCiAgcTJfayAgICAgICAgNDMgdGVuc29ycywgMjguMjIgR2lCCiAgaXEyX3h4cyAgICAgODYgdGVuc29ycywgNDQuMzQgR2lCCiAgaTMyICAgICAgICAgIDMgdGVuc29ycywgMC4wMSBHaUIK",
+        "bytes": 555,
+        "sha256": "01e26395f614c885e87ccbdc4fd8f8b5ceb9c06ed51a6d73238192cd7224e794"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTMuMzk1cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MK",
+        "bytes": 546,
+        "sha256": "2e1fc57dddd8bc5d1ffc5e1042ebae61f630667db9cff554f0cadc3b3ee42458"
+      },
+      "stdout_anchors": [
+        "model: DeepSeek V4 Flash",
+        "arch:  deepseek4",
+        "tensor types:"
+      ],
+      "stderr_anchors": [
+        "ds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)",
+        "ds4: CUDA loading model tensors into device cache",
+        "ds4: CUDA startup model cache prepared 80.76 GiB",
+        "ds4: cuda backend initialized for graph diagnostics"
+      ],
+      "summary": {
+        "parse_ok": true,
+        "model": "DeepSeek V4 Flash",
+        "arch": "deepseek4",
+        "layers": 43,
+        "file_size": "80.76 GiB",
+        "tensor_bytes": "80.76 GiB",
+        "logical_parameters": "284.33 B",
+        "gguf_version": 3,
+        "metadata_keys": 62,
+        "tensors": 1328,
+        "attention": {
+          "heads": 64,
+          "kv_heads": 1,
+          "head_dim": 512,
+          "swa": 128
+        },
+        "indexer": {
+          "heads": 64,
+          "head_dim": 128,
+          "top_k": 512
+        },
+        "experts": {
+          "count": 256,
+          "used": 6,
+          "groups": 0,
+          "groups_used": 0
+        },
+        "tensor_types": [
+          {
+            "type": "f32",
+            "count": 492,
+            "size": "0.00 GiB"
+          },
+          {
+            "type": "f16",
+            "count": 359,
+            "size": "2.04 GiB"
+          },
+          {
+            "type": "q8_0",
+            "count": 345,
+            "size": "6.15 GiB"
+          },
+          {
+            "type": "q2_k",
+            "count": 43,
+            "size": "28.22 GiB"
+          },
+          {
+            "type": "iq2_xxs",
+            "count": 86,
+            "size": "44.34 GiB"
+          },
+          {
+            "type": "i32",
+            "count": 3,
+            "size": "0.01 GiB"
+          }
+        ]
+      },
+      "same_stdout_as": "cuda_inspect",
+      "dispatch_evidence": {
+        "inspect_skips_context_log": "ds4_cli.c main calls log_context_memory and cli_warn_think_max_downgraded only when !cfg.inspect",
+        "inspect_branch": "ds4_cli.c main calls ds4_engine_summary(engine) when cfg.inspect before generation/repl/perplexity/imatrix branches"
+      }
+    }
+  ]
+}

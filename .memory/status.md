@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.8 Current-C CLI Inspect Output Oracle
-- Last validated source commit: M8.7 parity split/runtime blocker
-  documentation in this commit; prior pushed source commit
-  `211869045daec0893ebb5595b029fb67ee7e1341`
+- Active item: M8.9 Rust CLI Inspect Output Parity
+- Last validated source commit: M8.8 current-C CLI inspect oracle in this
+  commit; prior pushed source commit
+  `dcd02faaf38b59a72746fea6269f59a3508d73eb`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -996,3 +996,21 @@
   prerequisite and the actual CLI diagnostic output parity item. The original
   M8.7 is blocked until that runtime-boundary prerequisite exists; skipping to
   M8.8 avoids claiming replay-only artifact handling as execution parity.
+- M8.8 adds `ds4-parity/check_cli_inspect_dump.py` and the current-C inspect
+  artifact at `ds4-parity/baselines/cli/m8.8/current-c.json`.
+- M8.8 captures two B300 CLI inspect cases: plain `--cuda --inspect` and an
+  inspect case with prompt/context/generation controls that must keep the same
+  summary stdout and avoid context-buffer, think-max, generation, perplexity,
+  or imatrix logs.
+- M8.8 committed `ds4-parity/baselines/cli/m8.8/current-c.json` is 9,087 bytes
+  with SHA256 `613a03b604204831a04d5c74be15f3c4ecdf33f990aef43fcb3e92e6fe894ca1`.
+- M8.8 B300 validation passed after refreshing `/workspace/ds4` on
+  `ds4-rust-port-b300`, building `make ds4 CUDA_ARCH=native`, capturing the
+  baseline, and running `python3 ds4-parity/check_cli_inspect_dump.py
+  ds4-parity/baselines/cli/m8.8/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.8/manifest.json --negative-test` (`CLI inspect
+  oracle: PASS, 112 checks`; manifest `PASS, 20 checks`; negative tests `PASS,
+  8 checks`). Local revalidation of the copied artifact reported the same PASS
+  counts; `python3 -m py_compile ds4-parity/check_cli_inspect_dump.py`,
+  `python3 -m json.tool` for both M8.8 JSON files, and `git diff --check` also
+  passed.

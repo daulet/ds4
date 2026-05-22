@@ -1412,13 +1412,14 @@
 
 ### M8.8: Current-C CLI Inspect Output Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture the current-C `--inspect` CLI output surface.
-- Source evidence needed: `ds4_cli.c` `--inspect` dispatch, `ds4_engine_summary`
+- Source evidence used: `ds4_cli.c` `--inspect` dispatch, `ds4_engine_summary`
   output, model/backend identity, and B300 model availability.
 - Oracle: current `./ds4 --inspect` on the recorded B300 model.
 - Fixture: model path, backend selection, summary stdout/stderr records, model
-  identity, exit status, and exact B300 refresh commands.
+  identity, prompt/control-ignored inspect case, exit status, and exact B300
+  refresh commands.
 - Comparator: schema/hash checker for summary output anchors, model/backend
   identity, exit status, and refresh commands.
 - Acceptance: summary output anchors and model identity match current C; no
@@ -1427,10 +1428,40 @@
   normalized; model identity, summary sections, and exit status are exact.
 - Review gate: ask Claude to review inspect-output coverage against
   `ds4_engine_summary` dispatch.
-- Validation needed: B300 capture or exact skipped recapture command, local
-  checker with negative tests, and `git diff --check`.
+- Validation passed: B300 capture on `ds4-rust-port-b300` after `make ds4
+  CUDA_ARCH=native`, `python3 ds4-parity/check_cli_inspect_dump.py
+  ds4-parity/baselines/cli/m8.8/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.8/manifest.json --negative-test` (`CLI inspect
+  oracle: PASS, 112 checks`; manifest `PASS, 20 checks`; negative tests `PASS,
+  8 checks`), local revalidation with the same PASS counts, `python3 -m
+  py_compile ds4-parity/check_cli_inspect_dump.py`, `python3 -m json.tool` for
+  both M8.8 JSON files, and `git diff --check`.
 - Owner path: CLI inspect oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/cli/`, `.memory/status.md`.
+
+### M8.9: Rust CLI Inspect Output Parity
+
+- Status: pending
+- Goal: implement Rust CLI parity for `--inspect`.
+- Precondition: Rust must expose at least an engine-open and engine-summary
+  boundary. If that boundary is absent, split this item before implementation.
+- Source evidence needed: committed M8.8 current-C inspect fixture, Rust CLI
+  parse/dispatch code, and Rust engine-summary boundary evidence.
+- Oracle: committed M8.8 current-C inspect fixture.
+- Fixture: same model/backend inspect cases as M8.8.
+- Comparator: C/Rust inspect comparator for normalized summary output, model
+  identity, backend identity, and exit status.
+- Acceptance: Rust enters only the inspect path and matches the committed C
+  summary surface within documented normalization.
+- Drift policy: path, volatile-address, backend progress, and startup-timing
+  normalization only.
+- Review gate: ask Claude to review dispatch exclusivity and output
+  normalization.
+- Validation needed: comparator with negative tests, targeted Rust CLI tests,
+  B300 comparison when required, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: Rust CLI inspect path, CLI inspect comparator, `ds4-parity/`,
+  `.memory/status.md`.
 
 ## Later Items
 
