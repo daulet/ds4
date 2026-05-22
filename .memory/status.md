@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.7 Sampling And Logprob Report Integration
-- Last validated source commit: M6.6b Rust decode stop policy port in this
-  commit; prior pushed source commit
-  `9ed43bdcc1652929ff9043d1f458588945237aa8`
+- Active item: M7.1 KV Store Work Item Breakdown
+- Last validated source commit: M6.7 sampling/logprob report integration in
+  this commit; prior pushed source commit
+  `8cafb76aeae9a68f3be7c4c47e731b38580b38b5`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -639,3 +639,22 @@
   fmt --all -- --check`, `cargo test -p ds4-gguf decode_policy`, `cargo test
   -p ds4-gguf --bin ds4-decode-policy-dump-rs`, `cargo test --workspace`, and
   `git diff --check`.
+- M6.7 adds `python3 ds4-parity/run_sampling_parity_report.py`, which runs the
+  M6.2 current-C sampler/logprob checker, M6.3 Rust sampler comparator, M6.4
+  committed session-logits fixture checker, M6.5 Rust model-logits comparator,
+  M6.6a current-C decode policy checker, and M6.6b Rust decode-policy
+  comparator.
+- M6.7 records the model-backed M6.4 B300 session-logits recapture as a
+  skipped report item using the exact `refresh_commands` from
+  `ds4-parity/baselines/sampling/m6.4/manifest.json`; no other M6 local
+  comparator is skipped by the M6 report.
+- M6.7 wires the sampling/logprob report into
+  `python3 ds4-parity/run_parity_report.py`. Validation passed with `python3
+  -m py_compile ds4-parity/run_sampling_parity_report.py
+  ds4-parity/run_parity_report.py`, `python3
+  ds4-parity/run_sampling_parity_report.py` (`summary: 6 passed, 1 skipped, 0
+  failed`), `python3 ds4-parity/run_sampling_parity_report.py --json |
+  python3 -m json.tool`, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` (`summary: 7 passed, 10 skipped, 0 failed`), `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles --json | python3 -m
+  json.tool`, `cargo test --workspace`, and `git diff --check`.

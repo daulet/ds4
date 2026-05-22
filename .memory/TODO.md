@@ -800,6 +800,39 @@
 - Owner path: Rust decode-policy port, `ds4-parity/`,
   `.memory/status.md`.
 
+### M6.7: Sampling And Logprob Report Integration
+
+- Status: done
+- Goal: wire M6 local comparators and B300 refresh records into the parity
+  reports.
+- Source evidence needed: M6.2 through M6.6b manifests, comparator commands,
+  current `run_parity_report.py` and text parity report conventions, and B300
+  refresh commands for model-backed M6.4 recapture.
+- Oracle: committed M6 fixed-logits, model-backed logits, and decode-policy
+  fixtures.
+- Fixture: M6.2 through M6.6b manifest entries and refresh commands.
+- Comparator: a Milestone 6 report that runs all local sampling/logprob
+  comparators, summarizes numeric tolerances and first drift paths, and skips
+  only model-backed recapture with exact B300 commands; the unified parity
+  report includes that M6 report.
+- Acceptance: local report passes without the model, JSON output is machine
+  readable, failure output names fixture/field/expected/got, and B300
+  refreshes are reproducible from the report.
+- Drift policy: report normalizes only capture paths and timestamps.
+- Review gate: ask Claude to review report integration and failure output.
+- Validation passed: `python3 -m py_compile
+  ds4-parity/run_sampling_parity_report.py ds4-parity/run_parity_report.py`,
+  `python3 ds4-parity/run_sampling_parity_report.py` (`summary: 6 passed, 1
+  skipped, 0 failed`), `python3 ds4-parity/run_sampling_parity_report.py
+  --json | python3 -m json.tool`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` (`summary: 7 passed,
+  10 skipped, 0 failed`), `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles --json | python3 -m json.tool`, `cargo test
+  --workspace`, and `git diff --check`.
+- Owner path: `ds4-parity/run_sampling_parity_report.py`,
+  `ds4-parity/run_parity_report.py`, `ds4-parity/README.md`,
+  `.memory/status.md`.
+
 ## Later Items
 
 Add later roadmap items from `RUST_PORT_ROADMAP.md` as each active item

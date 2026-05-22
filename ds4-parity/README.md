@@ -108,11 +108,26 @@ Run the unified local parity report:
 python3 ds4-parity/run_parity_report.py
 ```
 
-The unified report runs local no-model C checks, then runs the M1.2 through
-M1.5 comparator commands. Model-backed B300 oracle refreshes are skipped by
-default, but each skip includes the temp-kubeconfig and explicit-context rerun
-command needed to reproduce the check. For a comparator-only report:
+The unified report runs local no-model C checks, then runs the committed M1,
+M4, M5, and M6 comparator reports. Model-backed B300 oracle refreshes are
+skipped by default, but each skip includes the temp-kubeconfig and
+explicit-context rerun command needed to reproduce the check. For a
+comparator-only report:
 
 ```sh
 python3 ds4-parity/run_parity_report.py --skip-local-oracles
 ```
+
+## Sampling And Logprob Parity
+
+Run the local Milestone 6 report:
+
+```sh
+python3 ds4-parity/run_sampling_parity_report.py
+```
+
+The report runs the M6.2 fixed-logits C oracle checker, M6.3 Rust sampler
+comparator, M6.4 committed session-logits fixture checker, M6.5 Rust
+model-logits comparator, M6.6a decode-policy oracle checker, and M6.6b Rust
+decode-policy comparator. The B300 model-backed M6.4 recapture is skipped by
+default with the exact manifest refresh command.
