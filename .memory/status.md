@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.2 C KV Header And Policy Oracle
-- Last validated source commit: M7.1 KV store work item breakdown in this
+- Active item: M7.3 Rust KV Header And Policy Parser
+- Last validated source commit: M7.2 C KV header and policy oracle in this
   commit; prior pushed source commit
-  `58c2833b70d96fbc3a8de48e97f94ac0de799573`
+  `777e2159b9e182c534b71d4100f0fe40c4188593`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -666,3 +666,21 @@
   the no-model C KV header and policy oracle; the C on-disk session payload
   shape oracle is independently eligible because it depends on session payload
   code rather than KV header/policy work.
+- M7.2 added `./ds4-kv-policy-dump`, a deterministic no-model current-C
+  oracle for KVC header bytes, decoded fields, reason/key-kind mapping,
+  little-endian helpers, SHA/path helpers, size budgeting, store-boundary
+  selection, chat-anchor selection, continued-store targets, byte-prefix
+  matching, eviction scoring with explicit `now`, text-prefix lookup, and M0.5
+  parsed header fixture references.
+- M7.2 added `python3 ds4-parity/check_kv_policy_dump.py`, whose schema,
+  manifest, and negative checks validate the C oracle dump and the committed
+  M0.5 `kv-header.tsv` row references.
+- M7.2 local validation passed for `arch -arm64 make ds4-kv-policy-dump`,
+  `./ds4-kv-policy-dump ds4-parity/baselines/kv/m7.2/current-c.json`,
+  `python3 -m json.tool ds4-parity/baselines/kv/m7.2/current-c.json`,
+  `python3 -m py_compile ds4-parity/check_kv_policy_dump.py`, and
+  `python3 ds4-parity/check_kv_policy_dump.py --negative-test` (`451` schema
+  checks, `11` manifest checks, `7` negative checks), `arch -arm64 make`,
+  `arch -arm64 make cpu`, deterministic CPU-regenerated dump comparison
+  against the committed M7.2 artifact, `arch -arm64 make ds4_test`,
+  `./ds4_test --server`, and `git diff --check`.

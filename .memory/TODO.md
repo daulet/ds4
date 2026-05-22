@@ -868,7 +868,7 @@
 
 ### M7.2: C KV Header And Policy Oracle
 
-- Status: pending
+- Status: done
 - Goal: expose current C KV-cache header, filename, and policy behavior through
   a deterministic no-model oracle dump.
 - Source evidence needed: `ds4_kvstore.c`, `ds4_kvstore.h`, `ds4_server.c`
@@ -895,9 +895,41 @@
   normalize paths and timestamps only.
 - Review gate: ask Claude to review fixture coverage against `ds4_kvstore`
   source and M0.5 artifacts.
-- Validation needed: C oracle helper build, schema/negative checks, existing
-  server/KV unit surface, and `git diff --check`.
+- Validation passed: `arch -arm64 make ds4-kv-policy-dump`,
+  `./ds4-kv-policy-dump ds4-parity/baselines/kv/m7.2/current-c.json`,
+  `python3 -m json.tool ds4-parity/baselines/kv/m7.2/current-c.json`,
+  `python3 -m py_compile ds4-parity/check_kv_policy_dump.py`, and
+  `python3 ds4-parity/check_kv_policy_dump.py --negative-test` (`451` schema
+  checks, `11` manifest checks, `7` negative checks). Existing build/test
+  surface validation also passed and is listed in `.memory/status.md`.
 - Owner path: C oracle dump surface, `ds4-parity/`,
+  `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
+### M7.3: Rust KV Header And Policy Parser
+
+- Status: pending
+- Goal: port the KVC header parser/writer and no-model KV policy decisions to
+  Rust without loading model sessions.
+- Source evidence needed: M7.2 current-C KV policy oracle dump,
+  `ds4_kvstore.c`, `ds4_kvstore.h`, committed M0.5 header/rendered-text/cache
+  artifacts, and existing Rust parity crate conventions.
+- Oracle: M7.2 current-C KV header and policy oracle dump at
+  `ds4-parity/baselines/kv/m7.2/current-c.json`.
+- Fixture: committed M7.2 synthetic dump plus M0.5 header, rendered-text, and
+  cache-decision artifacts.
+- Comparator: C/Rust comparison for header bytes, decoded fields, reason and
+  extension flags, SHA file names, file-size budgeting, prefix selection,
+  store-boundary selection, continued-store targets, and eviction ordering.
+- Acceptance: Rust parses existing KVC headers, writes byte-identical headers
+  for every fixture, and matches C policy decisions for every no-model case.
+- Drift policy: no header-byte, keying, selection, or eviction drift; a
+  versioned format change is not allowed in this item.
+- Review gate: ask Claude to review byte-order handling, integer overflow
+  checks, timestamp normalization boundaries, and policy tie-break behavior.
+- Validation needed: KV comparator with negative tests, Rust unit tests,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: Rust KV policy module, `ds4-parity/`,
   `ds4-parity/baselines/kv/`, `.memory/status.md`.
 
 ### M7.5: C Session Payload Shape Oracle

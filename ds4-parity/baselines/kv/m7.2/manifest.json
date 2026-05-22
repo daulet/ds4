@@ -1,0 +1,39 @@
+{
+  "schema": "ds4.kv_policy_manifest.v1",
+  "milestone": "M7.2",
+  "artifact": {
+    "path": "current-c.json",
+    "sha256": "f908b4bf059db500c1de6b4265491719083224d2bab703169ba0e585e9de6bcb",
+    "size_bytes": 12719
+  },
+  "oracle": "current C ds4_kvstore no-model header and policy helpers",
+  "fixture": {
+    "m0_5_header_tsv": "ds4-parity/baselines/kv-artifacts/m0.5/logs/kv-header.tsv",
+    "model": "no model is loaded for this oracle"
+  },
+  "comparator": "python3 ds4-parity/check_kv_policy_dump.py --negative-test",
+  "acceptance": [
+    "KVC header bytes and decoded fields match the current C helpers",
+    "KV reason, key kind, SHA, path, little-endian, size-budget, store-boundary, continued-store, eviction, and text-prefix policies are deterministic",
+    "Committed M0.5 parsed KVC header rows still match the M7.2 fixture references",
+    "Negative tests detect schema, byte, policy, and M0.5 fixture drift"
+  ],
+  "drift_policy": "No KV policy or format behavior changes; paths and timestamps are fixture inputs or normalized.",
+  "notes": [
+    "find_text_prefix equal-text-byte tie cases are not representable with distinct on-disk files because the filename is the SHA1 of the exact matched text bytes; duplicate exact-prefix entries overwrite the same path.",
+    "stale_hits_floor records the continuous exp2 hit decay after the DS4_KVSTORE_MIN_EFFECTIVE_HITS floor has zeroed negligible effective hits."
+  ],
+  "validation": [
+    "arch -arm64 make ds4-kv-policy-dump",
+    "./ds4-kv-policy-dump ds4-parity/baselines/kv/m7.2/current-c.json",
+    "python3 -m json.tool ds4-parity/baselines/kv/m7.2/current-c.json",
+    "python3 -m py_compile ds4-parity/check_kv_policy_dump.py",
+    "python3 ds4-parity/check_kv_policy_dump.py --negative-test",
+    "arch -arm64 make",
+    "arch -arm64 make cpu",
+    "./ds4-kv-policy-dump /tmp/ds4-kv-policy-cpu.json && cmp -s /tmp/ds4-kv-policy-cpu.json ds4-parity/baselines/kv/m7.2/current-c.json",
+    "arch -arm64 make ds4_test",
+    "./ds4_test --server",
+    "git diff --check"
+  ]
+}
