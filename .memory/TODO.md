@@ -118,7 +118,7 @@
 
 ### M1.3: Server And KV Normalization Comparators
 
-- Status: in-progress
+- Status: done
 - Goal: add comparison helpers for M0.4 server traces/responses and M0.5 KV
   restore artifacts.
 - Source evidence needed: M0.4 server fixtures, responses, traces, documented
@@ -131,6 +131,22 @@
   cached token count, finish reason, KV reason, or rendered text fail;
   `git diff --check`.
 - Owner path: `ds4-parity/`, `ds4-parity/baselines/`.
+
+### M1.4: Logprob And Numeric Comparator
+
+- Status: in-progress
+- Goal: add numeric comparison support for official-vector output and later
+  tensor/logit fixtures.
+- Source evidence needed: M0.3 official-vector baseline,
+  `tests/test-vectors/official.vec`, model identity, and captured B300 logprob
+  output.
+- Oracle: M0.3 official-vector baseline and current
+  `./ds4_test --logprob-vectors` output.
+- Comparator: harness logic parsing exact selected-token outcomes and numeric
+  slices with explicit tolerances in the report.
+- Validation needed: current captured M0.3 output compares cleanly; negative
+  tests for token drift and numeric drift fail; `git diff --check`.
+- Owner path: `ds4-parity/`, `tests/test-vectors/`.
 
 ## Later Items
 

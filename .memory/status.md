@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M1.3 Server And KV Normalization Comparators
-- Last validated source commit: `f0ba22ec93df8fb4a37bfbda3c2ca5576824cc9a`
+- Active item: M1.4 Logprob And Numeric Comparator
+- Last validated source commit: `edfc342537af299c4b19b093b11471e74dc17282`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -74,3 +74,7 @@
   through M0.6 artifact families locally without rerunning model-backed
   commands. Its negative test corrupts a copied benchmark CSV and requires the
   verifier to detect the drift.
+- M1.3 added `python3 ds4-parity/compare_server_kv.py`, which self-compares
+  committed M0.4 server and M0.5 KV artifacts with only documented
+  normalizations. Its negative test covers finish reason, cached token count,
+  cache source, KV reason, and rendered text drift.

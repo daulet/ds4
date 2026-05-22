@@ -26,3 +26,26 @@ to a temporary directory, corrupts one CSV, and requires verification failure:
 ```sh
 python3 ds4-parity/verify_baselines.py --negative-test
 ```
+
+Compare the committed server and KV artifacts against themselves with the
+documented normalizations:
+
+```sh
+python3 ds4-parity/compare_server_kv.py
+```
+
+The comparator accepts candidate artifact directories from a fresh run or a
+future Rust implementation:
+
+```sh
+python3 ds4-parity/compare_server_kv.py \
+  --server-candidate /path/to/server-traces/m0.4 \
+  --kv-candidate /path/to/kv-artifacts/m0.5
+```
+
+Its negative test corrupts behavioral server/KV fields in temporary candidate
+copies and requires comparison failure:
+
+```sh
+python3 ds4-parity/compare_server_kv.py --negative-test
+```
