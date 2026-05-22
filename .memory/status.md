@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.7 Rust CLI Logprob And Perplexity Parity
-- Last validated source commit: M8.6 current-C CLI logprob/perplexity oracle
-  in this commit; prior pushed source commit
-  `80a9f03cbd7af5c31590ff028f1e8c3edcf25f8b`
+- Active item: M8.8 Current-C CLI Inspect Output Oracle
+- Last validated source commit: M8.7 parity split/runtime blocker
+  documentation in this commit; prior pushed source commit
+  `211869045daec0893ebb5595b029fb67ee7e1341`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -986,3 +986,13 @@
   the same PASS counts; `python3 -m py_compile
   ds4-parity/check_cli_diagnostics_dump.py`, `python3 -m json.tool` for both
   M8.6 JSON files, and `git diff --check` also passed.
+- M8.7 is not implemented as model-backed parity because the Rust tree does not
+  yet expose a model/session execution boundary. Current Rust evidence is
+  tokenizer/prompt/fixed-logits support in `rust/ds4-gguf`, a model-logits
+  replay binary over captured logits, and low-level GPU tensor wrappers in
+  `rust/ds4-gpu`; there is no Rust `ds4_engine`/`ds4_session` equivalent that
+  can run the M8.6 CLI prompts.
+- M8.7 has been split in `RUST_PORT_ROADMAP.md` into a runtime-boundary
+  prerequisite and the actual CLI diagnostic output parity item. The original
+  M8.7 is blocked until that runtime-boundary prerequisite exists; skipping to
+  M8.8 avoids claiming replay-only artifact handling as execution parity.

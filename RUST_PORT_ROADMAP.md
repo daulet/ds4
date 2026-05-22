@@ -1318,15 +1318,64 @@ Work items:
 - Validation gate: B300 capture or exact skipped recapture command, local
   checker with negative tests, and `git diff --check`.
 
-#### M8.7: Rust CLI Logprob And Perplexity Parity
+#### M8.7: Rust CLI Logprob And Perplexity Parity Split
 
-- Goal: implement Rust CLI parity for logprob and perplexity diagnostic modes.
-- Oracle: committed M8.6 current-C CLI diagnostic fixture.
-- Fixture: same `--dump-logprobs` and `--perplexity-file` cases as M8.6.
+- Goal: split the original Rust CLI logprob/perplexity parity item because it
+  requires model/session execution that the Rust tree does not yet expose.
+- Oracle: repository evidence that Rust currently has tokenizer, prompt,
+  fixed-logits sampler/logprob, model-logits replay, and GPU tensor wrappers,
+  but no `ds4_engine`/`ds4_session` execution boundary.
+- Comparator: roadmap/board review against `rust/ds4-gguf/src/sampling.rs`,
+  `rust/ds4-gguf/src/bin/ds4-model-logits-dump-rs.rs`,
+  `rust/ds4-gpu/src/lib.rs`, and `rust/ds4-gpu-sys/src/lib.rs`.
+- Acceptance: the original model-backed parity claim is not implemented by a
+  replay-only proxy; it is decomposed into separately verifiable prerequisites
+  and remains blocked until a Rust runtime/session path exists.
+- Drift policy: no source behavior changes; this is roadmap scope control.
+- Review gate: ask Claude to review whether the split avoids overstating Rust
+  model-backed parity and keeps each successor item comparable to current C.
+- Validation gate: inspect the cited Rust paths, `git diff --check`, and
+  review.
+
+#### M8.7a: Rust Diagnostic Runtime Boundary Prerequisite
+
+- Goal: introduce or expose a Rust-accessible model/session execution boundary
+  sufficient to run one prompt prefill, query next-token logits/top-logprobs,
+  evaluate a selected token, and score teacher-forced tokens. A thin FFI-backed
+  boundary over current C is acceptable for this milestone if the comparator can
+  later hold a Rust-owned implementation to the same contract.
+- Oracle: current C `ds4_engine_open`, `ds4_session_create`,
+  `ds4_session_sync`, `ds4_session_top_logprobs`, `ds4_session_argmax`,
+  `ds4_session_token_logprob`, and `ds4_session_eval` on the M8.6 fixture
+  prompts.
+- Fixture: a minimal prompt/token sequence that can prove prefill, one decode
+  step, top-logprob order, and teacher-forced token scoring without running the
+  full M8.6 CLI surface.
+- Comparator: C/Rust runtime-boundary comparator for selected token,
+  top-logprob IDs/order, token-logprob result, and M6 numeric tolerances.
+- Acceptance: Rust can execute the minimal diagnostic session path against the
+  same model/backend and match current-C selected IDs/order with M6 score
+  tolerance.
+- Drift policy: test-driver paths, stderr, and timing may be normalized; token
+  IDs/order and numeric tolerance policy are exact.
+- Review gate: ask Claude to review runtime ownership, unsafe/FFI boundaries,
+  and parity comparator coverage.
+- Validation gate: B300 runtime comparator with negative tests, targeted Rust
+  tests, `cargo test --workspace`, and `git diff --check`.
+
+#### M8.7b: Rust CLI Diagnostic Output Surface
+
+- Goal: route the runtime-boundary outputs through Rust CLI diagnostic
+  formatting for `--dump-logprobs` and `--perplexity-file`.
+- Oracle: committed M8.6 current-C CLI diagnostic fixture plus the M8.7a
+  runtime-boundary comparator.
+- Fixture: same M8.6 CLI cases, run through Rust once M8.7a exists.
 - Comparator: C/Rust comparator for JSON shape, selected tokens, top-logprob
-  ordering, score tolerances, perplexity text fields, and error categories.
+  ordering, score tolerances, perplexity text fields, stderr categories, and
+  error exits.
 - Acceptance: Rust emits the same machine-readable diagnostic surface and
-  preserves M6 numeric tolerance policy.
+  preserves M6 numeric tolerance policy without using current-C JSON replay as
+  a substitute for model execution.
 - Drift policy: path and progress-stderr normalization only.
 - Review gate: ask Claude to review model-backed CLI diagnostic parity and
   failure categories.
@@ -1354,6 +1403,9 @@ Work items:
 #### M8.9: Rust CLI Inspect Output Parity
 
 - Goal: implement Rust CLI parity for `--inspect`.
+- Precondition: Rust must expose at least an engine-open and engine-summary
+  boundary. If that boundary is still absent after M8.8, split this item into a
+  smaller inspect runtime-boundary prerequisite before implementation.
 - Oracle: committed M8.8 current-C inspect fixture.
 - Fixture: same model/backend inspect cases as M8.8.
 - Comparator: C/Rust inspect comparator for normalized summary output, model

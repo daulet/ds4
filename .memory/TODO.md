@@ -1399,25 +1399,38 @@
 
 ### M8.7: Rust CLI Logprob And Perplexity Parity
 
-- Status: pending
-- Goal: implement Rust CLI parity for logprob and perplexity diagnostic modes.
-- Source evidence needed: committed M8.6 current-C CLI diagnostic fixture, M6
-  sampler/logprob Rust APIs, Rust tokenizer/prompt rendering, and any available
-  model-logit fixture limits for local comparison.
-- Oracle: committed M8.6 current-C CLI diagnostic fixture.
-- Fixture: same `--dump-logprobs` and `--perplexity-file` cases as M8.6.
-- Comparator: C/Rust comparator for JSON shape, selected tokens, top-logprob
-  ordering, score tolerances, perplexity text fields, and error categories.
-- Acceptance: Rust emits the same machine-readable diagnostic surface and
-  preserves M6 numeric tolerance policy.
-- Drift policy: path and progress-stderr normalization only.
-- Review gate: ask Claude to review model-backed CLI diagnostic parity and
-  failure categories.
-- Validation needed: comparator with negative tests, targeted Rust tests, B300
-  refresh if required by the comparator, `cargo test --workspace`, and
-  `git diff --check`.
+- Status: split into M8.7a and M8.7b before implementation
+- Goal: the original Rust CLI logprob/perplexity parity item required
+  model/session execution that the Rust tree does not yet expose. M8.7a owns
+  the Rust diagnostic runtime boundary prerequisite; M8.7b owns the CLI
+  diagnostic output surface that runs on top of it. See `RUST_PORT_ROADMAP.md`
+  M8.7/M8.7a/M8.7b.
+- Drift policy: no source behavior changed by this split; no replay-only proxy
+  is accepted as execution parity.
 - Owner path: Rust CLI diagnostic paths, CLI diagnostic comparator,
   `ds4-parity/`, `.memory/status.md`.
+
+### M8.8: Current-C CLI Inspect Output Oracle
+
+- Status: pending
+- Goal: capture the current-C `--inspect` CLI output surface.
+- Source evidence needed: `ds4_cli.c` `--inspect` dispatch, `ds4_engine_summary`
+  output, model/backend identity, and B300 model availability.
+- Oracle: current `./ds4 --inspect` on the recorded B300 model.
+- Fixture: model path, backend selection, summary stdout/stderr records, model
+  identity, exit status, and exact B300 refresh commands.
+- Comparator: schema/hash checker for summary output anchors, model/backend
+  identity, exit status, and refresh commands.
+- Acceptance: summary output anchors and model identity match current C; no
+  generation, REPL, perplexity, or imatrix path is entered.
+- Drift policy: workspace paths and volatile memory addresses may be
+  normalized; model identity, summary sections, and exit status are exact.
+- Review gate: ask Claude to review inspect-output coverage against
+  `ds4_engine_summary` dispatch.
+- Validation needed: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+- Owner path: CLI inspect oracle artifacts, `ds4-parity/`,
+  `ds4-parity/baselines/cli/`, `.memory/status.md`.
 
 ## Later Items
 
