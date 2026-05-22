@@ -1,0 +1,12 @@
+command: arch -arm64 make test
+cwd: /Users/dzhanguzin/dev/personal/ds4
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T00:59:17Z
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -Wno-unused-function -c -o ds4_test.o tests/ds4_test.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -o ds4_test ds4_test.o ds4_kvstore.o rax.o ds4.o ds4_metal.o -lm -pthread -framework Foundation -framework Metal
+./ds4_test
+long-context:
+ds4: cannot open model 'ds4flash.gguf': No such file or directory
+make: *** [test] Error 1
+finished_utc: 2026-05-22T00:59:19Z
+exit_status: 2

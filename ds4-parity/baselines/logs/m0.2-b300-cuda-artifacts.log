@@ -1,0 +1,14 @@
+command: kubectl exec ds4-rust-port-b300 -- file cuda artifacts
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+source_commit: 004ade62556bcfa7c8950a624619f8492230102b
+captured_utc: 2026-05-22T01:10:04Z
+ds4:        ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=9ec25bf66ec0ba9d5833c854803f7e90302fc298, for GNU/Linux 3.2.0, with debug_info, not stripped
+ds4-server: ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=a1d6be05f637ded70d6b86c175afa5bbe02fc764, for GNU/Linux 3.2.0, with debug_info, not stripped
+ds4-bench:  ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=78c056d4ea49635c7dc94428e373842dd2e786c6, for GNU/Linux 3.2.0, with debug_info, not stripped
+ds4-eval:   ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=0c1d3809f09c40fb4ac4cc966807204038cfbf21, for GNU/Linux 3.2.0, with debug_info, not stripped
+ds4-agent:  ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=eb32f1f3addcf6bf0f75a7d20682bc0f6225bb6a, for GNU/Linux 3.2.0, with debug_info, not stripped
+exit_status: 0

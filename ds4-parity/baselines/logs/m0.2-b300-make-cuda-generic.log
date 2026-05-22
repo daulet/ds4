@@ -1,0 +1,94 @@
+command: kubectl exec ds4-rust-port-b300 -- make cuda-generic
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+source_commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T01:08:48Z
+make ds4 ds4-server ds4-bench ds4-eval ds4-agent CUDA_ARCH=native
+make[1]: Entering directory '/workspace/ds4'
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_cli.o ds4_cli.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o linenoise.o linenoise.c
+linenoise.c: In function ‘linenoiseEditStop’:
+linenoise.c:2351:24: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+ 2351 |             if (n > 0) write(l->ofd, seq, (size_t)n);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+linenoise.c:2353:9: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+ 2353 |         write(l->ofd, "\r\x1b[0K", 5);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4.o ds4.c
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math -arch=native -Xcompiler -march=native -Xcompiler -pthread -c -o ds4_cuda.o ds4_cuda.cu
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math -arch=native -Xcompiler -march=native -Xcompiler -pthread -o ds4 ds4_cli.o linenoise.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_server.o ds4_server.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_kvstore.o ds4_kvstore.c
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o rax.o rax.c
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math -arch=native -Xcompiler -march=native -Xcompiler -pthread -o ds4-server ds4_server.o ds4_kvstore.o rax.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_bench.o ds4_bench.c
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math -arch=native -Xcompiler -march=native -Xcompiler -pthread -o ds4-bench ds4_bench.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_eval.o ds4_eval.c
+ds4_eval.c: In function ‘tui_signal_restore’:
+ds4_eval.c:1890:15: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+ 1890 |         (void)write(STDOUT_FILENO, restore, sizeof(restore) - 1);
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math -arch=native -Xcompiler -march=native -Xcompiler -pthread -o ds4-eval ds4_eval.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+cc -O3 -ffast-math -g -march=native -Wall -Wextra -std=c99 -D_GNU_SOURCE -fno-finite-math-only -c -o ds4_agent.o ds4_agent.c
+ds4_agent.c: In function ‘agent_bash_observation.constprop’:
+ds4_agent.c:4819:31: warning: ‘%s’ directive output may be truncated writing up to 4095 bytes into a region of size 500 [-Wformat-truncation=]
+ 4819 |                  "output_path=%s (%zu bytes, %d lines)\n",
+      |                               ^~
+In file included from /usr/include/stdio.h:980,
+                 from ds4.h:7,
+                 from ds4_agent.c:1:
+In function ‘snprintf’,
+    inlined from ‘agent_bash_observation.constprop’ at ds4_agent.c:4818:9:
+/usr/include/x86_64-linux-gnu/bits/stdio2.h:54:10: note: ‘__builtin___snprintf_chk’ output between 33 and 4157 bytes into a destination of size 512
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+ds4_agent.c: In function ‘agent_bash_observation.constprop’:
+ds4_agent.c:4823:49: warning: ‘%s’ directive output may be truncated writing up to 4095 bytes into a region of size between 502 and 503 [-Wformat-truncation=]
+ 4823 |         snprintf(line, sizeof(line), "<tail -%d %s>\n", tail_lines, job->path);
+      |                                                 ^~
+In function ‘snprintf’,
+    inlined from ‘agent_bash_observation.constprop’ at ds4_agent.c:4823:9:
+/usr/include/x86_64-linux-gnu/bits/stdio2.h:54:10: note: ‘__builtin___snprintf_chk’ output between 12 and 4108 bytes into a destination of size 512
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+ds4_agent.c: In function ‘agent_bash_observation.constprop’:
+ds4_agent.c:4802:35: warning: ‘%s’ directive output may be truncated writing up to 4095 bytes into a region of size 500 [-Wformat-truncation=]
+ 4802 |                      "output_path=%s (%zu bytes, %d lines)\n",
+      |                                   ^~
+In function ‘snprintf’,
+    inlined from ‘agent_bash_observation.constprop’ at ds4_agent.c:4801:13:
+/usr/include/x86_64-linux-gnu/bits/stdio2.h:54:10: note: ‘__builtin___snprintf_chk’ output between 33 and 4157 bytes into a destination of size 512
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+ds4_agent.c: In function ‘agent_bash_observation.constprop’:
+ds4_agent.c:4806:53: warning: ‘%s’ directive output may be truncated writing up to 4095 bytes into a region of size 501 [-Wformat-truncation=]
+ 4806 |             snprintf(line, sizeof(line), "<head -%d %s>\n",
+      |                                                     ^~
+In function ‘snprintf’,
+    inlined from ‘agent_bash_observation.constprop’ at ds4_agent.c:4806:13:
+/usr/include/x86_64-linux-gnu/bits/stdio2.h:54:10: note: ‘__builtin___snprintf_chk’ output between 14 and 4109 bytes into a destination of size 512
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+/usr/local/cuda/bin/nvcc -O3 -g -lineinfo --use_fast_math -arch=native -Xcompiler -march=native -Xcompiler -pthread -o ds4-agent ds4_agent.o ds4_kvstore.o linenoise.o ds4.o ds4_cuda.o -lm -Xcompiler -pthread -L/usr/local/cuda/targets/sbsa-linux/lib -L/usr/local/cuda/lib64 -lcudart -lcublas
+make[1]: Leaving directory '/workspace/ds4'
+finished_utc: 2026-05-22T01:09:51Z
+exit_status: 0

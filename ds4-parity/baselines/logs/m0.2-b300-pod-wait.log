@@ -1,0 +1,8 @@
+command: kubectl wait pod/ds4-rust-port-b300 --for=condition=Ready --timeout=10m
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+started_utc: 2026-05-22T01:03:43Z
+pod/ds4-rust-port-b300 condition met
+finished_utc: 2026-05-22T01:07:14Z
+exit_status: 0

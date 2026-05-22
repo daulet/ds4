@@ -1,0 +1,20 @@
+command: arch -arm64 make cpu
+cwd: /Users/dzhanguzin/dev/personal/ds4
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T01:00:54Z
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -DDS4_NO_GPU -c -o ds4_cli_cpu.o ds4_cli.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -DDS4_NO_GPU -c -o ds4_server_cpu.o ds4_server.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -DDS4_NO_GPU -c -o ds4_bench_cpu.o ds4_bench.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -DDS4_NO_GPU -c -o ds4_eval_cpu.o ds4_eval.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -DDS4_NO_GPU -c -o ds4_agent_cpu.o ds4_agent.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -c -o ds4_kvstore.o ds4_kvstore.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -c -o linenoise.o linenoise.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -c -o rax.o rax.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -DDS4_NO_GPU -c -o ds4_cpu.o ds4.c
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -o ds4 ds4_cli_cpu.o linenoise.o ds4_cpu.o -lm -pthread
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -o ds4-server ds4_server_cpu.o ds4_kvstore.o rax.o ds4_cpu.o -lm -pthread
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -o ds4-bench ds4_bench_cpu.o ds4_cpu.o -lm -pthread
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -o ds4-eval ds4_eval_cpu.o ds4_cpu.o -lm -pthread
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -o ds4-agent ds4_agent_cpu.o ds4_kvstore.o linenoise.o ds4_cpu.o -lm -pthread
+finished_utc: 2026-05-22T01:00:59Z
+exit_status: 0

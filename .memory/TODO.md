@@ -18,7 +18,7 @@
 
 ### M0.2: Baseline Build Command Capture
 
-- Status: in-progress
+- Status: done
 - Goal: capture reproducible baseline command lines and logs for `make`,
   `make test`, `make cpu`, and backend-specific regression commands.
 - Source evidence needed: `Makefile`, `CONTRIBUTING.md`, local model/backend
@@ -30,6 +30,20 @@
   commands with exact rerun instructions.
 - Owner path: `ds4-parity/baselines/`, `.memory/status.md`.
 
+### M0.3: Official Vector Logprob Baseline
+
+- Status: in-progress
+- Goal: capture the current implementation's output for
+  `tests/test-vectors/official.vec`.
+- Source evidence needed: `tests/test-vectors/README.md`,
+  `tests/test-vectors/official.vec`, `tests/ds4_test.c`, model availability on
+  local or B300 environment.
+- Oracle: current `./ds4_test --logprob-vectors` path.
+- Comparator: baseline manifest entry plus later replay through `ds4-parity`.
+- Validation needed: run with exact `DS4_TEST_MODEL` and
+  `DS4_TEST_VECTOR_FILE` or record the exact model acquisition blocker.
+- Owner path: `ds4-parity/baselines/`, `tests/test-vectors/`.
+
 ## Later Items
 
-Add later Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.2 completes.
+Add later Milestone 0 items from `RUST_PORT_ROADMAP.md` when M0.3 completes.

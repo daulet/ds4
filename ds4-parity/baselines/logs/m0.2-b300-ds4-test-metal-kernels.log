@@ -1,0 +1,14 @@
+command: kubectl exec ds4-rust-port-b300 -- ./ds4_test --metal-kernels
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+source_commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T01:11:10Z
+metal-kernels:
+ds4: CUDA host registration skipped: operation not supported
+ds4 tests: ok
+metal-kernels: OK
+finished_utc: 2026-05-22T01:11:12Z
+exit_status: 0

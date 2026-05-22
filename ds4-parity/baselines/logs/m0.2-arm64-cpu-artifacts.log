@@ -1,0 +1,10 @@
+command: file ds4 ds4-server ds4-bench ds4-eval ds4-agent
+cwd: /Users/dzhanguzin/dev/personal/ds4
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+captured_utc: 2026-05-22T01:01:07Z
+ds4:        Mach-O 64-bit executable arm64
+ds4-server: Mach-O 64-bit executable arm64
+ds4-bench:  Mach-O 64-bit executable arm64
+ds4-eval:   Mach-O 64-bit executable arm64
+ds4-agent:  Mach-O 64-bit executable arm64
+exit_status: 0

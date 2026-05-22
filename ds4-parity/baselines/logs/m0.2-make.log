@@ -1,0 +1,9 @@
+command: make
+cwd: /Users/dzhanguzin/dev/personal/ds4
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T00:57:50Z
+cc -O3 -ffast-math -g -mcpu=native -Wall -Wextra -std=c99 -c -o ds4_cli.o ds4_cli.c
+clang: error: unsupported option '-mcpu=' for target 'x86_64-apple-darwin25.4.0'
+make: *** [ds4_cli.o] Error 1
+finished_utc: 2026-05-22T00:57:50Z
+exit_status: 2

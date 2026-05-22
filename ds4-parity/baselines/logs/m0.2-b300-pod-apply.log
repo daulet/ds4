@@ -1,0 +1,10 @@
+command: kubectl apply ds4-rust-port-b300 pod
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T01:03:32Z
+Warning: would violate PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "ds4-rust-port-b300" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "ds4-rust-port-b300" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "ds4-rust-port-b300" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "ds4-rust-port-b300" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+pod/ds4-rust-port-b300 created
+finished_utc: 2026-05-22T01:03:33Z
+exit_status: 0

@@ -1,0 +1,9 @@
+command: arch -arm64 ./ds4_test --server
+cwd: /Users/dzhanguzin/dev/personal/ds4
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T00:59:33Z
+server:
+server: OK
+ds4 tests: ok
+finished_utc: 2026-05-22T00:59:33Z
+exit_status: 0

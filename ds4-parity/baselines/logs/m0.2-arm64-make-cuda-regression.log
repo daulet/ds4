@@ -1,0 +1,7 @@
+command: arch -arm64 make cuda-regression
+cwd: /Users/dzhanguzin/dev/personal/ds4
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T01:00:00Z
+cuda-regression requires a CUDA build
+finished_utc: 2026-05-22T01:00:00Z
+exit_status: 0

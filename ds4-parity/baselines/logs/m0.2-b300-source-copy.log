@@ -1,0 +1,9 @@
+command: git archive HEAD | kubectl exec tar to /workspace/ds4
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+source_commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T01:08:10Z
+finished_utc: 2026-05-22T01:08:24Z
+exit_status: 0

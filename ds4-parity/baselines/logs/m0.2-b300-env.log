@@ -1,0 +1,60 @@
+command: kubectl exec ds4-rust-port-b300 -- environment probe
+kubeconfig: /tmp/ds4-hou2-prod1.kubeconfig
+context: hou2-prod1
+namespace: default
+pod: ds4-rust-port-b300
+node: c1v17-b300n1-nic1
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T01:07:55Z
+[hostname]
+ds4-rust-port-b300
+
+[uname -a]
+Linux ds4-rust-port-b300 6.18.15-talos #1 SMP Fri Mar  6 11:34:33 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+[nvidia-smi -L]
+GPU 0: NVIDIA B300 SXM6 AC (UUID: GPU-81f6bd2a-3404-6445-1788-365264243aab)
+
+[nvidia-smi]
+Fri May 22 01:07:56 2026
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.16             Driver Version: 580.126.16     CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA B300 SXM6 AC            On  |   00000000:3C:00.0 Off |                    0 |
+| N/A   31C    P0            135W / 1100W |       0MiB / 275040MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+
+[nvcc --version]
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2026 NVIDIA Corporation
+Built on Thu_Mar_19_11:12:51_PM_PDT_2026
+Cuda compilation tools, release 13.2, V13.2.78
+Build cuda_13.2.r13.2/compiler.37668154_0
+
+[cc --version]
+cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+[make --version]
+GNU Make 4.3
+
+[git --version]
+git version 2.43.0
+finished_utc: 2026-05-22T01:07:56Z
+exit_status: 0

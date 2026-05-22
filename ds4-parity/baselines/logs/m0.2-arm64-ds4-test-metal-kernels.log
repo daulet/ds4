@@ -1,0 +1,12 @@
+command: arch -arm64 ./ds4_test --metal-kernels
+cwd: /Users/dzhanguzin/dev/personal/ds4
+commit: 004ade62556bcfa7c8950a624619f8492230102b
+started_utc: 2026-05-22T00:59:38Z
+metal-kernels:
+ds4: Metal device Apple M4 Pro, 48.00 GiB RAM
+ds4: Metal model views created in 0.018 ms, residency requested in 0.128 ms, warmup 6.393 ms (mapped 4.00 MiB from offset 0.00 MiB)
+ds4: Metal mapped mmaped model as 1 overlapping shared buffers
+metal-kernels: OK
+ds4 tests: ok
+finished_utc: 2026-05-22T00:59:39Z
+exit_status: 0
