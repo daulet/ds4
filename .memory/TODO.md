@@ -1298,28 +1298,61 @@
 
 ### M8.4: Current-C CLI Token And Prompt Diagnostic Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture current-C CLI prompt ingestion and token-dump behavior.
-- Source evidence needed: `ds4_cli.c` prompt-source handling, `--dump-tokens`
+- Source evidence used: `ds4_cli.c` prompt-source handling, `--dump-tokens`
   path, thinking controls, prompt rendering/tokenizer milestones, and B300
   model/tokenizer availability.
 - Oracle: current `./ds4 --dump-tokens` with the recorded B300 model/tokenizer.
 - Fixture: `-p`, `--prompt-file`, rendered-chat prompt passthrough, custom
-  system prompt, empty system prompt, `--think`, `--think-max` with below/above
-  threshold contexts, and `--nothink`.
-- Comparator: schema/hash checker for token IDs, token bytes, prompt-file byte
-  hashes, thinking-mode warning categories, and exact B300 refresh commands.
-- Acceptance: prompt bytes, selected thinking mode, token sequence, and warning
-  category match the current CLI fixture; raw large prompt files are represented
-  by hashes when needed.
+  system prompt, empty system prompt, and `--think`/`--think-max`/`--nothink`
+  cases proving those controls are ignored by the early `--dump-tokens` exit.
+- Comparator: schema/hash checker for token IDs, raw stdout token bytes,
+  prompt-file byte hashes, empty warning categories, and exact B300 refresh
+  commands.
+- Acceptance: prompt bytes, raw token stdout, token sequence, and no-warning
+  category match the current CLI fixture; system/thinking controls remain
+  byte-identical to the base prompt because `--dump-tokens` exits before
+  `build_prompt` and `cli_warn_think_max_downgraded`.
 - Drift policy: model path and B300 workspace may be normalized; prompt bytes,
   token IDs, token bytes, thinking controls, and warning categories are exact.
 - Review gate: ask Claude to review prompt-source and thinking-control coverage
   against `ds4_cli.c`.
-- Validation needed: B300 capture or exact skipped recapture command, local
-  checker with negative tests, and `git diff --check`.
+- Validation passed: B300 capture on `ds4-rust-port-b300` after `make ds4
+  CUDA_ARCH=native`, `python3 ds4-parity/check_cli_token_dump.py
+  ds4-parity/baselines/cli/m8.4/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.4/manifest.json --negative-test` (`CLI token dump
+  oracle: PASS, 306 checks`; manifest `PASS, 18 checks`; negative tests `PASS,
+  8 checks`), `python3 -m py_compile ds4-parity/check_cli_token_dump.py`,
+  `python3 -m json.tool ds4-parity/baselines/cli/m8.4/current-c.json`, and
+  `git diff --check`.
 - Owner path: CLI token/prompt oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/cli/`, `.memory/status.md`.
+
+### M8.5: Rust CLI Token And Prompt Diagnostic Parity
+
+- Status: pending
+- Goal: implement Rust CLI behavior for `--dump-tokens` and prompt-source
+  diagnostics.
+- Source evidence needed: committed M8.4 current-C token/prompt diagnostic
+  fixture, M8.3 Rust CLI parser, Rust tokenizer text path, and `ds4_cli.c`
+  dump-token early-exit behavior.
+- Oracle: committed M8.4 current-C token/prompt diagnostic fixture.
+- Fixture: same prompt-source cases and ignored system/thinking-control cases
+  as M8.4, run through the Rust CLI.
+- Comparator: C/Rust diagnostic comparator for token IDs, token bytes,
+  prompt-file hashes, stdout shape, stderr warning categories, and exit status.
+- Acceptance: Rust matches the C CLI for prompt ingestion and dump-token output
+  without introducing alternate formatting or applying system/thinking controls
+  in the `--dump-tokens` path.
+- Drift policy: executable paths and timing-free stderr prefixes may be
+  normalized; token and prompt surfaces are exact.
+- Review gate: ask Claude to review CLI-to-tokenizer plumbing and normalization
+  boundaries.
+- Validation needed: comparator with negative tests, targeted Rust CLI tests,
+  `cargo test --workspace`, and `git diff --check`.
+- Owner path: Rust CLI token dump path, CLI token comparator, `ds4-parity/`,
+  `.memory/status.md`.
 
 ## Later Items
 

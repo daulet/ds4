@@ -268,3 +268,19 @@ python3 ds4-parity/compare_cli_parse.py --negative-test
 The comparator builds `ds4-cli-parse-rs`, runs it against the M8.2 argument
 matrix, and compares exit status, stdout/stderr emptiness, stable help anchors,
 stderr category anchors, and no-model-load markers.
+
+Validate the M8.4 current-C CLI token/prompt diagnostic oracle:
+
+```sh
+python3 ds4-parity/check_cli_token_dump.py \
+  ds4-parity/baselines/cli/m8.4/current-c.json \
+  --manifest ds4-parity/baselines/cli/m8.4/manifest.json \
+  --negative-test
+```
+
+The fixture runs `./ds4 --dump-tokens` on B300 with `-p`, `--prompt-file`, a
+rendered-chat prompt, `--system`, empty `--system`, `--think`, `--think-max` at
+both context thresholds, and `--nothink`. `--dump-tokens` exits before the
+normal prompt builder and thinking warning path, so the system/thinking cases
+are expected to produce byte-identical token dumps to the base prompt with empty
+stderr.

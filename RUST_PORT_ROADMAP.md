@@ -1260,13 +1260,15 @@ Work items:
 - Goal: capture current-C CLI prompt ingestion and token-dump behavior.
 - Oracle: current `./ds4 --dump-tokens` with the recorded B300 model/tokenizer.
 - Fixture: `-p`, `--prompt-file`, rendered-chat prompt passthrough, custom
-  system prompt, empty system prompt, `--think`, `--think-max` with below/above
-  threshold contexts, and `--nothink`.
-- Comparator: schema/hash checker for token IDs, token bytes, prompt-file byte
-  hashes, thinking-mode warning categories, and exact B300 refresh commands.
-- Acceptance: prompt bytes, selected thinking mode, token sequence, and warning
-  category match the current CLI fixture; raw large prompt files are represented
-  by hashes when needed.
+  system prompt, empty system prompt, and `--think`/`--think-max`/`--nothink`
+  cases proving those controls are ignored by the early `--dump-tokens` exit.
+- Comparator: schema/hash checker for token IDs, raw stdout token bytes,
+  prompt-file byte hashes, empty warning categories, and exact B300 refresh
+  commands.
+- Acceptance: prompt bytes, raw token stdout, token sequence, and no-warning
+  category match the current CLI fixture; system/thinking controls remain
+  byte-identical to the base prompt because `--dump-tokens` exits before
+  `build_prompt` and `cli_warn_think_max_downgraded`.
 - Drift policy: model path and B300 workspace may be normalized; prompt bytes,
   token IDs, token bytes, thinking controls, and warning categories are exact.
 - Review gate: ask Claude to review prompt-source and thinking-control
@@ -1279,12 +1281,13 @@ Work items:
 - Goal: implement Rust CLI behavior for `--dump-tokens` and prompt-source
   diagnostics.
 - Oracle: committed M8.4 current-C token/prompt diagnostic fixture.
-- Fixture: same prompt-source and thinking-control cases as M8.4, run through
-  the Rust CLI.
+- Fixture: same prompt-source cases and ignored system/thinking-control cases
+  as M8.4, run through the Rust CLI.
 - Comparator: C/Rust diagnostic comparator for token IDs, token bytes,
   prompt-file hashes, stdout shape, stderr warning categories, and exit status.
 - Acceptance: Rust matches the C CLI for prompt ingestion and dump-token output
-  without introducing alternate formatting.
+  without introducing alternate formatting or applying system/thinking controls
+  in the `--dump-tokens` path.
 - Drift policy: executable paths and timing-free stderr prefixes may be
   normalized; token and prompt surfaces are exact.
 - Review gate: ask Claude to review CLI-to-tokenizer plumbing and normalization

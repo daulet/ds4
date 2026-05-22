@@ -1,0 +1,34 @@
+{
+  "schema": "ds4.cli_token_dump_manifest.v1",
+  "milestone": "M8.4",
+  "oracle": "current C CLI --dump-tokens prompt ingestion and raw token dump",
+  "artifact": {
+    "path": "current-c.json",
+    "size_bytes": 18870,
+    "sha256": "87d427fb88563c15a07e859618fd585c6cb847bc77add556da89edf504bfb51c"
+  },
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig"
+  },
+  "model": {
+    "link_path": "/workspace/ds4/ds4flash.gguf",
+    "size_bytes": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "capture_commands": [
+    "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4 CUDA_ARCH=native; python3 ds4-parity/check_cli_token_dump.py --write-baseline ds4-parity/baselines/cli/m8.4/current-c.json --write-manifest ds4-parity/baselines/cli/m8.4/manifest.json --binary ./ds4 --model /workspace/ds4/ds4flash.gguf; python3 ds4-parity/check_cli_token_dump.py ds4-parity/baselines/cli/m8.4/current-c.json --manifest ds4-parity/baselines/cli/m8.4/manifest.json --negative-test'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/cli/m8.4/current-c.json ds4-parity/baselines/cli/m8.4/current-c.json",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/cli/m8.4/manifest.json ds4-parity/baselines/cli/m8.4/manifest.json"
+  ],
+  "normalization": {
+    "model.path": "B300 link path is retained; comparisons may normalize only the model path string",
+    "stdout": "raw stdout bytes, token IDs, and token pieces are exact",
+    "stderr": "must be empty for every captured case",
+    "thinking_controls": "--system, --think, --think-max, --ctx, and --nothink are expected to have no dump-token effect because main exits before build_prompt and cli_warn_think_max_downgraded"
+  }
+}

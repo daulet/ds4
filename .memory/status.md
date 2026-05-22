@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.4 Current-C CLI Token And Prompt Diagnostic Oracle
-- Last validated source commit: M8.3 Rust CLI parse/error parity in this
-  commit; prior pushed source commit
-  `ef84608b9a7e5490682fc1c8d5854a30d173ef0b`
+- Active item: M8.5 Rust CLI Token And Prompt Diagnostic Parity
+- Last validated source commit: M8.4 current-C CLI token/prompt diagnostic
+  oracle in this commit; prior pushed source commit
+  `dbaf2090fb37a94305e0e7c8251d58c865ab3007`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -926,3 +926,19 @@
   preconditions: PASS, 224 checks`; `CLI parse C/Rust comparator: PASS, 244
   checks`; negative tests `PASS, 5 checks`), `cargo test --workspace`, and
   `git diff --check`.
+- M8.4 adds `python3 ds4-parity/check_cli_token_dump.py`, B300 fixtures under
+  `ds4-parity/baselines/cli-fixtures/m8.4/`, and the committed current-C
+  `--dump-tokens` oracle at `ds4-parity/baselines/cli/m8.4/current-c.json`.
+  The checker captures raw stdout/stderr bytes as base64 plus hashes, parses
+  the first-line token ID list, records prompt bytes and prompt-file hashes, and
+  asserts that `--system`, empty `--system`, `--think`, both `--think-max`
+  context thresholds, and `--nothink` are ignored by the early dump-token exit.
+- M8.4 committed `ds4-parity/baselines/cli/m8.4/current-c.json` is 18,870 bytes
+  with SHA256 `87d427fb88563c15a07e859618fd585c6cb847bc77add556da89edf504bfb51c`.
+- M8.4 B300 validation passed after refreshing `/workspace/ds4` on
+  `ds4-rust-port-b300`, building `make ds4 CUDA_ARCH=native`, capturing the
+  baseline, and running `python3 ds4-parity/check_cli_token_dump.py
+  ds4-parity/baselines/cli/m8.4/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.4/manifest.json --negative-test` (`CLI token dump
+  oracle: PASS, 306 checks`; manifest `PASS, 18 checks`; negative tests `PASS,
+  8 checks`).

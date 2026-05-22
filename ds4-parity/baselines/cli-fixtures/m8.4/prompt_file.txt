@@ -1,0 +1,1 @@
+Prompt file oracle: preserve every byte from this fixture.
