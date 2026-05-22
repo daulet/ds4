@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M4.2 C Metadata Dump Oracle
-- Last validated source commit: `47080b14527d207f0c09dcf2611ca93a164c2e41`
+- Active item: M4.3 Rust GGUF Directory Parser
+- Last validated source commit: `de1c3c98b84a97732df5c29233a2585e53753223`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -118,3 +118,24 @@
   reading `ds4.c` loader, summary, metadata validation, base tensor binding,
   and MTP tensor binding surfaces. The next executable item is the current-C
   metadata dump oracle.
+- M4.2 added `./ds4-metadata-dump`, which opens the model through the current C
+  GGUF loader, runs `config_validate_model` and `weights_bind`, and emits
+  deterministic `ds4.metadata.v1` JSON with selected metadata values, tensor
+  type histograms, all tensor descriptors, and bound semantic tensor roles.
+- M4.2 added `python3 ds4-parity/check_metadata_dump.py`, whose schema checker
+  validates the dump and whose negative test detects tensor-count drift, a
+  missing required bound role, and a missing required metadata key.
+- M4.2 B300 validation copied the M4.2 source files into
+  `/workspace/ds4`, built with `make clean ds4-metadata-dump CUDA_ARCH=native`,
+  dumped `/workspace/ds4/ds4flash.gguf`, and passed
+  `python3 ds4-parity/check_metadata_dump.py /tmp/ds4-metadata.json --negative-test`.
+  The generated B300 dump had 633,297 bytes, SHA256
+  `39ad79574b19421e2c470a055376258b9415eb1f429188426cfd2860688a2a2f`,
+  1,328 tensors, and 1,511 bound tensor roles.
+- M4.2 local validation passed for `arch -arm64 make ds4-metadata-dump`,
+  `./ds4-metadata-dump --help`, local schema/negative checks against the copied
+  B300 dump, `python3 -m py_compile ds4-parity/check_metadata_dump.py`,
+  sequential `arch -arm64 make clean`, sequential `arch -arm64 make`,
+  sequential `arch -arm64 make clean`, sequential `arch -arm64 make cpu`,
+  `python3 ds4-parity/run_parity_report.py` with 9 passed, 4 skipped, 0 failed,
+  `cargo test --workspace`, and `git diff --check`.

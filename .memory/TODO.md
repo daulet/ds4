@@ -232,7 +232,7 @@
 
 ### M4.2: C Metadata Dump Oracle
 
-- Status: pending
+- Status: done
 - Goal: add a current-C metadata dump helper that opens GGUF through the
   existing loader and emits deterministic machine-readable metadata without
   running inference.
@@ -249,6 +249,25 @@
   rerun command, and `git diff --check`.
 - Owner path: C dump helper surface, `ds4-parity/`,
   `ds4-parity/baselines/metadata/`, `.memory/status.md`.
+
+### M4.3: Rust GGUF Directory Parser
+
+- Status: pending
+- Goal: add a `ds4-gguf` parser for GGUF v3 header, metadata descriptors,
+  scalar and array value decoding, tensor directory parsing, alignment,
+  absolute offsets, and tensor byte sizing.
+- Source evidence needed: M4.2 C metadata dump schema, `parse_metadata`,
+  `parse_tensors`, `gguf_types`, `tensor_nbytes`, `cursor_*`, and the B300
+  q2-imatrix metadata dump evidence.
+- Oracle: M4.2 C metadata dumps for the same GGUF files.
+- Comparator: Rust dump output compared to the C dump for version, counts,
+  key/type/value summaries, tensor names, dims, types, relative and absolute
+  offsets, byte sizes, and type histograms.
+- Validation needed: Rust parser tests, C-vs-Rust dump comparison, negative
+  fixture checks, `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: new `rust/ds4-gguf/` crate or equivalent parser module,
+  `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items
 

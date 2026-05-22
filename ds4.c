@@ -2752,6 +2752,487 @@ static void weights_free(ds4_weights *w) {
     memset(w, 0, sizeof(*w));
 }
 
+static const char *gguf_value_type_name(uint32_t type) {
+    switch (type) {
+    case GGUF_VALUE_UINT8:   return "uint8";
+    case GGUF_VALUE_INT8:    return "int8";
+    case GGUF_VALUE_UINT16:  return "uint16";
+    case GGUF_VALUE_INT16:   return "int16";
+    case GGUF_VALUE_UINT32:  return "uint32";
+    case GGUF_VALUE_INT32:   return "int32";
+    case GGUF_VALUE_FLOAT32: return "float32";
+    case GGUF_VALUE_BOOL:    return "bool";
+    case GGUF_VALUE_STRING:  return "string";
+    case GGUF_VALUE_ARRAY:   return "array";
+    case GGUF_VALUE_UINT64:  return "uint64";
+    case GGUF_VALUE_INT64:   return "int64";
+    case GGUF_VALUE_FLOAT64: return "float64";
+    default:                 return "unknown";
+    }
+}
+
+static void json_string_write(FILE *fp, const char *ptr, uint64_t len) {
+    fputc('"', fp);
+    for (uint64_t i = 0; i < len; i++) {
+        const unsigned char c = (unsigned char)ptr[i];
+        switch (c) {
+        case '"':  fputs("\\\"", fp); break;
+        case '\\': fputs("\\\\", fp); break;
+        case '\b': fputs("\\b", fp); break;
+        case '\f': fputs("\\f", fp); break;
+        case '\n': fputs("\\n", fp); break;
+        case '\r': fputs("\\r", fp); break;
+        case '\t': fputs("\\t", fp); break;
+        default:
+            if (c < 0x20) {
+                fprintf(fp, "\\u%04x", (unsigned)c);
+            } else {
+                fputc((int)c, fp);
+            }
+            break;
+        }
+    }
+    fputc('"', fp);
+}
+
+static void json_cstr_write(FILE *fp, const char *s) {
+    json_string_write(fp, s, (uint64_t)strlen(s));
+}
+
+static void metadata_comma(FILE *fp, bool *first) {
+    if (*first) {
+        *first = false;
+    } else {
+        fputs(",\n", fp);
+    }
+}
+
+static void metadata_emit_scalar_value(FILE *fp, const ds4_model *m, const ds4_kv *kv) {
+    ds4_cursor c = cursor_at(m, kv->value_pos);
+    switch (kv->type) {
+    case GGUF_VALUE_STRING: {
+        ds4_str s = {0};
+        if (!cursor_string(&c, &s)) ds4_die(c.error);
+        json_string_write(fp, s.ptr, s.len);
+        break;
+    }
+    case GGUF_VALUE_UINT32: {
+        uint32_t v = 0;
+        if (!cursor_u32(&c, &v)) ds4_die(c.error);
+        fprintf(fp, "%" PRIu32, v);
+        break;
+    }
+    case GGUF_VALUE_UINT64: {
+        uint64_t v = 0;
+        if (!cursor_u64(&c, &v)) ds4_die(c.error);
+        fprintf(fp, "%" PRIu64, v);
+        break;
+    }
+    case GGUF_VALUE_INT32: {
+        int32_t v = 0;
+        if (!cursor_read(&c, &v, sizeof(v))) ds4_die(c.error);
+        fprintf(fp, "%" PRId32, v);
+        break;
+    }
+    case GGUF_VALUE_FLOAT32: {
+        float v = 0.0f;
+        if (!cursor_read(&c, &v, sizeof(v))) ds4_die(c.error);
+        fprintf(fp, "%.9g", (double)v);
+        break;
+    }
+    case GGUF_VALUE_FLOAT64: {
+        double v = 0.0;
+        if (!cursor_read(&c, &v, sizeof(v))) ds4_die(c.error);
+        fprintf(fp, "%.17g", v);
+        break;
+    }
+    case GGUF_VALUE_BOOL: {
+        uint8_t v = 0;
+        if (!cursor_read(&c, &v, sizeof(v))) ds4_die(c.error);
+        fputs(v ? "true" : "false", fp);
+        break;
+    }
+    default:
+        fputs("null", fp);
+        break;
+    }
+}
+
+static void metadata_emit_array_values(FILE *fp, const ds4_model *m, const ds4_array_ref *arr) {
+    ds4_cursor c = cursor_at(m, arr->data_pos);
+    fputc('[', fp);
+    for (uint64_t i = 0; i < arr->len; i++) {
+        if (i) fputs(", ", fp);
+        switch (arr->type) {
+        case GGUF_VALUE_UINT32: {
+            uint32_t v = 0;
+            if (!cursor_u32(&c, &v)) ds4_die(c.error);
+            fprintf(fp, "%" PRIu32, v);
+            break;
+        }
+        case GGUF_VALUE_INT32: {
+            int32_t v = 0;
+            if (!cursor_read(&c, &v, sizeof(v))) ds4_die(c.error);
+            fprintf(fp, "%" PRId32, v);
+            break;
+        }
+        case GGUF_VALUE_FLOAT32: {
+            float v = 0.0f;
+            if (!cursor_read(&c, &v, sizeof(v))) ds4_die(c.error);
+            fprintf(fp, "%.9g", (double)v);
+            break;
+        }
+        case GGUF_VALUE_FLOAT64: {
+            double v = 0.0;
+            if (!cursor_read(&c, &v, sizeof(v))) ds4_die(c.error);
+            fprintf(fp, "%.17g", v);
+            break;
+        }
+        default:
+            fputs("null", fp);
+            break;
+        }
+    }
+    fputc(']', fp);
+}
+
+static void metadata_emit_selected_entry(
+        FILE            *fp,
+        const ds4_model *m,
+        const char      *key,
+        bool            *first) {
+    ds4_kv *kv = model_find_kv(m, key);
+    if (!kv) return;
+
+    metadata_comma(fp, first);
+    fputs("    {\"key\": ", fp);
+    json_cstr_write(fp, key);
+    fprintf(fp, ", \"type\": \"%s\"", gguf_value_type_name(kv->type));
+    if (kv->type == GGUF_VALUE_ARRAY) {
+        ds4_array_ref arr = {0};
+        if (!model_get_array(m, key, &arr)) ds4_die("failed to read metadata array");
+        fprintf(fp,
+                ", \"array_type\": \"%s\", \"len\": %" PRIu64 ", \"values\": ",
+                gguf_value_type_name(arr.type),
+                arr.len);
+        metadata_emit_array_values(fp, m, &arr);
+    } else {
+        fputs(", \"value\": ", fp);
+        metadata_emit_scalar_value(fp, m, kv);
+    }
+    fputc('}', fp);
+}
+
+static void metadata_emit_selected_metadata(FILE *fp, const ds4_model *m) {
+    static const char *keys[] = {
+        "general.name",
+        "general.architecture",
+        "deepseek4.context_length",
+        "deepseek4.block_count",
+        "deepseek4.embedding_length",
+        "deepseek4.vocab_size",
+        "deepseek4.attention.head_count",
+        "deepseek4.attention.head_count_kv",
+        "deepseek4.attention.key_length",
+        "deepseek4.attention.value_length",
+        "deepseek4.attention.sliding_window",
+        "deepseek4.attention.q_lora_rank",
+        "deepseek4.attention.output_lora_rank",
+        "deepseek4.attention.output_group_count",
+        "deepseek4.attention.indexer.head_count",
+        "deepseek4.attention.indexer.key_length",
+        "deepseek4.attention.indexer.top_k",
+        "deepseek4.attention.compress_rope_freq_base",
+        "deepseek4.attention.compress_ratios",
+        "deepseek4.rope.dimension_count",
+        "deepseek4.rope.freq_base",
+        "deepseek4.rope.scaling.factor",
+        "deepseek4.rope.scaling.original_context_length",
+        "deepseek4.rope.scaling.yarn_beta_fast",
+        "deepseek4.rope.scaling.yarn_beta_slow",
+        "deepseek4.expert_count",
+        "deepseek4.expert_used_count",
+        "deepseek4.expert_feed_forward_length",
+        "deepseek4.expert_shared_count",
+        "deepseek4.expert_group_count",
+        "deepseek4.expert_group_used_count",
+        "deepseek4.hash_layer_count",
+        "deepseek4.expert_weights_scale",
+        "deepseek4.expert_weights_norm",
+        "deepseek4.hyper_connection.count",
+        "deepseek4.hyper_connection.sinkhorn_iterations",
+        "deepseek4.hyper_connection.epsilon",
+        "deepseek4.swiglu_clamp_exp",
+        "deepseek4.attention.layer_norm_rms_epsilon",
+    };
+
+    fputs("  \"selected_metadata\": [\n", fp);
+    bool first = true;
+    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+        metadata_emit_selected_entry(fp, m, keys[i], &first);
+    }
+    fputs("\n  ],\n", fp);
+}
+
+static void metadata_emit_tensor_ref(FILE *fp, const ds4_tensor *t) {
+    fprintf(fp,
+            "\"name\": ");
+    json_string_write(fp, t->name.ptr, t->name.len);
+    fprintf(fp,
+            ", \"type\": %u, \"type_name\": ",
+            t->type);
+    json_cstr_write(fp, tensor_type_name(t->type));
+    fprintf(fp,
+            ", \"ndim\": %u, \"dims\": [",
+            t->ndim);
+    for (uint32_t i = 0; i < t->ndim; i++) {
+        if (i) fputs(", ", fp);
+        fprintf(fp, "%" PRIu64, t->dim[i]);
+    }
+    fprintf(fp,
+            "], \"elements\": %" PRIu64
+            ", \"bytes\": %" PRIu64
+            ", \"rel_offset\": %" PRIu64
+            ", \"abs_offset\": %" PRIu64,
+            t->elements,
+            t->bytes,
+            t->rel_offset,
+            t->abs_offset);
+}
+
+static void metadata_emit_tensor_types(FILE *fp, const ds4_model *m) {
+    fputs("  \"tensor_types\": [\n", fp);
+    bool first = true;
+    for (uint32_t type = 0; type < sizeof(gguf_types) / sizeof(gguf_types[0]); type++) {
+        uint64_t count = 0;
+        uint64_t bytes = 0;
+        for (uint64_t i = 0; i < m->n_tensors; i++) {
+            if (m->tensors[i].type == type) {
+                count++;
+                bytes += m->tensors[i].bytes;
+            }
+        }
+        if (!count) continue;
+        metadata_comma(fp, &first);
+        fprintf(fp,
+                "    {\"type\": %u, \"type_name\": ",
+                type);
+        json_cstr_write(fp, tensor_type_name(type));
+        fprintf(fp,
+                ", \"count\": %" PRIu64 ", \"bytes\": %" PRIu64 "}",
+                count,
+                bytes);
+    }
+    fputs("\n  ],\n", fp);
+}
+
+static void metadata_emit_tensors(FILE *fp, const ds4_model *m) {
+    fputs("  \"tensors\": [\n", fp);
+    for (uint64_t i = 0; i < m->n_tensors; i++) {
+        const ds4_tensor *t = &m->tensors[i];
+        if (i) fputs(",\n", fp);
+        fprintf(fp, "    {\"index\": %" PRIu64 ", ", i);
+        metadata_emit_tensor_ref(fp, t);
+        fputc('}', fp);
+    }
+    fputs("\n  ],\n", fp);
+}
+
+static void metadata_emit_bound_tensor(
+        FILE             *fp,
+        bool             *first,
+        const char       *role,
+        const ds4_tensor *t) {
+    metadata_comma(fp, first);
+    fputs("    {\"role\": ", fp);
+    json_cstr_write(fp, role);
+    if (!t) {
+        fputs(", \"present\": false}", fp);
+        return;
+    }
+    fputs(", \"present\": true, ", fp);
+    metadata_emit_tensor_ref(fp, t);
+    fputc('}', fp);
+}
+
+static void metadata_emit_layer_bound_tensor(
+        FILE                    *fp,
+        bool                    *first,
+        const char              *prefix,
+        uint32_t                 layer,
+        const char              *field,
+        const ds4_tensor        *t) {
+    char role[128];
+    int n = snprintf(role, sizeof(role), "%s.layer.%u.%s", prefix, layer, field);
+    if (n < 0 || (size_t)n >= sizeof(role)) ds4_die("metadata bound tensor role is too long");
+    metadata_emit_bound_tensor(fp, first, role, t);
+}
+
+static void metadata_emit_block_bound_tensor(
+        FILE             *fp,
+        bool             *first,
+        const char       *prefix,
+        const char       *field,
+        const ds4_tensor *t) {
+    char role[128];
+    int n = snprintf(role, sizeof(role), "%s.%s", prefix, field);
+    if (n < 0 || (size_t)n >= sizeof(role)) ds4_die("metadata bound tensor role is too long");
+    metadata_emit_bound_tensor(fp, first, role, t);
+}
+
+static void metadata_emit_layer_bindings(
+        FILE                    *fp,
+        bool                    *first,
+        const char              *prefix,
+        uint32_t                 layer,
+        const ds4_layer_weights *l) {
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "hc_attn_fn", l->hc_attn_fn);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "hc_attn_scale", l->hc_attn_scale);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "hc_attn_base", l->hc_attn_base);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_norm", l->attn_norm);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_q_a", l->attn_q_a);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_q_a_norm", l->attn_q_a_norm);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_q_b", l->attn_q_b);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_kv", l->attn_kv);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_kv_a_norm", l->attn_kv_a_norm);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_sinks", l->attn_sinks);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_output_a", l->attn_output_a);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_output_b", l->attn_output_b);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_compressor_ape", l->attn_compressor_ape);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_compressor_kv", l->attn_compressor_kv);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_compressor_gate", l->attn_compressor_gate);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "attn_compressor_norm", l->attn_compressor_norm);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "indexer_attn_q_b", l->indexer_attn_q_b);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "indexer_proj", l->indexer_proj);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "indexer_compressor_ape", l->indexer_compressor_ape);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "indexer_compressor_kv", l->indexer_compressor_kv);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "indexer_compressor_gate", l->indexer_compressor_gate);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "indexer_compressor_norm", l->indexer_compressor_norm);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "hc_ffn_fn", l->hc_ffn_fn);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "hc_ffn_scale", l->hc_ffn_scale);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "hc_ffn_base", l->hc_ffn_base);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_norm", l->ffn_norm);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_gate_tid2eid", l->ffn_gate_tid2eid);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_gate_inp", l->ffn_gate_inp);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_exp_probs_b", l->ffn_exp_probs_b);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_gate_exps", l->ffn_gate_exps);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_up_exps", l->ffn_up_exps);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_down_exps", l->ffn_down_exps);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_gate_shexp", l->ffn_gate_shexp);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_up_shexp", l->ffn_up_shexp);
+    metadata_emit_layer_bound_tensor(fp, first, prefix, layer, "ffn_down_shexp", l->ffn_down_shexp);
+}
+
+static void metadata_emit_mtp_block_bindings(
+        FILE                    *fp,
+        bool                    *first,
+        const char              *prefix,
+        const ds4_layer_weights *l) {
+    metadata_emit_block_bound_tensor(fp, first, prefix, "hc_attn_fn", l->hc_attn_fn);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "hc_attn_scale", l->hc_attn_scale);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "hc_attn_base", l->hc_attn_base);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_norm", l->attn_norm);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_q_a", l->attn_q_a);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_q_a_norm", l->attn_q_a_norm);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_q_b", l->attn_q_b);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_kv", l->attn_kv);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_kv_a_norm", l->attn_kv_a_norm);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_sinks", l->attn_sinks);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_output_a", l->attn_output_a);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "attn_output_b", l->attn_output_b);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "hc_ffn_fn", l->hc_ffn_fn);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "hc_ffn_scale", l->hc_ffn_scale);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "hc_ffn_base", l->hc_ffn_base);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_norm", l->ffn_norm);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_gate_inp", l->ffn_gate_inp);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_exp_probs_b", l->ffn_exp_probs_b);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_gate_exps", l->ffn_gate_exps);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_up_exps", l->ffn_up_exps);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_down_exps", l->ffn_down_exps);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_gate_shexp", l->ffn_gate_shexp);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_up_shexp", l->ffn_up_shexp);
+    metadata_emit_block_bound_tensor(fp, first, prefix, "ffn_down_shexp", l->ffn_down_shexp);
+}
+
+static void metadata_emit_base_bindings(FILE *fp, const ds4_weights *w, bool *first) {
+    metadata_emit_bound_tensor(fp, first, "base.token_embd", w->token_embd);
+    metadata_emit_bound_tensor(fp, first, "base.output_hc_base", w->output_hc_base);
+    metadata_emit_bound_tensor(fp, first, "base.output_hc_fn", w->output_hc_fn);
+    metadata_emit_bound_tensor(fp, first, "base.output_hc_scale", w->output_hc_scale);
+    metadata_emit_bound_tensor(fp, first, "base.output_norm", w->output_norm);
+    metadata_emit_bound_tensor(fp, first, "base.output", w->output);
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        metadata_emit_layer_bindings(fp, first, "base", il, &w->layer[il]);
+    }
+}
+
+static void metadata_emit_mtp_bindings(FILE *fp, const ds4_mtp_weights *w, bool *first) {
+    metadata_emit_bound_tensor(fp, first, "mtp.e_proj", w->e_proj);
+    metadata_emit_bound_tensor(fp, first, "mtp.h_proj", w->h_proj);
+    metadata_emit_bound_tensor(fp, first, "mtp.enorm", w->enorm);
+    metadata_emit_bound_tensor(fp, first, "mtp.hnorm", w->hnorm);
+    metadata_emit_bound_tensor(fp, first, "mtp.norm", w->norm);
+    metadata_emit_bound_tensor(fp, first, "mtp.hc_head_base", w->hc_head_base);
+    metadata_emit_bound_tensor(fp, first, "mtp.hc_head_fn", w->hc_head_fn);
+    metadata_emit_bound_tensor(fp, first, "mtp.hc_head_scale", w->hc_head_scale);
+    metadata_emit_mtp_block_bindings(fp, first, "mtp.block", &w->block);
+}
+
+int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *fp) {
+    ds4_model model;
+    model_open(&model, model_path, false, false);
+
+    ds4_weights weights;
+    config_validate_model(&model);
+    weights_bind(&weights, &model);
+
+    ds4_model mtp_model = { .fd = -1 };
+    ds4_mtp_weights mtp_weights = {0};
+    const bool has_mtp = mtp_path && mtp_path[0];
+    if (has_mtp) {
+        model_open(&mtp_model, mtp_path, false, false);
+        mtp_weights_bind(&mtp_weights, &mtp_model);
+    }
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.metadata.v1\",\n", fp);
+    fputs("  \"source\": \"current-c-loader\",\n", fp);
+    fputs("  \"model\": {\n", fp);
+    fputs("    \"path\": ", fp);
+    json_cstr_write(fp, model_path);
+    fprintf(fp,
+            ",\n    \"size\": %" PRIu64
+            ",\n    \"gguf_version\": %u"
+            ",\n    \"metadata_count\": %" PRIu64
+            ",\n    \"tensor_count\": %" PRIu64
+            ",\n    \"alignment\": %" PRIu64
+            ",\n    \"tensor_data_offset\": %" PRIu64 "\n",
+            model.size,
+            model.version,
+            model.n_kv,
+            model.n_tensors,
+            model.alignment,
+            model.tensor_data_pos);
+    fputs("  },\n", fp);
+    fputs("  \"validation\": {\"config\": \"passed\", \"weights\": \"passed\", \"mtp_weights\": ", fp);
+    json_cstr_write(fp, has_mtp ? "passed" : "skipped");
+    fputs("},\n", fp);
+    metadata_emit_selected_metadata(fp, &model);
+    metadata_emit_tensor_types(fp, &model);
+    metadata_emit_tensors(fp, &model);
+    fputs("  \"bound_tensors\": [\n", fp);
+    bool first = true;
+    metadata_emit_base_bindings(fp, &weights, &first);
+    if (has_mtp) metadata_emit_mtp_bindings(fp, &mtp_weights, &first);
+    fputs("\n  ]\n", fp);
+    fputs("}\n", fp);
+
+    if (has_mtp) model_close(&mtp_model);
+    weights_free(&weights);
+    model_close(&model);
+    return ferror(fp) ? 1 : 0;
+}
+
 /* Load one token embedding row and expand it to float activations. */
 static void embed_token_f16(const ds4_model *m, const ds4_weights *w, int token, float *out) {
     ds4_tensor *te = w->token_embd;
