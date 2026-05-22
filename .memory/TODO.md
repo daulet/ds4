@@ -271,7 +271,7 @@
 
 ### M4.4: DS4 Metadata Validation Parity
 
-- Status: pending
+- Status: done
 - Goal: port DS4-specific metadata validation from `config_validate_model`,
   including required key lookup, numeric type coercions, compression ratio
   arrays, SwiGLU clamp arrays, RoPE constants, HC constants, and expert
@@ -285,6 +285,23 @@
   first failing key, expected/got category, and tolerance policy.
 - Validation needed: metadata validation comparator, negative fixtures,
   workspace Rust tests, and `git diff --check`.
+- Owner path: `rust/ds4-gguf/`, `ds4-parity/`, `.memory/status.md`.
+
+### M4.5: Tensor Binding And Layout Parity
+
+- Status: pending
+- Goal: port the semantic tensor binding and layout checks from `weights_bind`,
+  `mtp_weights_bind`, `weights_validate_layout`, and
+  `mtp_weights_validate_layout`.
+- Source evidence needed: C bound tensor table and layout validation from the
+  M4.2 dump helper, tensor naming rules, optional and conditional tensor rules,
+  supported-model tensor directory, and generated tensor mutation fixtures.
+- Oracle: C bound tensor table and layout validation from the M4.2 dump helper.
+- Comparator: compare bound semantic tensor names to tensor descriptor
+  identity, dims, type, offsets, byte size, optional-vs-required status, and
+  normalized first failure.
+- Validation needed: tensor binding comparator, negative fixtures, workspace
+  Rust tests, and `git diff --check`.
 - Owner path: `rust/ds4-gguf/`, `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items

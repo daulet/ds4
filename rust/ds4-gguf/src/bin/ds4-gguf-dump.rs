@@ -1,5 +1,6 @@
 use ds4_gguf::{
-    parse_gguf, tensor_type_name, value_type_name, Gguf, MetadataValue, MAX_REPORTED_TENSOR_TYPE_ID,
+    parse_gguf, tensor_type_name, validate_ds4_metadata, value_type_name, Gguf, MetadataValue,
+    MAX_REPORTED_TENSOR_TYPE_ID,
 };
 use std::collections::BTreeMap;
 use std::env;
@@ -56,30 +57,64 @@ const SELECTED_METADATA_KEYS: &[&str] = &[
 ];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = parse_args()?;
-    let bytes = fs::read(&path)?;
+    let args = parse_args()?;
+    let bytes = fs::read(&args.path)?;
     let gguf = parse_gguf(&bytes)?;
+    if args.validate_ds4_metadata {
+        if let Err(err) = validate_ds4_metadata(&gguf) {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    }
 
     let mut out = io::BufWriter::new(io::stdout());
-    write_dump(&mut out, &path, &gguf)?;
+    write_dump(&mut out, &args.path, &gguf, args.validate_ds4_metadata)?;
     Ok(())
 }
 
-fn parse_args() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let mut args = env::args_os();
-    let program = args.next().unwrap_or_default();
-    let Some(path) = args.next() else {
-        eprintln!("usage: {} FILE", PathBuf::from(program).display());
-        std::process::exit(2);
-    };
-    if args.next().is_some() {
-        eprintln!("usage: {} FILE", PathBuf::from(program).display());
-        std::process::exit(2);
-    }
-    Ok(path.into())
+struct Args {
+    path: PathBuf,
+    validate_ds4_metadata: bool,
 }
 
-fn write_dump<W: Write>(out: &mut W, path: &PathBuf, gguf: &Gguf) -> io::Result<()> {
+fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
+    let mut args = env::args_os();
+    let program = args.next().unwrap_or_default();
+    let mut validate_ds4_metadata = false;
+    let mut path = None;
+    for arg in args {
+        if arg == "--validate-ds4-metadata" {
+            validate_ds4_metadata = true;
+            continue;
+        }
+        if path.is_some() {
+            eprintln!(
+                "usage: {} [--validate-ds4-metadata] FILE",
+                PathBuf::from(program).display()
+            );
+            std::process::exit(2);
+        }
+        path = Some(PathBuf::from(arg));
+    }
+    let Some(path) = path else {
+        eprintln!(
+            "usage: {} [--validate-ds4-metadata] FILE",
+            PathBuf::from(program).display()
+        );
+        std::process::exit(2);
+    };
+    Ok(Args {
+        path,
+        validate_ds4_metadata,
+    })
+}
+
+fn write_dump<W: Write>(
+    out: &mut W,
+    path: &PathBuf,
+    gguf: &Gguf,
+    config_validated: bool,
+) -> io::Result<()> {
     writeln!(out, "{{")?;
     writeln!(out, "  \"schema\": \"ds4.metadata.v1\",")?;
     writeln!(out, "  \"source\": \"rust-gguf-parser\",")?;
@@ -100,7 +135,8 @@ fn write_dump<W: Write>(out: &mut W, path: &PathBuf, gguf: &Gguf) -> io::Result<
     writeln!(out, "  }},")?;
     writeln!(
         out,
-        "  \"validation\": {{\"config\": \"skipped\", \"weights\": \"skipped\", \"mtp_weights\": \"skipped\"}},"
+        "  \"validation\": {{\"config\": \"{}\", \"weights\": \"skipped\", \"mtp_weights\": \"skipped\"}},",
+        if config_validated { "passed" } else { "skipped" }
     )?;
     write_selected_metadata(out, gguf)?;
     write_tensor_types(out, gguf)?;

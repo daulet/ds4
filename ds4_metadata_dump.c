@@ -16,6 +16,8 @@ static void usage(FILE *fp) {
         "  -m, --model FILE   GGUF model path. Default: ds4flash.gguf\n"
         "  --mtp FILE         Optional MTP support GGUF to bind and dump\n"
         "  --directory-only   Parse GGUF metadata/tensor directory without DS4 validation\n"
+        "  --validate-config-only\n"
+        "                     Run DS4 metadata validation without tensor binding\n"
         "  -o, --output FILE  Write JSON to FILE instead of stdout\n"
         "  -h, --help         Show this help\n");
 }
@@ -45,6 +47,8 @@ int main(int argc, char **argv) {
             mtp_path = argv[i];
         } else if (!strcmp(arg, "--directory-only")) {
             flags |= DS4_METADATA_DUMP_DIRECTORY_ONLY;
+        } else if (!strcmp(arg, "--validate-config-only")) {
+            flags |= DS4_METADATA_DUMP_VALIDATE_CONFIG_ONLY;
         } else if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
             if (++i >= argc) {
                 usage(stderr);

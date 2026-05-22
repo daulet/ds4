@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M4.4 DS4 Metadata Validation Parity
-- Last validated source commit: `d466688029a1a2a4a92f9d3d12e9b65dcaf2e601`
+- Active item: M4.5 Tensor Binding And Layout Parity
+- Last validated source commit: `24f4061e02e891d16244bf8c6006178f79764851`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -167,3 +167,22 @@
   `arch -arm64 make clean`, sequential `arch -arm64 make`, sequential
   `arch -arm64 make clean`, sequential `arch -arm64 make cpu`, and
   `python3 ds4-parity/run_parity_report.py` with 9 passed, 4 skipped, 0 failed.
+- M4.4 added `./ds4-metadata-dump --validate-config-only`, which runs current C
+  `config_validate_model` after GGUF parsing but skips tensor binding, making
+  local metadata-only validation fixtures possible without the full model
+  tensor table.
+- M4.4 added `validate_ds4_metadata` in `ds4-gguf`, matching C required-key
+  behavior, `u64` and `f32` coercion rules, optional expert group defaults,
+  fixed DeepSeek4 constants, compression-ratio arrays, SwiGLU clamp arrays,
+  RoPE constants, HC constants, RMS epsilon, expert weight scale, and expert
+  weight normalization.
+- M4.4 added `python3 ds4-parity/compare_metadata_validation.py`, whose
+  synthetic fixtures compare C and Rust pass/fail behavior and normalized first
+  failures for baseline metadata, C-compatible numeric coercions, missing keys,
+  wrong scalar types, wrong scalar values, short arrays, negative compression
+  ratios, wrong compression ratios, float tolerance failures, non-integer
+  `u64` inputs, non-float `f32` inputs, and boolean drift.
+- M4.4 focused validation passed for `arch -arm64 make ds4-metadata-dump`,
+  `cargo test -p ds4-gguf` with 4 tests, `python3
+  ds4-parity/compare_metadata_validation.py --negative-test` with 41 checks,
+  and `python3 -m py_compile ds4-parity/compare_metadata_validation.py`.

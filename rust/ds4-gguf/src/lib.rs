@@ -98,6 +98,185 @@ impl fmt::Display for GgufError {
 
 impl std::error::Error for GgufError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ds4ValidationError {
+    message: String,
+}
+
+impl Ds4ValidationError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl fmt::Display for Ds4ValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for Ds4ValidationError {}
+
+const DS4_N_LAYER: u32 = 43;
+const DS4_N_EMBD: u32 = 4096;
+const DS4_N_VOCAB: u32 = 129280;
+const DS4_N_HEAD: u32 = 64;
+const DS4_N_HEAD_KV: u32 = 1;
+const DS4_N_HEAD_DIM: u32 = 512;
+const DS4_N_VALUE_DIM: u32 = 512;
+const DS4_N_ROT: u32 = 64;
+const DS4_N_OUT_GROUP: u32 = 8;
+const DS4_N_LORA_Q: u32 = 1024;
+const DS4_N_LORA_O: u32 = 1024;
+const DS4_N_EXPERT: u32 = 256;
+const DS4_N_EXPERT_USED: u32 = 6;
+const DS4_N_EXPERT_SHARED: u32 = 1;
+const DS4_N_FF_EXP: u32 = 2048;
+const DS4_N_HASH_LAYER: u32 = 3;
+const DS4_N_SWA: u32 = 128;
+const DS4_N_INDEXER_HEAD: u32 = 64;
+const DS4_N_INDEXER_HEAD_DIM: u32 = 128;
+const DS4_N_INDEXER_TOP_K: u32 = 512;
+const DS4_N_HC: u32 = 4;
+const DS4_N_HC_SINKHORN_ITER: u32 = 20;
+const DS4_RMS_EPS: f32 = 1.0e-6;
+const DS4_HC_EPS: f32 = 1.0e-6;
+const DS4_EXPERT_WEIGHT_SCALE: f32 = 1.5;
+const DS4_SWIGLU_CLAMP_EXP: f32 = 10.0;
+const DS4_ROPE_FREQ_BASE: f32 = 10000.0;
+const DS4_ROPE_SCALE_FACTOR: f32 = 16.0;
+const DS4_ROPE_YARN_BETA_FAST: f32 = 32.0;
+const DS4_ROPE_YARN_BETA_SLOW: f32 = 1.0;
+const DS4_COMPRESS_ROPE_FREQ_BASE: f32 = 160000.0;
+const DS4_ROPE_ORIG_CTX: u64 = 65536;
+
+pub fn validate_ds4_metadata(gguf: &Gguf) -> Result<(), Ds4ValidationError> {
+    let n_layer = required_u32(gguf, "deepseek4.block_count")?;
+    let n_embd = required_u32(gguf, "deepseek4.embedding_length")?;
+    let n_vocab = required_u32(gguf, "deepseek4.vocab_size")?;
+    let n_head = required_u32(gguf, "deepseek4.attention.head_count")?;
+    let n_head_kv = required_u32(gguf, "deepseek4.attention.head_count_kv")?;
+    let n_head_dim = required_u32(gguf, "deepseek4.attention.key_length")?;
+    let n_value_dim = required_u32(gguf, "deepseek4.attention.value_length")?;
+    let n_rot = required_u32(gguf, "deepseek4.rope.dimension_count")?;
+    let n_lora_q = required_u32(gguf, "deepseek4.attention.q_lora_rank")?;
+    let n_lora_o = required_u32(gguf, "deepseek4.attention.output_lora_rank")?;
+    let n_out_group = required_u32(gguf, "deepseek4.attention.output_group_count")?;
+    let n_expert = required_u32(gguf, "deepseek4.expert_count")?;
+    let n_expert_used = required_u32(gguf, "deepseek4.expert_used_count")?;
+    let n_ff_exp = required_u32(gguf, "deepseek4.expert_feed_forward_length")?;
+    let n_expert_shared = required_u32(gguf, "deepseek4.expert_shared_count")?;
+    let n_hash_layer = required_u32(gguf, "deepseek4.hash_layer_count")?;
+    let n_expert_groups = optional_u32(gguf, "deepseek4.expert_group_count").unwrap_or(0);
+    let n_group_used = optional_u32(gguf, "deepseek4.expert_group_used_count").unwrap_or(0);
+
+    expect_u32("embedding_length", n_embd, DS4_N_EMBD)?;
+    expect_u32("vocab_size", n_vocab, DS4_N_VOCAB)?;
+    expect_u32("attention.head_count", n_head, DS4_N_HEAD)?;
+    expect_u32("attention.key_length", n_head_dim, DS4_N_HEAD_DIM)?;
+    expect_u32("attention.head_count_kv", n_head_kv, DS4_N_HEAD_KV)?;
+    expect_u32("attention.value_length", n_value_dim, DS4_N_VALUE_DIM)?;
+    expect_u32("rope.dimension_count", n_rot, DS4_N_ROT)?;
+    expect_u32("attention.output_group_count", n_out_group, DS4_N_OUT_GROUP)?;
+    expect_u32("attention.q_lora_rank", n_lora_q, DS4_N_LORA_Q)?;
+    expect_u32("attention.output_lora_rank", n_lora_o, DS4_N_LORA_O)?;
+    expect_u32("expert_count", n_expert, DS4_N_EXPERT)?;
+    expect_u32("expert_used_count", n_expert_used, DS4_N_EXPERT_USED)?;
+    expect_u32("expert_feed_forward_length", n_ff_exp, DS4_N_FF_EXP)?;
+    expect_u32("expert_shared_count", n_expert_shared, DS4_N_EXPERT_SHARED)?;
+    expect_u32("hash_layer_count", n_hash_layer, DS4_N_HASH_LAYER)?;
+    expect_u32("expert_group_count", n_expert_groups, 0)?;
+    expect_u32("expert_group_used_count", n_group_used, 0)?;
+
+    let n_swa = required_u32(gguf, "deepseek4.attention.sliding_window")?;
+    expect_u32("attention.sliding_window", n_swa, DS4_N_SWA)?;
+    let n_indexer_head = required_u32(gguf, "deepseek4.attention.indexer.head_count")?;
+    let n_indexer_head_dim = required_u32(gguf, "deepseek4.attention.indexer.key_length")?;
+    let n_indexer_top_k = required_u32(gguf, "deepseek4.attention.indexer.top_k")?;
+    expect_u32(
+        "attention.indexer.head_count",
+        n_indexer_head,
+        DS4_N_INDEXER_HEAD,
+    )?;
+    expect_u32(
+        "attention.indexer.key_length",
+        n_indexer_head_dim,
+        DS4_N_INDEXER_HEAD_DIM,
+    )?;
+    expect_u32(
+        "attention.indexer.top_k",
+        n_indexer_top_k,
+        DS4_N_INDEXER_TOP_K,
+    )?;
+    let n_hc = required_u32(gguf, "deepseek4.hyper_connection.count")?;
+    expect_u32("hyper_connection.count", n_hc, DS4_N_HC)?;
+    let n_hc_sinkhorn_iter = required_u32(gguf, "deepseek4.hyper_connection.sinkhorn_iterations")?;
+    expect_u32(
+        "hyper_connection.sinkhorn_iterations",
+        n_hc_sinkhorn_iter,
+        DS4_N_HC_SINKHORN_ITER,
+    )?;
+
+    expect_u32("block_count", n_layer, DS4_N_LAYER)?;
+    validate_compress_ratio_metadata(gguf)?;
+    validate_swiglu_clamp_metadata(gguf)?;
+
+    let rope_orig_ctx = required_u64(gguf, "deepseek4.rope.scaling.original_context_length")?;
+    if rope_orig_ctx != DS4_ROPE_ORIG_CTX {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: expected rope.scaling.original_context_length={} for DeepSeek4 Flash, got {}",
+            DS4_ROPE_ORIG_CTX, rope_orig_ctx
+        )));
+    }
+
+    let rope_freq_base = required_f32(gguf, "deepseek4.rope.freq_base")?;
+    expect_f32("rope.freq_base", rope_freq_base, DS4_ROPE_FREQ_BASE)?;
+    let rope_scale_factor = required_f32(gguf, "deepseek4.rope.scaling.factor")?;
+    expect_f32(
+        "rope.scaling.factor",
+        rope_scale_factor,
+        DS4_ROPE_SCALE_FACTOR,
+    )?;
+    let rope_yarn_beta_fast = required_f32(gguf, "deepseek4.rope.scaling.yarn_beta_fast")?;
+    expect_f32(
+        "rope.scaling.yarn_beta_fast",
+        rope_yarn_beta_fast,
+        DS4_ROPE_YARN_BETA_FAST,
+    )?;
+    let rope_yarn_beta_slow = required_f32(gguf, "deepseek4.rope.scaling.yarn_beta_slow")?;
+    expect_f32(
+        "rope.scaling.yarn_beta_slow",
+        rope_yarn_beta_slow,
+        DS4_ROPE_YARN_BETA_SLOW,
+    )?;
+    let compress_rope_freq_base =
+        required_f32(gguf, "deepseek4.attention.compress_rope_freq_base")?;
+    expect_f32(
+        "attention.compress_rope_freq_base",
+        compress_rope_freq_base,
+        DS4_COMPRESS_ROPE_FREQ_BASE,
+    )?;
+    let expert_weight_scale = required_f32(gguf, "deepseek4.expert_weights_scale")?;
+    expect_f32(
+        "expert_weights_scale",
+        expert_weight_scale,
+        DS4_EXPERT_WEIGHT_SCALE,
+    )?;
+    let rms_eps = required_f32(gguf, "deepseek4.attention.layer_norm_rms_epsilon")?;
+    expect_f32("attention.layer_norm_rms_epsilon", rms_eps, DS4_RMS_EPS)?;
+    let hc_eps = required_f32(gguf, "deepseek4.hyper_connection.epsilon")?;
+    expect_f32("hyper_connection.epsilon", hc_eps, DS4_HC_EPS)?;
+    let expert_weight_norm = required_bool(gguf, "deepseek4.expert_weights_norm")?;
+    expect_bool("expert_weights_norm", expert_weight_norm, true)?;
+    Ok(())
+}
+
 pub fn parse_gguf(bytes: &[u8]) -> Result<Gguf, GgufError> {
     let mut cursor = Cursor::new(bytes);
     let magic = cursor.u32()?;
@@ -387,6 +566,199 @@ fn tensor_type(type_id: u32) -> Option<TensorType> {
         _ => return None,
     };
     Some(info)
+}
+
+fn validate_compress_ratio_metadata(gguf: &Gguf) -> Result<(), Ds4ValidationError> {
+    let key = "deepseek4.attention.compress_ratios";
+    let (element_type, values) = required_array(gguf, key)?;
+    if element_type != 4 && element_type != 5 {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: required int32/uint32 array metadata key is missing: {key}"
+        )));
+    }
+    if values.len() < DS4_N_LAYER as usize {
+        return Err(Ds4ValidationError::new(
+            "ds4: deepseek4.attention.compress_ratios is shorter than the layer count",
+        ));
+    }
+
+    for (il, value) in values.iter().take(DS4_N_LAYER as usize).enumerate() {
+        let got = match value {
+            MetadataValue::UInt32(v) if element_type == 4 => *v,
+            MetadataValue::Int32(v) if element_type == 5 => {
+                if *v < 0 {
+                    return Err(Ds4ValidationError::new(
+                        "ds4: metadata array contains a negative value",
+                    ));
+                }
+                *v as u32
+            }
+            _ => {
+                return Err(Ds4ValidationError::new(format!(
+                    "ds4: required int32/uint32 array metadata key is missing: {key}"
+                )));
+            }
+        };
+        let expected = ds4_layer_compress_ratio(il as u32);
+        if got != expected {
+            return Err(Ds4ValidationError::new(format!(
+                "ds4: unexpected DeepSeek4 compression ratio at layer {il}: got {got}, expected {expected}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_swiglu_clamp_metadata(gguf: &Gguf) -> Result<(), Ds4ValidationError> {
+    let key = "deepseek4.swiglu_clamp_exp";
+    let (element_type, values) = required_array(gguf, key)?;
+    if element_type != 6 && element_type != 12 {
+        return Err(Ds4ValidationError::new(format!(
+            "ds4: required float array metadata key is missing: {key}"
+        )));
+    }
+    if values.len() < DS4_N_LAYER as usize {
+        return Err(Ds4ValidationError::new(
+            "ds4: deepseek4.swiglu_clamp_exp is shorter than the layer count",
+        ));
+    }
+
+    for value in values.iter().take(DS4_N_LAYER as usize) {
+        let got = match value {
+            MetadataValue::Float32(v) if element_type == 6 => *v,
+            MetadataValue::Float64(v) if element_type == 12 => *v as f32,
+            _ => {
+                return Err(Ds4ValidationError::new(format!(
+                    "ds4: required float array metadata key is missing: {key}"
+                )));
+            }
+        };
+        expect_f32("swiglu_clamp_exp", got, DS4_SWIGLU_CLAMP_EXP)?;
+    }
+    Ok(())
+}
+
+fn ds4_layer_compress_ratio(layer: u32) -> u32 {
+    if layer < 2 {
+        0
+    } else if (layer & 1) == 0 {
+        4
+    } else {
+        128
+    }
+}
+
+fn metadata_value<'a>(gguf: &'a Gguf, key: &str) -> Option<&'a MetadataValue> {
+    gguf.metadata
+        .iter()
+        .find(|entry| entry.key == key)
+        .map(|entry| &entry.value)
+}
+
+fn required_u32(gguf: &Gguf, key: &str) -> Result<u32, Ds4ValidationError> {
+    match metadata_value(gguf, key) {
+        Some(MetadataValue::UInt32(v)) => Ok(*v),
+        _ => Err(Ds4ValidationError::new(format!(
+            "ds4: required metadata key is missing: {key}"
+        ))),
+    }
+}
+
+fn optional_u32(gguf: &Gguf, key: &str) -> Option<u32> {
+    match metadata_value(gguf, key) {
+        Some(MetadataValue::UInt32(v)) => Some(*v),
+        _ => None,
+    }
+}
+
+fn required_u64(gguf: &Gguf, key: &str) -> Result<u64, Ds4ValidationError> {
+    match metadata_value(gguf, key) {
+        Some(MetadataValue::UInt64(v)) => Ok(*v),
+        Some(MetadataValue::UInt32(v)) => Ok(u64::from(*v)),
+        Some(_) => Err(Ds4ValidationError::new(format!(
+            "ds4: metadata key has a non-integer type: {key}"
+        ))),
+        None => Err(Ds4ValidationError::new(format!(
+            "ds4: required metadata key is missing: {key}"
+        ))),
+    }
+}
+
+fn required_f32(gguf: &Gguf, key: &str) -> Result<f32, Ds4ValidationError> {
+    match metadata_value(gguf, key) {
+        Some(MetadataValue::Float32(v)) => Ok(*v),
+        Some(MetadataValue::Float64(v)) => Ok(*v as f32),
+        Some(MetadataValue::UInt32(v)) => Ok(*v as f32),
+        Some(MetadataValue::Int32(v)) => Ok(*v as f32),
+        Some(value) => Err(Ds4ValidationError::new(format!(
+            "ds4: metadata key has a non-float type {}: {key}",
+            value.type_id()
+        ))),
+        None => Err(Ds4ValidationError::new(format!(
+            "ds4: required metadata key is missing: {key}"
+        ))),
+    }
+}
+
+fn required_bool(gguf: &Gguf, key: &str) -> Result<bool, Ds4ValidationError> {
+    match metadata_value(gguf, key) {
+        Some(MetadataValue::Bool(v)) => Ok(*v),
+        _ => Err(Ds4ValidationError::new(format!(
+            "ds4: required metadata key is missing: {key}"
+        ))),
+    }
+}
+
+fn required_array<'a>(
+    gguf: &'a Gguf,
+    key: &str,
+) -> Result<(u32, &'a [MetadataValue]), Ds4ValidationError> {
+    match metadata_value(gguf, key) {
+        Some(MetadataValue::Array {
+            element_type,
+            values,
+        }) => Ok((*element_type, values)),
+        _ => Err(Ds4ValidationError::new(format!(
+            "ds4: required array metadata key is missing: {key}"
+        ))),
+    }
+}
+
+fn expect_u32(name: &str, got: u32, expected: u32) -> Result<(), Ds4ValidationError> {
+    if got == expected {
+        Ok(())
+    } else {
+        Err(Ds4ValidationError::new(format!(
+            "ds4: expected {name}={expected} for DeepSeek4 Flash, got {got}"
+        )))
+    }
+}
+
+fn expect_f32(name: &str, got: f32, expected: f32) -> Result<(), Ds4ValidationError> {
+    let scale = if expected.abs() > 1.0 {
+        expected.abs()
+    } else {
+        1.0
+    };
+    if (got - expected).abs() <= scale * 1.0e-6 {
+        Ok(())
+    } else {
+        Err(Ds4ValidationError::new(format!(
+            "ds4: expected {name}={expected} for DeepSeek4 Flash, got {got}"
+        )))
+    }
+}
+
+fn expect_bool(name: &str, got: bool, expected: bool) -> Result<(), Ds4ValidationError> {
+    if got == expected {
+        Ok(())
+    } else {
+        Err(Ds4ValidationError::new(format!(
+            "ds4: expected {name}={} for DeepSeek4 Flash, got {}",
+            if expected { "true" } else { "false" },
+            if got { "true" } else { "false" }
+        )))
+    }
 }
 
 fn align_up(value: u64, alignment: u64) -> Result<u64, GgufError> {
