@@ -73,3 +73,16 @@ available directly from the repo.
 - Permanent rule: parity verifier parsers should convert malformed structured
   artifacts into section errors so negative tests prove failure reporting as
   well as drift detection.
+
+## 2026-05-22: M0.3 Runtime Log Is Pass/Fail Evidence, Not A Numeric Dump
+
+- Symptom: M1.4 needed a numeric comparator, but
+  `m0.3-b300-logprob-vectors.log` only recorded per-case pass markers and
+  `logprob-vectors: OK`.
+- Root cause: `./ds4_test --logprob-vectors` enforces exact selected-token
+  matching and a hardcoded 4.0 logprob tolerance internally, but it does not
+  print the runtime top-logprob values unless a failure occurs.
+- Permanent rule: compare logprob numeric fixtures through
+  `tests/test-vectors/official.vec` and the raw official JSON, and treat the
+  M0.3 B300 log as evidence that the C runtime enforced that fixture on the
+  recorded model/backend.

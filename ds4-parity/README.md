@@ -49,3 +49,28 @@ copies and requires comparison failure:
 ```sh
 python3 ds4-parity/compare_server_kv.py --negative-test
 ```
+
+Compare the committed official-vector logprob fixture and M0.3 run evidence:
+
+```sh
+python3 ds4-parity/compare_logprob_numeric.py
+```
+
+The M0.3 B300 run log is pass/fail evidence from
+`./ds4_test --logprob-vectors`; it does not dump runtime logits. The numeric
+slice lives in `tests/test-vectors/official.vec` and the raw official JSON under
+`tests/test-vectors/official/`. The comparator therefore audits those numeric
+fixtures, verifies the B300 run markers, and compares candidate vector files
+with exact selected-token matching plus the reported absolute logprob tolerance:
+
+```sh
+python3 ds4-parity/compare_logprob_numeric.py \
+  --candidate-vec /path/to/official-vector-style-output.vec
+```
+
+Its negative test corrupts a temporary candidate selected token and logprob
+value and requires comparison failure:
+
+```sh
+python3 ds4-parity/compare_logprob_numeric.py --negative-test
+```

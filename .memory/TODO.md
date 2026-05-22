@@ -134,7 +134,7 @@
 
 ### M1.4: Logprob And Numeric Comparator
 
-- Status: in-progress
+- Status: done
 - Goal: add numeric comparison support for official-vector output and later
   tensor/logit fixtures.
 - Source evidence needed: M0.3 official-vector baseline,
@@ -147,6 +147,22 @@
 - Validation needed: current captured M0.3 output compares cleanly; negative
   tests for token drift and numeric drift fail; `git diff --check`.
 - Owner path: `ds4-parity/`, `tests/test-vectors/`.
+
+### M1.5: Benchmark CSV Comparator
+
+- Status: in-progress
+- Goal: add comparison support for M0.6 benchmark CSV baselines.
+- Source evidence needed: M0.6 `bench/m0.6/csv/b300-short.csv`,
+  `bench/m0.6/csv/b300-long.csv`, prompt hash, model hash, B300 machine record,
+  and `csv-summary.json`.
+- Oracle: M0.6 benchmark CSV baselines captured on the B300 node.
+- Comparator: harness logic validating CSV schema, context frontiers, prefill
+  intervals, generation-token counts, `kvcache_bytes`, and throughput ratios
+  against the documented drift policy.
+- Validation needed: committed M0.6 CSVs self-compare cleanly; schema,
+  frontier, generation-token, cache-byte, and throughput-threshold edits fail;
+  `git diff --check`.
+- Owner path: `ds4-parity/`, `ds4-parity/baselines/bench/m0.6/`.
 
 ## Later Items
 

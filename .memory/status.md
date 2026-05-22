@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M1.4 Logprob And Numeric Comparator
-- Last validated source commit: `edfc342537af299c4b19b093b11471e74dc17282`
+- Active item: M1.5 Benchmark CSV Comparator
+- Last validated source commit: `cd596dd8504aef144663e853e92f78fcbf6779f2`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -78,3 +78,8 @@
   committed M0.4 server and M0.5 KV artifacts with only documented
   normalizations. Its negative test covers finish reason, cached token count,
   cache source, KV reason, and rendered text drift.
+- M1.4 added `python3 ds4-parity/compare_logprob_numeric.py`, which parses the
+  compact official-vector fixture, audits it against raw official API JSON,
+  verifies the M0.3 B300 pass markers, and compares candidate vector files with
+  exact selected tokens plus a reported 4.0 absolute logprob tolerance. Its
+  negative test covers selected-token drift and numeric drift outside tolerance.
