@@ -26,3 +26,7 @@ path = "src/bin/ds4-sampling-dump-rs.rs"
 [[bin]]
 name = "ds4-model-logits-dump-rs"
 path = "src/bin/ds4-model-logits-dump-rs.rs"
+
+[[bin]]
+name = "ds4-decode-policy-dump-rs"
+path = "src/bin/ds4-decode-policy-dump-rs.rs"

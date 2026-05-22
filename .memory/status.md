@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M6.6b Rust Decode Stop Policy Port
-- Last validated source commit: M6.6a decode stop policy C oracle fixture
-  commit once committed; prior pushed source commit
-  `625dc2552a3b38b98825dfffd3f76097d5a209c0`
+- Active item: M6.7 Sampling And Logprob Report Integration
+- Last validated source commit: M6.6b Rust decode stop policy port in this
+  commit; prior pushed source commit
+  `9ed43bdcc1652929ff9043d1f458588945237aa8`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -621,4 +621,21 @@
   ds4-parity/check_decode_policy_dump.py --negative-test` (`decode policy
   schema: PASS, 969 checks`; manifest `PASS, 5 checks`; negative tests `PASS,
   10 checks`), `arch -arm64 make ds4_test`, `./ds4_test --server`, and
+  `git diff --check`.
+- M6.6b adds the Rust byte-oriented decode stop policy in
+  `rust/ds4-gguf/src/decode_policy.rs` plus `ds4-decode-policy-dump-rs`.
+  It mirrors the M6.6a generated-token schedules without introducing a Rust
+  CLI/server runtime or reimplementing M5 DSML parsing; the tool case only
+  observes complete tool-call marker boundaries.
+- M6.6b adds `python3 ds4-parity/compare_decode_policy.py`, which runs the
+  Rust dump and compares request records, schedules, finish reason, raw and
+  visible bytes, streamed bytes, held tails, session invalidation, stop
+  boundaries, tool-boundary flags, API finish mappings, and per-step streaming
+  metadata against the committed M6.6a C oracle.
+- M6.6b validation passed with `python3 -m py_compile
+  ds4-parity/compare_decode_policy.py`, `python3
+  ds4-parity/compare_decode_policy.py --negative-test` (`decode policy C/Rust
+  comparator: PASS, 1059 checks`; negative tests `PASS, 10 checks`), `cargo
+  fmt --all -- --check`, `cargo test -p ds4-gguf decode_policy`, `cargo test
+  -p ds4-gguf --bin ds4-decode-policy-dump-rs`, `cargo test --workspace`, and
   `git diff --check`.

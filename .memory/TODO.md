@@ -769,6 +769,37 @@
 - Owner path: C decode-policy oracle, `ds4-parity/`,
   `.memory/status.md`.
 
+### M6.6b: Rust Decode Stop Policy Port
+
+- Status: done
+- Goal: port the request-surface decode stop policy over no-model
+  generated-token/text schedules without implementing Rust CLI/server runtime.
+- Source evidence needed: M6.6a current-C decode policy dump, C stop-list and
+  UTF-8 helper behavior, tool marker boundary behavior, and API finish mapping
+  helpers.
+- Oracle: M6.6a C decode stop policy oracle dump at
+  `ds4-parity/baselines/sampling/m6.6a/current-c.json`.
+- Fixture: committed M6.6a stop-policy schedules and request option records.
+- Comparator: C/Rust policy comparison for request records, schedules, finish
+  reason, emitted raw/visible text, streamed text, held streaming tail, session
+  invalidation requirement, stop boundary offsets, tool boundary flags, and
+  API finish mappings.
+- Acceptance: Rust policy output matches C for every EOS, length, stop
+  sequence, UTF-8 boundary, and complete tool-call fixture.
+- Drift policy: no finish-reason, emitted-text, held-tail, session
+  invalidation, API mapping, or boundary-offset drift.
+- Review gate: ask Claude to review the Rust policy boundary and make sure it
+  does not reimplement M5 DSML parsing or require model execution.
+- Validation passed: `python3 -m py_compile
+  ds4-parity/compare_decode_policy.py`, `python3
+  ds4-parity/compare_decode_policy.py --negative-test` (`1059` comparator
+  checks, `10` negative checks), `cargo fmt --all -- --check`, `cargo test -p
+  ds4-gguf decode_policy`, `cargo test -p ds4-gguf --bin
+  ds4-decode-policy-dump-rs`, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: Rust decode-policy port, `ds4-parity/`,
+  `.memory/status.md`.
+
 ## Later Items
 
 Add later roadmap items from `RUST_PORT_ROADMAP.md` as each active item
