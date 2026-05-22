@@ -901,6 +901,273 @@ Acceptance:
 - Cache hit/miss decisions match for the same prompt and options.
 - Restored sessions produce the same next-token distribution within tolerance.
 
+### Milestone 7 Work Item Adjustment
+
+Milestone 7 spans on-disk cache file structure, cache policy decisions,
+session-payload boundaries, in-memory session snapshots, request-level replay,
+and model-backed restore validation. Split it before implementation so no
+commit mixes local no-model KV format fixtures with B300 snapshot/logit
+recapture.
+
+#### M7.1: KV Store Work Item Breakdown
+
+- Goal: split Milestone 7 into reviewable KV, session-payload, replay, and
+  report work items before adding Rust persistence code.
+- Oracle: current `ds4_kvstore` and session snapshot implementation, plus the
+  committed M0.5 KV/cache artifacts.
+- Fixture: M0.5 `kv-artifacts`, current `ds4_kvstore` source, current session
+  payload source, trailer-hook source, in-memory snapshot API surface, and
+  existing parity-report conventions.
+- Comparator: documentation-only review; no source behavior changes.
+- Acceptance: each Milestone 7 item names a tangible goal, oracle, fixture,
+  comparator, acceptance rule, drift policy, review gate, and validation gate.
+- Drift policy: no implementation or fixture-format drift allowed.
+- Review gate: ask Claude to review that the split isolates header/policy
+  fixtures, Rust format parsing, generic full-file round trips, per-extension
+  trailer coverage, on-disk payload structure, in-memory snapshot restore,
+  request replay, B300 recapture, and report integration without mixing oracle
+  surfaces.
+- Validation gate: `git diff --check`.
+
+#### M7.2: C KV Header And Policy Oracle
+
+- Goal: expose current C KV-cache header, filename, and policy behavior through
+  a deterministic no-model oracle dump.
+- Oracle: `ds4_kvstore` no-model helpers in the current C implementation:
+  fixed header layout, `ds4_kvstore_fill_header`,
+  `ds4_kvstore_read_header`, `ds4_kvstore_read_entry_file`,
+  `ds4_kvstore_default_options`, `ds4_kvstore_reason_code`,
+  `ds4_kvstore_key_kind`, `ds4_kvstore_store_len`,
+  `ds4_kvstore_chat_anchor_pos`, `ds4_kvstore_continued_store_target`,
+  `ds4_kvstore_file_size_fits`, `ds4_kvstore_entry_eviction_score`,
+  `ds4_kvstore_find_text_prefix`, `ds4_kvstore_byte_prefix_match`,
+  SHA/path helpers, little-endian helpers, reason encoding, and extension flag
+  encoding. Model/session-bound helpers such as token rendering,
+  `store_live_prefix`, `maybe_store_continued`, and `try_load_text` are out of
+  scope for this no-model oracle.
+- Fixture: synthetic text bytes, token IDs, cache entries, timestamps, file
+  sizes, option records, explicit `now` values for eviction scoring, and
+  committed M0.5 parsed header rows. Entry `created_at` and `last_used` are
+  fixture inputs, not capture-time values.
+- Comparator: schema checker and negative tests for the C oracle dump,
+  including exact header bytes, decoded fields, selected path names, policy
+  outputs, and first-failure paths.
+- Acceptance: oracle output is deterministic, local, no-model, and captures
+  the current KVC header bytes, field decoding, SHA keying, prefix selection,
+  eviction ordering, store target decisions, and boundary edge cases.
+- Drift policy: no KV policy or format behavior changes; fixture formatting may
+  normalize paths and timestamps only.
+- Review gate: ask Claude to review fixture coverage against `ds4_kvstore`
+  source and M0.5 artifacts.
+- Validation gate: build the C oracle helper, run schema and negative checks,
+  run the existing server/KV unit surface, and run `git diff --check`.
+
+#### M7.3: Rust KV Header And Policy Parser
+
+- Goal: port the KVC header parser/writer and no-model KV policy decisions to
+  Rust without loading model sessions.
+- Oracle: the M7.2 current-C KV header and policy oracle dump.
+- Fixture: committed M7.2 synthetic dump plus M0.5 header, rendered-text, and
+  cache-decision artifacts.
+- Comparator: C/Rust comparison for header bytes, decoded fields, reason and
+  extension flags, SHA file names, file-size budgeting, prefix selection,
+  store-boundary selection, continued-store targets, and eviction ordering.
+- Acceptance: Rust parses existing KVC headers, writes byte-identical headers
+  for every fixture, and matches C policy decisions for every no-model case.
+- Drift policy: no header-byte, keying, selection, or eviction drift; a
+  versioned format change is not allowed in this item.
+- Review gate: ask Claude to review byte-order handling, integer overflow
+  checks, timestamp normalization boundaries, and policy tie-break behavior.
+- Validation gate: KV comparator with negative tests, Rust unit tests,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M7.4a: Generic KVC Full-File Round Trip
+
+- Goal: compare full KVC file construction, generic optional trailer bytes,
+  file-size budgeting, and cross-reader acceptance without restoring model
+  tensors.
+- Prerequisite: M7.3 Rust KVC header writer and no-model policy comparator.
+- Oracle: current C fixed-header/text/payload file layout,
+  `ds4_kvstore_trailer_hooks`, current C entry-file reader behavior, and C
+  `ds4_kvstore_file_size_fits` for the produced file sizes.
+- Fixture: synthetic cache text, opaque payload bytes, fixed timestamps, option
+  records, generic extension-flag combinations, opaque trailer bytes, and
+  truncated/corrupted header, text, payload, and trailer data.
+- Comparator: C writer versus Rust writer byte comparison for the complete KVC
+  file, Rust reader acceptance of C-written files, C reader acceptance of
+  Rust-written files, and negative tests for malformed header/text/payload and
+  trailer boundaries.
+- Acceptance: full files are byte-identical for the fixed-header, text,
+  payload, and trailer fixture; C can read Rust-written metadata/trailer files;
+  Rust can read C-written metadata/trailer files; malformed files fail at the
+  same boundary category; Rust writer output size equals the C policy
+  `file_size_fits` budget input for each fixture.
+- Drift policy: no KVC full-file byte drift, extension-flag drift, trailer-size
+  drift, or cross-reader acceptance drift; opaque payload bytes remain
+  uninterpreted in this item.
+- Review gate: ask Claude to review generic trailer-hook coverage, full-file
+  byte identity, file-size budget cross-checks, and C-reads-Rust/Rust-reads-C
+  round-trip evidence.
+- Validation gate: full-file comparator with negative tests, C helper build,
+  Rust tests, `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M7.4b: KV Extension Trailer Payload Coverage
+
+- Goal: compare server-owned KVC extension payloads and extension-flag
+  semantics separately from the generic full-file round trip.
+- Prerequisite: M7.4a generic full-file round-trip comparator.
+- Oracle: server tool-map trailer format (`KTM` version 1),
+  `DS4_KVSTORE_EXT_TOOL_MAP`, `DS4_KVSTORE_EXT_RESPONSES_VISIBLE`,
+  `DS4_KVSTORE_EXT_THINKING_VISIBLE`, and current C trailer write/load helper
+  behavior.
+- Fixture: tool-map trailer entries with boundary cases for zero entries,
+  multiple entries, UTF-8 bytes, long IDs, long DSML records, duplicate-shaped
+  entries, visible-transcript extension flags without payload bytes, and
+  truncated/corrupted trailer data.
+- Comparator: C/Rust comparison for extension flags, serialized trailer byte
+  size, trailer bytes, decoded tool-map entries, visible-transcript flag
+  handling, and malformed trailer rejection.
+- Acceptance: Rust emits and decodes the same extension flags and tool-map
+  trailer bytes as C, visible transcript flags do not imply extra payload
+  bytes, and malformed extension data fails at the same boundary category.
+- Drift policy: no extension-flag, trailer-byte, decoded-entry, or malformed
+  rejection drift.
+- Review gate: ask Claude to review per-extension payload coverage and make
+  sure server-owned trailer semantics are not hidden inside generic KVC
+  parsing.
+- Validation gate: extension trailer comparator with negative tests, C helper
+  build, Rust tests, `cargo fmt --all -- --check`, `cargo test --workspace`,
+  and `git diff --check`.
+
+#### M7.5: C Session Payload Shape Oracle
+
+- Goal: expose current C session snapshot payload structure, size budgeting,
+  and on-disk payload-header rejection behavior before any Rust payload reader.
+- Oracle: `DS4_SESSION_PAYLOAD_MAGIC`, session payload version and fields,
+  `ds4_session_payload_bytes`, `ds4_session_save_payload`,
+  and `ds4_session_load_payload` behavior in the current C implementation.
+  In-memory `ds4_session_save_snapshot` and `ds4_session_load_snapshot` have no
+  on-disk magic or byte layout and are deliberately excluded from this item.
+- Fixture: deterministic no-model structural records for payload constants and
+  rejection cases, frozen current-C model-layout constants (`DS4_N_LAYER`,
+  `DS4_N_HEAD_DIM`, `DS4_N_INDEXER_HEAD_DIM`, and `DS4_N_VOCAB`), M0.5
+  payload-size/hash records, and exact B300 refresh commands for model-backed
+  payload captures.
+- Comparator: schema/hash checker that validates payload metadata, fixed header
+  fields, size calculations, rejection categories, and skipped B300 recapture
+  commands.
+- Acceptance: the committed fixture records the DSV4 payload contract, payload
+  size inputs, rejection cases, and model-backed hash records needed for a Rust
+  reader. Raw payloads larger than 1 MiB are represented by hashes plus exact
+  recapture commands instead of being committed.
+- Drift policy: no payload format or acceptance-rule drift; model path and
+  capture workspace may be normalized.
+- Review gate: ask Claude to review that payload-shape evidence is sufficient
+  for a Rust reader while avoiding a premature Rust runtime/session port.
+- Validation gate: C payload oracle helper or exact B300 blocked command,
+  schema/hash checker with negative tests, and `git diff --check`.
+
+#### M7.6: Rust Session Payload Header Reader
+
+- Goal: add a Rust reader for DSV4 session payload headers and structural
+  validation without restoring tensors or executing a model.
+- Oracle: the M7.5 current-C on-disk session payload shape oracle.
+- Fixture: committed M7.5 payload metadata, rejection fixtures, frozen current-C
+  model-layout constants, and M0.5 payload-size/hash records.
+- Comparator: C/Rust comparison for payload magic, version, field decoding,
+  model-layout constant checks, payload-size accounting, trailing-byte
+  rejection, and malformed-header rejection.
+- Acceptance: Rust decodes current payload metadata, reports the same
+  structural rejection categories as C, and never claims tensor restore or
+  in-memory snapshot support.
+- Drift policy: no payload-header or size-accounting drift; body tensor
+  interpretation remains out of scope.
+- Review gate: ask Claude to review format-boundary checks, checked arithmetic,
+  and the no-runtime-restore scope boundary.
+- Validation gate: payload comparator with negative tests, Rust tests,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M7.7: KV Replay And Prefix Decision Comparator
+
+- Goal: compare request-level cache hit, cache miss, prefix match, exact DSML
+  replay, and effective prompt suffix construction against current C artifacts.
+- Oracle: M0.5 KV/cache traces, M0.4 server traces where DSML rendering is
+  involved, current `ds4_kvstore_try_load_text`, and current prompt rendering
+  behavior already covered by Milestone 5.
+- Fixture: committed cache request JSON, rendered cached text, cache-decision
+  logs, token prefix records, DSML tool-call records, hashes of the Milestone 5
+  prompt-rendering artifacts consumed as opaque fixture inputs, and M7.3 Rust
+  KV policy outputs.
+- Comparator: C/log-artifact versus Rust comparison for `cache_source`,
+  cached-token counts, cache-write-token counts, reason codes, key kind,
+  extension flags, rendered text SHA, exact prefix token records, and effective
+  prompt suffix bytes. M5 artifact-hash drift is reported as a fixture
+  precondition failure, not as KV behavior drift.
+- Acceptance: Rust makes the same cache hit/miss and prefix decisions for the
+  committed replay cases, including DSML-visible transcript boundaries and text
+  suffix construction, using M5 outputs as fixed inputs. M7.7 only uses replay
+  prompts already covered by committed M5 artifacts; extending M5 rendering
+  coverage is M5 work, not M7.7 work.
+- Drift policy: no cache-decision, rendered-text, token-prefix, or suffix-byte
+  drift; trace timing and process paths may be normalized.
+- Review gate: ask Claude to review replay coverage at the boundary between KV
+  policy, opaque Milestone 5 text fixtures, and future server runtime work.
+- Validation gate: replay comparator with negative tests, Milestone 5 fixture
+  hash precondition check, `cargo test --workspace`, and `git diff --check`.
+
+#### M7.8: B300 Disk KV And In-Memory Snapshot Restore Oracle
+
+- Goal: capture model-backed current-C evidence for both disk KV/session
+  payload restore and in-memory `ds4_session_snapshot` restore.
+- Oracle: current C server/session save and restore paths on the recorded B300
+  model, `ds4_session_save_payload`, `ds4_session_load_payload`,
+  `ds4_session_save_snapshot`, `ds4_session_load_snapshot`,
+  `ds4_session_top_logprobs`, and selected-token output after restore.
+- Fixture: fixed cache seed prompts, continuation prompts, cache directory
+  setup, selected disk restore points, selected in-memory snapshot points, raw
+  KV/payload hash records, snapshot metadata records, top-logprob slices,
+  selected tokens, model identity, backend identity, and exact B300 refresh
+  commands. Rust in-memory snapshot loading is deferred to Milestone 10 runtime
+  ownership; this item captures current-C oracle evidence only.
+- Comparator: schema/hash/top-logprob checker that validates committed restore
+  records locally and skips recapture only with exact B300 rerun commands.
+- Acceptance: restored and uninterrupted current-C sessions have matching
+  selected next token and top-logprob token ordering; logit/logprob score
+  values match within the M6 model-logits absolute tolerance of `1e-5` from
+  `ds4-parity/compare_model_logits.py`. Raw payloads larger than 1 MiB are
+  represented by hashes plus exact recapture commands instead of being
+  committed.
+- Drift policy: model path and capture workspace may be normalized; prompt
+  bytes, restore metadata, snapshot metadata, payload hashes, selected tokens,
+  top-logprob token IDs/order, and score tolerances are exact.
+- Review gate: ask Claude to review B300 command fidelity, artifact-size
+  policy, disk-vs-memory snapshot separation, and distribution-comparison
+  tolerance.
+- Validation gate: B300 capture or exact skipped recapture command, local
+  schema/hash checker with negative tests, and `git diff --check`.
+
+#### M7.9: KV And Snapshot Report Integration
+
+- Goal: wire M7 local comparators and B300 restore refresh records into the
+  parity reports.
+- Oracle: committed M7.2 through M7.8 fixtures and refresh commands.
+- Fixture: M7 manifest entries, local comparator commands, M0.5 baseline
+  artifacts, and B300 restore recapture records.
+- Comparator: a Milestone 7 report that runs all local KV/snapshot comparators,
+  summarizes first drift paths, and skips only model-backed B300 recapture with
+  exact commands; the unified parity report includes that M7 report.
+- Acceptance: local report passes without the model, JSON output is machine
+  readable, failure output names fixture/field/expected/got, and B300
+  refreshes are reproducible from the report.
+- Drift policy: report normalizes only capture paths and timestamps.
+- Review gate: ask Claude to review report integration and skipped-B300
+  command fidelity.
+- Validation gate: M7 report, unified parity report, `py_compile`,
+  `cargo test --workspace`, and `git diff --check`.
+
 ## Milestone 8: CLI Surface Parity
 
 Port the CLI after core text, sampling, and persistence pieces are comparable.

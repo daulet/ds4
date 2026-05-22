@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M7.1 KV Store Work Item Breakdown
-- Last validated source commit: M6.7 sampling/logprob report integration in
-  this commit; prior pushed source commit
-  `8cafb76aeae9a68f3be7c4c47e731b38580b38b5`
+- Active item: M7.2 C KV Header And Policy Oracle
+- Last validated source commit: M7.1 KV store work item breakdown in this
+  commit; prior pushed source commit
+  `58c2833b70d96fbc3a8de48e97f94ac0de799573`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -658,3 +658,11 @@
   --skip-local-oracles` (`summary: 7 passed, 10 skipped, 0 failed`), `python3
   ds4-parity/run_parity_report.py --skip-local-oracles --json | python3 -m
   json.tool`, `cargo test --workspace`, and `git diff --check`.
+- M7.1 split Milestone 7 into C KV header/policy oracle, Rust KV
+  parser/policy, generic full-file round-trip coverage, per-extension trailer
+  coverage, C on-disk session payload shape oracle, Rust payload header reader,
+  KV replay/prefix decision comparator, B300 disk-KV and in-memory snapshot
+  restore oracle, and report integration items. The first executable item is
+  the no-model C KV header and policy oracle; the C on-disk session payload
+  shape oracle is independently eligible because it depends on session payload
+  code rather than KV header/policy work.

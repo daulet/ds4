@@ -833,6 +833,107 @@
   `ds4-parity/run_parity_report.py`, `ds4-parity/README.md`,
   `.memory/status.md`.
 
+### M7.1: KV Store Work Item Breakdown
+
+- Status: done
+- Goal: split Milestone 7 KV store and snapshot parity into reviewable work
+  items before adding Rust persistence code.
+- Source evidence needed: `RUST_PORT_ROADMAP.md` Milestone 7,
+  `ds4_kvstore.c`, `ds4_kvstore.h`, session snapshot payload code in
+  `ds4.c`, M0.5 KV artifacts, server tool-map trailer code, in-memory
+  snapshot APIs, and existing report conventions.
+- Oracle: current `ds4_kvstore` and session snapshot implementation plus
+  committed M0.5 KV/cache artifacts.
+- Fixture: M0.5 `kv-artifacts`, current `ds4_kvstore` source, current session
+  payload source, in-memory snapshot API surface, trailer-hook source, and
+  existing parity-report conventions.
+- Comparator: documentation-only work item list that defines header/policy,
+  Rust parser, generic full-file round trips, per-extension trailer coverage,
+  payload shape, Rust payload reader, request replay, B300 disk and in-memory
+  restore, and report integration comparison contracts for later executable
+  items. M7.2 is the first open item; M7.5 is independently eligible because
+  it depends on session payload code rather than KV header/policy work.
+- Acceptance: the split gives each KV/snapshot item a tangible oracle, fixture,
+  comparator, drift policy, review gate, and validation gate before
+  implementation begins.
+- Drift policy: no implementation behavior changes in the split.
+- Review gate: ask Claude to review that the split isolates header/policy
+  fixtures, Rust format parsing, generic full-file round trips, per-extension
+  trailer coverage, on-disk payload structure, in-memory snapshot restore,
+  request replay, B300 recapture, and report integration without mixing oracle
+  surfaces.
+- Validation needed: `git diff --check`.
+- Owner path: `.memory/TODO.md`, `.memory/status.md`,
+  `RUST_PORT_ROADMAP.md` source evidence.
+
+### M7.2: C KV Header And Policy Oracle
+
+- Status: pending
+- Goal: expose current C KV-cache header, filename, and policy behavior through
+  a deterministic no-model oracle dump.
+- Source evidence needed: `ds4_kvstore.c`, `ds4_kvstore.h`, `ds4_server.c`
+  tool-map trailer constants where extension flags matter, M0.5 parsed header
+  rows, rendered cache text, and cache-decision logs.
+- Oracle: current C no-model KV helpers: KVC header layout,
+  `ds4_kvstore_fill_header`, `ds4_kvstore_read_header`,
+  `ds4_kvstore_read_entry_file`, default options, reason/key-kind mapping,
+  SHA/path helpers, store-boundary selection, chat-anchor selection,
+  continued-store target selection, file-size budgeting, byte-prefix matching,
+  eviction scoring, and text-prefix entry selection. Model/session-bound token
+  rendering, live-prefix storage, continued storage, and `try_load_text` are
+  out of scope for this no-model item.
+- Comparator: schema checker and negative tests for a deterministic C oracle
+  dump covering exact header bytes, decoded fields, selected path names,
+  policy outputs, and first-failure paths.
+- Fixture: synthetic text bytes, token IDs, cache entries, timestamps, file
+  sizes, option records, explicit `now` values for eviction scoring, and
+  committed M0.5 parsed header rows.
+- Acceptance: oracle output is deterministic, local, no-model, and captures
+  the current KVC header bytes, field decoding, SHA keying, prefix selection,
+  eviction ordering, store target decisions, and boundary edge cases.
+- Drift policy: no KV policy or format behavior changes; fixture formatting may
+  normalize paths and timestamps only.
+- Review gate: ask Claude to review fixture coverage against `ds4_kvstore`
+  source and M0.5 artifacts.
+- Validation needed: C oracle helper build, schema/negative checks, existing
+  server/KV unit surface, and `git diff --check`.
+- Owner path: C oracle dump surface, `ds4-parity/`,
+  `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
+### M7.5: C Session Payload Shape Oracle
+
+- Status: pending
+- Goal: expose current C session payload structure, size budgeting, and
+  on-disk payload-header rejection behavior before any Rust payload reader.
+- Source evidence needed: `DS4_SESSION_PAYLOAD_MAGIC`,
+  `DS4_SESSION_PAYLOAD_VERSION`, `DS4_SESSION_PAYLOAD_U32_FIELDS`,
+  `ds4_session_payload_bytes`, `ds4_session_save_payload`,
+  `ds4_session_load_payload`, current fixed model-layout constants, M0.5
+  payload-size/hash records, and B300 refresh commands.
+- Oracle: current C on-disk DSV4 payload format and load/save rejection
+  behavior. In-memory `ds4_session_save_snapshot` and
+  `ds4_session_load_snapshot` are excluded from this on-disk payload item.
+- Fixture: deterministic no-model structural records for payload constants and
+  rejection cases, frozen current-C model-layout constants (`DS4_N_LAYER`,
+  `DS4_N_HEAD_DIM`, `DS4_N_INDEXER_HEAD_DIM`, and `DS4_N_VOCAB`), M0.5
+  payload-size/hash records, and exact B300 refresh commands for model-backed
+  payload captures.
+- Comparator: schema/hash checker that validates payload metadata, fixed header
+  fields, size calculations, rejection categories, and skipped B300 recapture
+  commands.
+- Acceptance: the committed fixture records the DSV4 payload contract, payload
+  size inputs, rejection cases, and model-backed hash records needed for a Rust
+  reader. Raw payloads larger than 1 MiB are represented by hashes plus exact
+  recapture commands instead of being committed.
+- Drift policy: no payload format or acceptance-rule drift; model path and
+  capture workspace may be normalized.
+- Review gate: ask Claude to review that payload-shape evidence is sufficient
+  for a Rust reader while avoiding a premature Rust runtime/session port.
+- Validation needed: C payload oracle helper or exact B300 blocked command,
+  schema/hash checker with negative tests, and `git diff --check`.
+- Owner path: C payload oracle surface, `ds4-parity/`,
+  `ds4-parity/baselines/kv/`, `.memory/status.md`.
+
 ## Later Items
 
 Add later roadmap items from `RUST_PORT_ROADMAP.md` as each active item
