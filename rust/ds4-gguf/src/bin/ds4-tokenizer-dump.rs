@@ -18,6 +18,17 @@ const TEXT_CASES: &[(&str, &str)] = &[
     ),
 ];
 
+const RENDERED_CHAT_CASES: &[(&str, &str)] = &[
+    (
+        "rendered_specials",
+        "<｜begin▁of▁sentence｜>System<｜User｜>Hello<｜Assistant｜><think>Reason</think>Answer｜DSML｜<｜end▁of▁sentence｜>",
+    ),
+    (
+        "rendered_tool_result",
+        "<｜begin▁of▁sentence｜><｜User｜><tool_result>a & b </tool_result><｜Assistant｜></think>",
+    ),
+];
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = parse_args()?;
     let bytes = fs::read(&path)?;
@@ -82,7 +93,15 @@ fn write_dump<W: Write>(out: &mut W, tokenizer: &Ds4Tokenizer) -> io::Result<()>
         if idx != 0 {
             writeln!(out, ",")?;
         }
-        write_text_case(out, tokenizer, name, input)?;
+        write_text_case(out, tokenizer, name, input, false)?;
+    }
+    writeln!(out, "\n  ],")?;
+    writeln!(out, "  \"rendered_chat_cases\": [")?;
+    for (idx, (name, input)) in RENDERED_CHAT_CASES.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_text_case(out, tokenizer, name, input, true)?;
     }
     writeln!(out, "\n  ]")?;
     writeln!(out, "}}")?;
@@ -112,10 +131,22 @@ fn write_text_case<W: Write>(
     tokenizer: &Ds4Tokenizer,
     name: &str,
     input: &str,
+    rendered_chat: bool,
 ) -> io::Result<()> {
-    let tokens = tokenizer.tokenize_text(input);
+    let tokens = if rendered_chat {
+        tokenizer.tokenize_rendered_chat(input)
+    } else {
+        tokenizer.tokenize_text(input)
+    };
+    let mode = if rendered_chat {
+        "rendered_chat"
+    } else {
+        "plain_text"
+    };
     write!(out, "    {{\"name\": ")?;
     write_json_string(out, name)?;
+    write!(out, ", \"mode\": ")?;
+    write_json_string(out, mode)?;
     write!(out, ", \"input\": ")?;
     write_json_string(out, input)?;
     write!(out, ", \"token_count\": {}, \"tokens\": [", tokens.len())?;

@@ -3,8 +3,8 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M5.4 Rust Rendered Chat Special Tokenization
-- Last validated source commit: `0b351c7f309cf53981a646d1701ea2d4bd11ead4`
+- Active item: M5.5 Prompt Renderer Parity
+- Last validated source commit: `4063fdd7fe8193f4a3e8c734ce1a41bb19b3a2cf`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -314,3 +314,24 @@
 - M5.3 Claude review returned `NO BLOCKERS` after checking the Rust tokenizer
   against the C byte encoding, JoyAI split rules, BPE merge loop, token text
   decoding, and comparator scope.
+- M5.4 added Rust rendered-chat tokenization over the exact C
+  `special_token_at` rendered-control table. `tokenize_rendered_chat` scans
+  trusted rendered prompt bytes for BOS, EOS, User, Assistant, `<think>`,
+  `</think>`, and `｜DSML｜`, emits those special token IDs, and tokenizes
+  intervening spans through the existing JoyAI BPE path; plain `tokenize_text`
+  remains separate so special-looking user text is not trusted as control text.
+- M5.4 extended `ds4-tokenizer-dump` and
+  `python3 ds4-parity/compare_tokenizer_text.py` to compare the M5.2
+  `rendered_chat_cases` exactly for rendered prompt bytes, token IDs, and
+  decoded token-piece bytes. Negative checks now include rendered special-token
+  ID drift and rendered ordinary-piece drift.
+- M5.4 local validation passed for `cargo fmt --all -- --check`,
+  `cargo test --workspace` with 9 `ds4-gguf` tests,
+  `python3 -m py_compile ds4-parity/compare_tokenizer_text.py`, and
+  `python3 ds4-parity/compare_tokenizer_text.py --manifest
+  ds4-parity/baselines/tokenization/m5.3/manifest.json --negative-test` with
+  `tokenizer text comparison: PASS, 71 checks`, `tokenizer manifest: PASS, 4
+  checks`, and `tokenizer negative tests: PASS, 9 checks`.
+- M5.4 Claude review returned `NO BLOCKERS`; after adding Rust dump `mode`
+  fields and pinning them in the comparator, the follow-up Claude review also
+  returned `NO BLOCKERS`.

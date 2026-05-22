@@ -108,15 +108,39 @@ def compare_dumps(baseline: dict[str, Any], rust: dict[str, Any]) -> Report:
         report.check(got.get("id") == expected["id"], f"special token {name} id drift")
         report.check(got.get("text") == expected["text"], f"special token {name} text drift")
 
-    base_cases = {
-        case["name"]: case
-        for case in baseline["text_cases"]
-        if case.get("mode") == "plain_text"
-    }
-    rust_cases = {case.get("name"): case for case in rust.get("text_cases", [])}
-    report.check(set(rust_cases) == set(base_cases), "plain text case names drift")
+    compare_case_family(
+        report,
+        {
+            case["name"]: case
+            for case in baseline["text_cases"]
+            if case.get("mode") == "plain_text"
+        },
+        {case.get("name"): case for case in rust.get("text_cases", [])},
+        "plain text",
+    )
+    compare_case_family(
+        report,
+        {
+            case["name"]: case
+            for case in baseline["rendered_chat_cases"]
+            if case.get("mode") == "rendered_chat"
+        },
+        {case.get("name"): case for case in rust.get("rendered_chat_cases", [])},
+        "rendered chat",
+    )
+    return report
+
+
+def compare_case_family(
+    report: Report,
+    base_cases: dict[str, dict[str, Any]],
+    rust_cases: dict[str, dict[str, Any]],
+    label: str,
+) -> None:
+    report.check(set(rust_cases) == set(base_cases), f"{label} case names drift")
     for name, expected in base_cases.items():
         got = rust_cases.get(name, {})
+        report.check(got.get("mode") == expected["mode"], f"{name}.mode drift")
         report.check(got.get("input") == expected["input"], f"{name}.input drift")
         report.check(got.get("token_count") == expected["token_count"], f"{name}.token_count drift")
         got_tokens = got.get("tokens", [])
@@ -135,7 +159,6 @@ def compare_dumps(baseline: dict[str, Any], rust: dict[str, Any]) -> Report:
                 token_pieces_sha(got_tokens) == expected["token_pieces_sha256"],
                 f"{name}.token_pieces_sha256 drift",
             )
-    return report
 
 
 def check_manifest(manifest_path: Path, tokenizer_path: Path) -> Report:
@@ -222,6 +245,8 @@ def write_tokenizer_fixture(path: Path, arrays: dict[str, list[bytes]]) -> None:
 def run_negative(tokenizer_path: Path, baseline: dict[str, Any]) -> Report:
     report = Report()
     original = parse_tokenizer_fixture(tokenizer_path)
+    rc, stdout, _stderr = run_rust_dump(tokenizer_path)
+    rust_good = json.loads(stdout) if rc == 0 else {}
 
     def expect_failure(label: str, mutate: Any) -> None:
         with tempfile.TemporaryDirectory(prefix="ds4-tokenizer-negative-") as tmp:
@@ -252,6 +277,20 @@ def run_negative(tokenizer_path: Path, baseline: dict[str, Any]) -> Report:
             1,
             obj["tokenizer.ggml.merges"][0],
         ),
+    )
+
+    def expect_compare_failure(label: str, mutate: Any) -> None:
+        bad = copy.deepcopy(rust_good)
+        mutate(bad)
+        report.check(not compare_dumps(baseline, bad).ok, f"negative {label} drift was not detected")
+
+    expect_compare_failure(
+        "rendered-special-id",
+        lambda obj: obj["rendered_chat_cases"][0]["tokens"][0].__setitem__("id", 42),
+    )
+    expect_compare_failure(
+        "rendered-piece",
+        lambda obj: obj["rendered_chat_cases"][1]["tokens"][2]["bytes"].append(0),
     )
     return report
 

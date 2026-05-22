@@ -434,7 +434,7 @@
 
 ### M5.4: Rust Rendered Chat Special Tokenization
 
-- Status: pending
+- Status: done
 - Goal: port rendered-chat tokenization, special token recognition, and token
   text decoding for the exact `special_token_at` rendered-control table:
   `<｜begin▁of▁sentence｜>`, `<｜end▁of▁sentence｜>`, `<｜User｜>`,

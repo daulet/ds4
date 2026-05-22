@@ -154,6 +154,25 @@ impl Ds4Tokenizer {
         out
     }
 
+    pub fn tokenize_rendered_chat(&self, text: &str) -> Vec<u32> {
+        let bytes = text.as_bytes();
+        let mut out = Vec::new();
+        let mut span = 0usize;
+        let mut pos = 0usize;
+        while pos < bytes.len() {
+            if let Some((token, len)) = self.special_token_at(bytes, pos) {
+                self.tokenize_span(&bytes[span..pos], &mut out);
+                out.push(token);
+                pos += len;
+                span = pos;
+            } else {
+                pos += 1;
+            }
+        }
+        self.tokenize_span(&bytes[span..], &mut out);
+        out
+    }
+
     pub fn token_bytes(&self, token: u32) -> Vec<u8> {
         let Some(raw) = self.tokens.get(token as usize) else {
             return Vec::new();
@@ -171,6 +190,34 @@ impl Ds4Tokenizer {
             }
         }
         out
+    }
+
+    fn special_token_at(&self, bytes: &[u8], pos: usize) -> Option<(u32, usize)> {
+        let special = self.special;
+        let specials: [(&[u8], u32); 7] = [
+            ("<｜begin▁of▁sentence｜>".as_bytes(), special.bos),
+            ("<｜end▁of▁sentence｜>".as_bytes(), special.eos),
+            ("<｜User｜>".as_bytes(), special.user),
+            ("<｜Assistant｜>".as_bytes(), special.assistant),
+            ("<think>".as_bytes(), special.think_start),
+            ("</think>".as_bytes(), special.think_end),
+            ("｜DSML｜".as_bytes(), special.dsml),
+        ];
+        for (text, token) in specials {
+            if bytes[pos..].starts_with(text) {
+                return Some((token, text.len()));
+            }
+        }
+        None
+    }
+
+    fn tokenize_span(&self, bytes: &[u8], out: &mut Vec<u32>) {
+        if bytes.is_empty() {
+            return;
+        }
+        let text =
+            std::str::from_utf8(bytes).expect("rendered chat spans must preserve UTF-8 boundaries");
+        out.extend(self.tokenize_text(text));
     }
 
     fn from_token_and_merge_bytes(
@@ -722,6 +769,17 @@ mod tests {
     fn token_text_decodes_gpt2_byte_mapping() {
         let tokenizer = toy_tokenizer();
         assert_eq!(tokenizer.token_bytes(16), b" ");
+    }
+
+    #[test]
+    fn rendered_chat_scans_specials_but_plain_text_does_not() {
+        let tokenizer = toy_tokenizer();
+        assert_eq!(tokenizer.tokenize_rendered_chat("<｜User｜>ab"), vec![2, 9]);
+        assert_ne!(
+            tokenizer.tokenize_text("<｜User｜>ab"),
+            tokenizer.tokenize_rendered_chat("<｜User｜>ab"),
+            "plain text remains BPE-tokenized and does not trust rendered controls"
+        );
     }
 
     #[test]
