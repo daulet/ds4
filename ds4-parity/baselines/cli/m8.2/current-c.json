@@ -1,0 +1,283 @@
+{
+  "schema": "ds4.cli_parse_oracle.v1",
+  "source": "current-c-cli-parse",
+  "binary": "./ds4",
+  "cases": [
+    {
+      "id": "help_long",
+      "argv": [
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "Usage: ds4 [(-p PROMPT | --prompt-file FILE)] [options]\n\nInvocation modes:\n  ds4\n      Start the interactive chat prompt with a session backend: ds4>\n  ds4 -p TEXT\n      Run one prompt and exit.\n  ds4 --prompt-file FILE\n      Run one prompt read from FILE and exit. Useful for long prompts.\n\nModel and runtime:\n  -m, --model FILE\n      GGUF model path. Default: ds4flash.gguf\n  --mtp FILE\n      Optional MTP support GGUF used for draft-token probes.\n  --mtp-draft N\n      Maximum autoregressive MTP draft tokens per speculative step. Default: 1\n  --mtp-margin F\n      Minimum recursive-draft confidence for the fast N=2 verifier. Default: 3\n  -c, --ctx N\n      Context size allocated for the session. Default: 32768\n  --metal\n      Use the Metal graph backend. This is the normal fast path on macOS.\n  --cuda\n      Use the CUDA graph backend. This is the normal fast path on CUDA builds.\n  --cpu\n      Use the CPU reference/debug backend. Not recommended for normal inference.\n  --backend NAME\n      Select backend explicitly: metal, cuda, or cpu.\n  -t, --threads N\n      CPU helper threads for host-side or reference work.\n  --quality\n      Prefer exact kernels where faster approximate paths exist; MTP uses strict verification.\n  --dir-steering-file FILE\n      Load one f32 direction vector per layer for directional steering.\n  --dir-steering-ffn F\n      Apply steering after FFN outputs: y -= F*v*dot(v,y). Default with file: 1\n  --dir-steering-attn F\n      Apply steering after attention outputs. Default: 0\n  --warm-weights\n      Touch mapped tensor pages before generation. Slower startup, fewer first-use stalls.\n\nPrompt and generation:\n  -p, --prompt TEXT\n      Prompt to generate from.\n  --prompt-file FILE\n      Read the prompt text from FILE.\n  -sys, --system TEXT\n      System prompt. Empty string disables the default. Default: You are a helpful assistant\n  -n, --tokens N\n      Maximum tokens to generate. Default: 50000\n  --temp F\n      Sampling temperature. 0 is greedy/deterministic. Default: 1\n  --top-p F\n      Nucleus sampling probability. Default: 1\n  --min-p F\n      Keep tokens scoring at least F times the top token. Default: 0.05\n  --seed N\n      Sampling seed for reproducible non-greedy runs. Default: time-based\n  --think\n      Use normal thinking mode. This is the default.\n  --think-max\n      Use Think Max when --ctx is at least 393216 tokens; otherwise normal thinking.\n  --nothink\n      Start assistant turns with </think> for direct non-thinking replies.\n\nInteractive commands:\n  /help\n      Show interactive commands.\n  /think, /think-max, /nothink\n      Select normal thinking, context-gated Think Max, or non-thinking mode.\n  /ctx N\n      Recreate the interactive session with a new context size.\n  /read FILE\n      Read a prompt from FILE and run it as the next user message.\n  /quit, /exit\n      Leave the interactive prompt.\n  Ctrl+C\n      Stop the current generation and return to ds4> without exiting.\n\nDiagnostics:\n  --inspect\n      Load the model and print a summary only.\n  --dump-tokens\n      Tokenize -p/--prompt-file exactly as written, then exit without inference.\n  --dump-logprobs FILE\n      Write greedy continuation top-logprobs as JSON without printing text.\n  --logprobs-top-k N\n      Number of local alternatives stored by --dump-logprobs. Default: 20\n  --perplexity-file FILE\n      Score raw text with teacher-forced next-token negative log likelihood.\n  --imatrix-dataset FILE\n      Rendered DS4 prompt dataset produced by misc/imatrix_dataset.\n  --imatrix-out FILE\n      Collect a routed-MoE activation imatrix and write llama-compatible .dat.\n  --imatrix-max-prompts N\n      Stop imatrix collection after N prompts. Default: no prompt limit\n  --imatrix-max-tokens N\n      Stop imatrix collection after N prompt tokens. Default: no token limit\n  --head-test\n      Run the output HC/logits head after the native slice.\n  --first-token-test\n      Run an exact CPU whole-model pass for the first prompt token.\n  --metal-graph-test\n      Compare first GPU-resident graph stages with CPU.\n  --metal-graph-full-test\n      Run the GPU-resident self-token graph across all layers.\n  --metal-graph-prompt-test\n      Compare CPU and GPU graph logits for the full prompt.\n\nNormal CLI commands:\n  ./ds4\n  ./ds4 -p \"Scrivi una storia su una papera scansafatiche\"\n  ./ds4 --think-max --prompt-file prompt.txt --ctx 393216\n\nNotes:\n  The CLI keeps KV cache state across interactive turns on session backends.\n  CPU mode supports interactive chat too, but it is a slow reference/debug path.\n  Long added input is processed with batched prefill; short continuations use decode.\n  Startup prints the extra context-buffer memory for the selected context size.\n\n  -h, --help\n      Show this help.\n",
+      "stderr": "",
+      "stdout_bytes": 4737,
+      "stderr_bytes": 0,
+      "stdout_sha256": "5f8e964e05c4b0bfae0cf571e6354d67f62f277cf05c6d55c0a382094564a77b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "help_short",
+      "argv": [
+        "-h"
+      ],
+      "exit_code": 0,
+      "stdout": "Usage: ds4 [(-p PROMPT | --prompt-file FILE)] [options]\n\nInvocation modes:\n  ds4\n      Start the interactive chat prompt with a session backend: ds4>\n  ds4 -p TEXT\n      Run one prompt and exit.\n  ds4 --prompt-file FILE\n      Run one prompt read from FILE and exit. Useful for long prompts.\n\nModel and runtime:\n  -m, --model FILE\n      GGUF model path. Default: ds4flash.gguf\n  --mtp FILE\n      Optional MTP support GGUF used for draft-token probes.\n  --mtp-draft N\n      Maximum autoregressive MTP draft tokens per speculative step. Default: 1\n  --mtp-margin F\n      Minimum recursive-draft confidence for the fast N=2 verifier. Default: 3\n  -c, --ctx N\n      Context size allocated for the session. Default: 32768\n  --metal\n      Use the Metal graph backend. This is the normal fast path on macOS.\n  --cuda\n      Use the CUDA graph backend. This is the normal fast path on CUDA builds.\n  --cpu\n      Use the CPU reference/debug backend. Not recommended for normal inference.\n  --backend NAME\n      Select backend explicitly: metal, cuda, or cpu.\n  -t, --threads N\n      CPU helper threads for host-side or reference work.\n  --quality\n      Prefer exact kernels where faster approximate paths exist; MTP uses strict verification.\n  --dir-steering-file FILE\n      Load one f32 direction vector per layer for directional steering.\n  --dir-steering-ffn F\n      Apply steering after FFN outputs: y -= F*v*dot(v,y). Default with file: 1\n  --dir-steering-attn F\n      Apply steering after attention outputs. Default: 0\n  --warm-weights\n      Touch mapped tensor pages before generation. Slower startup, fewer first-use stalls.\n\nPrompt and generation:\n  -p, --prompt TEXT\n      Prompt to generate from.\n  --prompt-file FILE\n      Read the prompt text from FILE.\n  -sys, --system TEXT\n      System prompt. Empty string disables the default. Default: You are a helpful assistant\n  -n, --tokens N\n      Maximum tokens to generate. Default: 50000\n  --temp F\n      Sampling temperature. 0 is greedy/deterministic. Default: 1\n  --top-p F\n      Nucleus sampling probability. Default: 1\n  --min-p F\n      Keep tokens scoring at least F times the top token. Default: 0.05\n  --seed N\n      Sampling seed for reproducible non-greedy runs. Default: time-based\n  --think\n      Use normal thinking mode. This is the default.\n  --think-max\n      Use Think Max when --ctx is at least 393216 tokens; otherwise normal thinking.\n  --nothink\n      Start assistant turns with </think> for direct non-thinking replies.\n\nInteractive commands:\n  /help\n      Show interactive commands.\n  /think, /think-max, /nothink\n      Select normal thinking, context-gated Think Max, or non-thinking mode.\n  /ctx N\n      Recreate the interactive session with a new context size.\n  /read FILE\n      Read a prompt from FILE and run it as the next user message.\n  /quit, /exit\n      Leave the interactive prompt.\n  Ctrl+C\n      Stop the current generation and return to ds4> without exiting.\n\nDiagnostics:\n  --inspect\n      Load the model and print a summary only.\n  --dump-tokens\n      Tokenize -p/--prompt-file exactly as written, then exit without inference.\n  --dump-logprobs FILE\n      Write greedy continuation top-logprobs as JSON without printing text.\n  --logprobs-top-k N\n      Number of local alternatives stored by --dump-logprobs. Default: 20\n  --perplexity-file FILE\n      Score raw text with teacher-forced next-token negative log likelihood.\n  --imatrix-dataset FILE\n      Rendered DS4 prompt dataset produced by misc/imatrix_dataset.\n  --imatrix-out FILE\n      Collect a routed-MoE activation imatrix and write llama-compatible .dat.\n  --imatrix-max-prompts N\n      Stop imatrix collection after N prompts. Default: no prompt limit\n  --imatrix-max-tokens N\n      Stop imatrix collection after N prompt tokens. Default: no token limit\n  --head-test\n      Run the output HC/logits head after the native slice.\n  --first-token-test\n      Run an exact CPU whole-model pass for the first prompt token.\n  --metal-graph-test\n      Compare first GPU-resident graph stages with CPU.\n  --metal-graph-full-test\n      Run the GPU-resident self-token graph across all layers.\n  --metal-graph-prompt-test\n      Compare CPU and GPU graph logits for the full prompt.\n\nNormal CLI commands:\n  ./ds4\n  ./ds4 -p \"Scrivi una storia su una papera scansafatiche\"\n  ./ds4 --think-max --prompt-file prompt.txt --ctx 393216\n\nNotes:\n  The CLI keeps KV cache state across interactive turns on session backends.\n  CPU mode supports interactive chat too, but it is a slow reference/debug path.\n  Long added input is processed with batched prefill; short continuations use decode.\n  Startup prints the extra context-buffer memory for the selected context size.\n\n  -h, --help\n      Show this help.\n",
+      "stderr": "",
+      "stdout_bytes": 4737,
+      "stderr_bytes": 0,
+      "stdout_sha256": "5f8e964e05c4b0bfae0cf571e6354d67f62f277cf05c6d55c0a382094564a77b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "missing_prompt_value",
+      "argv": [
+        "-p"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: missing value for -p\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 26,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "d49c334f4c28aa662e070a076cab33342650bcdeb8b06a776dcc78c4315b2f4a"
+    },
+    {
+      "id": "missing_backend_value",
+      "argv": [
+        "--backend"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: missing value for --backend\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 33,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "7f217750b8be46a56c2240498e428f4d082f6c6e2aa8a666cb9caabd4b0b8fcc"
+    },
+    {
+      "id": "unknown_option",
+      "argv": [
+        "--definitely-unknown"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: unknown option: --definitely-unknown\nUsage: ds4 [(-p PROMPT | --prompt-file FILE)] [options]\n\nInvocation modes:\n  ds4\n      Start the interactive chat prompt with a session backend: ds4>\n  ds4 -p TEXT\n      Run one prompt and exit.\n  ds4 --prompt-file FILE\n      Run one prompt read from FILE and exit. Useful for long prompts.\n\nModel and runtime:\n  -m, --model FILE\n      GGUF model path. Default: ds4flash.gguf\n  --mtp FILE\n      Optional MTP support GGUF used for draft-token probes.\n  --mtp-draft N\n      Maximum autoregressive MTP draft tokens per speculative step. Default: 1\n  --mtp-margin F\n      Minimum recursive-draft confidence for the fast N=2 verifier. Default: 3\n  -c, --ctx N\n      Context size allocated for the session. Default: 32768\n  --metal\n      Use the Metal graph backend. This is the normal fast path on macOS.\n  --cuda\n      Use the CUDA graph backend. This is the normal fast path on CUDA builds.\n  --cpu\n      Use the CPU reference/debug backend. Not recommended for normal inference.\n  --backend NAME\n      Select backend explicitly: metal, cuda, or cpu.\n  -t, --threads N\n      CPU helper threads for host-side or reference work.\n  --quality\n      Prefer exact kernels where faster approximate paths exist; MTP uses strict verification.\n  --dir-steering-file FILE\n      Load one f32 direction vector per layer for directional steering.\n  --dir-steering-ffn F\n      Apply steering after FFN outputs: y -= F*v*dot(v,y). Default with file: 1\n  --dir-steering-attn F\n      Apply steering after attention outputs. Default: 0\n  --warm-weights\n      Touch mapped tensor pages before generation. Slower startup, fewer first-use stalls.\n\nPrompt and generation:\n  -p, --prompt TEXT\n      Prompt to generate from.\n  --prompt-file FILE\n      Read the prompt text from FILE.\n  -sys, --system TEXT\n      System prompt. Empty string disables the default. Default: You are a helpful assistant\n  -n, --tokens N\n      Maximum tokens to generate. Default: 50000\n  --temp F\n      Sampling temperature. 0 is greedy/deterministic. Default: 1\n  --top-p F\n      Nucleus sampling probability. Default: 1\n  --min-p F\n      Keep tokens scoring at least F times the top token. Default: 0.05\n  --seed N\n      Sampling seed for reproducible non-greedy runs. Default: time-based\n  --think\n      Use normal thinking mode. This is the default.\n  --think-max\n      Use Think Max when --ctx is at least 393216 tokens; otherwise normal thinking.\n  --nothink\n      Start assistant turns with </think> for direct non-thinking replies.\n\nInteractive commands:\n  /help\n      Show interactive commands.\n  /think, /think-max, /nothink\n      Select normal thinking, context-gated Think Max, or non-thinking mode.\n  /ctx N\n      Recreate the interactive session with a new context size.\n  /read FILE\n      Read a prompt from FILE and run it as the next user message.\n  /quit, /exit\n      Leave the interactive prompt.\n  Ctrl+C\n      Stop the current generation and return to ds4> without exiting.\n\nDiagnostics:\n  --inspect\n      Load the model and print a summary only.\n  --dump-tokens\n      Tokenize -p/--prompt-file exactly as written, then exit without inference.\n  --dump-logprobs FILE\n      Write greedy continuation top-logprobs as JSON without printing text.\n  --logprobs-top-k N\n      Number of local alternatives stored by --dump-logprobs. Default: 20\n  --perplexity-file FILE\n      Score raw text with teacher-forced next-token negative log likelihood.\n  --imatrix-dataset FILE\n      Rendered DS4 prompt dataset produced by misc/imatrix_dataset.\n  --imatrix-out FILE\n      Collect a routed-MoE activation imatrix and write llama-compatible .dat.\n  --imatrix-max-prompts N\n      Stop imatrix collection after N prompts. Default: no prompt limit\n  --imatrix-max-tokens N\n      Stop imatrix collection after N prompt tokens. Default: no token limit\n  --head-test\n      Run the output HC/logits head after the native slice.\n  --first-token-test\n      Run an exact CPU whole-model pass for the first prompt token.\n  --metal-graph-test\n      Compare first GPU-resident graph stages with CPU.\n  --metal-graph-full-test\n      Run the GPU-resident self-token graph across all layers.\n  --metal-graph-prompt-test\n      Compare CPU and GPU graph logits for the full prompt.\n\nNormal CLI commands:\n  ./ds4\n  ./ds4 -p \"Scrivi una storia su una papera scansafatiche\"\n  ./ds4 --think-max --prompt-file prompt.txt --ctx 393216\n\nNotes:\n  The CLI keeps KV cache state across interactive turns on session backends.\n  CPU mode supports interactive chat too, but it is a slow reference/debug path.\n  Long added input is processed with batched prefill; short continuations use decode.\n  Startup prints the extra context-buffer memory for the selected context size.\n\n  -h, --help\n      Show this help.\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 4779,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "20384fdf3fccb2c7ae34f6acb9a8e73772f7f3dabea196b35de36c34f573208a"
+    },
+    {
+      "id": "invalid_backend",
+      "argv": [
+        "--backend",
+        "vulkan"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: invalid backend: vulkan\nds4: valid backends are: metal, cuda, cpu\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 71,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "eecd9616d30abf76731a21089c945bc9dbb5748eee56409838c3d2e90f2fad03"
+    },
+    {
+      "id": "invalid_ctx_zero",
+      "argv": [
+        "--ctx",
+        "0"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: invalid value for --ctx: 0\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 32,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "a69ef30958e6dd96813881a42e42391061293d19ca1a95c2894b064c31c8241d"
+    },
+    {
+      "id": "invalid_tokens_text",
+      "argv": [
+        "--tokens",
+        "abc"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: invalid value for --tokens: abc\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 37,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "32fb353e5cad01be3e4e72432cd58a5e390fcd28a24127a110b95a1af332ee51"
+    },
+    {
+      "id": "invalid_temp_nan",
+      "argv": [
+        "--temp",
+        "nan"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: invalid value for --temp: nan\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 35,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "c11173a13d8ecb7dcadc32e358b68be339db4e45687c103a0104ed492be8f3e5"
+    },
+    {
+      "id": "invalid_top_p_range",
+      "argv": [
+        "--top-p",
+        "1.5"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: invalid value for --top-p: 1.5\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 36,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "1f3fbf5af48dccb9049ca96ee04545cc7e03abd4755e007f11c0cf49c9e124d9"
+    },
+    {
+      "id": "invalid_min_p_range",
+      "argv": [
+        "--min-p",
+        "-0.1"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: invalid value for --min-p: -0.1\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 37,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "3b3b114a3bdc08dd3a550707149e97abbd73b6fe49e60f8cbaa8611326fbb764"
+    },
+    {
+      "id": "invalid_threads_zero",
+      "argv": [
+        "--threads",
+        "0"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: invalid value for --threads: 0\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 36,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "504075fd486ea1924aa5685b5f2c53ec65a51c1c658867e71025ae6026b05fe6"
+    },
+    {
+      "id": "duplicate_prompt_sources",
+      "argv": [
+        "-p",
+        "hello",
+        "--prompt-file",
+        "does-not-matter"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: specify only one prompt source\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 36,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "0c8617021cff16d8a6ebc7abc7b7b721cde3aefb5b324605d888fbd37916b64e"
+    },
+    {
+      "id": "missing_prompt_file",
+      "argv": [
+        "--prompt-file",
+        "ds4-parity/baselines/cli/m8.2/missing-prompt.txt"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: failed to open prompt file: ds4-parity/baselines/cli/m8.2/missing-prompt.txt\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 82,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "336fcdb79a71c809538113cf805fbb1db9916c11336e47f3e088b99d4427cf23"
+    },
+    {
+      "id": "server_deprecation",
+      "argv": [
+        "--server"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: use ds4-server for the HTTP server\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 40,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "46ee78b1a94a913496a240b13df13b96ed91003d18c57b303ed26043e36bc972"
+    },
+    {
+      "id": "removed_metal_graph_generate",
+      "argv": [
+        "--metal-graph-generate"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: --metal-graph-generate was removed; --metal is the graph path\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 67,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "69f89438bff5c00292a3281201cf601f75aac6d081891574e55db2e3f48e3b04"
+    },
+    {
+      "id": "dump_tokens_requires_prompt",
+      "argv": [
+        "--dump-tokens"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: --dump-tokens requires -p or --prompt-file\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 48,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "189d4768b76ccf8a91e53cbc7de2305bcb14097d173acc06ba57de0f37e3637c"
+    },
+    {
+      "id": "imatrix_out_requires_dataset",
+      "argv": [
+        "--imatrix-out",
+        "out.dat"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: --imatrix-out requires --imatrix-dataset\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 46,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "af38c98f84a5a69239637aa3b3a29e9bdaaf71cde14277d554ec3813dcdd5b7c"
+    },
+    {
+      "id": "imatrix_dataset_requires_out",
+      "argv": [
+        "--imatrix-dataset",
+        "dataset.txt"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: --imatrix-dataset requires --imatrix-out\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 46,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "4941ce80327be6fd63783695ab8c71d4d5b63be3b5a0d689913a90029a4f9960"
+    },
+    {
+      "id": "perplexity_rejects_prompt",
+      "argv": [
+        "--perplexity-file",
+        "text.txt",
+        "-p",
+        "hello"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "ds4: --perplexity-file does not use -p/--prompt-file\n",
+      "stdout_bytes": 0,
+      "stderr_bytes": 53,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "680ffdf757c4dd288411dade89624e648a69d2b702c80897d63e9adb9b42c233"
+    }
+  ]
+}

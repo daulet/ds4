@@ -1,0 +1,15 @@
+{
+  "schema": "ds4.cli_parse_manifest.v1",
+  "milestone": "M8.2",
+  "oracle": "current C no-model CLI parser and early error surface",
+  "artifact": {
+    "path": "current-c.json",
+    "size_bytes": 23626,
+    "sha256": "d395a55e92957b84deb4cb43d4b70c5a2e78bac363b7d11be1200f1d3601fa22"
+  },
+  "capture_commands": [
+    "arch -arm64 make ds4",
+    "python3 ds4-parity/check_cli_parse_dump.py --write-baseline ds4-parity/baselines/cli/m8.2/current-c.json --write-manifest ds4-parity/baselines/cli/m8.2/manifest.json",
+    "python3 ds4-parity/check_cli_parse_dump.py ds4-parity/baselines/cli/m8.2/current-c.json --manifest ds4-parity/baselines/cli/m8.2/manifest.json --negative-test"
+  ]
+}

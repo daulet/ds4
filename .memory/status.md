@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.2 Current-C CLI Parse And Error Oracle
-- Last validated source commit: M8.1 CLI surface work item breakdown in this
+- Active item: M8.3 Rust CLI Parse And Error Parity
+- Last validated source commit: M8.2 current-C CLI parse/error oracle in this
   commit; prior pushed source commit
-  `8c002617c6ca9537f2e8a9eea5d8e5a4ecb88d09`
+  `2b1df299d66051d8eb5e893ba28f3a2e2e8d4af4`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -886,4 +886,26 @@
   interactive PTY transcripts, and CLI report integration. The next executable
   item is M8.2 current-C CLI parse/error oracle.
 - M8.1 validation passed for docs/state-only diff inspection and
+  `git diff --check`.
+- M8.2 adds `python3 ds4-parity/check_cli_parse_dump.py`, a local no-model
+  current-C CLI parser/error oracle checker. It captures 20 cases for `--help`,
+  missing option values, unknown options, invalid numeric/float/backend values,
+  duplicate prompt sources, missing prompt files, `--server`,
+  `--metal-graph-generate`, `--dump-tokens` without a prompt, imatrix option
+  coupling, and `--perplexity-file` prompt-source rejection.
+- M8.2 committed `ds4-parity/baselines/cli/m8.2/current-c.json` is 23,626 bytes
+  with SHA256 `d395a55e92957b84deb4cb43d4b70c5a2e78bac363b7d11be1200f1d3601fa22`.
+  The checker stores stdout/stderr bytes and hashes while asserting stable help
+  anchors, error categories, exact option names, exit status, and no model-load
+  markers.
+- M8.2 validation passed for `arch -arm64 make ds4`, baseline generation with
+  `python3 ds4-parity/check_cli_parse_dump.py --write-baseline
+  ds4-parity/baselines/cli/m8.2/current-c.json --write-manifest
+  ds4-parity/baselines/cli/m8.2/manifest.json`, `python3 -m py_compile
+  ds4-parity/check_cli_parse_dump.py`, `python3
+  ds4-parity/check_cli_parse_dump.py
+  ds4-parity/baselines/cli/m8.2/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.2/manifest.json --negative-test` (`CLI parse
+  oracle: PASS, 369 checks`; manifest `PASS, 11 checks`; negative tests `PASS,
+  7 checks`), `python3 -m json.tool` for both M8.2 JSON files, and
   `git diff --check`.

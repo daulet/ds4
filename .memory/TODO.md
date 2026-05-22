@@ -1238,7 +1238,7 @@
 
 ### M8.2: Current-C CLI Parse And Error Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture the no-model CLI argument, help, and early error surface.
 - Source evidence needed: current `ds4_cli.c` parser, `usage()` text, `main()`
   early exits, local `ds4` build target, and parse/error branches that exit
@@ -1256,10 +1256,41 @@
   option spelling, exit status, and user-facing error category are exact.
 - Review gate: ask Claude to review coverage for parser branches and accidental
   model-loading cases.
-- Validation needed: local C capture, schema checker with negative tests, and
+- Validation passed: `arch -arm64 make ds4`, baseline generation with
+  `python3 ds4-parity/check_cli_parse_dump.py --write-baseline
+  ds4-parity/baselines/cli/m8.2/current-c.json --write-manifest
+  ds4-parity/baselines/cli/m8.2/manifest.json`, `python3 -m py_compile
+  ds4-parity/check_cli_parse_dump.py`, `python3
+  ds4-parity/check_cli_parse_dump.py
+  ds4-parity/baselines/cli/m8.2/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.2/manifest.json --negative-test` (`CLI parse
+  oracle: PASS, 369 checks`; manifest `PASS, 11 checks`; negative tests `PASS,
+  7 checks`), `python3 -m json.tool` for both M8.2 JSON files, and
   `git diff --check`.
 - Owner path: CLI parse/error oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/cli/`, `.memory/status.md`.
+
+### M8.3: Rust CLI Parse And Error Parity
+
+- Status: pending
+- Goal: implement Rust CLI parsing for the M8.2 no-model surface.
+- Source evidence needed: committed M8.2 current-C CLI parse/error fixture,
+  existing Rust workspace layout, current `ds4_cli.c` parser, and CLI binary
+  naming/build conventions.
+- Oracle: committed M8.2 current-C CLI parse/error fixture.
+- Fixture: same argument matrix as M8.2, run against the Rust CLI binary.
+- Comparator: C/Rust CLI parser comparator for exit status, stdout/stderr
+  category, help anchors, normalized executable names, and option spelling.
+- Acceptance: Rust exits with the same status and reports the same category and
+  option names without loading a model for early parse failures.
+- Drift policy: binary path and usage indentation may be normalized only where
+  documented by the comparator.
+- Review gate: ask Claude to review parser compatibility and whether any C
+  parser branch remains uncovered.
+- Validation needed: Rust CLI parser tests, comparator with negative tests,
+  `cargo test --workspace`, and `git diff --check`.
+- Owner path: Rust CLI parser, CLI parse comparator, `ds4-parity/`,
+  `.memory/status.md`.
 
 ## Later Items
 

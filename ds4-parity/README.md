@@ -241,3 +241,20 @@ continuation prompts. Raw payload/snapshot bodies are larger than 1 MiB and are
 not committed; the JSON records hashes, header prefixes, selected tokens, top-20
 logprob ordering, score deltas, model/backend identity, fixture hashes, and the
 exact B300 refresh commands.
+
+## CLI Surface Parity
+
+Validate the M8.2 current-C no-model CLI parse/error oracle:
+
+```sh
+python3 ds4-parity/check_cli_parse_dump.py \
+  ds4-parity/baselines/cli/m8.2/current-c.json \
+  --manifest ds4-parity/baselines/cli/m8.2/manifest.json \
+  --negative-test
+```
+
+The fixture covers help output, missing option values, unknown options, invalid
+numeric and backend values, duplicate prompt sources, removed/deprecated flags,
+`--dump-tokens` without a prompt, imatrix option coupling, prompt-file open
+errors, and `--perplexity-file` prompt-source rejection. These cases must remain
+local and model-free.
