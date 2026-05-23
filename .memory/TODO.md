@@ -1925,7 +1925,7 @@
 
 ### M8.15a: Rust Reusable Interactive Session Boundary
 
-- Status: pending
+- Status: done
 - Goal: expose the Rust runtime primitives needed for interactive turns without
   building the REPL surface yet.
 - Source evidence needed: `ds4.h` chat/session APIs, `ds4_cli.c` interactive
@@ -1947,8 +1947,17 @@
   exit categories are exact.
 - Review gate: ask Claude to review unsafe session ownership, progress callback
   lifetimes, token transcript mutation, and cleanup.
-- Validation needed: B300 runtime comparator with negative tests, targeted Rust
-  tests, `cargo test --workspace`, and `git diff --check`.
+- Validation passed: local `cargo fmt --all -- --check`; local `cargo build -p
+  ds4-engine --bin ds4-interactive-runtime-rs`; local `cargo test -p
+  ds4-engine`; local full `cargo test --workspace`; local `python3 -m
+  py_compile ds4-parity/compare_cli_interactive_runtime.py
+  ds4-parity/check_cli_interactive_dump.py`; local `git diff --check`; B300
+  `cargo build -p ds4-engine --bin ds4-interactive-runtime-rs` with
+  `CUDA_ARCH=native`; and B300 `python3
+  ds4-parity/compare_cli_interactive_runtime.py
+  ds4-parity/baselines/cli/m8.14/current-c.json --candidate-binary
+  target/debug/ds4-interactive-runtime-rs --negative-test` (`CLI interactive
+  runtime comparator: PASS, 19 checks`; negative tests `PASS, 4 checks`).
 - Owner path: `rust/ds4-engine/`, `ds4-parity/`, `.memory/status.md`.
 
 ### M8.15b: Rust REPL Command State Surface

@@ -158,6 +158,16 @@ impl Tokens {
     pub fn is_empty(&self) -> bool {
         self.raw.len == 0
     }
+
+    fn set_len(&mut self, len: i32) {
+        self.raw.len = len.clamp(0, self.raw.len);
+    }
+
+    fn push(&mut self, token: i32) {
+        unsafe {
+            ds4_tokens_push(&mut self.raw, token as c_int);
+        }
+    }
 }
 
 impl Drop for Tokens {
@@ -190,6 +200,24 @@ pub struct SamplingOptions {
 pub struct GenerationResult {
     pub exit_code: i32,
     pub stdout: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InteractiveTurnOptions {
+    pub n_predict: i32,
+    pub think_mode: ThinkMode,
+    pub temperature: f32,
+    pub top_p: f32,
+    pub min_p: f32,
+    pub seed: u64,
+}
+
+#[derive(Debug)]
+pub struct ChatSession<'a> {
+    engine: &'a Engine,
+    session: Session,
+    transcript: Tokens,
+    ctx_size: i32,
 }
 
 impl Engine {
@@ -379,6 +407,219 @@ impl Engine {
             stdout: printer.into_bytes(),
         }
     }
+
+    pub fn create_chat_session(
+        &self,
+        system: &str,
+        ctx_size: i32,
+        think_mode: ThinkMode,
+    ) -> Result<ChatSession<'_>, EngineError> {
+        let mut transcript = Tokens {
+            raw: RawTokens::default(),
+        };
+        unsafe {
+            ds4_chat_begin(self.raw.as_ptr(), &mut transcript.raw);
+        }
+        if think_mode.for_context(ctx_size) == ThinkMode::Max {
+            unsafe {
+                ds4_chat_append_max_effort_prefix(self.raw.as_ptr(), &mut transcript.raw);
+            }
+        }
+        if !system.is_empty() {
+            self.append_chat_message(&mut transcript, "system", system)?;
+        }
+        let session = self.create_session(ctx_size)?;
+        Ok(ChatSession {
+            engine: self,
+            session,
+            transcript,
+            ctx_size,
+        })
+    }
+
+    fn create_session(&self, ctx_size: i32) -> Result<Session, EngineError> {
+        let mut raw = std::ptr::null_mut();
+        let rc = unsafe { ds4_session_create(&mut raw, self.raw.as_ptr(), ctx_size as c_int) };
+        if rc != 0 {
+            return Err(EngineError::message(format!(
+                "ds4_session_create failed with {rc}"
+            )));
+        }
+        Ok(Session {
+            raw: NonNull::new(raw).ok_or_else(|| {
+                EngineError::message("ds4_session_create returned a null session".to_string())
+            })?,
+        })
+    }
+
+    fn append_chat_message(
+        &self,
+        transcript: &mut Tokens,
+        role: &str,
+        content: &str,
+    ) -> Result<(), EngineError> {
+        let role = CString::new(role)?;
+        let content = CString::new(content)?;
+        unsafe {
+            ds4_chat_append_message(
+                self.raw.as_ptr(),
+                &mut transcript.raw,
+                role.as_ptr(),
+                content.as_ptr(),
+            );
+        }
+        Ok(())
+    }
+
+    fn append_assistant_prefix(&self, transcript: &mut Tokens, think_mode: ThinkMode) {
+        unsafe {
+            ds4_chat_append_assistant_prefix(
+                self.raw.as_ptr(),
+                &mut transcript.raw,
+                think_mode.as_raw(),
+            );
+        }
+    }
+
+    fn token_eos(&self) -> i32 {
+        unsafe { ds4_token_eos(self.raw.as_ptr()) as i32 }
+    }
+}
+
+impl ChatSession<'_> {
+    pub fn ctx_size(&self) -> i32 {
+        self.ctx_size
+    }
+
+    pub fn set_ctx(&mut self, ctx_size: i32) -> Result<(), EngineError> {
+        self.session = self.engine.create_session(ctx_size)?;
+        self.ctx_size = ctx_size;
+        Ok(())
+    }
+
+    pub fn run_turn(
+        &mut self,
+        user_text: &str,
+        options: InteractiveTurnOptions,
+    ) -> GenerationResult {
+        let think_mode = options.think_mode.for_context(self.ctx_size);
+        let rollback_len = self.transcript.len();
+        if let Err(err) = self
+            .engine
+            .append_chat_message(&mut self.transcript, "user", user_text)
+        {
+            eprintln!("{err}");
+            return GenerationResult {
+                exit_code: 1,
+                stdout: Vec::new(),
+            };
+        }
+        self.engine
+            .append_assistant_prefix(&mut self.transcript, think_mode);
+
+        let old_pos = self.session.pos();
+        let common = self.session.common_prefix(&self.transcript);
+        let cached = if common == old_pos && self.transcript.len() >= old_pos {
+            common
+        } else {
+            0
+        };
+        let suffix = self.transcript.len() - cached;
+        let progress = ProgressState {
+            base_tokens: cached,
+            input_tokens: suffix,
+        };
+        let mut err = [0 as c_char; 160];
+        let prefill_start = Instant::now();
+        unsafe {
+            ds4_session_set_progress(
+                self.session.raw.as_ptr(),
+                Some(session_progress),
+                (&progress as *const ProgressState).cast_mut().cast(),
+            );
+        }
+        let sync_rc = unsafe {
+            ds4_session_sync(
+                self.session.raw.as_ptr(),
+                &self.transcript.raw,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        unsafe {
+            ds4_session_set_progress(self.session.raw.as_ptr(), None, std::ptr::null_mut());
+        }
+        if sync_rc != 0 {
+            self.transcript.set_len(rollback_len);
+            eprintln!("ds4: prompt processing failed: {}", c_error(&err));
+            return GenerationResult {
+                exit_code: sync_rc,
+                stdout: Vec::new(),
+            };
+        }
+        let prefill_elapsed = prefill_start.elapsed();
+
+        let mut max_tokens = options.n_predict;
+        let room = self.session.ctx() - self.session.pos();
+        if room <= 1 {
+            max_tokens = 0;
+        } else if max_tokens > room - 1 {
+            max_tokens = room - 1;
+        }
+
+        let mut rng = options.seed;
+        let eos = self.engine.token_eos();
+        let mut printer = TokenPrinter::new(think_mode);
+        let decode_start = Instant::now();
+        let mut generated = 0;
+        while generated < max_tokens {
+            let token = unsafe {
+                ds4_session_sample(
+                    self.session.raw.as_ptr(),
+                    options.temperature,
+                    0,
+                    options.top_p,
+                    options.min_p,
+                    &mut rng,
+                )
+            };
+            if token == eos {
+                break;
+            }
+            let eval_rc = unsafe {
+                ds4_session_eval(
+                    self.session.raw.as_ptr(),
+                    token,
+                    err.as_mut_ptr(),
+                    err.len(),
+                )
+            };
+            if eval_rc != 0 {
+                eprintln!("ds4: decode failed: {}", c_error(&err));
+                return GenerationResult {
+                    exit_code: eval_rc,
+                    stdout: printer.into_bytes(),
+                };
+            }
+            self.transcript.push(token);
+            unsafe {
+                append_token_text(self.engine.raw.as_ptr(), &mut printer, token);
+            }
+            generated += 1;
+        }
+        let decode_elapsed = decode_start.elapsed();
+        printer.finish_generation();
+        self.transcript.push(eos);
+        eprintln!(
+            "ds4: prefill: {:.2} t/s, generation: {:.2} t/s",
+            rate(suffix, prefill_elapsed),
+            rate(generated, decode_elapsed)
+        );
+        GenerationResult {
+            exit_code: 0,
+            stdout: printer.into_bytes(),
+        }
+    }
 }
 
 impl Drop for Engine {
@@ -399,6 +640,7 @@ enum EngineErrorKind {
     InvalidString(NulError),
     OpenFailed(c_int),
     NullEngine,
+    Message(String),
 }
 
 impl EngineError {
@@ -420,6 +662,12 @@ impl EngineError {
             kind: EngineErrorKind::NullEngine,
         }
     }
+
+    fn message(message: String) -> Self {
+        Self {
+            kind: EngineErrorKind::Message(message),
+        }
+    }
 }
 
 impl From<NulError> for EngineError {
@@ -436,6 +684,7 @@ impl fmt::Display for EngineError {
             EngineErrorKind::InvalidString(error) => write!(f, "invalid C string: {error}"),
             EngineErrorKind::OpenFailed(code) => write!(f, "ds4_engine_open failed with {code}"),
             EngineErrorKind::NullEngine => write!(f, "ds4_engine_open returned a null engine"),
+            EngineErrorKind::Message(message) => f.write_str(message),
         }
     }
 }
@@ -462,6 +711,40 @@ fn is_rendered_chat_prompt(prompt: &[u8]) -> bool {
 struct EmitState {
     engine: *mut RawEngine,
     printer: TokenPrinter,
+}
+
+#[derive(Debug)]
+struct ProgressState {
+    base_tokens: i32,
+    input_tokens: i32,
+}
+
+unsafe extern "C" fn session_progress(
+    ud: *mut c_void,
+    event: *const c_char,
+    current: c_int,
+    _total: c_int,
+) {
+    if ud.is_null() || event.is_null() {
+        return;
+    }
+    let state = &*ud.cast::<ProgressState>();
+    if state.input_tokens <= 0 {
+        return;
+    }
+    let Ok(event) = CStr::from_ptr(event).to_str() else {
+        return;
+    };
+    if event != "prefill_chunk" {
+        return;
+    }
+    let mut processed = current - state.base_tokens;
+    processed = processed.clamp(0, state.input_tokens);
+    let pct = 100.0 * f64::from(processed) / f64::from(state.input_tokens);
+    eprintln!(
+        "processing {} input tokens: {}/{} ({pct:.1}%)",
+        state.input_tokens, processed, state.input_tokens
+    );
 }
 
 unsafe extern "C" fn emit_generated_token(ud: *mut c_void, token: c_int) {
@@ -616,6 +899,20 @@ impl Drop for Session {
     }
 }
 
+impl Session {
+    fn common_prefix(&self, tokens: &Tokens) -> i32 {
+        unsafe { ds4_session_common_prefix(self.raw.as_ptr(), &tokens.raw) }
+    }
+
+    fn pos(&self) -> i32 {
+        unsafe { ds4_session_pos(self.raw.as_ptr()) }
+    }
+
+    fn ctx(&self) -> i32 {
+        unsafe { ds4_session_ctx(self.raw.as_ptr()) }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug)]
 struct RawTokens {
@@ -677,6 +974,20 @@ unsafe extern "C" {
         out: *mut RawTokens,
     );
     fn ds4_tokens_free(tokens: *mut RawTokens);
+    fn ds4_tokens_push(tokens: *mut RawTokens, token: c_int);
+    fn ds4_chat_begin(engine: *mut RawEngine, tokens: *mut RawTokens);
+    fn ds4_chat_append_max_effort_prefix(engine: *mut RawEngine, tokens: *mut RawTokens);
+    fn ds4_chat_append_message(
+        engine: *mut RawEngine,
+        tokens: *mut RawTokens,
+        role: *const c_char,
+        content: *const c_char,
+    );
+    fn ds4_chat_append_assistant_prefix(
+        engine: *mut RawEngine,
+        tokens: *mut RawTokens,
+        think_mode: c_int,
+    );
     fn ds4_token_text(engine: *mut RawEngine, token: c_int, len: *mut usize) -> *mut c_char;
     fn ds4_engine_generate_argmax(
         engine: *mut RawEngine,
@@ -696,6 +1007,11 @@ unsafe extern "C" {
         ctx_size: c_int,
     ) -> c_int;
     fn ds4_session_free(session: *mut RawSession);
+    fn ds4_session_set_progress(
+        session: *mut RawSession,
+        progress: Option<unsafe extern "C" fn(*mut c_void, *const c_char, c_int, c_int)>,
+        progress_ud: *mut c_void,
+    );
     fn ds4_session_sync(
         session: *mut RawSession,
         prompt: *const RawTokens,
@@ -716,6 +1032,7 @@ unsafe extern "C" {
         err: *mut c_char,
         errlen: usize,
     ) -> c_int;
+    fn ds4_session_common_prefix(session: *mut RawSession, prompt: *const RawTokens) -> c_int;
     fn ds4_session_pos(session: *mut RawSession) -> c_int;
     fn ds4_session_ctx(session: *mut RawSession) -> c_int;
     fn free(ptr: *mut c_void);

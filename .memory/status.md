@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.15a Rust Reusable Interactive Session Boundary
-- Last validated source commit: M8.15 interactive parity split in this commit;
-  prior pushed source commit `4e47ab50950ed5800a59c33bab661718d4e1bf38`
+- Active item: M8.15b Rust REPL Command State Surface
+- Last validated source commit: M8.15a Rust reusable interactive session
+  boundary in this commit; prior pushed source commit
+  `4cf6ce70e718cd46d7e57abaf1185cf120473c81`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1314,3 +1315,31 @@
 - M8.15 has been split in `RUST_PORT_ROADMAP.md` into M8.15a reusable
   interactive session boundary, M8.15b REPL command-state surface, and M8.15c
   final interactive PTY transcript surface.
+- M8.15a extends `rust/ds4-engine/src/lib.rs` with a borrowed `ChatSession`
+  wrapper over the current C chat/session APIs, including chat transcript
+  creation, user/assistant append, reusable session creation/reset,
+  session-sync progress callbacks, token append/eos, session position/context
+  handling, and two-turn generation.
+- M8.15a adds `ds4-interactive-runtime-rs`, a narrow non-PTY runtime-boundary
+  binary that simulates the M8.14 model-backed `/read` turn followed by the
+  direct prompt `Answer with one short noun: glacier.` and emits explicit
+  `read`/`direct` turn blocks.
+- M8.15a adds `ds4-parity/compare_cli_interactive_runtime.py`, which extracts
+  the M8.14 generated turn bytes from the committed PTY transcript and compares
+  them against `target/debug/ds4-interactive-runtime-rs` while also checking
+  runtime stderr anchors and forbidden unsupported paths.
+- M8.15a B300 validation over `/workspace/ds4/ds4flash.gguf` passed after
+  copying the changed files to `/workspace/ds4`, verifying SHA256 matches,
+  building with `CARGO_HOME=/tmp/ds4-cargo RUSTUP_HOME=/tmp/ds4-rustup
+  PATH=/tmp/ds4-cargo/bin:$PATH CUDA_ARCH=native cargo build -p ds4-engine
+  --bin ds4-interactive-runtime-rs`, and running
+  `python3 ds4-parity/compare_cli_interactive_runtime.py
+  ds4-parity/baselines/cli/m8.14/current-c.json --candidate-binary
+  target/debug/ds4-interactive-runtime-rs --negative-test`.
+- M8.15a B300 comparator reported `CLI interactive runtime comparator: PASS, 19
+  checks` and `CLI interactive runtime negative tests: PASS, 4 checks`.
+- M8.15a local validation passed for `cargo fmt --all -- --check`, `cargo build
+  -p ds4-engine --bin ds4-interactive-runtime-rs`, `cargo test -p
+  ds4-engine`, full `cargo test --workspace`, `python3 -m py_compile
+  ds4-parity/compare_cli_interactive_runtime.py
+  ds4-parity/check_cli_interactive_dump.py`, and `git diff --check`.
