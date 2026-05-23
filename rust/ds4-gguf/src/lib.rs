@@ -157,6 +157,56 @@ pub struct BoundTensor {
     pub tensor: Option<TensorInfo>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ds4Weights {
+    pub token_embd: TensorInfo,
+    pub output_hc_base: TensorInfo,
+    pub output_hc_fn: TensorInfo,
+    pub output_hc_scale: TensorInfo,
+    pub output_norm: TensorInfo,
+    pub output: TensorInfo,
+    pub layers: Vec<Ds4LayerWeights>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ds4LayerWeights {
+    pub hc_attn_fn: TensorInfo,
+    pub hc_attn_scale: TensorInfo,
+    pub hc_attn_base: TensorInfo,
+    pub attn_norm: TensorInfo,
+    pub attn_q_a: TensorInfo,
+    pub attn_q_a_norm: TensorInfo,
+    pub attn_q_b: TensorInfo,
+    pub attn_kv: TensorInfo,
+    pub attn_kv_a_norm: TensorInfo,
+    pub attn_sinks: TensorInfo,
+    pub attn_output_a: TensorInfo,
+    pub attn_output_b: TensorInfo,
+    pub attn_compressor_ape: Option<TensorInfo>,
+    pub attn_compressor_kv: Option<TensorInfo>,
+    pub attn_compressor_gate: Option<TensorInfo>,
+    pub attn_compressor_norm: Option<TensorInfo>,
+    pub indexer_attn_q_b: Option<TensorInfo>,
+    pub indexer_proj: Option<TensorInfo>,
+    pub indexer_compressor_ape: Option<TensorInfo>,
+    pub indexer_compressor_kv: Option<TensorInfo>,
+    pub indexer_compressor_gate: Option<TensorInfo>,
+    pub indexer_compressor_norm: Option<TensorInfo>,
+    pub hc_ffn_fn: TensorInfo,
+    pub hc_ffn_scale: TensorInfo,
+    pub hc_ffn_base: TensorInfo,
+    pub ffn_norm: TensorInfo,
+    pub ffn_gate_tid2eid: Option<TensorInfo>,
+    pub ffn_gate_inp: TensorInfo,
+    pub ffn_exp_probs_b: Option<TensorInfo>,
+    pub ffn_gate_exps: TensorInfo,
+    pub ffn_up_exps: TensorInfo,
+    pub ffn_down_exps: TensorInfo,
+    pub ffn_gate_shexp: TensorInfo,
+    pub ffn_up_shexp: TensorInfo,
+    pub ffn_down_shexp: TensorInfo,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GgufError {
     message: String,
@@ -442,6 +492,11 @@ pub fn bind_ds4_tensors(gguf: &Gguf) -> Result<Vec<BoundTensor>, Ds4ValidationEr
     Ok(out)
 }
 
+pub fn bind_ds4_weights(gguf: &Gguf) -> Result<Ds4Weights, Ds4ValidationError> {
+    let bindings = bind_ds4_tensors(gguf)?;
+    Ds4Weights::from_bound_tensors(&bindings)
+}
+
 pub fn bind_ds4_mtp_tensors(gguf: &Gguf) -> Result<Vec<BoundTensor>, Ds4ValidationError> {
     let hc_dim = u64::from(DS4_N_EMBD) * u64::from(DS4_N_HC);
     let hc_mix_dim = 2 * u64::from(DS4_N_HC) + u64::from(DS4_N_HC) * u64::from(DS4_N_HC);
@@ -523,6 +578,201 @@ pub fn bind_ds4_mtp_tensors(gguf: &Gguf) -> Result<Vec<BoundTensor>, Ds4Validati
         out_low_dim,
     )?;
     Ok(out)
+}
+
+impl Ds4Weights {
+    pub fn from_bound_tensors(bindings: &[BoundTensor]) -> Result<Self, Ds4ValidationError> {
+        let mut layers = Vec::with_capacity(DS4_N_LAYER as usize);
+        for layer in 0..DS4_N_LAYER {
+            layers.push(Ds4LayerWeights::from_bound_tensors(bindings, layer)?);
+        }
+
+        Ok(Self {
+            token_embd: required_bound_tensor(bindings, "base.token_embd")?,
+            output_hc_base: required_bound_tensor(bindings, "base.output_hc_base")?,
+            output_hc_fn: required_bound_tensor(bindings, "base.output_hc_fn")?,
+            output_hc_scale: required_bound_tensor(bindings, "base.output_hc_scale")?,
+            output_norm: required_bound_tensor(bindings, "base.output_norm")?,
+            output: required_bound_tensor(bindings, "base.output")?,
+            layers,
+        })
+    }
+
+    pub fn bound_tensors(&self) -> Vec<BoundTensor> {
+        let mut out = Vec::new();
+        push_required_binding(&mut out, "base.token_embd", &self.token_embd);
+        push_required_binding(&mut out, "base.output_hc_base", &self.output_hc_base);
+        push_required_binding(&mut out, "base.output_hc_fn", &self.output_hc_fn);
+        push_required_binding(&mut out, "base.output_hc_scale", &self.output_hc_scale);
+        push_required_binding(&mut out, "base.output_norm", &self.output_norm);
+        push_required_binding(&mut out, "base.output", &self.output);
+        for (layer, weights) in self.layers.iter().enumerate() {
+            weights.push_bound_tensors(layer as u32, &mut out);
+        }
+        out
+    }
+}
+
+impl Ds4LayerWeights {
+    fn from_bound_tensors(
+        bindings: &[BoundTensor],
+        layer: u32,
+    ) -> Result<Self, Ds4ValidationError> {
+        let role = |field: &str| format!("base.layer.{layer}.{field}");
+        Ok(Self {
+            hc_attn_fn: required_bound_tensor(bindings, &role("hc_attn_fn"))?,
+            hc_attn_scale: required_bound_tensor(bindings, &role("hc_attn_scale"))?,
+            hc_attn_base: required_bound_tensor(bindings, &role("hc_attn_base"))?,
+            attn_norm: required_bound_tensor(bindings, &role("attn_norm"))?,
+            attn_q_a: required_bound_tensor(bindings, &role("attn_q_a"))?,
+            attn_q_a_norm: required_bound_tensor(bindings, &role("attn_q_a_norm"))?,
+            attn_q_b: required_bound_tensor(bindings, &role("attn_q_b"))?,
+            attn_kv: required_bound_tensor(bindings, &role("attn_kv"))?,
+            attn_kv_a_norm: required_bound_tensor(bindings, &role("attn_kv_a_norm"))?,
+            attn_sinks: required_bound_tensor(bindings, &role("attn_sinks"))?,
+            attn_output_a: required_bound_tensor(bindings, &role("attn_output_a"))?,
+            attn_output_b: required_bound_tensor(bindings, &role("attn_output_b"))?,
+            attn_compressor_ape: optional_bound_tensor(bindings, &role("attn_compressor_ape"))?,
+            attn_compressor_kv: optional_bound_tensor(bindings, &role("attn_compressor_kv"))?,
+            attn_compressor_gate: optional_bound_tensor(bindings, &role("attn_compressor_gate"))?,
+            attn_compressor_norm: optional_bound_tensor(bindings, &role("attn_compressor_norm"))?,
+            indexer_attn_q_b: optional_bound_tensor(bindings, &role("indexer_attn_q_b"))?,
+            indexer_proj: optional_bound_tensor(bindings, &role("indexer_proj"))?,
+            indexer_compressor_ape: optional_bound_tensor(
+                bindings,
+                &role("indexer_compressor_ape"),
+            )?,
+            indexer_compressor_kv: optional_bound_tensor(bindings, &role("indexer_compressor_kv"))?,
+            indexer_compressor_gate: optional_bound_tensor(
+                bindings,
+                &role("indexer_compressor_gate"),
+            )?,
+            indexer_compressor_norm: optional_bound_tensor(
+                bindings,
+                &role("indexer_compressor_norm"),
+            )?,
+            hc_ffn_fn: required_bound_tensor(bindings, &role("hc_ffn_fn"))?,
+            hc_ffn_scale: required_bound_tensor(bindings, &role("hc_ffn_scale"))?,
+            hc_ffn_base: required_bound_tensor(bindings, &role("hc_ffn_base"))?,
+            ffn_norm: required_bound_tensor(bindings, &role("ffn_norm"))?,
+            ffn_gate_tid2eid: optional_bound_tensor(bindings, &role("ffn_gate_tid2eid"))?,
+            ffn_gate_inp: required_bound_tensor(bindings, &role("ffn_gate_inp"))?,
+            ffn_exp_probs_b: optional_bound_tensor(bindings, &role("ffn_exp_probs_b"))?,
+            ffn_gate_exps: required_bound_tensor(bindings, &role("ffn_gate_exps"))?,
+            ffn_up_exps: required_bound_tensor(bindings, &role("ffn_up_exps"))?,
+            ffn_down_exps: required_bound_tensor(bindings, &role("ffn_down_exps"))?,
+            ffn_gate_shexp: required_bound_tensor(bindings, &role("ffn_gate_shexp"))?,
+            ffn_up_shexp: required_bound_tensor(bindings, &role("ffn_up_shexp"))?,
+            ffn_down_shexp: required_bound_tensor(bindings, &role("ffn_down_shexp"))?,
+        })
+    }
+
+    fn push_bound_tensors(&self, layer: u32, out: &mut Vec<BoundTensor>) {
+        let role = |field: &str| format!("base.layer.{layer}.{field}");
+        push_required_binding(out, &role("hc_attn_fn"), &self.hc_attn_fn);
+        push_required_binding(out, &role("hc_attn_scale"), &self.hc_attn_scale);
+        push_required_binding(out, &role("hc_attn_base"), &self.hc_attn_base);
+        push_required_binding(out, &role("attn_norm"), &self.attn_norm);
+        push_required_binding(out, &role("attn_q_a"), &self.attn_q_a);
+        push_required_binding(out, &role("attn_q_a_norm"), &self.attn_q_a_norm);
+        push_required_binding(out, &role("attn_q_b"), &self.attn_q_b);
+        push_required_binding(out, &role("attn_kv"), &self.attn_kv);
+        push_required_binding(out, &role("attn_kv_a_norm"), &self.attn_kv_a_norm);
+        push_required_binding(out, &role("attn_sinks"), &self.attn_sinks);
+        push_required_binding(out, &role("attn_output_a"), &self.attn_output_a);
+        push_required_binding(out, &role("attn_output_b"), &self.attn_output_b);
+        push_optional_binding(out, &role("attn_compressor_ape"), &self.attn_compressor_ape);
+        push_optional_binding(out, &role("attn_compressor_kv"), &self.attn_compressor_kv);
+        push_optional_binding(
+            out,
+            &role("attn_compressor_gate"),
+            &self.attn_compressor_gate,
+        );
+        push_optional_binding(
+            out,
+            &role("attn_compressor_norm"),
+            &self.attn_compressor_norm,
+        );
+        push_optional_binding(out, &role("indexer_attn_q_b"), &self.indexer_attn_q_b);
+        push_optional_binding(out, &role("indexer_proj"), &self.indexer_proj);
+        push_optional_binding(
+            out,
+            &role("indexer_compressor_ape"),
+            &self.indexer_compressor_ape,
+        );
+        push_optional_binding(
+            out,
+            &role("indexer_compressor_kv"),
+            &self.indexer_compressor_kv,
+        );
+        push_optional_binding(
+            out,
+            &role("indexer_compressor_gate"),
+            &self.indexer_compressor_gate,
+        );
+        push_optional_binding(
+            out,
+            &role("indexer_compressor_norm"),
+            &self.indexer_compressor_norm,
+        );
+        push_required_binding(out, &role("hc_ffn_fn"), &self.hc_ffn_fn);
+        push_required_binding(out, &role("hc_ffn_scale"), &self.hc_ffn_scale);
+        push_required_binding(out, &role("hc_ffn_base"), &self.hc_ffn_base);
+        push_required_binding(out, &role("ffn_norm"), &self.ffn_norm);
+        push_optional_binding(out, &role("ffn_gate_tid2eid"), &self.ffn_gate_tid2eid);
+        push_required_binding(out, &role("ffn_gate_inp"), &self.ffn_gate_inp);
+        push_optional_binding(out, &role("ffn_exp_probs_b"), &self.ffn_exp_probs_b);
+        push_required_binding(out, &role("ffn_gate_exps"), &self.ffn_gate_exps);
+        push_required_binding(out, &role("ffn_up_exps"), &self.ffn_up_exps);
+        push_required_binding(out, &role("ffn_down_exps"), &self.ffn_down_exps);
+        push_required_binding(out, &role("ffn_gate_shexp"), &self.ffn_gate_shexp);
+        push_required_binding(out, &role("ffn_up_shexp"), &self.ffn_up_shexp);
+        push_required_binding(out, &role("ffn_down_shexp"), &self.ffn_down_shexp);
+    }
+}
+
+fn required_bound_tensor(
+    bindings: &[BoundTensor],
+    role: &str,
+) -> Result<TensorInfo, Ds4ValidationError> {
+    match bindings.iter().find(|binding| binding.role == role) {
+        Some(BoundTensor {
+            tensor: Some(tensor),
+            ..
+        }) => Ok(tensor.clone()),
+        Some(_) => Err(Ds4ValidationError::new(format!(
+            "ds4: required tensor role is absent: {role}"
+        ))),
+        None => Err(Ds4ValidationError::new(format!(
+            "ds4: bound tensor role is missing: {role}"
+        ))),
+    }
+}
+
+fn optional_bound_tensor(
+    bindings: &[BoundTensor],
+    role: &str,
+) -> Result<Option<TensorInfo>, Ds4ValidationError> {
+    match bindings.iter().find(|binding| binding.role == role) {
+        Some(binding) => Ok(binding.tensor.clone()),
+        None => Err(Ds4ValidationError::new(format!(
+            "ds4: bound tensor role is missing: {role}"
+        ))),
+    }
+}
+
+fn push_required_binding(out: &mut Vec<BoundTensor>, role: &str, tensor: &TensorInfo) {
+    out.push(BoundTensor {
+        role: role.to_owned(),
+        tensor: Some(tensor.clone()),
+    });
+}
+
+fn push_optional_binding(out: &mut Vec<BoundTensor>, role: &str, tensor: &Option<TensorInfo>) {
+    out.push(BoundTensor {
+        role: role.to_owned(),
+        tensor: tensor.clone(),
+    });
 }
 
 pub fn parse_gguf(bytes: &[u8]) -> Result<Gguf, GgufError> {
@@ -1874,7 +2124,7 @@ impl<'a> Cursor<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_gguf, MetadataValue};
+    use super::{parse_gguf, BoundTensor, Ds4Weights, MetadataValue, TensorInfo};
 
     #[test]
     fn parses_header_metadata_and_tensor_directory() {
@@ -1941,6 +2191,34 @@ mod tests {
         assert!(err.message().contains("metadata array"));
     }
 
+    #[test]
+    fn ds4_weight_table_preserves_flat_roles() {
+        let bindings = synthetic_base_bindings();
+        let weights = Ds4Weights::from_bound_tensors(&bindings).expect("weight table");
+
+        assert_eq!(weights.layers.len(), 43);
+        assert!(weights.layers[0].attn_compressor_ape.is_none());
+        assert!(weights.layers[2].attn_compressor_ape.is_some());
+        assert!(weights.layers[2].indexer_proj.is_some());
+        assert!(weights.layers[3].attn_compressor_ape.is_some());
+        assert!(weights.layers[3].indexer_proj.is_none());
+        assert!(weights.layers[2].ffn_gate_tid2eid.is_some());
+        assert!(weights.layers[3].ffn_gate_tid2eid.is_none());
+
+        assert_eq!(weights.bound_tensors(), bindings);
+    }
+
+    #[test]
+    fn ds4_weight_table_rejects_missing_roles() {
+        let mut bindings = synthetic_base_bindings();
+        bindings.retain(|binding| binding.role != "base.layer.2.indexer_proj");
+        let err = Ds4Weights::from_bound_tensors(&bindings).unwrap_err();
+        assert_eq!(
+            err.message(),
+            "ds4: bound tensor role is missing: base.layer.2.indexer_proj"
+        );
+    }
+
     fn fixture_bytes() -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(&0x4655_4747u32.to_le_bytes());
@@ -1964,6 +2242,117 @@ mod tests {
         }
         out.extend_from_slice(&[0u8; 16]);
         out
+    }
+
+    fn synthetic_base_bindings() -> Vec<BoundTensor> {
+        let mut out = Vec::new();
+        for field in [
+            "token_embd",
+            "output_hc_base",
+            "output_hc_fn",
+            "output_hc_scale",
+            "output_norm",
+            "output",
+        ] {
+            out.push(present_binding(format!("base.{field}")));
+        }
+        for layer in 0..43 {
+            push_synthetic_layer_bindings(&mut out, layer);
+        }
+        out
+    }
+
+    fn push_synthetic_layer_bindings(out: &mut Vec<BoundTensor>, layer: u32) {
+        let ratio = if layer < 2 {
+            0
+        } else if (layer & 1) == 0 {
+            4
+        } else {
+            128
+        };
+        for field in [
+            "hc_attn_fn",
+            "hc_attn_scale",
+            "hc_attn_base",
+            "attn_norm",
+            "attn_q_a",
+            "attn_q_a_norm",
+            "attn_q_b",
+            "attn_kv",
+            "attn_kv_a_norm",
+            "attn_sinks",
+            "attn_output_a",
+            "attn_output_b",
+        ] {
+            out.push(present_binding(layer_role(layer, field)));
+        }
+        for field in [
+            "attn_compressor_ape",
+            "attn_compressor_kv",
+            "attn_compressor_gate",
+            "attn_compressor_norm",
+        ] {
+            out.push(optional_binding(layer_role(layer, field), ratio != 0));
+        }
+        for field in [
+            "indexer_attn_q_b",
+            "indexer_proj",
+            "indexer_compressor_ape",
+            "indexer_compressor_kv",
+            "indexer_compressor_gate",
+            "indexer_compressor_norm",
+        ] {
+            out.push(optional_binding(layer_role(layer, field), ratio == 4));
+        }
+        for field in ["hc_ffn_fn", "hc_ffn_scale", "hc_ffn_base", "ffn_norm"] {
+            out.push(present_binding(layer_role(layer, field)));
+        }
+        out.push(optional_binding(
+            layer_role(layer, "ffn_gate_tid2eid"),
+            layer < 3,
+        ));
+        out.push(present_binding(layer_role(layer, "ffn_gate_inp")));
+        out.push(optional_binding(
+            layer_role(layer, "ffn_exp_probs_b"),
+            layer == 0,
+        ));
+        for field in [
+            "ffn_gate_exps",
+            "ffn_up_exps",
+            "ffn_down_exps",
+            "ffn_gate_shexp",
+            "ffn_up_shexp",
+            "ffn_down_shexp",
+        ] {
+            out.push(present_binding(layer_role(layer, field)));
+        }
+    }
+
+    fn layer_role(layer: u32, field: &str) -> String {
+        format!("base.layer.{layer}.{field}")
+    }
+
+    fn present_binding(role: String) -> BoundTensor {
+        optional_binding(role, true)
+    }
+
+    fn optional_binding(role: String, present: bool) -> BoundTensor {
+        BoundTensor {
+            tensor: present.then(|| fake_tensor(&role)),
+            role,
+        }
+    }
+
+    fn fake_tensor(role: &str) -> TensorInfo {
+        TensorInfo {
+            name: format!("{role}.weight"),
+            dims: vec![1],
+            type_id: 0,
+            rel_offset: 0,
+            abs_offset: 0,
+            elements: 1,
+            bytes: 4,
+        }
     }
 
     fn push_string_entry(out: &mut Vec<u8>, key: &str, value: &str) {

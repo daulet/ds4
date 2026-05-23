@@ -3186,10 +3186,79 @@ Acceptance:
   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
   and non-interactive Claude review with no blockers.
 
-#### M10.5c: Rust Single-Token Decode Graph Execution
+#### M10.5c1: Rust Structured Decode Weight Table
+
+- Goal: add a structured Rust DS4 base/layer weight table equivalent to the C
+  `ds4_weights` and `ds4_layer_weights` pointer layout, without launching graph
+  kernels.
+- Oracle: C `ds4_weights`/`ds4_layer_weights` field inventory and the existing
+  Rust `bind_ds4_tensors` flat role bindings.
+- Fixture: synthetic DS4 GGUF tensor directory from the M4 tensor-binding
+  comparator, covering dense, ratio-4, ratio-128, optional bias, and hash-layer
+  fields.
+- Comparator: `compare_rust_weight_table.py` runs `ds4-gguf-dump`, checks the
+  structured table against C field order, and verifies that it flattens exactly
+  back to `bound_tensors`.
+- Acceptance: every C base/layer field has a typed Rust table slot, absence is
+  preserved for dense/indexer/hash optional fields, and synthetic layer/field
+  mutations fail closed.
+- Drift policy: field names, order, and present/absent optional semantics are
+  exact; tensor values and backend execution remain out of scope.
+- Review gate: ask Claude to review weight ownership shape and comparator
+  coverage.
+- Validation gate: targeted Rust tests, weight-table comparator with negative
+  test, unified comparator-only parity report, `cargo test --workspace`, `cargo
+  fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
+  with no blockers.
+
+#### M10.5c2: Rust Decode Graph Tensor State
+
+- Goal: add Rust graph tensor state allocation/zero-fill scaffolding for
+  one-token decode, without issuing decode kernels yet.
+- Oracle: M10.2 graph tensor owner inventory and M10.4 checkpoint note that
+  cache tensors hash full allocated capacity.
+- Fixture: M10.3 graph plan cases for raw/compressed/indexer cache sizes and
+  representative ctx/prompt combinations.
+- Comparator: Rust tensor-state plan versus M10.2 owner inventory and M10.3
+  graph-plan byte-size formulas.
+- Acceptance: Rust state names every decode tensor owner, allocates the same
+  sizes, and records zero-fill obligations for unused cache capacity.
+- Drift policy: tensor names, owner groups, allocated byte sizes, and zero-fill
+  requirements are exact; kernel values remain out of scope.
+- Review gate: ask Claude to review tensor ownership, lifetimes, and zero-fill
+  obligations.
+- Validation gate: targeted Rust tests, tensor-state comparator with negative
+  test, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, and non-interactive Claude review with no blockers.
+
+#### M10.5c3: Rust Decode Backend Facade
+
+- Goal: add safe Rust facade methods for the subset of M10.5a backend
+  primitives used by default fused one-token decode, without owning the full
+  decode schedule yet.
+- Oracle: M10.2 operation inventory, M10.5a ABI comparator, and C
+  `metal_graph_encode_decode_layer` default fusion branches with graph-reference
+  environment flags unset.
+- Fixture: decode primitive groups for embedding, QKV/norm, raw/compressed KV
+  store, attention, router/MoE, hyper-connection, output head, command
+  begin/flush/end, read, and synchronize-on-failure.
+- Comparator: Rust facade coverage versus required decode primitive list and
+  ABI type checks.
+- Acceptance: every default decode primitive has one safe Rust wrapper with the
+  same tensor argument order as the C call site and no unwrapped raw ABI calls
+  leak into scheduler code.
+- Drift policy: operation names and tensor argument order are exact; no GPU
+  numeric execution is compared in this item.
+- Review gate: ask Claude to review unsafe FFI encapsulation and tensor
+  argument ordering.
+- Validation gate: facade comparator with negative test, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+#### M10.5c4: Rust Single-Token Decode Graph Execution
 
 - Goal: move one-token decode scheduling for the target model into Rust while
-  calling the existing backend primitives through the M10.5a FFI surface.
+  calling the existing backend primitives through the M10.5c3 facade.
 - Oracle: M10.4 decode checkpoints and the M10.5b call-order plan.
 - Fixture: official-vector first-token and continuation-token cases with raw
   SWA, ratio-4 compressed/indexer layers, ratio-128 compressed layers, and

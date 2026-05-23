@@ -1,7 +1,7 @@
 use ds4_gguf::{
-    bind_ds4_mtp_tensors, bind_ds4_tensors, parse_gguf, parse_gguf_allowing_missing_tensor_data,
-    tensor_type_name, validate_ds4_metadata, value_type_name, BoundTensor, Gguf, MetadataValue,
-    TensorInfo, MAX_REPORTED_TENSOR_TYPE_ID,
+    bind_ds4_mtp_tensors, bind_ds4_weights, parse_gguf, parse_gguf_allowing_missing_tensor_data,
+    tensor_type_name, validate_ds4_metadata, value_type_name, BoundTensor, Ds4Weights, Gguf,
+    MetadataValue, TensorInfo, MAX_REPORTED_TENSOR_TYPE_ID,
 };
 use std::collections::BTreeMap;
 use std::env;
@@ -67,12 +67,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let mut bound_tensors = Vec::new();
+    let mut weight_table = None;
     let mut config_validated = false;
     let mut weights_validated = false;
     let mut mtp_weights_validated = false;
     if args.validate_ds4_layout {
-        match bind_ds4_tensors(&gguf) {
-            Ok(bindings) => bound_tensors.extend(bindings),
+        match bind_ds4_weights(&gguf) {
+            Ok(weights) => {
+                bound_tensors.extend(weights.bound_tensors());
+                weight_table = Some(weights);
+            }
             Err(err) => {
                 eprintln!("{err}");
                 std::process::exit(1);
@@ -111,6 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mtp_weights: mtp_weights_validated,
         },
         &bound_tensors,
+        weight_table.as_ref(),
     )?;
     Ok(())
 }
@@ -193,6 +198,7 @@ fn write_dump<W: Write>(
     gguf: &Gguf,
     validation: ValidationStatus,
     bound_tensors: &[BoundTensor],
+    weight_table: Option<&Ds4Weights>,
 ) -> io::Result<()> {
     writeln!(out, "{{")?;
     writeln!(out, "  \"schema\": \"ds4.metadata.v1\",")?;
@@ -234,7 +240,10 @@ fn write_dump<W: Write>(
     write_selected_metadata(out, gguf)?;
     write_tensor_types(out, gguf)?;
     write_tensors(out, gguf)?;
-    write_bound_tensors(out, bound_tensors)?;
+    write_bound_tensors(out, bound_tensors, weight_table.is_some())?;
+    if let Some(weights) = weight_table {
+        write_weight_table(out, weights)?;
+    }
     writeln!(out, "}}")?;
     Ok(())
 }
@@ -312,7 +321,11 @@ fn write_tensors<W: Write>(out: &mut W, gguf: &Gguf) -> io::Result<()> {
     Ok(())
 }
 
-fn write_bound_tensors<W: Write>(out: &mut W, bound_tensors: &[BoundTensor]) -> io::Result<()> {
+fn write_bound_tensors<W: Write>(
+    out: &mut W,
+    bound_tensors: &[BoundTensor],
+    trailing_comma: bool,
+) -> io::Result<()> {
     writeln!(out, "  \"bound_tensors\": [")?;
     for (idx, binding) in bound_tensors.iter().enumerate() {
         if idx != 0 {
@@ -330,7 +343,72 @@ fn write_bound_tensors<W: Write>(out: &mut W, bound_tensors: &[BoundTensor]) -> 
         write!(out, "}}")?;
     }
     writeln!(out)?;
-    writeln!(out, "  ]")?;
+    if trailing_comma {
+        writeln!(out, "  ],")?;
+    } else {
+        writeln!(out, "  ]")?;
+    }
+    Ok(())
+}
+
+fn write_weight_table<W: Write>(out: &mut W, weights: &Ds4Weights) -> io::Result<()> {
+    let bindings = weights.bound_tensors();
+    writeln!(out, "  \"weight_table\": {{")?;
+    writeln!(out, "    \"schema\": \"ds4.weights.v1\",")?;
+    writeln!(out, "    \"base\": [")?;
+    let mut first = true;
+    for binding in bindings.iter().filter(|binding| {
+        binding.role.starts_with("base.") && !binding.role.starts_with("base.layer.")
+    }) {
+        let field = binding.role.trim_start_matches("base.");
+        write_weight_binding(out, &mut first, field, &binding.role, binding)?;
+    }
+    writeln!(out)?;
+    writeln!(out, "    ],")?;
+    writeln!(out, "    \"layers\": [")?;
+    for layer in 0..weights.layers.len() {
+        if layer != 0 {
+            writeln!(out, ",")?;
+        }
+        let prefix = format!("base.layer.{layer}.");
+        writeln!(out, "      {{\"index\": {layer}, \"fields\": [")?;
+        let mut first_field = true;
+        for binding in bindings
+            .iter()
+            .filter(|binding| binding.role.starts_with(&prefix))
+        {
+            let field = binding.role.trim_start_matches(&prefix);
+            write_weight_binding(out, &mut first_field, field, &binding.role, binding)?;
+        }
+        writeln!(out)?;
+        write!(out, "      ]}}")?;
+    }
+    writeln!(out)?;
+    writeln!(out, "    ]")?;
+    writeln!(out, "  }}")?;
+    Ok(())
+}
+
+fn write_weight_binding<W: Write>(
+    out: &mut W,
+    first: &mut bool,
+    field: &str,
+    role: &str,
+    binding: &BoundTensor,
+) -> io::Result<()> {
+    write_comma(out, first)?;
+    write!(out, "      {{\"field\": ")?;
+    write_json_string(out, field)?;
+    write!(out, ", \"role\": ")?;
+    write_json_string(out, role)?;
+    match &binding.tensor {
+        Some(tensor) => {
+            write!(out, ", \"present\": true, ")?;
+            write_tensor_ref(out, tensor)?;
+        }
+        None => write!(out, ", \"present\": false")?,
+    }
+    write!(out, "}}")?;
     Ok(())
 }
 

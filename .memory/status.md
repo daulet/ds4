@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c Rust Single-Token Decode Graph Execution
-- Last validated source commit: M10.5b Rust decode call-order and state plan in
+- Active item: M10.5c2 Rust Decode Graph Tensor State
+- Last validated source commit: M10.5c1 Rust structured decode weight table in
   this commit; prior pushed source commit
-  `0283f8946ecf134db3d602134528de775bd78b79`
+  `2926174ddb382ed92f65c47605344e1cd91196f1`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,34 @@
 
 ## Last Evidence
 
+- M10.5c1 adds structured Rust DS4 decode weight bindings in
+  `rust/ds4-gguf/src/lib.rs`: `Ds4Weights` for base model weights and
+  `Ds4LayerWeights` for every C `ds4_layer_weights` field. Required fields are
+  stored as `TensorInfo`; dense/compressor/indexer/hash/optional-bias fields
+  preserve `None` where the existing flat binding marks them absent.
+- M10.5c1 changes `ds4-gguf-dump --validate-ds4-layout` to construct the
+  structured base weight table first, emit a `weight_table` JSON section, and
+  flatten that table back to the existing `bound_tensors` output. MTP bindings
+  still use the existing flat MTP path and remain out of scope for this decode
+  slice.
+- M10.5c1 adds `ds4-parity/compare_rust_weight_table.py`, which builds the
+  synthetic DS4 GGUF tensor directory used by the tensor-binding comparator,
+  runs `ds4-gguf-dump`, checks base/layer field order against C
+  `ds4_weights`/`ds4_layer_weights`, verifies the structured table flattens
+  exactly to `bound_tensors`, and fails closed on removed-layer, removed-field,
+  and presence-bit mutations. It is wired into the unified parity report as
+  `M10.5c1 Rust structured weight table comparator`.
+- M10.5c1 validation passed `cargo test -p ds4-gguf ds4_weight_table --lib`,
+  `python3 ds4-parity/compare_rust_weight_table.py`, `python3
+  ds4-parity/compare_rust_weight_table.py --negative-test`, `python3 -m
+  py_compile ds4-parity/compare_rust_weight_table.py
+  ds4-parity/run_parity_report.py`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with `16 passed, 10
+  skipped, 0 failed`, `arch -arm64 make ds4-metadata-dump` followed by
+  `python3 ds4-parity/compare_tensor_bindings.py --negative-test`, `cargo
+  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and NUL
+  scan over touched files. Non-interactive Claude review returned
+  `NO BLOCKERS`.
 - M10.5b adds the no-execute Rust decode plan in
   `rust/ds4-gpu/src/decode_plan.rs`. It mirrors the default
   `metal_graph_eval_token_raw_swa` scheduling surface without backend calls:

@@ -203,6 +203,20 @@ counter transitions for representative first-token, short-prefill,
 ratio-boundary, long-indexed, and no-logits cases. The negative test mutates a
 stage, raw-start value, and indexed-layer count in memory.
 
+Compare the Rust M10.5c1 structured DS4 weight table against the existing flat
+tensor bindings and the C `ds4_weights`/`ds4_layer_weights` field inventory:
+
+```sh
+python3 ds4-parity/compare_rust_weight_table.py
+python3 ds4-parity/compare_rust_weight_table.py --negative-test
+```
+
+The comparator builds a synthetic DS4 GGUF, asks `ds4-gguf-dump` for the
+structured weight table, verifies that it flattens back to `bound_tensors`, and
+checks base/layer field order plus dense, ratio-4, ratio-128, and hash-layer
+presence rules. Its negative test mutates a layer, a field, and a presence bit
+in memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
