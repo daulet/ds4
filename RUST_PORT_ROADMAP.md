@@ -1549,9 +1549,9 @@ Work items:
 - Comparator: roadmap/board review that each successor item has one tangible
   capture surface and one checker contract.
 - Acceptance: core generation, prompt-file, thinking-control, seeded sampling,
-  and context clipping are captured first; MTP, directional steering, quality,
-  warm-weight, thread, and backend-option coverage remains a separately
-  verifiable oracle item.
+  and context-size boundary behavior are captured first; MTP, directional
+  steering, quality, warm-weight, thread, and backend-option coverage remains a
+  separately verifiable oracle item.
 - Drift policy: no source behavior changes; this is roadmap scope control.
 - Review gate: ask Claude to review whether the split preserves M8.12 coverage
   without hiding advanced flags in the core transcript oracle.
@@ -1564,8 +1564,8 @@ Work items:
 - Oracle: current `./ds4` one-shot mode on the recorded B300 model.
 - Fixture: `-p`, `--prompt-file`, greedy generation with fixed token limit,
   seeded non-greedy sampling, `--nothink`, `--think`, `--think-max` downgrade
-  warning, explicit `--cuda`, fixed `--ctx`, context-size clipping, prompt
-  hashes, seed, backend/model identity, and timing/progress stderr
+  warning, explicit `--cuda`, fixed `--ctx`, context-size boundary behavior,
+  prompt hashes, seed, backend/model identity, and timing/progress stderr
   normalization rules.
 - Comparator: transcript checker for stdout bytes, selected token sequence when
   available from captured text, exit status, stderr categories, prompt hashes,

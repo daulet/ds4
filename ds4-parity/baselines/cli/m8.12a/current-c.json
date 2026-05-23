@@ -1,0 +1,251 @@
+{
+  "schema": "ds4.cli_generation_oracle.v1",
+  "source": "current-c-cli-one-shot-generation",
+  "binary": "./ds4",
+  "model": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "size_bytes": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig"
+  },
+  "cases": [
+    {
+      "id": "greedy_inline_nothink",
+      "mode": "greedy_inline_nothink",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "2",
+        "--temp",
+        "0",
+        "--nothink",
+        "-p",
+        "Answer with one short noun: glacier."
+      ],
+      "prompt_file": null,
+      "prompt_base64": "QW5zd2VyIHdpdGggb25lIHNob3J0IG5vdW46IGdsYWNpZXIu",
+      "prompt_bytes": 36,
+      "prompt_sha256": "669fd593a322bd0498e44060ea87fcdf24b14102409335a15e682c55cd400689",
+      "seed": null,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": {
+        "base64": "Z2xhYwo=",
+        "bytes": 5,
+        "sha256": "862550215bb33a4e6f591f4c1c52fcd03dc98022f1acad87ce807f7d58b8c03c"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTMuMTIycwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MKZHM0OiB1c2luZyBHUFUgZ3JhcGggZ2VuZXJhdGlvbiB3aXRoIGxheWVyLW1ham9yIGdyYXBoIHByZWZpbGwKZHM0OiBncHUgcHJlZmlsbCBsYXllciAxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDExLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTUvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxNi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTgvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxOS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIwLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIzLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjQvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI2LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjcvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI5LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzAvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzMS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM1LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM4LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0MC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNDIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0My80Mw0KZHM0OiBwcmVmaWxsOiA0Ni40MSB0L3MsIGdlbmVyYXRpb246IDkwLjI1IHQvcwo=",
+        "bytes": 2009,
+        "sha256": "155513352d9328d2e0fa17ff7984de9509677cd40a5bdf40776e5ee4c1219a2c"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: using GPU graph generation with layer-major graph prefill\nds4: gpu prefill layer 1/43\rds4: gpu prefill layer 2/43\rds4: gpu prefill layer 3/43\rds4: gpu prefill layer 4/43\rds4: gpu prefill layer 5/43\rds4: gpu prefill layer 6/43\rds4: gpu prefill layer 7/43\rds4: gpu prefill layer 8/43\rds4: gpu prefill layer 9/43\rds4: gpu prefill layer 10/43\rds4: gpu prefill layer 11/43\rds4: gpu prefill layer 12/43\rds4: gpu prefill layer 13/43\rds4: gpu prefill layer 14/43\rds4: gpu prefill layer 15/43\rds4: gpu prefill layer 16/43\rds4: gpu prefill layer 17/43\rds4: gpu prefill layer 18/43\rds4: gpu prefill layer 19/43\rds4: gpu prefill layer 20/43\rds4: gpu prefill layer 21/43\rds4: gpu prefill layer 22/43\rds4: gpu prefill layer 23/43\rds4: gpu prefill layer 24/43\rds4: gpu prefill layer 25/43\rds4: gpu prefill layer 26/43\rds4: gpu prefill layer 27/43\rds4: gpu prefill layer 28/43\rds4: gpu prefill layer 29/43\rds4: gpu prefill layer 30/43\rds4: gpu prefill layer 31/43\rds4: gpu prefill layer 32/43\rds4: gpu prefill layer 33/43\rds4: gpu prefill layer 34/43\rds4: gpu prefill layer 35/43\rds4: gpu prefill layer 36/43\rds4: gpu prefill layer 37/43\rds4: gpu prefill layer 38/43\rds4: gpu prefill layer 39/43\rds4: gpu prefill layer 40/43\rds4: gpu prefill layer 41/43\rds4: gpu prefill layer 42/43\rds4: gpu prefill layer 43/43\r\nds4: prefill: <rate> t/s, generation: <rate> t/s\n",
+      "stderr_normalized_sha256": "e08a512dfdf1706e6fca6593a452e927298ad42370778e906e1262e881a03baa",
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "backend=cuda",
+        "ds4: using GPU graph generation"
+      ],
+      "normalized_stderr_anchors": [],
+      "stdout_empty": false
+    },
+    {
+      "id": "prompt_file_think",
+      "mode": "greedy_prompt_file_think",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "2",
+        "--temp",
+        "0",
+        "--think",
+        "--prompt-file",
+        "ds4-parity/baselines/cli-fixtures/m8.12a/prompt_file.txt"
+      ],
+      "prompt_file": "ds4-parity/baselines/cli-fixtures/m8.12a/prompt_file.txt",
+      "prompt_base64": "TTguMTIgcHJvbXB0IGZpbGUgYXNrcyBmb3IgYSBjb25jaXNlIGNvbG9yIG5hbWUuCg==",
+      "prompt_bytes": 49,
+      "prompt_sha256": "bcc99297b3ca9fe8e23ea546a6874650f15e0db5e55f4ba9ab963ea9c32d2295",
+      "seed": null,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": {
+        "base64": "V2UgbmVlZAo=",
+        "bytes": 8,
+        "sha256": "e566cf8e60978ac10a300c2503a68e03edd6d162fb11e2496057d57346660af0"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuODkycwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MKZHM0OiB1c2luZyBHUFUgZ3JhcGggZ2VuZXJhdGlvbiB3aXRoIGxheWVyLW1ham9yIGdyYXBoIHByZWZpbGwKZHM0OiBncHUgcHJlZmlsbCBsYXllciAxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDExLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTUvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxNi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTgvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxOS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIwLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIzLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjQvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI2LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjcvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI5LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzAvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzMS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM1LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM4LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0MC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNDIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0My80Mw0KZHM0OiBwcmVmaWxsOiA1Ni4yOSB0L3MsIGdlbmVyYXRpb246IDg5LjE0IHQvcwo=",
+        "bytes": 2009,
+        "sha256": "4f1842249b20fd40361b08165c8a9da18e2f21cfa44a23b8c7432fd9137bfcb5"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: using GPU graph generation with layer-major graph prefill\nds4: gpu prefill layer 1/43\rds4: gpu prefill layer 2/43\rds4: gpu prefill layer 3/43\rds4: gpu prefill layer 4/43\rds4: gpu prefill layer 5/43\rds4: gpu prefill layer 6/43\rds4: gpu prefill layer 7/43\rds4: gpu prefill layer 8/43\rds4: gpu prefill layer 9/43\rds4: gpu prefill layer 10/43\rds4: gpu prefill layer 11/43\rds4: gpu prefill layer 12/43\rds4: gpu prefill layer 13/43\rds4: gpu prefill layer 14/43\rds4: gpu prefill layer 15/43\rds4: gpu prefill layer 16/43\rds4: gpu prefill layer 17/43\rds4: gpu prefill layer 18/43\rds4: gpu prefill layer 19/43\rds4: gpu prefill layer 20/43\rds4: gpu prefill layer 21/43\rds4: gpu prefill layer 22/43\rds4: gpu prefill layer 23/43\rds4: gpu prefill layer 24/43\rds4: gpu prefill layer 25/43\rds4: gpu prefill layer 26/43\rds4: gpu prefill layer 27/43\rds4: gpu prefill layer 28/43\rds4: gpu prefill layer 29/43\rds4: gpu prefill layer 30/43\rds4: gpu prefill layer 31/43\rds4: gpu prefill layer 32/43\rds4: gpu prefill layer 33/43\rds4: gpu prefill layer 34/43\rds4: gpu prefill layer 35/43\rds4: gpu prefill layer 36/43\rds4: gpu prefill layer 37/43\rds4: gpu prefill layer 38/43\rds4: gpu prefill layer 39/43\rds4: gpu prefill layer 40/43\rds4: gpu prefill layer 41/43\rds4: gpu prefill layer 42/43\rds4: gpu prefill layer 43/43\r\nds4: prefill: <rate> t/s, generation: <rate> t/s\n",
+      "stderr_normalized_sha256": "e08a512dfdf1706e6fca6593a452e927298ad42370778e906e1262e881a03baa",
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "backend=cuda",
+        "ds4: using GPU graph generation"
+      ],
+      "normalized_stderr_anchors": [],
+      "stdout_empty": false
+    },
+    {
+      "id": "think_max_downgrade",
+      "mode": "think_max_downgrade",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--think-max",
+        "-p",
+        "Say one number."
+      ],
+      "prompt_file": null,
+      "prompt_base64": "U2F5IG9uZSBudW1iZXIu",
+      "prompt_bytes": 15,
+      "prompt_sha256": "991f1bb8ba668e0dfabed7bee4d340d561b054dc637372e9ed3fd2fb130bf12c",
+      "seed": null,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": {
+        "base64": "V2UK",
+        "bytes": 3,
+        "sha256": "c36d4b240ac10dcf300ba8d9d5aafc33957b8c1976c7f5ae2b26e654701e1b74"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiB3YXJuaW5nOiAtLXRoaW5rLW1heCBuZWVkcyAtLWN0eCA+PSAzOTMyMTY7IGN0eD0xMjggdXNlcyBub3JtYWwgdGhpbmtpbmcgaW5zdGVhZApkczQ6IENVREEgYmFja2VuZCBpbml0aWFsaXplZCBvbiBOVklESUEgQjMwMCBTWE02IEFDIChzbV8xMDMpCmRzNDogQ1VEQSBob3N0IHJlZ2lzdHJhdGlvbiBza2lwcGVkOiBvcGVyYXRpb24gbm90IHN1cHBvcnRlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIGludG8gZGV2aWNlIGNhY2hlCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMTYuMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDMyLjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA0OC4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNjQuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDgwLjA0IEdpQiBjYWNoZWQKZHM0OiBDVURBIHN0YXJ0dXAgbW9kZWwgY2FjaGUgcHJlcGFyZWQgODAuNzYgR2lCIG9mIHRlbnNvciBzcGFucyBpbiAxMy40NzRzCmRzNDogY3VkYSBiYWNrZW5kIGluaXRpYWxpemVkIGZvciBncmFwaCBkaWFnbm9zdGljcwpkczQ6IHVzaW5nIEdQVSBncmFwaCBnZW5lcmF0aW9uIHdpdGggbGF5ZXItbWFqb3IgZ3JhcGggcHJlZmlsbApkczQ6IGdwdSBwcmVmaWxsIGxheWVyIDEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA1LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDcvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA4LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgOS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDEwLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDEzLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTQvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE2LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTcvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE5LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjAvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyMS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyNC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI1LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyNy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI4LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzMC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzMy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzUvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzgvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzOS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQwLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNDEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0Mi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQzLzQzDQpkczQ6IHByZWZpbGw6IDM0Ljg2IHQvcywgZ2VuZXJhdGlvbjogMjk5My4wNCB0L3MK",
+        "bytes": 2097,
+        "sha256": "56b706dbe2badbd2c3404b9b900ef31d3ec2ec6ea913fd2a692aa80ae0076841"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: warning: --think-max needs --ctx >= 393216; ctx=128 uses normal thinking instead\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: using GPU graph generation with layer-major graph prefill\nds4: gpu prefill layer 1/43\rds4: gpu prefill layer 2/43\rds4: gpu prefill layer 3/43\rds4: gpu prefill layer 4/43\rds4: gpu prefill layer 5/43\rds4: gpu prefill layer 6/43\rds4: gpu prefill layer 7/43\rds4: gpu prefill layer 8/43\rds4: gpu prefill layer 9/43\rds4: gpu prefill layer 10/43\rds4: gpu prefill layer 11/43\rds4: gpu prefill layer 12/43\rds4: gpu prefill layer 13/43\rds4: gpu prefill layer 14/43\rds4: gpu prefill layer 15/43\rds4: gpu prefill layer 16/43\rds4: gpu prefill layer 17/43\rds4: gpu prefill layer 18/43\rds4: gpu prefill layer 19/43\rds4: gpu prefill layer 20/43\rds4: gpu prefill layer 21/43\rds4: gpu prefill layer 22/43\rds4: gpu prefill layer 23/43\rds4: gpu prefill layer 24/43\rds4: gpu prefill layer 25/43\rds4: gpu prefill layer 26/43\rds4: gpu prefill layer 27/43\rds4: gpu prefill layer 28/43\rds4: gpu prefill layer 29/43\rds4: gpu prefill layer 30/43\rds4: gpu prefill layer 31/43\rds4: gpu prefill layer 32/43\rds4: gpu prefill layer 33/43\rds4: gpu prefill layer 34/43\rds4: gpu prefill layer 35/43\rds4: gpu prefill layer 36/43\rds4: gpu prefill layer 37/43\rds4: gpu prefill layer 38/43\rds4: gpu prefill layer 39/43\rds4: gpu prefill layer 40/43\rds4: gpu prefill layer 41/43\rds4: gpu prefill layer 42/43\rds4: gpu prefill layer 43/43\r\nds4: prefill: <rate> t/s, generation: <rate> t/s\n",
+      "stderr_normalized_sha256": "efddcfb49b02acc33fa63a1d86683533415fbe779f6a43e12d5ffffc964edf66",
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "backend=cuda",
+        "ds4: warning: --think-max needs --ctx >= 393216; ctx=128 uses normal thinking instead"
+      ],
+      "normalized_stderr_anchors": [],
+      "stdout_empty": false
+    },
+    {
+      "id": "seeded_sampling_nothink",
+      "mode": "seeded_sampling_nothink",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "2",
+        "--temp",
+        "0.7",
+        "--top-p",
+        "0.9",
+        "--min-p",
+        "0.05",
+        "--seed",
+        "12345",
+        "--nothink",
+        "-p",
+        "Answer with one adjective: ice."
+      ],
+      "prompt_file": null,
+      "prompt_base64": "QW5zd2VyIHdpdGggb25lIGFkamVjdGl2ZTogaWNlLg==",
+      "prompt_bytes": 31,
+      "prompt_sha256": "1cc030bf8c76309c791707b5794039315954d022a5dd944e7826210e6b3a9dfa",
+      "seed": 12345,
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": {
+        "base64": "Q29sZAo=",
+        "bytes": 5,
+        "sha256": "c72869b348ae66d5a5267de18ed40cd032dc13a908bc32ad10d30f4d1b550c39"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuNzczcwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MKZHM0OiBwcmVmaWxsOiA2MC45NCB0L3MsIGdlbmVyYXRpb246IDE4LjY3IHQvcwo=",
+        "bytes": 707,
+        "sha256": "60f3f88770f41dccca0a5da0d5785b97054549738e62040c4c42787f36d28bf9"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: prefill: <rate> t/s, generation: <rate> t/s\n",
+      "stderr_normalized_sha256": "a8b1e4a100f1cf04975e5c6b7bbb90a80e0373bd90b5c98a4caebfe7422182bc",
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "backend=cuda"
+      ],
+      "normalized_stderr_anchors": [
+        "ds4: prefill: <rate> t/s, generation: <rate> t/s"
+      ],
+      "stdout_empty": false
+    },
+    {
+      "id": "ctx_too_small",
+      "mode": "context_too_small",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "16",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink",
+        "-p",
+        "This prompt is intentionally long enough to exceed a tiny sixteen-token context window after chat wrapping."
+      ],
+      "prompt_file": null,
+      "prompt_base64": "VGhpcyBwcm9tcHQgaXMgaW50ZW50aW9uYWxseSBsb25nIGVub3VnaCB0byBleGNlZWQgYSB0aW55IHNpeHRlZW4tdG9rZW4gY29udGV4dCB3aW5kb3cgYWZ0ZXIgY2hhdCB3cmFwcGluZy4=",
+      "prompt_bytes": 107,
+      "prompt_sha256": "c552727b2e01a84e084dba52fcb056979b7b1d4b9ce94df6ce95db7f3293f322",
+      "seed": null,
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjEuODkgTWlCIChjdHg9MTYsIGJhY2tlbmQ9Y3VkYSwgcHJlZmlsbF9jaHVuaz0xNiwgcmF3X2t2X3Jvd3M9MjU2LCBjb21wcmVzc2VkX2t2X3Jvd3M9NikKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTMuMzY5cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MKZHM0OiB1c2luZyBHUFUgZ3JhcGggZ2VuZXJhdGlvbiB3aXRoIGxheWVyLW1ham9yIGdyYXBoIHByZWZpbGwKZHM0OiBwcm9tcHQgaXMgZW1wdHkgb3IgZXhjZWVkcyBjb250ZXh0IHNpemUK",
+        "bytes": 765,
+        "sha256": "fc129728498d8d4b1a5ff4f77915195d7da8510963d4958c568b38f6d8cbd485"
+      },
+      "stderr_normalized": "ds4: context buffers 21.89 MiB (ctx=16, backend=cuda, prefill_chunk=16, raw_kv_rows=256, compressed_kv_rows=6)\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: using GPU graph generation with layer-major graph prefill\nds4: prompt is empty or exceeds context size\n",
+      "stderr_normalized_sha256": "203566b67cb3eb49e8a721652726296bf5a1eeabab140da49309dc50420ad71b",
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "backend=cuda",
+        "ds4: using GPU graph generation",
+        "ds4: prompt is empty or exceeds context size"
+      ],
+      "normalized_stderr_anchors": [],
+      "stdout_empty": true
+    }
+  ],
+  "normalization": {
+    "stderr": "startup seconds and throughput rates are normalized; backend identity, warnings, generation path, and error categories are exact",
+    "stdout": "generated bytes and hashes are exact for committed current-C fixture"
+  }
+}

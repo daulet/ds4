@@ -3,9 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.12a Current-C CLI One-Shot Core Transcript Oracle
-- Last validated source commit: M8.12 split in this commit; prior pushed
-  source commit `963918425b2068b0d0e2eaae3f2a828dd75ba0ab`
+- Active item: M8.12b Current-C CLI One-Shot Runtime-Control Oracle
+- Last validated source commit: M8.12a current-C CLI one-shot core transcript
+  oracle in this commit; prior pushed source commit
+  `91694038a798e3f8f5630b1d9839852f30d5cf90`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1085,3 +1086,30 @@
   thinking-control, seeded-sampling, and context transcript capture, followed by
   M8.12b advanced runtime-control coverage for MTP, directional steering,
   quality, warm-weights, threads, and backend-option behavior.
+- M8.12a adds `ds4-parity/check_cli_generation_dump.py`, fixture
+  `ds4-parity/baselines/cli-fixtures/m8.12a/prompt_file.txt`, and the
+  current-C transcript artifact at
+  `ds4-parity/baselines/cli/m8.12a/current-c.json`.
+- M8.12a committed current-C artifact size is 25,651 bytes with SHA256
+  `d56ab4566471731abdb55769b23dceb9c9e42ad1d40ffc18bbb201a343861628`.
+- M8.12a captures five B300 CLI one-shot cases: greedy inline `--nothink`,
+  prompt-file `--think`, low-context `--think-max` downgrade warning, seeded
+  non-greedy sampling with seed `12345`, and a too-small-context error case.
+- M8.12a case stdout hashes are: `greedy_inline_nothink`
+  `862550215bb33a4e6f591f4c1c52fcd03dc98022f1acad87ce807f7d58b8c03c`,
+  `prompt_file_think`
+  `e566cf8e60978ac10a300c2503a68e03edd6d162fb11e2496057d57346660af0`,
+  `think_max_downgrade`
+  `c36d4b240ac10dcf300ba8d9d5aafc33957b8c1976c7f5ae2b26e654701e1b74`,
+  `seeded_sampling_nothink`
+  `c72869b348ae66d5a5267de18ed40cd032dc13a908bc32ad10d30f4d1b550c39`,
+  and `ctx_too_small`
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- M8.12a B300 validation passed after copying the uncommitted checker/fixture to
+  `/workspace/ds4`, running the capture/checker command, and then copying
+  `current-c.json` and `manifest.json` back. Local revalidation passed
+  `python3 ds4-parity/check_cli_generation_dump.py
+  ds4-parity/baselines/cli/m8.12a/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.12a/manifest.json --negative-test` with oracle
+  `PASS, 156 checks`, manifest `PASS, 17 checks`, and negative tests `PASS, 5
+  checks`.
