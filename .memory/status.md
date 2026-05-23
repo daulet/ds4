@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5 Rust Single-Token Decode Graph Scheduling
-- Last validated source commit: M10.4 current-C intermediate tensor checkpoint
-  oracle in this commit; prior pushed source commit
-  `a4d7fa4e58177aec42aed5e0ac0a38abd7495837`
+- Active item: M10.5b Rust Decode Call-Order And State Plan
+- Last validated source commit: M10.5a Rust GPU sys ABI surface in this commit;
+  prior pushed source commit `6e2dc0f5654dfa52ea84a739f67b9e32af93e94f`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,27 @@
 
 ## Last Evidence
 
+- M10.5a splits the broad one-token decode scheduler step into reviewable
+  ABI-surface, call-order/state-plan, and backend-execution stages before
+  M10.6 prefill. The completed ABI slice exposes all 81 M10.2 graph backend
+  primitives in `rust/ds4-gpu-sys/src/lib.rs`, adding 57 declarations beyond
+  the existing lifecycle/tensor/command/model-map surface.
+- M10.5a adds `ds4-parity/compare_gpu_sys_abi.py`, which compares the M10.2
+  operation oracle and current `ds4_gpu.h` signatures against
+  `ds4-gpu-sys`. The comparator checks every required operation's return type
+  and parameter ABI type sequence, and its negative test catches a missing Rust
+  declaration plus Rust-side and C-header parameter type drift.
+- M10.5a is wired into the unified parity report as
+  `M10.5a Rust GPU sys ABI comparator` and documented in
+  `ds4-parity/README.md`.
+- M10.5a validation passed `python3 ds4-parity/compare_gpu_sys_abi.py`,
+  `python3 ds4-parity/compare_gpu_sys_abi.py --negative-test`,
+  `python3 -m py_compile ds4-parity/compare_gpu_sys_abi.py
+  ds4-parity/run_parity_report.py`, `cargo test --workspace`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with `14 passed, 10
+  skipped, 0 failed`, `cargo fmt --all -- --check`, `git diff --check`, NUL
+  scan over touched files, and non-interactive Claude review with
+  `NO BLOCKERS`.
 - M10.4 adds `ds4-graph-checkpoint-dump` plus
   `ds4_dump_graph_checkpoint_oracle_json`, a current-C graph checkpoint dump
   path that exercises the normal C graph backend without changing production

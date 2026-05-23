@@ -171,6 +171,24 @@ compare selected f32 samples with the recorded tolerance. The MTP verifier
 entry is explicitly skipped when no support MTP model is available in the
 capture environment.
 
+Compare the Rust `ds4-gpu-sys` ABI declarations against the M10.2 operation
+oracle and `ds4_gpu.h`:
+
+```sh
+python3 ds4-parity/compare_gpu_sys_abi.py
+```
+
+Run its negative test before committing ABI-surface changes:
+
+```sh
+python3 ds4-parity/compare_gpu_sys_abi.py --negative-test
+```
+
+The ABI comparator checks that every graph backend primitive recorded in the
+M10.2 oracle is declared in Rust with matching return and parameter types. Its
+negative test removes one Rust declaration and mutates both Rust-side and
+C-header parameter types in memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

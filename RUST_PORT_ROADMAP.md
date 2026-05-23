@@ -3143,12 +3143,54 @@ Acceptance:
 - Validation gate: B300 checkpoint capture/checker, negative mutation test,
   `git diff --check`, and non-interactive Claude review with no blockers.
 
-#### M10.5: Rust Single-Token Decode Graph Scheduling
+#### M10.5a: Rust GPU Sys ABI Surface For Graph Primitives
+
+- Goal: expose the complete M10.2 graph backend primitive surface in
+  `ds4-gpu-sys` without scheduling model execution yet.
+- Oracle: M10.2 operation inventory plus the exact current `ds4_gpu.h`
+  signatures.
+- Fixture: all 81 backend operations recorded in
+  `baselines/graph/m10.2/graph-plan-inventory.json`.
+- Comparator: `compare_gpu_sys_abi.py` parses `ds4_gpu.h` and
+  `rust/ds4-gpu-sys/src/lib.rs`, then compares every Rust declaration's return
+  and parameter ABI types against the C signature.
+- Acceptance: every oracle operation has a Rust sys declaration with matching
+  return type and parameter type sequence, and synthetic missing/type-drift
+  mutations fail closed.
+- Drift policy: operation names, return ABI types, and parameter ABI types are
+  exact; no backend execution or tensor values are compared in this item.
+- Review gate: ask Claude to review the unsafe ABI surface and static
+  comparator.
+- Validation gate: ABI comparator with negative test, Python syntax check,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+
+#### M10.5b: Rust Decode Call-Order And State Plan
+
+- Goal: model one-token raw-SWA decode scheduling in Rust as an executable
+  plan/trace before launching backend kernels.
+- Oracle: C `metal_graph_eval_token_raw_swa`,
+  `metal_graph_encode_token_raw_swa`, `metal_graph_encode_decode_layer`, and
+  M10.4 decode checkpoint metadata.
+- Fixture: short first-token and continuation-token cases covering dense,
+  ratio-4 compressed/indexer, and ratio-128 compressed layers.
+- Comparator: Rust plan trace versus C-derived call order, command boundaries,
+  raw/compressed/indexer cache counter transitions, and tensor owner plan.
+- Acceptance: Rust emits the exact decode layer/head/output scheduling plan and
+  cache counter transitions needed for the B300 execution comparator, without
+  mutating backend state.
+- Drift policy: operation order, layer classification, token position, cache
+  counters, and command boundaries are exact; tensor values remain out of scope.
+- Review gate: ask Claude to review decode ordering and cache-state modeling.
+- Validation gate: targeted Rust tests, plan comparator with negative test,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+
+#### M10.5c: Rust Single-Token Decode Graph Execution
 
 - Goal: move one-token decode scheduling for the target model into Rust while
-  still calling the existing backend primitives through FFI.
-- Oracle: M10.4 decode checkpoints and C `metal_graph_eval_token_raw_swa`
-  command order.
+  calling the existing backend primitives through the M10.5a FFI surface.
+- Oracle: M10.4 decode checkpoints and the M10.5b call-order plan.
 - Fixture: official-vector first-token and continuation-token cases with raw
   SWA, ratio-4 compressed/indexer layers, ratio-128 compressed layers, and
   directional-steering disabled/enabled cases if available.
