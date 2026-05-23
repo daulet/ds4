@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.1 Runtime Graph Work Item Breakdown
-- Last validated source commit: M9.9 server parity report integration in this
-  commit; prior pushed source commit
-  `3b5532db0872e381a85c7fe21abef3c1eb291e9c`
+- Active item: M10.2 Backend Operation Inventory And Graph Plan Oracle
+- Last validated source commit: M10.1 runtime graph work item breakdown in
+  this commit; prior pushed source commit
+  `dd98399950d7c57a31b72b8cf0cbf4aa74feb730`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,24 @@
 
 ## Last Evidence
 
+- M10.1 split broad runtime graph orchestration into comparator-first work
+  items M10.2 through M10.9: backend operation inventory/graph plan oracle,
+  Rust backend trait and graph-plan surface, current-C intermediate tensor
+  checkpoint oracle, Rust single-token decode scheduling, Rust layer-major and
+  chunked prefill, Rust graph session state and payload parity, Rust MTP
+  draft/verifier orchestration, and end-to-end/benchmark closure.
+- M10.1 source review tied the split to current C graph paths:
+  `ds4_gpu_graph`, `metal_graph_alloc_raw_cap`,
+  `metal_graph_encode_layer_attention_batch`,
+  `metal_graph_encode_layer_ffn_batch`, `metal_graph_eval_token_raw_swa`,
+  `metal_graph_prefill_layer_major`, `metal_graph_prefill_chunked_range`,
+  `metal_graph_verify_decode2_exact`, `metal_graph_eval_mtp_draft`, and
+  speculative frontier snapshot/restore/commit helpers, plus backend primitive
+  groups in `ds4_gpu.h`.
+- M10.1 validation passed roadmap/TODO diff inspection, `git diff --check`, NUL
+  scan over touched files, and non-interactive Claude review with
+  `NO BLOCKERS`. Claude confirmed all named source paths exist, dependency
+  ordering is measurable, and no M10 graph responsibility is unassigned.
 - M9.9 adds `ds4-parity/run_server_parity_report.py`, wires it into
   `ds4-parity/run_parity_report.py`, documents it in `ds4-parity/README.md`,
   and adds `ds4-parity/check_runtime_kv_replay_summary.py` so the M9.8f5 B300

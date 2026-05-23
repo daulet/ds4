@@ -3049,6 +3049,217 @@ Acceptance:
 - `ds4-bench` throughput is compared against the same backend and model quant;
   any regression beyond the agreed threshold is documented before merge.
 
+### Milestone 10 Work Item Adjustment
+
+#### M10.1: Runtime Graph Work Item Breakdown
+
+- Goal: split Milestone 10 runtime graph orchestration parity into comparable
+  implementation and oracle-capture work items before moving graph ownership.
+- Oracle: current C `ds4_gpu_graph` allocation/execution paths in `ds4.c`,
+  backend primitives in `ds4_gpu.h`, existing graph diagnostics, and the broad
+  Milestone 10 acceptance gates above.
+- Fixture: roadmap/TODO state plus source evidence for graph allocation,
+  decode, prefill, compressed KV, session payload, MTP, and benchmark closure.
+- Comparator: documentation-only review that each M10.2+ item has an explicit
+  oracle, fixture, comparator, acceptance rule, drift policy, and validation
+  gate.
+- Acceptance: no M10 implementation item remains catch-all; graph shape,
+  backend coverage, tensor oracle capture, decode, prefill, KV/session state,
+  MTP, and end-to-end closure can be reviewed and validated independently.
+- Drift policy: docs/state-only; no runtime behavior changes.
+- Review gate: ask Claude to review whether the split is comparable and avoids
+  unmeasurable graph-port steps.
+- Validation gate: roadmap/TODO diff inspection, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+#### M10.2: Backend Operation Inventory And Graph Plan Oracle
+
+- Goal: capture a current-C oracle for the graph tensor plan, backend primitive
+  surface, and command-buffer boundaries that Rust must preserve.
+- Oracle: `ds4_gpu.h`, C call sites under `metal_graph_alloc_raw_cap`,
+  `metal_graph_encode_layer_attention_batch`,
+  `metal_graph_encode_layer_ffn_batch`, `metal_graph_eval_token_raw_swa`,
+  `metal_graph_prefill_chunked_range`, and MTP verifier helpers.
+- Fixture: graph plans for at least short, 2k, and 32k context settings; MTP
+  disabled/enabled where model files are available; `ds4_gpu.h` operation
+  inventory grouped by tensor allocation, model mapping, command buffers,
+  embeddings, attention, compressor, MoE, HC/output, and routing.
+- Comparator: machine-readable checker comparing the captured graph plan and
+  operation inventory against source-derived expectations and failing on
+  missing backend primitives or unassigned graph tensors.
+- Acceptance: every `ds4_gpu.h` primitive used by the graph has a named Rust
+  trait/facade target, every persistent/work tensor family has an owner group,
+  and command-buffer begin/end/synchronize boundaries are recorded before Rust
+  scheduling starts.
+- Drift policy: operation names, tensor families, context caps, compression
+  ratios, command boundaries, and MTP enablement are exact; pointer addresses,
+  timings, and allocation addresses are ignored.
+- Review gate: ask Claude to review inventory completeness against
+  `ds4_gpu.h` and graph call sites.
+- Validation gate: oracle checker with negative fixture, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+
+#### M10.3: Rust Backend Trait And Graph Plan Surface
+
+- Goal: add Rust graph-plan data structures and backend trait/facade coverage
+  for the full M10.2 operation inventory without executing a model graph yet.
+- Oracle: M10.2 graph plan and backend operation inventory.
+- Fixture: same context/MTP plan cases as M10.2 plus synthetic missing-op and
+  tensor-size mismatch cases.
+- Comparator: Rust tests and/or a parity script comparing serialized Rust graph
+  plans, tensor families, capacities, and trait coverage against the C oracle.
+- Acceptance: Rust can name and size the graph state C allocates, exposes a
+  backend facade for every required primitive, and fails closed when the C
+  inventory gains an unassigned primitive.
+- Drift policy: tensor names, capacities, compression caps, raw-window caps,
+  and operation names are exact; backend implementation remains FFI-backed.
+- Review gate: ask Claude to review trait completeness and whether the facade
+  hides backend-specific semantics.
+- Validation gate: targeted Rust graph-plan tests, inventory comparator,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+
+#### M10.4: Current-C Intermediate Tensor Checkpoint Oracle
+
+- Goal: add current-C checkpoint capture for selected graph tensors at decode,
+  prefill, compressed-KV, output-head, and MTP verification boundaries.
+- Oracle: C graph execution through `metal_graph_eval_token_raw_swa`,
+  `metal_graph_prefill_chunked_range`, `metal_graph_prefill_layer_major`, and
+  MTP verifier paths using the same GPU backend and model.
+- Fixture: official-vector prompt slices, a chunked long-context prompt slice,
+  cache continuation prompt slice, and MTP-enabled two-token draft case when
+  the support model is available.
+- Comparator: tensor checkpoint manifest and checker that compares shape,
+  dtype, row selection, counter values, hashes, and selected f32 tolerances
+  against fresh captures.
+- Acceptance: C can recapture deterministic enough intermediate checkpoints
+  for the next Rust decode/prefill stages, and nondeterministic long-context
+  rows are either excluded or explicitly marked hash-only/skip with evidence.
+- Drift policy: tensor shape, dtype, row index, layer, stage, and cache counters
+  are exact; f32 values use per-stage tolerances; timings and absolute paths are
+  normalized.
+- Review gate: ask Claude to review checkpoint coverage and nondeterminism
+  policy.
+- Validation gate: B300 checkpoint capture/checker, negative mutation test,
+  `git diff --check`, and non-interactive Claude review with no blockers.
+
+#### M10.5: Rust Single-Token Decode Graph Scheduling
+
+- Goal: move one-token decode scheduling for the target model into Rust while
+  still calling the existing backend primitives through FFI.
+- Oracle: M10.4 decode checkpoints and C `metal_graph_eval_token_raw_swa`
+  command order.
+- Fixture: official-vector first-token and continuation-token cases with raw
+  SWA, ratio-4 compressed/indexer layers, ratio-128 compressed layers, and
+  directional-steering disabled/enabled cases if available.
+- Comparator: Rust-vs-C intermediate tensor diffs, logits diffs, raw/compressed
+  cache counter comparisons, and command-boundary trace comparison.
+- Acceptance: Rust decode produces matching logits and selected intermediate
+  tensors for one token, updates raw/compressed/indexer counters like C, and
+  preserves command-buffer boundaries required by the backend.
+- Drift policy: scheduling order, cache counters, token position, and command
+  boundaries are exact; f32 tensor values follow M10.4 tolerances.
+- Review gate: ask Claude to review decode ordering, cache mutation, and unsafe
+  backend calls.
+- Validation gate: targeted decode comparator on B300, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+#### M10.6: Rust Layer-Major Prefill And Chunking
+
+- Goal: move layer-major and chunked prefill scheduling into Rust while keeping
+  backend operations FFI-backed.
+- Oracle: M10.4 prefill checkpoints plus C
+  `metal_graph_prefill_layer_major` and `metal_graph_prefill_chunked_range`.
+- Fixture: short whole-prefill prompt, boundary-crossing resume suffix, 2k+
+  chunked prompt, and long-context prompt slice.
+- Comparator: Rust-vs-C prefill tensor checkpoints, final logits, raw ring
+  physical/logical row mapping, compressed row counters, and progress/chunk
+  boundary traces.
+- Acceptance: Rust prefill matches C for whole, chunked, and resumed suffix
+  paths, including output-row selection and cache state after the final chunk.
+- Drift policy: chunk boundaries, raw ring mapping, compressed counters, and
+  selected logits are exact within M10.4 tolerances; progress timestamps are
+  normalized.
+- Review gate: ask Claude to review chunk boundary and resume-prefix handling.
+- Validation gate: targeted prefill comparator on B300, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+#### M10.7: Rust Graph Session State And Payload Parity
+
+- Goal: make Rust own graph session state needed by cache snapshots, disk KV
+  payloads, restore, and continued-frontier decisions.
+- Oracle: C session payload save/load paths, M7 session-payload fixtures, M0.5
+  KV artifacts, M9.8 runtime cache behavior, and graph state counters from
+  M10.5/M10.6.
+- Fixture: short and long checkpoints, raw-ring wrap cases, ratio-4 and
+  ratio-128 compressed states, restored disk KVC payloads, and continued-store
+  frontiers.
+- Comparator: session payload byte/field comparator, disk-KV replay comparator,
+  Rust-vs-C cache counter checks, and B300 restore smoke.
+- Acceptance: Rust graph state can save, restore, and continue sessions with
+  C-compatible payload bytes and M9.8 cache accounting while Rust owns decode
+  and prefill scheduling.
+- Drift policy: payload layout, counter fields, cache source, cached token
+  counts, and store/restore decisions are exact; raw payload hashes remain
+  normalized where existing policy requires.
+- Review gate: ask Claude to review payload compatibility and cache/frontier
+  invariants.
+- Validation gate: session payload comparator, KV replay comparator, B300
+  restore smoke, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and non-interactive Claude review with no blockers.
+
+#### M10.8: Rust MTP Draft And Verifier Orchestration
+
+- Goal: move MTP draft, exact N=2 verifier, prefix-1 commit, and speculative
+  frontier restore/rollback orchestration into Rust.
+- Oracle: C `metal_graph_eval_mtp_draft`,
+  `metal_graph_verify_decode2_exact`, `spec_frontier_snapshot`,
+  `spec_frontier_restore`, and `spec_frontier_commit_prefix1`.
+- Fixture: MTP disabled, first-draft miss, one-token accept, two-token accept,
+  verifier failure, prefix1 commit, and rollback cases on the B300 support
+  model path when available.
+- Comparator: accepted-token sequence comparison, frontier counter/tensor
+  checkpoint comparison, logits/top-id comparison, and visible output parity
+  for speculative argmax.
+- Acceptance: Rust speculative decode never changes the target output stream,
+  commits only verified prefixes, and restores graph state exactly on misses or
+  verifier failures.
+- Drift policy: accepted token sequence, frontier counters, rollback state, and
+  target logits are exact within M10.4 tolerances; probe logs and timings are
+  normalized.
+- Review gate: ask Claude to review state rollback and target-stream safety.
+- Validation gate: B300 MTP comparator, targeted Rust tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+#### M10.9: Runtime Graph End-To-End And Benchmark Closure
+
+- Goal: close Milestone 10 by routing the Rust runtime path through Rust-owned
+  graph scheduling and comparing end-to-end quality, long-context behavior, and
+  throughput.
+- Oracle: current C graph runtime on the same model/backend and committed M0.3,
+  M0.6, M9 server/cache artifacts.
+- Fixture: official vector logprob cases, long-context fact-recall prompt,
+  tool-call-quality prompts, M9 server requests, and short/long `ds4-bench`
+  benchmark prompts.
+- Comparator: Rust-runtime `ds4_test --logprob-vectors`,
+  `ds4_test --long-context`, `ds4_test --tool-call-quality`, server replay
+  comparators, and same-backend `ds4-bench` CSV comparator.
+- Acceptance: Rust graph runtime passes official-vector, long-context, and
+  tool-call-quality gates through the Rust path; server parity remains green;
+  benchmark regression beyond the agreed threshold is documented before merge.
+- Drift policy: behavioral outputs and cache accounting are exact; benchmark
+  throughput uses the M0.6 threshold policy and same model/backend/machine
+  identity.
+- Review gate: ask Claude to review end-to-end coverage and benchmark
+  comparability.
+- Validation gate: B300 Rust-runtime end-to-end suite, server parity report,
+  benchmark CSV comparator, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and non-interactive Claude review with no
+  blockers.
+
 ## Milestone 11: Agent Trace Replay
 
 Port the integrated coding agent only after runtime and server parity are
