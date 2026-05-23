@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.1 Server Surface Work Item Breakdown
-- Last validated source commit: M8.16 CLI parity report integration in this
-  commit; prior pushed source commit
-  `daf8af5f5bbc56884a40835ae4717476dc1b8e20`
+- Active item: M9.2 Server Request Parse And Prompt Render Surface
+- Last validated source commit: M9.1 server surface work item breakdown in
+  this commit; prior pushed source commit
+  `34f3025101e72475bb5f26e08fc4b48db0b70c5d`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1396,3 +1396,18 @@
 - M8.16 local validation also passed `python3 -m py_compile
   ds4-parity/run_cli_parity_report.py ds4-parity/run_parity_report.py`, full
   `cargo test --workspace`, and `git diff --check`.
+- M9.1 split Milestone 9 into concrete server parity items in
+  `RUST_PORT_ROADMAP.md` and `.memory/TODO.md`: request parse/render, HTTP
+  skeleton and model metadata, non-streaming chat runtime, streaming SSE,
+  OpenAI tool/DSML server surface, Responses/Anthropic protocols, cache/KV/tool
+  memory, and server report integration.
+- M9.1 source inspection found that `ds4_server.c` server scope includes
+  OpenAI chat, Responses, Anthropic, streaming deltas, CORS/preflight behavior,
+  thinking controls, stop lists, DSML/tool parsing, live tool-tail validation,
+  usage accounting, cache/KV restore, tool-memory replay, and eviction policy.
+- M9.1 baseline inspection confirmed M0.4 covers `models`, non-streaming chat,
+  streaming chat, tool calls, thinking-disabled chat, and memory-token cache
+  continuation, while M0.5 covers disk-KV seed miss/restore and continuation
+  restore with KV headers, rendered text, traces, and cache decisions.
+- M9.1 validation passed with source/fixture inspection, roadmap/board diff, and
+  `git diff --check`.
