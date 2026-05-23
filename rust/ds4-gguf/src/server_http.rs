@@ -228,6 +228,7 @@ fn reason_phrase(code: u16) -> &'static str {
         404 => "Not Found",
         409 => "Conflict",
         500 => "Internal Server Error",
+        503 => "Service Unavailable",
         _ => "Error",
     }
 }

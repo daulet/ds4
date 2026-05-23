@@ -2526,7 +2526,7 @@
 
 ### M9.3c1: No-Model Generation Error Dispatcher
 
-- Status: active
+- Status: done
 - Goal: add an in-memory no-model dispatcher that wires M9.3a/M9.3b helpers to
   generation-route parse/error handling without opening sockets or running
   generation.
@@ -2544,13 +2544,14 @@
 - Drift policy: exact response bytes for covered negative paths.
 - Review gate: ask Claude to review route-to-parser error mapping, unsupported
   generation handling, context-limit response body, and CORS propagation.
-- Validation needed: targeted Rust dispatcher tests, `cargo test --workspace`,
+- Validation passed: targeted `cargo test -p ds4-gguf server_no_model -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
   and `git diff --check`.
 - Owner path: Rust server HTTP route modules, `.memory/status.md`.
 
 ### M9.3c2: No-Model Server Binary And Socket Replay
 
-- Status: pending
+- Status: active
 - Goal: add a Rust `ds4-server-rs` binary that binds/listens, exposes server
   CLI startup flags needed by M9.3, wires M9.3c1 dispatch to accepted sockets,
   and shuts down deterministically in local replay tests.

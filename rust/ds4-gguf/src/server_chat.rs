@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    render_chat_prompt_text, render_live_tool_tail_text, render_tool_result_text, ChatMessage,
-    SamplingParams, ThinkMode, ToolArgument, ToolCall,
+    prompt::THINK_MAX_PREFIX, render_chat_prompt_text, render_live_tool_tail_text,
+    render_tool_result_text, ChatMessage, SamplingParams, ThinkMode, ToolArgument, ToolCall,
 };
 
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
@@ -65,6 +65,20 @@ pub struct AnthropicRequest {
     pub anthropic_live_suffix_text: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompletionRequest {
+    pub model: String,
+    pub prompt: String,
+    pub max_tokens: i32,
+    pub sampling: SamplingParams,
+    pub seed: u64,
+    pub stream: bool,
+    pub stream_include_usage: bool,
+    pub think_mode: ThinkMode,
+    pub stops: Vec<String>,
+    pub prompt_text: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResponsesLiveState {
     pub call_ids: Vec<String>,
@@ -117,6 +131,7 @@ pub enum ServerRequestErrorCategory {
     InvalidJson,
     MissingMessages,
     MissingInput,
+    MissingPrompt,
     UnsupportedDurableState,
     UnsupportedToolChoice,
     MissingResponsesContinuationState,
@@ -148,6 +163,13 @@ impl ServerRequestError {
         Self {
             category: ServerRequestErrorCategory::MissingInput,
             message: "missing input".to_string(),
+        }
+    }
+
+    fn missing_prompt() -> Self {
+        Self {
+            category: ServerRequestErrorCategory::MissingPrompt,
+            message: "missing prompt".to_string(),
         }
     }
 
@@ -333,6 +355,115 @@ pub fn parse_openai_chat_request(
         stops,
         prompt_text,
         prompt_preserves_reasoning,
+    })
+}
+
+pub fn parse_completion_core_request(
+    body: &str,
+    def_tokens: i32,
+    ctx_size: i32,
+) -> Result<CompletionRequest, ServerRequestError> {
+    let fields = JsonParser::new(body)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+
+    let mut model = DEFAULT_MODEL.to_string();
+    let mut prompt = None;
+    let mut max_tokens = def_tokens;
+    let mut sampling = SamplingParams::defaults();
+    let mut seed = 0_u64;
+    let mut stream = false;
+    let mut stream_include_usage = false;
+    let mut got_thinking = false;
+    let mut thinking_enabled = true;
+    let mut reasoning_effort = ThinkMode::High;
+    let mut stops = Vec::new();
+
+    for (key, _, value) in fields {
+        match key.as_str() {
+            "prompt" => {
+                prompt = Some(parse_completion_prompt(&value));
+            }
+            "model" => {
+                model = value
+                    .as_str()
+                    .ok_or_else(ServerRequestError::invalid_json)?
+                    .to_string();
+            }
+            "max_tokens" => {
+                max_tokens = json_int(&value).ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "temperature" => {
+                sampling.temperature =
+                    json_number(&value).ok_or_else(ServerRequestError::invalid_json)? as f32;
+            }
+            "top_p" => {
+                sampling.top_p =
+                    json_number(&value).ok_or_else(ServerRequestError::invalid_json)? as f32;
+            }
+            "min_p" => {
+                sampling.min_p =
+                    json_number(&value).ok_or_else(ServerRequestError::invalid_json)? as f32;
+            }
+            "top_k" => {
+                sampling.top_k = json_int(&value).ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "seed" => {
+                let value = json_number(&value).ok_or_else(ServerRequestError::invalid_json)?;
+                seed = if value > 0.0 { value as u64 } else { 0 };
+            }
+            "stream" => {
+                stream = value
+                    .as_bool()
+                    .ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "stream_options" => {
+                parse_stream_options(&value, &mut stream_include_usage)?;
+            }
+            "thinking" => {
+                parse_thinking_control(&value, &mut thinking_enabled)?;
+                got_thinking = true;
+            }
+            "reasoning_effort" => {
+                parse_reasoning_effort_value(&value, &mut reasoning_effort)?;
+            }
+            "think" => {
+                thinking_enabled = value
+                    .as_bool()
+                    .ok_or_else(ServerRequestError::invalid_json)?;
+                got_thinking = true;
+            }
+            "stop" => {
+                stops = parse_stop(&value)?;
+            }
+            _ => {}
+        }
+    }
+
+    let prompt = prompt.ok_or_else(ServerRequestError::missing_prompt)?;
+    if !got_thinking && model_alias_disables_thinking(&model) {
+        thinking_enabled = false;
+    }
+    if !got_thinking && model_alias_enables_thinking(&model) {
+        thinking_enabled = true;
+    }
+    let think_mode = think_mode_for_context(
+        think_mode_from_enabled(thinking_enabled, reasoning_effort),
+        ctx_size,
+    );
+    let prompt_text = render_completion_prompt_text(&prompt, think_mode);
+
+    Ok(CompletionRequest {
+        model,
+        prompt,
+        max_tokens,
+        sampling,
+        seed,
+        stream,
+        stream_include_usage,
+        think_mode,
+        stops,
+        prompt_text,
     })
 }
 
@@ -854,8 +985,23 @@ pub fn request_exceeds_context(n_prompt_tokens: usize, ctx_size: i32) -> bool {
 }
 
 pub fn openai_context_length_error_body(n_prompt_tokens: usize, ctx_size: i32) -> String {
+    openai_context_length_error_body_for_param(n_prompt_tokens, ctx_size, "messages")
+}
+
+pub fn openai_context_length_error_body_for_param(
+    n_prompt_tokens: usize,
+    ctx_size: i32,
+    param: &str,
+) -> String {
     format!(
-        "{{\"error\":{{\"message\":\"Prompt has {n_prompt_tokens} tokens, but the configured context size is {ctx_size} tokens\",\"type\":\"invalid_request_error\",\"param\":\"messages\",\"code\":\"context_length_exceeded\",\"n_prompt_tokens\":{n_prompt_tokens},\"n_ctx\":{ctx_size}}}}}\n"
+        "{{\"error\":{{\"message\":\"Prompt has {n_prompt_tokens} tokens, but the configured context size is {ctx_size} tokens\",\"type\":\"invalid_request_error\",\"param\":{},\"code\":\"context_length_exceeded\",\"n_prompt_tokens\":{n_prompt_tokens},\"n_ctx\":{ctx_size}}}}}\n",
+        json_escape_string(param)
+    )
+}
+
+pub fn anthropic_context_length_error_body(n_prompt_tokens: usize, ctx_size: i32) -> String {
+    format!(
+        "{{\"type\":\"error\",\"error\":{{\"type\":\"invalid_request_error\",\"message\":\"Prompt has {n_prompt_tokens} tokens, but the configured context size is {ctx_size} tokens\",\"n_prompt_tokens\":{n_prompt_tokens},\"n_ctx\":{ctx_size}}}}}\n"
     )
 }
 
@@ -875,6 +1021,34 @@ fn think_mode_from_enabled(enabled: bool, effort: ThinkMode) -> ThinkMode {
     } else {
         ThinkMode::High
     }
+}
+
+fn parse_completion_prompt(value: &JsonValue) -> String {
+    match value {
+        JsonValue::String(value) => value.clone(),
+        JsonValue::Array(values) => match values.first() {
+            Some(JsonValue::String(value)) => value.clone(),
+            _ => String::new(),
+        },
+        _ => String::new(),
+    }
+}
+
+fn render_completion_prompt_text(prompt: &str, think_mode: ThinkMode) -> String {
+    let mut out = String::new();
+    out.push_str("<｜begin▁of▁sentence｜>");
+    if think_mode == ThinkMode::Max {
+        out.push_str(THINK_MAX_PREFIX);
+    }
+    out.push_str("You are a helpful assistant<｜User｜>");
+    out.push_str(prompt);
+    out.push_str("<｜Assistant｜>");
+    out.push_str(if think_mode.enabled() {
+        "<think>"
+    } else {
+        "</think>"
+    });
+    out
 }
 
 fn parse_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestError> {

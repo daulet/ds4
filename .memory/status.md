@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.3c1 No-Model Generation Error Dispatcher
-- Last validated source commit: M9.3c split documentation in this commit;
-  prior pushed source commit `78fd030e2988691c4967d60d3f9e63329a521f2a`
+- Active item: M9.3c2 No-Model Server Binary And Socket Replay
+- Last validated source commit: M9.3c1 no-model generation error dispatcher
+  in this commit; prior pushed source commit
+  `369ff943f6bbf3b7ee7b6a7e67afa3c0ce6fd477`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,23 @@
 
 ## Last Evidence
 
+- M9.3c1 added `rust/ds4-gguf/src/server_no_model.rs` as a socket-free
+  dispatcher that combines M9.3a/M9.3b HTTP helpers with generation-route
+  parse/error handling.
+- M9.3c1 added Rust completion request parsing for `/v1/completions` negative
+  and no-model dispatch paths, including missing-prompt handling and C-shaped
+  completion prompt rendering.
+- M9.3c1 added API-specific context-length response bodies for OpenAI chat,
+  Responses, completions, and Anthropic messages, with injectable prompt-token
+  counting for future tokenizer-backed or replay-specific checks.
+- M9.3c1 route tests cover bad HTTP, preflight, model route reuse, bad JSON,
+  missing `messages`/`input`/`prompt`, unsupported durable state, unsupported
+  tool choice, per-API context-length bodies, CORS propagation, and valid
+  generation rejection through a 503 no-model JSON error.
+- M9.3c1 validation passed for targeted
+  `cargo test -p ds4-gguf server_no_model -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.3c was split before implementation because in-memory generation-route
   parser/error dispatch and socket/process replay have distinct oracles,
   fixture families, and validation gates.

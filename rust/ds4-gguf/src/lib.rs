@@ -11,6 +11,7 @@ pub mod prompt;
 pub mod sampling;
 pub mod server_chat;
 pub mod server_http;
+pub mod server_no_model;
 pub mod session_payload;
 mod tokenizer;
 
@@ -36,17 +37,22 @@ pub use sampling::{
     top_logprobs, SamplingParams, SamplingTrace, TokenScore,
 };
 pub use server_chat::{
-    openai_context_length_error_body, parse_anthropic_core_request,
-    parse_anthropic_core_request_with_live_state, parse_openai_chat_request,
-    parse_responses_core_request, parse_responses_core_request_with_live_state,
-    request_exceeds_context, think_mode_for_context, AnthropicLiveState, AnthropicRequest,
-    OpenAiChatRequest, ResponsesLiveState, ResponsesRequest, ServerRequestError,
-    ServerRequestErrorCategory, ToolSchemaOrder,
+    anthropic_context_length_error_body, openai_context_length_error_body,
+    openai_context_length_error_body_for_param, parse_anthropic_core_request,
+    parse_anthropic_core_request_with_live_state, parse_completion_core_request,
+    parse_openai_chat_request, parse_responses_core_request,
+    parse_responses_core_request_with_live_state, request_exceeds_context, think_mode_for_context,
+    AnthropicLiveState, AnthropicRequest, CompletionRequest, OpenAiChatRequest, ResponsesLiveState,
+    ResponsesRequest, ServerRequestError, ServerRequestErrorCategory, ToolSchemaOrder,
 };
 pub use server_http::{
     format_http_error, format_http_response, format_model_metadata_json, parse_http_request,
     route_no_model_http, route_no_model_request, HttpRequest, HttpRequestParseError,
     NoModelRouteConfig, DS4_MODEL_ID,
+};
+pub use server_no_model::{
+    route_no_model_server_http, route_no_model_server_http_with_prompt_tokens,
+    route_no_model_server_request, route_no_model_server_request_with_prompt_tokens,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 
