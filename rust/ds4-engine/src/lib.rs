@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::ffi::{c_char, c_float, c_int, c_void, CStr, CString, NulError};
 use std::fmt;
+use std::io::{self, Write};
 use std::ptr::NonNull;
 use std::slice;
 use std::time::Instant;
@@ -504,6 +505,25 @@ impl ChatSession<'_> {
         user_text: &str,
         options: InteractiveTurnOptions,
     ) -> GenerationResult {
+        let mut stdout = Vec::new();
+        match self.run_turn_to_writer(user_text, options, &mut stdout) {
+            Ok(exit_code) => GenerationResult { exit_code, stdout },
+            Err(err) => {
+                eprintln!("{err}");
+                GenerationResult {
+                    exit_code: 1,
+                    stdout,
+                }
+            }
+        }
+    }
+
+    pub fn run_turn_to_writer<W: Write>(
+        &mut self,
+        user_text: &str,
+        options: InteractiveTurnOptions,
+        writer: &mut W,
+    ) -> io::Result<i32> {
         let think_mode = options.think_mode.for_context(self.ctx_size);
         let rollback_len = self.transcript.len();
         if let Err(err) = self
@@ -511,10 +531,7 @@ impl ChatSession<'_> {
             .append_chat_message(&mut self.transcript, "user", user_text)
         {
             eprintln!("{err}");
-            return GenerationResult {
-                exit_code: 1,
-                stdout: Vec::new(),
-            };
+            return Ok(1);
         }
         self.engine
             .append_assistant_prefix(&mut self.transcript, think_mode);
@@ -554,10 +571,7 @@ impl ChatSession<'_> {
         if sync_rc != 0 {
             self.transcript.set_len(rollback_len);
             eprintln!("ds4: prompt processing failed: {}", c_error(&err));
-            return GenerationResult {
-                exit_code: sync_rc,
-                stdout: Vec::new(),
-            };
+            return Ok(sync_rc);
         }
         let prefill_elapsed = prefill_start.elapsed();
 
@@ -597,11 +611,11 @@ impl ChatSession<'_> {
                 )
             };
             if eval_rc != 0 {
+                let bytes = printer.into_bytes();
+                writer.write_all(&bytes)?;
+                writer.flush()?;
                 eprintln!("ds4: decode failed: {}", c_error(&err));
-                return GenerationResult {
-                    exit_code: eval_rc,
-                    stdout: printer.into_bytes(),
-                };
+                return Ok(eval_rc);
             }
             self.transcript.push(token);
             unsafe {
@@ -612,15 +626,15 @@ impl ChatSession<'_> {
         let decode_elapsed = decode_start.elapsed();
         printer.finish_generation();
         self.transcript.push(eos);
+        let bytes = printer.into_bytes();
+        writer.write_all(&bytes)?;
+        writer.flush()?;
         eprintln!(
             "ds4: prefill: {:.2} t/s, generation: {:.2} t/s",
             rate(suffix, prefill_elapsed),
             rate(generated, decode_elapsed)
         );
-        GenerationResult {
-            exit_code: 0,
-            stdout: printer.into_bytes(),
-        }
+        Ok(0)
     }
 }
 

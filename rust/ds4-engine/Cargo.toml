@@ -33,3 +33,7 @@ path = "src/bin/ds4-cli-one-shot-rs.rs"
 [[bin]]
 name = "ds4-interactive-runtime-rs"
 path = "src/bin/ds4-interactive-runtime-rs.rs"
+
+[[bin]]
+name = "ds4-cli-interactive-rs"
+path = "src/bin/ds4-cli-interactive-rs.rs"

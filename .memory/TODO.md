@@ -1989,7 +1989,7 @@
 
 ### M8.15c: Rust Interactive PTY Transcript Surface
 
-- Status: pending
+- Status: done
 - Goal: wire the Rust no-prompt CLI path into an interactive PTY surface and
   compare it to the M8.14 current-C transcript.
 - Source evidence needed: M8.14 PTY oracle, M8.15a reusable runtime, and M8.15b
@@ -2006,10 +2006,42 @@
   records it.
 - Review gate: ask Claude to review interactive state handling, PTY
   determinism, and transcript normalization.
-- Validation needed: PTY comparator with negative tests, B300 comparison run,
-  targeted Rust CLI tests, `cargo test --workspace`, and `git diff --check`.
+- Validation passed: local `cargo fmt --all -- --check`; local `cargo build -p
+  ds4-engine --bin ds4-cli-interactive-rs`; local `cargo test -p
+  ds4-engine`; local full `cargo test --workspace`; local `python3 -m
+  py_compile ds4-parity/compare_cli_interactive_pty.py
+  ds4-parity/check_cli_interactive_dump.py`; local `git diff --check`; B300
+  `cargo build -p ds4-engine --bin ds4-cli-interactive-rs` with
+  `CUDA_ARCH=native`; and B300 `python3
+  ds4-parity/compare_cli_interactive_pty.py
+  ds4-parity/baselines/cli/m8.14/current-c.json --candidate-binary
+  target/debug/ds4-cli-interactive-rs --write-candidate
+  /tmp/ds4-m8.15c-rust-pty.json --negative-test` (`CLI interactive PTY
+  comparator: PASS, 59 checks`; negative tests `PASS, 4 checks`).
 - Owner path: Rust CLI interactive path, PTY comparator, `ds4-parity/`,
   `.memory/status.md`.
+
+### M8.16: CLI Parity Report Integration
+
+- Status: pending
+- Goal: wire M8 CLI comparators and B300 refresh records into parity reports.
+- Source evidence needed: M8.2 through M8.15 fixtures, local comparator
+  commands, B300 recapture records, and PTY transcript records.
+- Oracle: committed M8.2 through M8.15 fixtures and refresh commands.
+- Fixture: M8 manifest entries, local comparator commands, B300 recapture
+  records, and PTY transcript records.
+- Comparator: a Milestone 8 report that runs all local CLI comparators,
+  summarizes first drift paths, and skips only model-backed B300 recaptures with
+  exact commands; the unified parity report includes that M8 report.
+- Acceptance: local report passes without the model, JSON output is
+  machine-readable, failures name fixture/field/expected/got where underlying
+  comparators provide it, and B300 refreshes are reproducible from the report.
+- Drift policy: report normalizes only capture paths and timestamps.
+- Review gate: ask Claude to review report integration and skipped-B300 command
+  fidelity.
+- Validation needed: M8 report, unified parity report, `py_compile`, `cargo
+  test --workspace`, and `git diff --check`.
+- Owner path: `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items
 
