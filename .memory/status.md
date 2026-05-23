@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.5b Model-Backed Streaming Chat Replay
-- Last validated source commit: M9.5a OpenAI chat SSE formatter and header
-  builder in this commit; prior pushed source commit
-  `00d808e303cfa4587ace762a3e5c545dd0b14b4a`
+- Active item: M9.6 Tool-Call And DSML Server Surface
+- Last validated source commit: M9.5b model-backed streaming chat replay in
+  this commit; prior pushed source commit
+  `e7b16aa35ff814ef6a4cb75af2eb44c313ce3a1e`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -40,8 +40,32 @@
   streaming hold tests `cargo test -p ds4-gguf decode_policy -- --nocapture`,
   full `cargo test --workspace`, `cargo fmt --all -- --check`, and
   `git diff --check`.
-- M9.5b now owns model-backed streaming routing, token chunk capture, B300
-  `chat_stream` replay, and trace validation through the M9.5a formatter.
+- M9.5b added model-backed streaming routing for supported OpenAI chat
+  requests, captured raw per-token text chunks from `ServerSession`, and fed
+  those chunks through the M9.5a formatter for SSE responses.
+- M9.5b converts token chunks into SSE deltas through the existing
+  `utf8_stream_safe_len` helper, preserving ordinary token boundaries while
+  holding split multi-byte UTF-8 bytes until they are safe to emit.
+- M9.5b keeps tools, thinking, and stop-list requests outside the streaming
+  path while preserving the existing non-streaming response behavior.
+- M9.5b local validation passed for targeted
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  targeted `cargo test -p ds4-gguf server_response -- --nocapture`,
+  decode-policy streaming hold tests
+  `cargo test -p ds4-gguf decode_policy -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.5b B300 validation used `/workspace/ds4-m95b` and model
+  `/workspace/ds4/ds4flash.gguf`; targeted runtime tests passed, and the
+  server replay on port `18198` normalized only IDs/timestamps while matching
+  M0.4 `chat_stream` SSE headers/body, deltas `stream` and ` baseline`, finish
+  `stop`, usage `11/2/13`, cache `0/11`, and one newline after `[DONE]`.
+- M9.5b B300 trace validation checked `stream: 1`, `prompt_tokens: 11`,
+  `stream_include_usage: 1`, `cache_source: none`, `generated_tokens: 2`, and
+  final content `stream baseline`. Artifacts remain in the pod at
+  `/tmp/ds4-m95b-server.trace`, `/tmp/ds4-m95b-server.stderr`, and
+  `/tmp/ds4-m95b-chat_stream.*`; the server process was stopped by the
+  validation script.
 - M9.4d added a reusable `ServerSession` path for model-backed server
   generation so `/v1/chat/completions` requests in one Rust server process can
   reuse the live token prefix from prior completions.

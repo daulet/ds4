@@ -220,6 +220,7 @@ pub struct ServerGenerationOptions {
 pub struct ServerGenerationResult {
     pub exit_code: i32,
     pub text: Vec<u8>,
+    pub token_texts: Vec<Vec<u8>>,
     pub prompt_tokens: i32,
     pub cache_read_tokens: i32,
     pub cache_write_tokens: i32,
@@ -455,6 +456,7 @@ impl Engine {
             return ServerGenerationResult {
                 exit_code: if rc == 0 { 1 } else { rc },
                 text: Vec::new(),
+                token_texts: Vec::new(),
                 prompt_tokens: prompt.len(),
                 cache_read_tokens: 0,
                 cache_write_tokens: prompt.len(),
@@ -479,6 +481,7 @@ impl Engine {
             return ServerGenerationResult {
                 exit_code: sync_rc,
                 text: Vec::new(),
+                token_texts: Vec::new(),
                 prompt_tokens: prompt.len(),
                 cache_read_tokens: 0,
                 cache_write_tokens: prompt.len(),
@@ -496,6 +499,7 @@ impl Engine {
         let mut rng = options.seed;
         let eos = unsafe { ds4_token_eos(self.raw.as_ptr()) };
         let mut text = Vec::new();
+        let mut token_texts = Vec::new();
         let mut completion_tokens = 0;
         let mut finish_reason = "length";
         while completion_tokens < max_tokens {
@@ -521,6 +525,7 @@ impl Engine {
                 return ServerGenerationResult {
                     exit_code: eval_rc,
                     text,
+                    token_texts,
                     prompt_tokens: prompt.len(),
                     cache_read_tokens: 0,
                     cache_write_tokens: prompt.len(),
@@ -530,15 +535,16 @@ impl Engine {
                     finish_reason: "error",
                 };
             }
-            unsafe {
-                append_token_text_bytes(self.raw.as_ptr(), &mut text, token);
-            }
+            let token_text = unsafe { token_text_bytes(self.raw.as_ptr(), token) };
+            text.extend_from_slice(&token_text);
+            token_texts.push(token_text);
             completion_tokens += 1;
         }
 
         ServerGenerationResult {
             exit_code: 0,
             text,
+            token_texts,
             prompt_tokens: prompt.len(),
             cache_read_tokens: 0,
             cache_write_tokens: prompt.len(),
@@ -812,6 +818,7 @@ impl ServerSession<'_> {
             return ServerGenerationResult {
                 exit_code: sync_rc,
                 text: Vec::new(),
+                token_texts: Vec::new(),
                 prompt_tokens: prompt.len(),
                 cache_read_tokens,
                 cache_write_tokens,
@@ -827,6 +834,7 @@ impl ServerSession<'_> {
         let mut rng = options.seed;
         let eos = self.engine.token_eos();
         let mut text = Vec::new();
+        let mut token_texts = Vec::new();
         let mut completion_tokens = 0;
         let mut finish_reason = "length";
         while completion_tokens < max_tokens && self.session.pos() < self.session.ctx() {
@@ -857,6 +865,7 @@ impl ServerSession<'_> {
                 return ServerGenerationResult {
                     exit_code: eval_rc,
                     text,
+                    token_texts,
                     prompt_tokens: prompt.len(),
                     cache_read_tokens,
                     cache_write_tokens,
@@ -866,15 +875,16 @@ impl ServerSession<'_> {
                     finish_reason: "error",
                 };
             }
-            unsafe {
-                append_token_text_bytes(self.engine.raw.as_ptr(), &mut text, token);
-            }
+            let token_text = unsafe { token_text_bytes(self.engine.raw.as_ptr(), token) };
+            text.extend_from_slice(&token_text);
+            token_texts.push(token_text);
             completion_tokens += 1;
         }
 
         ServerGenerationResult {
             exit_code: 0,
             text,
+            token_texts,
             prompt_tokens: prompt.len(),
             cache_read_tokens,
             cache_write_tokens,
@@ -1019,25 +1029,20 @@ unsafe extern "C" fn emit_generated_token(ud: *mut c_void, token: c_int) {
 }
 
 unsafe fn append_token_text(engine: *mut RawEngine, printer: &mut TokenPrinter, token: c_int) {
-    let mut len = 0usize;
-    let text = ds4_token_text(engine, token, &mut len);
-    if text.is_null() {
-        return;
-    }
-    let bytes = slice::from_raw_parts(text.cast::<u8>(), len);
-    printer.write_token_text(bytes);
-    free(text.cast());
+    let bytes = token_text_bytes(engine, token);
+    printer.write_token_text(&bytes);
 }
 
-unsafe fn append_token_text_bytes(engine: *mut RawEngine, out: &mut Vec<u8>, token: c_int) {
+unsafe fn token_text_bytes(engine: *mut RawEngine, token: c_int) -> Vec<u8> {
     let mut len = 0usize;
     let text = ds4_token_text(engine, token, &mut len);
     if text.is_null() {
-        return;
+        return Vec::new();
     }
     let bytes = slice::from_raw_parts(text.cast::<u8>(), len);
-    out.extend_from_slice(bytes);
+    let bytes = bytes.to_vec();
     free(text.cast());
+    bytes
 }
 
 unsafe extern "C" fn finish_generation(ud: *mut c_void) {

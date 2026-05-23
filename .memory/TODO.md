@@ -2787,7 +2787,7 @@
 
 ### M9.5b: Model-Backed Streaming Chat Replay
 
-- Status: active
+- Status: done
 - Goal: route supported streaming `/v1/chat/completions` requests through the
   Rust server runtime for the M0.4 `chat_stream` fixture, preserving per-token
   content deltas and usage reporting through the M9.5a formatter.
@@ -2809,14 +2809,20 @@
 - Review gate: ask Claude to review server streaming routing, token chunk
   capture, SSE flush/write behavior, unsupported-route boundaries,
   decode-policy coverage, usage accounting, and B300 comparator normalization.
-- Validation needed: B300 streaming comparator for `chat_stream`, targeted
-  runtime tests, decode-policy streaming hold tests, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, and `git diff --check`.
+- Validation passed: targeted runtime tests
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  targeted SSE formatter tests `cargo test -p ds4-gguf server_response -- --nocapture`,
+  decode-policy streaming hold tests
+  `cargo test -p ds4-gguf decode_policy -- --nocapture`, full
+  `cargo test --workspace`, B300 streaming replay for `chat_stream` from
+  `/workspace/ds4-m95b` using `/workspace/ds4/ds4flash.gguf`, B300 trace
+  streaming-field checks, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: Rust server runtime path, `ds4-parity/`, `.memory/status.md`.
 
 ### M9.6: Tool-Call And DSML Server Surface
 
-- Status: pending
+- Status: active
 - Goal: port OpenAI tool schema parsing, DSML prompt rendering, tool-call
   extraction, and tool-call response JSON for the server path.
 - Oracle: M0.4 `chat_tool_call`, `test_tool_call_quality`, DSML/tool parser

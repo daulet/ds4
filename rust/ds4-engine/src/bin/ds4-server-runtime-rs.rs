@@ -4,10 +4,11 @@ use ds4_engine::{
 };
 use ds4_gguf::{
     format_http_error, format_http_response, format_openai_chat_completion_http,
-    openai_context_length_error_body, parse_http_request, parse_openai_chat_request,
-    request_exceeds_context, route_no_model_server_request_with_generation_message, HttpRequest,
+    format_openai_chat_stream_http, openai_context_length_error_body, parse_http_request,
+    parse_openai_chat_request, request_exceeds_context,
+    route_no_model_server_request_with_generation_message, utf8_stream_safe_len, HttpRequest,
     HttpRequestParseError, NoModelRouteConfig, OpenAiChatCompletion, OpenAiChatRequest,
-    OpenAiUsage,
+    OpenAiChatStream, OpenAiUsage,
 };
 use std::env;
 use std::fs::File;
@@ -239,29 +240,52 @@ fn route_chat_completions(
             eprintln!("ds4-server-runtime-rs: failed to write trace: {err}");
         }
     }
-    format_openai_chat_completion_http(
-        config.enable_cors,
-        &OpenAiChatCompletion {
-            id: &id,
-            created: unix_timestamp(),
-            model: &parsed.model,
-            content: &content,
-            reasoning_content: None,
-            finish_reason: generated.finish_reason,
-            usage: OpenAiUsage::new(
-                generated.prompt_tokens,
-                generated.completion_tokens,
-                generated.cache_read_tokens,
-                generated.cache_write_tokens,
-            ),
-        },
-    )
+    let created = unix_timestamp();
+    let usage = OpenAiUsage::new(
+        generated.prompt_tokens,
+        generated.completion_tokens,
+        generated.cache_read_tokens,
+        generated.cache_write_tokens,
+    );
+    if parsed.stream {
+        let delta_strings = match stream_delta_strings(&generated) {
+            Ok(delta_strings) => delta_strings,
+            Err(()) => return format_http_error(config.enable_cors, 500, "generation failed"),
+        };
+        let content_deltas = delta_strings.iter().map(String::as_str).collect::<Vec<_>>();
+        format_openai_chat_stream_http(
+            config.enable_cors,
+            &OpenAiChatStream {
+                id: &id,
+                created,
+                model: &parsed.model,
+                content_deltas: &content_deltas,
+                finish_reason: generated.finish_reason,
+                usage: if parsed.stream_include_usage {
+                    Some(usage)
+                } else {
+                    None
+                },
+            },
+        )
+    } else {
+        format_openai_chat_completion_http(
+            config.enable_cors,
+            &OpenAiChatCompletion {
+                id: &id,
+                created,
+                model: &parsed.model,
+                content: &content,
+                reasoning_content: None,
+                finish_reason: generated.finish_reason,
+                usage,
+            },
+        )
+    }
 }
 
 fn unsupported_chat_generation_message(parsed: &OpenAiChatRequest) -> Option<&'static str> {
-    if parsed.stream {
-        Some("streaming chat generation is not implemented yet")
-    } else if parsed.has_tools {
+    if parsed.has_tools {
         Some("tool chat generation is not implemented yet")
     } else if map_think_mode(parsed.think_mode).enabled() {
         Some("thinking chat generation is not implemented yet")
@@ -270,6 +294,23 @@ fn unsupported_chat_generation_message(parsed: &OpenAiChatRequest) -> Option<&'s
     } else {
         None
     }
+}
+
+fn stream_delta_strings(generated: &ds4_engine::ServerGenerationResult) -> Result<Vec<String>, ()> {
+    let mut raw = Vec::new();
+    let mut emitted = 0;
+    let mut deltas = Vec::new();
+    for (index, token_text) in generated.token_texts.iter().enumerate() {
+        raw.extend_from_slice(token_text);
+        let final_chunk = index + 1 == generated.token_texts.len();
+        let safe_len = utf8_stream_safe_len(&raw, emitted, raw.len(), final_chunk);
+        if safe_len > emitted {
+            let delta = std::str::from_utf8(&raw[emitted..safe_len]).map_err(|_| ())?;
+            deltas.push(delta.to_string());
+            emitted = safe_len;
+        }
+    }
+    Ok(deltas)
 }
 
 fn write_chat_trace<W: Write>(
@@ -649,6 +690,8 @@ mod tests {
     const CHAT_THINKING_DISABLED: &str = include_str!(
         "../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_thinking_disabled.json"
     );
+    const CHAT_STREAM: &str =
+        include_str!("../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_stream.json");
     const CHAT_CACHE_CONTINUATION: &str = include_str!(
         "../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json"
     );
@@ -808,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn m94c_allows_only_no_cache_non_streaming_non_thinking_chat() {
+    fn m95b_allows_only_supported_no_tool_non_thinking_chat() {
         assert_eq!(
             unsupported_chat_generation_message(&parse_chat(CHAT_BASIC)),
             None
@@ -818,10 +861,8 @@ mod tests {
             None
         );
         assert_eq!(
-            unsupported_chat_generation_message(&parse_chat(
-                r#"{"messages":[{"role":"user","content":"hi"}],"stream":true}"#
-            )),
-            Some("streaming chat generation is not implemented yet")
+            unsupported_chat_generation_message(&parse_chat(CHAT_STREAM)),
+            None
         );
         assert_eq!(
             unsupported_chat_generation_message(&parse_chat(
@@ -844,11 +885,46 @@ mod tests {
     }
 
     #[test]
+    fn stream_delta_strings_preserve_token_boundaries() {
+        let generated = ds4_engine::ServerGenerationResult {
+            exit_code: 0,
+            text: b"stream baseline".to_vec(),
+            token_texts: vec![b"stream".to_vec(), b" baseline".to_vec()],
+            prompt_tokens: 11,
+            cache_read_tokens: 0,
+            cache_write_tokens: 11,
+            live_tokens_before: 0,
+            live_prompt_common: 0,
+            completion_tokens: 2,
+            finish_reason: "stop",
+        };
+        assert_eq!(
+            stream_delta_strings(&generated).unwrap(),
+            vec!["stream".to_string(), " baseline".to_string()]
+        );
+
+        let split_utf8 = ds4_engine::ServerGenerationResult {
+            text: "€".as_bytes().to_vec(),
+            token_texts: vec![vec![0xe2], vec![0x82, 0xac]],
+            completion_tokens: 2,
+            ..generated.clone()
+        };
+        assert_eq!(stream_delta_strings(&split_utf8).unwrap(), vec!["€"]);
+
+        let invalid = ds4_engine::ServerGenerationResult {
+            token_texts: vec![vec![0xff]],
+            ..generated
+        };
+        assert!(stream_delta_strings(&invalid).is_err());
+    }
+
+    #[test]
     fn trace_reports_memory_token_cache_reuse() {
         let parsed = parse_chat(CHAT_CACHE_CONTINUATION);
         let generated = ds4_engine::ServerGenerationResult {
             exit_code: 0,
             text: b"cache continued".to_vec(),
+            token_texts: vec![b"cache".to_vec(), b" continued".to_vec()],
             prompt_tokens: 50,
             cache_read_tokens: 41,
             cache_write_tokens: 9,
