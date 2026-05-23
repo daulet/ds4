@@ -4,9 +4,16 @@ edition.workspace = true
 version.workspace = true
 publish.workspace = true
 
+[dependencies]
+ds4-gguf = { path = "../ds4-gguf" }
+
 [lib]
 path = "src/lib.rs"
 
 [[bin]]
 name = "ds4-inspect-runtime-rs"
 path = "src/bin/ds4-inspect-runtime-rs.rs"
+
+[[bin]]
+name = "ds4-cli-inspect-rs"
+path = "src/bin/ds4-cli-inspect-rs.rs"

@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.9b Rust CLI Inspect Output Surface
-- Last validated source commit: M8.9a Rust inspect runtime boundary in this
+- Active item: M8.10 Current-C CLI Imatrix Capture Oracle
+- Last validated source commit: M8.9b Rust CLI inspect output surface in this
   commit; prior pushed source commit
-  `2784324addfe346169d3414ce86e8ab788a1a593`
+  `514c59e002f2e60c81f4b3e850981ff5ea511599`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1034,3 +1034,23 @@
   ds4-parity/baselines/cli/m8.8/current-c.json --candidate-binary
   target/debug/ds4-inspect-runtime-rs --negative-test` (`CLI inspect runtime
   comparator: PASS, 68 checks`; negative tests `PASS, 5 checks`).
+- M8.9b adds `ds4-cli-inspect-rs`, which routes parsed Rust CLI `--inspect`
+  configuration through the M8.9a `Engine` boundary instead of replaying the
+  M8.8 JSON artifact.
+- M8.9b extends `CliConfig` so the Rust parser preserves inspect dispatch,
+  backend selection, `--warm-weights`, and `--quality` for runtime-boundary
+  consumers while keeping non-inspect model-backed paths stubbed.
+- M8.9b updates `ds4-parity/compare_cli_inspect_runtime.py` with
+  `--use-case-argv`, so the comparator can run the exact committed M8.8 CLI
+  argv through the Rust binary, including prompt/control flags that current C
+  ignores in inspect mode.
+- M8.9b local validation passed for `cargo fmt --all -- --check`, `cargo test
+  -p ds4-gguf cli_parse::tests::config_retains_inspect_backend_and_runtime_flags`,
+  `cargo test -p ds4-engine`, `cargo test --workspace`, `python3 -m py_compile
+  ds4-parity/compare_cli_inspect_runtime.py`, and `git diff --check`.
+- M8.9b B300 validation used the temporary Rust 1.95.0 toolchain under
+  `/tmp/ds4-cargo` and `/tmp/ds4-rustup`, built `ds4-cli-inspect-rs`, and
+  passed `python3 ds4-parity/compare_cli_inspect_runtime.py
+  ds4-parity/baselines/cli/m8.8/current-c.json --candidate-binary
+  target/debug/ds4-cli-inspect-rs --use-case-argv --negative-test` (`CLI
+  inspect comparator: PASS, 68 checks`; negative tests `PASS, 5 checks`).

@@ -19,6 +19,10 @@ pub struct CliConfig {
     pub model_path: String,
     pub prompt: Option<String>,
     pub dump_tokens: bool,
+    pub inspect: bool,
+    pub backend: CliBackend,
+    pub warm_weights: bool,
+    pub quality: bool,
 }
 
 impl Default for CliConfig {
@@ -27,6 +31,27 @@ impl Default for CliConfig {
             model_path: "ds4flash.gguf".to_string(),
             prompt: None,
             dump_tokens: false,
+            inspect: false,
+            backend: CliBackend::default_backend(),
+            warm_weights: false,
+            quality: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CliBackend {
+    Metal,
+    Cuda,
+    Cpu,
+}
+
+impl CliBackend {
+    const fn default_backend() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Metal
+        } else {
+            Self::Cuda
         }
     }
 }
@@ -276,7 +301,7 @@ where
                     Ok(value) => value,
                     Err(result) => return Err(result),
                 };
-                if !matches!(value, "metal" | "cuda" | "cpu") {
+                let Some(backend) = parse_backend(value) else {
                     return Err(exit(
                         2,
                         "",
@@ -285,7 +310,8 @@ where
                              ds4: valid backends are: metal, cuda, cpu\n"
                         ),
                     ));
-                }
+                };
+                state.config.backend = backend;
             }
             "--cpu"
             | "--metal"
@@ -301,11 +327,16 @@ where
             | "--metal-graph-full-test"
             | "--metal-graph-prompt-test"
             | "--inspect"
-            | "--warm-weights" => {
-                if arg == "--dump-tokens" {
-                    state.config.dump_tokens = true;
-                }
-            }
+            | "--warm-weights" => match arg {
+                "--cpu" => state.config.backend = CliBackend::Cpu,
+                "--metal" => state.config.backend = CliBackend::Metal,
+                "--cuda" => state.config.backend = CliBackend::Cuda,
+                "--quality" => state.config.quality = true,
+                "--dump-tokens" => state.config.dump_tokens = true,
+                "--inspect" => state.config.inspect = true,
+                "--warm-weights" => state.config.warm_weights = true,
+                _ => {}
+            },
             "--metal-graph-generate" => {
                 return Err(exit(
                     2,
@@ -390,6 +421,15 @@ fn parse_float_range(s: &str, min: f32, max: f32) -> Option<f32> {
     (v.is_finite() && v >= min && v <= max).then_some(v)
 }
 
+fn parse_backend(value: &str) -> Option<CliBackend> {
+    match value {
+        "metal" => Some(CliBackend::Metal),
+        "cuda" => Some(CliBackend::Cuda),
+        "cpu" => Some(CliBackend::Cpu),
+        _ => None,
+    }
+}
+
 fn exit(exit_code: i32, stdout: &str, stderr: &str) -> CliParseResult {
     CliParseResult {
         action: CliParseAction::Exit,
@@ -462,5 +502,27 @@ mod tests {
         assert_eq!(config.model_path, "tokenizer.gguf");
         assert_eq!(config.prompt.as_deref(), Some("prompt text"));
         assert!(config.dump_tokens);
+        assert!(!config.inspect);
+    }
+
+    #[test]
+    fn config_retains_inspect_backend_and_runtime_flags() {
+        let config = parse_cli_config([
+            "--inspect",
+            "--backend",
+            "cuda",
+            "--warm-weights",
+            "--quality",
+            "-m",
+            "model.gguf",
+        ])
+        .expect("valid inspect config");
+
+        assert_eq!(config.model_path, "model.gguf");
+        assert_eq!(config.backend, CliBackend::Cuda);
+        assert!(config.inspect);
+        assert!(config.warm_weights);
+        assert!(config.quality);
+        assert!(!config.dump_tokens);
     }
 }

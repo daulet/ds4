@@ -1487,7 +1487,7 @@
 
 ### M8.9b: Rust CLI Inspect Output Surface
 
-- Status: pending
+- Status: done
 - Goal: route Rust CLI `--inspect` handling through the M8.9a runtime boundary.
 - Source evidence needed: committed M8.8 inspect fixture, M8.9a runtime
   comparator, and Rust CLI parse/dispatch code.
@@ -1502,11 +1502,45 @@
 - Drift policy: path, backend progress, and startup-timing normalization only.
 - Review gate: ask Claude to review dispatch exclusivity and output
   normalization.
-- Validation needed: comparator with negative tests, targeted Rust CLI tests,
-  B300 comparison when required, `cargo test --workspace`, and
-  `git diff --check`.
+- Validation passed: local `cargo fmt --all -- --check`, local `cargo test
+  -p ds4-gguf cli_parse::tests::config_retains_inspect_backend_and_runtime_flags`,
+  local `cargo test -p ds4-engine`, local `cargo test --workspace`, local
+  `python3 -m py_compile ds4-parity/compare_cli_inspect_runtime.py`, local
+  `git diff --check`, B300 `cargo test -p ds4-gguf
+  cli_parse::tests::config_retains_inspect_backend_and_runtime_flags`, B300
+  `cargo test -p ds4-engine`, B300 `cargo build -p ds4-engine --bin
+  ds4-cli-inspect-rs`, and B300
+  `python3 ds4-parity/compare_cli_inspect_runtime.py
+  ds4-parity/baselines/cli/m8.8/current-c.json --candidate-binary
+  target/debug/ds4-cli-inspect-rs --use-case-argv --negative-test` (`CLI
+  inspect comparator: PASS, 68 checks`; negative tests `PASS, 5 checks`).
 - Owner path: Rust CLI inspect path, CLI inspect comparator, `ds4-parity/`,
   `.memory/status.md`.
+
+### M8.10: Current-C CLI Imatrix Capture Oracle
+
+- Status: pending
+- Goal: capture the current-C CLI imatrix execution mode.
+- Source evidence needed: current `./ds4 --imatrix-dataset --imatrix-out`
+  behavior, fixed imatrix dataset, B300 model/backend identity, imatrix limit
+  flags, output file metadata, and stderr/progress categories.
+- Oracle: current `./ds4 --imatrix-dataset --imatrix-out` on the recorded B300
+  model.
+- Fixture: fixed imatrix dataset, output `.dat` file hash/size, `--ctx`,
+  `--imatrix-max-prompts`, `--imatrix-max-tokens`, backend/model identity,
+  progress stderr categories, and exact B300 refresh commands.
+- Comparator: schema/hash checker for output file metadata, prompt/token limit
+  accounting, exit status, stderr categories, and refresh commands.
+- Acceptance: output file hash/size and limit accounting match current C for
+  the fixed dataset; invalid coupling remains covered by M8.2.
+- Drift policy: timing/progress counters and workspace paths may be normalized;
+  output bytes, limit semantics, model identity, and exit status are exact.
+- Review gate: ask Claude to review imatrix dataset coverage and limit
+  semantics.
+- Validation needed: B300 capture or exact skipped recapture command, local
+  checker with negative tests, and `git diff --check`.
+- Owner path: CLI imatrix oracle artifacts, `ds4-parity/`,
+  `ds4-parity/baselines/cli/`, `.memory/status.md`.
 
 ## Later Items
 

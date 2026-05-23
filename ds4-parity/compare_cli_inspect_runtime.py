@@ -103,16 +103,25 @@ def case_backend(argv: list[Any]) -> str:
     raise ValueError(f"case argv has no backend: {argv!r}")
 
 
-def run_candidate(binary: Path, model_path: str, raw_case: dict[str, Any]) -> CandidateOutput:
-    backend = case_backend(require_list(Report(), raw_case.get("argv"), f"{raw_case.get('id')}.argv"))
-    argv = (
-        str(binary),
-        "--backend",
-        backend,
-        "--model",
-        model_path,
-        "--inspect",
-    )
+def run_candidate(
+    binary: Path,
+    model_path: str,
+    raw_case: dict[str, Any],
+    use_case_argv: bool,
+) -> CandidateOutput:
+    if use_case_argv:
+        raw_argv = require_list(Report(), raw_case.get("argv"), f"{raw_case.get('id')}.argv")
+        argv = tuple([str(binary), *(str(arg) for arg in raw_argv)])
+    else:
+        backend = case_backend(require_list(Report(), raw_case.get("argv"), f"{raw_case.get('id')}.argv"))
+        argv = (
+            str(binary),
+            "--backend",
+            backend,
+            "--model",
+            model_path,
+            "--inspect",
+        )
     env = os.environ.copy()
     env["LC_ALL"] = "C"
     proc = subprocess.run(
@@ -132,7 +141,7 @@ def run_candidate(binary: Path, model_path: str, raw_case: dict[str, Any]) -> Ca
     )
 
 
-def capture_candidates(binary: Path, obj: Any) -> dict[str, CandidateOutput]:
+def capture_candidates(binary: Path, obj: Any, use_case_argv: bool) -> dict[str, CandidateOutput]:
     root = obj if isinstance(obj, dict) else {}
     model = root.get("model") if isinstance(root.get("model"), dict) else {}
     model_path = model.get("path")
@@ -145,7 +154,7 @@ def capture_candidates(binary: Path, obj: Any) -> dict[str, CandidateOutput]:
     for raw_case in cases:
         if not isinstance(raw_case, dict):
             continue
-        output = run_candidate(binary, model_path, raw_case)
+        output = run_candidate(binary, model_path, raw_case, use_case_argv)
         outputs[output.case_id] = output
     return outputs
 
@@ -236,13 +245,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact", nargs="?", type=Path, default=BASELINE)
     parser.add_argument("--candidate-binary", type=Path, default=DEFAULT_CANDIDATE)
+    parser.add_argument("--use-case-argv", action="store_true")
     parser.add_argument("--negative-test", action="store_true")
     args = parser.parse_args()
 
     obj = load_json(args.artifact)
-    outputs = capture_candidates(args.candidate_binary, obj)
+    outputs = capture_candidates(args.candidate_binary, obj, args.use_case_argv)
     report = compare_dump(obj, outputs)
-    print_report("CLI inspect runtime comparator", report)
+    label = "CLI inspect comparator" if args.use_case_argv else "CLI inspect runtime comparator"
+    print_report(label, report)
     ok = report.ok
     if args.negative_test:
         negative = run_negative_tests(obj, outputs)
