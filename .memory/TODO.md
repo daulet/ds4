@@ -2152,7 +2152,7 @@
 
 ### M9.2c: Responses And Anthropic Request Parse Surface
 
-- Status: active
+- Status: split into M9.2c1, M9.2c2, and M9.2c3 before implementation
 - Goal: port model-free Responses and Anthropic request parsing/rendering inputs
   while leaving response/event emission for M9.7.
 - Oracle: C `parse_responses_request`, `parse_anthropic_request`,
@@ -2166,16 +2166,106 @@
   reasoning requirements, usage-relevant flags, and stream flags.
 - Acceptance: Rust matches current C request semantics for Responses and
   Anthropic without opening sockets, emitting protocol responses, or loading the
-  model.
+  model. M9.2c parser tests use no-op/stub server state for validation paths;
+  KV/tool-memory replay side effects from `kv_cache_restore_tool_memory_for_messages`
+  and `tool_memory_attach_to_messages` are explicitly deferred to M9.8.
 - Drift policy: exact for semantic fields, validation categories, prompt bytes,
   and live-tail text; random IDs and response timestamps are out of scope here.
 - Review gate: ask Claude to review protocol-specific state, reasoning replay
   requirements, namespace tool schema restoration, and Anthropic tool-result ID
   validation.
-- Validation needed: targeted Rust protocol parser tests, `cargo test
-  --workspace`, and `git diff --check`.
+- Validation needed: source inspection, roadmap/board diff, and `git
+  diff --check`.
 - Owner path: Rust server protocol parser modules, `ds4-parity/`,
   `.memory/status.md`.
+
+### M9.2c1: Responses Core Input And Reasoning Parse Surface
+
+- Status: active
+- Goal: port model-free Responses API core request parsing for `input`,
+  `instructions`, scalar generation controls, reasoning effort/summary flags,
+  durable-state rejection, and prompt rendering, excluding tool-output
+  live-tail validation and tool schemas loaded from input tool-search results.
+- Oracle: C `parse_responses_request`, `parse_responses_reasoning`,
+  string/array `input` handling, `instructions` system prepend, model alias
+  thinking fallbacks, and `previous_response_id`/`conversation` rejection
+  branches.
+- Fixture: unit vectors for bare string input, message input arrays,
+  instructions prepend, `reasoning.effort`/`reasoning.summary`, tool-choice
+  unsupported categories, and durable-state non-null errors.
+- Comparator: Rust unit tests comparing normalized request fields, rendered
+  prompt bytes, stream flags, reasoning summary emit flag, thinking mode,
+  generation controls, and stable error categories.
+- Acceptance: Rust matches current C Responses core request semantics without
+  live tool-state validation, protocol response emission, sockets, or model
+  loading. Top-level `tools` can participate in prompt rendering here, but
+  tool schemas loaded from input items and the final combined-schema merge are
+  completed in M9.2c2.
+- Drift policy: exact for prompt bytes and semantic fields; stable-category
+  comparison for durable-state and unsupported tool-choice error strings.
+- Review gate: ask Claude to review Responses core field coverage, reasoning
+  controls, instructions ordering, durable-state rejection, and prompt bytes.
+- Validation needed: targeted Rust Responses core parser tests, `cargo test
+  --workspace`, and `git diff --check`.
+- Owner path: Rust server protocol parser modules, `.memory/status.md`.
+
+### M9.2c2: Responses Tool Output And Live-Tail Parse Surface
+
+- Status: pending
+- Goal: port model-free Responses tool-output/function-call input handling,
+  tool-search output schema loading, namespace tool schema restoration, and
+  live-tail validation categories, building on M9.2c1.
+- Oracle: C `parse_responses_input`, `parse_responses_input_item`,
+  `responses_validate_tool_outputs`, `responses_prepare_live_continuation`,
+  namespace tool schema helpers, and related unit vectors.
+- Fixture: unit vectors for `function_call`, `function_call_output`,
+  `tool_search_call`, `tool_search_result`, namespace tools, malformed
+  tool-search payloads, missing live tool state, and reasoning replay
+  requirements.
+- Comparator: Rust unit tests comparing parsed messages, loaded tool schemas,
+  namespace/wire names, live-tail suffix text, validation categories, and
+  reasoning/tool-state requirement flags.
+- Acceptance: Rust matches current C Responses tool-input semantics without
+  emitting Responses protocol events or running generation. Tests use no-op
+  server state for live validation; actual KV/tool-memory replay side effects
+  remain assigned to M9.8.
+- Drift policy: exact for schema names, namespace/wire names, prompt/live-tail
+  bytes, validation categories, and requirement flags.
+- Review gate: ask Claude to review tool-output validation, namespace schema
+  restoration, tool-search loading, and live-tail construction.
+- Validation needed: targeted Rust Responses tool parser tests, `cargo test
+  --workspace`, and `git diff --check`.
+- Owner path: Rust server protocol parser modules, `.memory/status.md`.
+
+### M9.2c3: Anthropic Message And Tool Result Parse Surface
+
+- Status: pending
+- Goal: port model-free Anthropic request parsing for system/content blocks,
+  tools, tool choice, stop sequences, thinking controls, tool-use/tool-result
+  messages, and live-tail validation.
+- Oracle: C `parse_anthropic_request`, `parse_anthropic_system`,
+  `parse_anthropic_system_object`, `parse_anthropic_content`,
+  `parse_anthropic_messages`, `anthropic_validate_tool_results`, and
+  `anthropic_prepare_live_continuation`.
+- Fixture: unit vectors for string and block system prompts, text content
+  arrays, tool_use/tool_result blocks, private system filtering,
+  `tool_choice.type`, `stop_sequences`, `output_config.effort`, bare
+  `reasoning_effort`, missing live tool state, and live tool-result suffix
+  rendering.
+- Comparator: Rust unit tests comparing normalized request fields, rendered
+  prompt/live-tail bytes, stop lists, thinking mode, tool schemas,
+  validation categories, and Anthropic live-state requirement flags.
+- Acceptance: Rust matches current C Anthropic request semantics without
+  emitting Anthropic protocol events, sockets, or model loading. Tests use
+  no-op server state for live validation; actual KV/tool-memory replay side
+  effects remain assigned to M9.8.
+- Drift policy: exact for prompt/live-tail bytes and semantic fields;
+  stable-category comparison for live-state validation errors.
+- Review gate: ask Claude to review Anthropic block parsing, private system
+  filtering, tool-result ID validation, and live-tail construction.
+- Validation needed: targeted Rust Anthropic parser tests, `cargo test
+  --workspace`, and `git diff --check`.
+- Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.3: Rust HTTP Skeleton And Model Metadata Endpoints
 

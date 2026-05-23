@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c Responses And Anthropic Request Parse Surface
-- Last validated source commit: M9.2b OpenAI tool schema and DSML prompt
-  rendering in this commit; prior pushed source commit
-  `b29188c287e02956c9199c7b02b3cdab3016e813`
+- Active item: M9.2c1 Responses Core Input And Reasoning Parse Surface
+- Last validated source commit: M9.2c protocol request parse split in this
+  commit; prior pushed source commit
+  `d9600cda1d32944ca9cb64ad575e2fa2b8c37546`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,23 @@
 
 ## Last Evidence
 
+- M9.2c was split before implementation because Responses core input/reasoning,
+  Responses tool-output/live-tail validation, and Anthropic content/tool-result
+  parsing have distinct oracle surfaces, fixtures, validation categories, and
+  prompt/live-tail comparators.
+- M9.2c split review initially found boundary gaps; the split now explicitly
+  defers KV/tool-memory replay side effects to M9.8, makes M9.2c2 depend on
+  M9.2c1 for combined Responses tool schemas, names `parse_anthropic_system`
+  and `parse_anthropic_system_object`, and includes Anthropic bare
+  `reasoning_effort` coverage.
+- M9.2c1 now owns Responses core `input`, `instructions`, scalar generation
+  controls, reasoning effort/summary flags, durable-state rejection, and prompt
+  rendering without live tool-state validation.
+- M9.2c2 now owns Responses function/tool output inputs, tool-search schema
+  loading, namespace tool schema restoration, and live-tail validation.
+- M9.2c3 now owns Anthropic content/system blocks, tools/tool_choice,
+  stop/thinking controls, tool-use/tool-result messages, and live-tail
+  validation.
 - M9.2b extended `rust/ds4-gguf/src/server_chat.rs` to parse OpenAI `tools`,
   `tool_choice`, assistant `tool_calls`, tool schema property order, tool role
   prompt rendering, and DSML request-history rendering without loading a model
