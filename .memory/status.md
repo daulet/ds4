@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c2 Responses Tool Output And Live-Tail Parse Surface
-- Last validated source commit: M9.2c1 Responses core parser in this commit;
-  prior pushed source commit `0269be970eb4d6ce9909636b878e67c0736f0bd4`
+- Active item: M9.2c2a Responses Function Call And Tool Output Input Surface
+- Last validated source commit: M9.2c2 Responses tool-output/live-tail split in
+  this commit; prior pushed source commit
+  `cdead32e30f715c68a0e424538e13805992326f2`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,17 @@
 
 ## Last Evidence
 
+- M9.2c2 was split before implementation because Responses tool-call input
+  parsing, dynamic tool schema loading, and live continuation validation have
+  distinct C branches, fixture families, and validation comparators.
+- M9.2c2a now owns function/custom/hosted call inputs, tool output inputs, call
+  IDs, pending-reasoning merge rules, and DSML prompt rendering.
+- M9.2c2b now owns hosted `tool_search`, namespace schema flattening,
+  tool-search-output dynamic schema loading, combined schema ordering, and
+  namespace/wire-name metadata.
+- M9.2c2c now owns missing/live call-id validation, live-state requirement
+  flags, reasoning replay requirement flags, call-id collection, and live-tail
+  suffix text.
 - M9.2c1 added the exported Rust `ResponsesRequest` and
   `parse_responses_core_request` surface for model-free Responses API core
   request parsing.

@@ -1984,28 +1984,105 @@ Acceptance:
 
 #### M9.2c2: Responses Tool Output And Live-Tail Parse Surface
 
-- Goal: port model-free Responses tool-output/function-call input handling,
-  tool-search output schema loading, namespace tool schema restoration, and
-  live-tail validation categories, building on M9.2c1.
-- Oracle: `parse_responses_input`, `parse_responses_input_item`,
-  `responses_validate_tool_outputs`, `responses_prepare_live_continuation`,
-  namespace tool schema helpers, and related unit vectors.
-- Fixture: unit vectors for `function_call`, `function_call_output`,
-  `tool_search_call`, `tool_search_result`, namespace tools, malformed
-  tool-search payloads, missing live tool state, and reasoning replay
-  requirements.
-- Comparator: Rust unit tests comparing parsed messages, loaded tool schemas,
-  namespace/wire names, live-tail suffix text, validation categories, and
-  reasoning/tool-state requirement flags.
-- Acceptance: Rust matches current C Responses tool-input semantics without
-  emitting Responses protocol events or running generation. Tests use no-op
-  server state for live validation; actual KV/tool-memory replay side effects
-  remain assigned to M9.8.
-- Drift policy: exact for schema names, namespace/wire names, prompt/live-tail
-  bytes, validation categories, and requirement flags.
-- Review gate: ask Claude to review tool-output validation, namespace schema
-  restoration, tool-search loading, and live-tail construction.
-- Validation gate: targeted Rust Responses tool parser tests,
+- Goal: split the Responses tool-output/function-call item into reviewable
+  parser, schema-loading, and live-continuation work before implementation.
+- Oracle: M9.2c2a through M9.2c2c below, each tied to the current C
+  `parse_responses_input`, tool-schema helpers, and live continuation helpers.
+- Fixture: documentation-only split assigning function/tool-call input vectors,
+  namespace/tool-search schema vectors, and live-tail validation vectors to
+  separate commits.
+- Comparator: roadmap and active-board review that every child item has an
+  oracle, fixture, comparator, acceptance rule, drift policy, review gate, and
+  validation gate.
+- Acceptance: the original M9.2c2 scope is fully covered by child items before
+  any source behavior changes.
+- Drift policy: documentation-only; no source behavior drift.
+- Review gate: ask Claude to review boundary completeness and whether any C
+  branch is unassigned.
+- Validation gate: roadmap/board diff and `git diff --check`.
+
+#### M9.2c2a: Responses Function Call And Tool Output Input Surface
+
+- Goal: port model-free Responses input items that become chat tool-call
+  history or tool-result history: `function_call`, `custom_tool_call`,
+  hosted-tool calls, `function_call_output`, custom/hosted tool outputs, call
+  IDs, pending-reasoning merge rules, and DSML prompt rendering.
+- Oracle: `parse_responses_input` branches for `function_call`,
+  `custom_tool_call`, `local_shell_call`, `web_search_call`,
+  `tool_search_call`, `image_generation_call`,
+  `function_call_output`, `custom_tool_call_output`, hosted tool outputs,
+  `chat_msg_add_tool_call_id`, and `render_chat_prompt_text`.
+- Fixture: unit vectors for assistant text plus split tool-call item merging,
+  function-call JSON arguments, custom tool free-text input, hosted tool action
+  payloads, output/result body selection, trailing tool-result prompt tails,
+  duplicate call-id preservation, and pending reasoning before tool outputs.
+- Comparator: Rust unit tests comparing normalized `ChatMessage`/`ToolCall`
+  fields, tool-result call IDs, prompt bytes, DSML argument ordering, and
+  reasoning attachment.
+- Acceptance: Rust parses and renders Responses tool-call/tool-output input
+  history like C without loading dynamic tool schemas or validating live server
+  state.
+- Drift policy: exact for message roles, call IDs, tool names, argument JSON
+  spelling after existing Rust minification, prompt bytes, and reasoning
+  placement.
+- Review gate: ask Claude to review function/custom/hosted call parsing,
+  merge-with-previous-assistant behavior, call-id preservation, and prompt
+  rendering.
+- Validation gate: targeted Rust Responses function/tool input tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M9.2c2b: Responses Tool Search And Namespace Schema Loading
+
+- Goal: port Responses dynamic tool schema parsing: top-level
+  `tool_search`, namespace tool groups, tool-search-output `tools` loading,
+  combined top-level plus loaded schemas, and namespace/wire-name metadata.
+- Oracle: `responses_special_schema_from_tool`,
+  `responses_namespace_function_schema_from_tool`,
+  `append_responses_namespace_tool_schemas`, `parse_tools_value`,
+  `tool_schema_orders_add_json_wire`, and the `tool_search_output` loading
+  branch in `parse_responses_input`.
+- Fixture: unit vectors for hosted `tool_search`, function named
+  `tool_search`, namespace schema flattening, namespace `wire_name` metadata,
+  tool-search output loading, malformed tool-search tool lists, and combined
+  top-level plus loaded schema prompt text.
+- Comparator: Rust unit tests comparing raw schema lines, `ToolSchemaOrder`
+  metadata, prompt schema placement, loaded-schema append order, and malformed
+  dynamic-tool rejection.
+- Acceptance: Rust matches C schema loading and namespace restoration for
+  Responses parser inputs while response-output emission remains outside this
+  parser milestone.
+- Drift policy: exact for schema names, namespace prefixes, wire names,
+  property order, prompt schema line order, and malformed-schema categories.
+- Review gate: ask Claude to review namespace flattening, hosted tool-search
+  distinction, loaded-schema ordering, and malformed dynamic-tool handling.
+- Validation gate: targeted Rust Responses schema-loading tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M9.2c2c: Responses Live Tail Validation Surface
+
+- Goal: port model-free Responses live continuation validation outputs:
+  missing call-id errors, `requires_live_tool_state`,
+  `requires_live_reasoning`, live call-id collection, and visible live suffix
+  rendering for trailing tool results.
+- Oracle: `responses_validate_tool_outputs`,
+  `responses_prepare_live_continuation`, `responses_find_prior_call_msg`,
+  `chat_msg_collect_tool_call_ids`, `render_live_tool_tail`, and related C unit
+  vectors.
+- Fixture: unit vectors for tool-output-only missing state, live-known
+  tool-output-only continuation, stateless replay with and without prior
+  reasoning, non-thinking replay, assistant-call anchor plus trailing tool
+  outputs, and tool-result suffix escaping.
+- Comparator: Rust unit tests using an explicit no-op/live stub state to
+  compare validation category, requirement flags, collected call IDs, and
+  live-tail prompt bytes.
+- Acceptance: Rust reports the same Responses live-continuation parser state as
+  C without touching real server KV/tool-memory side effects, which remain
+  assigned to M9.8.
+- Drift policy: exact for error strings, live/reasoning requirement flags,
+  call-id ordering/deduplication, and live-tail bytes.
+- Review gate: ask Claude to review missing-state rejection, live-state flag
+  assignment, reasoning replay requirements, and live-tail construction.
+- Validation gate: targeted Rust Responses live-tail tests,
   `cargo test --workspace`, and `git diff --check`.
 
 #### M9.2c3: Anthropic Message And Tool Result Parse Surface
