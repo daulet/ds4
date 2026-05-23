@@ -3566,7 +3566,7 @@
 
 ### M10.3: Rust Backend Trait And Graph Plan Surface
 
-- Status: active
+- Status: done
 - Goal: add Rust graph-plan data structures and backend trait/facade coverage
   for the full M10.2 operation inventory without executing a model graph yet.
 - Oracle: M10.2 graph plan and backend operation inventory.
@@ -3584,12 +3584,18 @@
 - Validation needed: targeted Rust graph-plan tests, inventory comparator,
   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
   and non-interactive Claude review with no blockers.
+- Validation passed: `cargo test -p ds4-gpu graph_plan --lib`, `python3
+  ds4-parity/compare_graph_plan_rust.py`, `python3
+  ds4-parity/compare_graph_plan_rust.py --negative-test`, Python syntax check,
+  unified parity report comparator row, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, NUL scan over touched files, and
+  non-interactive Claude review with no blockers.
 - Owner path: Rust graph/backend facade modules, graph plan comparator,
   `.memory/status.md`.
 
 ### M10.4: Current-C Intermediate Tensor Checkpoint Oracle
 
-- Status: pending
+- Status: active
 - Goal: add current-C checkpoint capture for selected graph tensors at decode,
   prefill, compressed-KV, output-head, and MTP verification boundaries.
 - Oracle: C graph execution through `metal_graph_eval_token_raw_swa`,

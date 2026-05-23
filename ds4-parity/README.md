@@ -146,6 +146,17 @@ raw-cap plan value:
 python3 ds4-parity/check_graph_plan_inventory.py --negative-test
 ```
 
+Compare the Rust M10.3 graph-plan and facade inventory against that oracle:
+
+```sh
+python3 ds4-parity/compare_graph_plan_rust.py --negative-test
+```
+
+The Rust comparator checks `rust/ds4-gpu/src/graph_plan.rs` for matching
+backend operation facade targets, graph tensor owner groups, command-boundary
+records, and the M10.2 context/MTP plan cases. Its negative test mutates an
+operation, a tensor field, a command boundary, and an MTP plan case in memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

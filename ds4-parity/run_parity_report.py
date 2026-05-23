@@ -5,7 +5,7 @@ The report has two jobs:
 
 * run local no-model C checks that are available in this workspace;
 * run the committed artifact comparators from M1.2 through M1.5, M4.6, M5.7,
-  M6.7, M7.9, M9.9, and M10.2.
+  M6.7, M7.9, M9.9, M10.2, and M10.3.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -126,6 +126,14 @@ class ParityReport:
             (
                 "M10.2 graph plan inventory oracle",
                 [sys.executable, "ds4-parity/check_graph_plan_inventory.py"],
+            ),
+            (
+                "M10.3 Rust graph plan comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_graph_plan_rust.py",
+                    "--negative-test",
+                ],
             ),
         ]
         for name, command in commands:

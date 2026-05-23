@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.3 Rust Backend Trait And Graph Plan Surface
-- Last validated source commit: M10.2 graph plan inventory oracle in this
-  commit; prior pushed source commit
-  `f62cf22dc7e36bd2ec99552bab25607ca0e03060`
+- Active item: M10.4 Current-C Intermediate Tensor Checkpoint Oracle
+- Last validated source commit: M10.3 Rust backend trait and graph plan
+  surface in this commit; prior pushed source commit
+  `67cbaf4e06858669087e200f50953b74e188ecc9`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,23 @@
 
 ## Last Evidence
 
+- M10.3 adds the model-execution-neutral Rust graph surface in
+  `rust/ds4-gpu/src/graph_plan.rs`: fixed DS4 graph constants, context/raw
+  cap/compression plan math, the four M10.2 plan cases, backend facade targets
+  for all 81 `ds4_gpu.h` operations, owner entries for all 113
+  `ds4_gpu_graph` tensor fields, byte-size formulas for graph tensor classes,
+  and command-boundary records for the 15 M10.2 boundaries.
+- M10.3 adds `ds4-parity/compare_graph_plan_rust.py`, which compares the Rust
+  graph inventory against the M10.2 JSON oracle and fails closed on synthetic
+  missing-operation, missing-tensor, missing-command-boundary, and missing-plan
+  mutations. It is wired into `ds4-parity/run_parity_report.py` and documented
+  in `ds4-parity/README.md`.
+- M10.3 validation passed targeted `cargo test -p ds4-gpu graph_plan --lib`,
+  `python3 ds4-parity/compare_graph_plan_rust.py`, `python3
+  ds4-parity/compare_graph_plan_rust.py --negative-test`, Python syntax check,
+  the unified parity report comparator row, full `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, NUL scan over touched
+  files, and non-interactive Claude review with `NO BLOCKERS`.
 - M10.2 adds `ds4-parity/check_graph_plan_inventory.py` and the committed
   source-derived oracle
   `ds4-parity/baselines/graph/m10.2/graph-plan-inventory.json`. The checker
