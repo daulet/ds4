@@ -46,6 +46,32 @@ pub struct OpenAiChatStream<'a> {
     pub usage: Option<OpenAiUsage>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OpenAiChatToolStream<'a> {
+    pub id: &'a str,
+    pub created: i64,
+    pub model: &'a str,
+    pub events: &'a [OpenAiToolCallStreamEvent<'a>],
+    pub finish_reason: &'a str,
+    pub usage: Option<OpenAiUsage>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenAiToolCallStreamEvent<'a> {
+    Start {
+        index: usize,
+        id: &'a str,
+        name: &'a str,
+    },
+    Arguments {
+        index: usize,
+        fragment: &'a str,
+    },
+    FullCalls {
+        calls: &'a [DsmlJsonCall],
+    },
+}
+
 pub fn format_openai_chat_completion_json(response: &OpenAiChatCompletion<'_>) -> String {
     format_openai_chat_completion_body_json(response, &[])
 }
@@ -108,7 +134,7 @@ pub fn format_openai_chat_tool_completion_http(
 
 pub fn format_openai_chat_stream_sse(response: &OpenAiChatStream<'_>) -> String {
     let mut out = String::new();
-    append_openai_chat_stream_role_chunk(&mut out, response);
+    append_openai_chat_stream_role_chunk(&mut out, response.id, response.created, response.model);
     for delta in response.content_deltas {
         if !delta.is_empty() {
             append_openai_chat_stream_content_chunk(&mut out, response, delta);
@@ -122,10 +148,65 @@ pub fn format_openai_chat_stream_sse(response: &OpenAiChatStream<'_>) -> String 
     out
 }
 
+pub fn format_openai_chat_tool_stream_sse(response: &OpenAiChatToolStream<'_>) -> String {
+    let mut out = String::new();
+    append_openai_chat_stream_role_chunk(&mut out, response.id, response.created, response.model);
+    for event in response.events {
+        match event {
+            OpenAiToolCallStreamEvent::Start { index, id, name } => {
+                append_openai_chat_tool_stream_start_chunk(&mut out, response, *index, id, name);
+            }
+            OpenAiToolCallStreamEvent::Arguments { index, fragment } => {
+                if !fragment.is_empty() {
+                    append_openai_chat_tool_stream_arguments_chunk(
+                        &mut out, response, *index, fragment,
+                    );
+                }
+            }
+            OpenAiToolCallStreamEvent::FullCalls { calls } => {
+                if !calls.is_empty() {
+                    append_openai_chat_tool_stream_full_calls_chunk(&mut out, response, calls);
+                }
+            }
+        }
+    }
+    append_openai_chat_stream_finish_fields_chunk(
+        &mut out,
+        response.id,
+        response.created,
+        response.model,
+        response.finish_reason,
+    );
+    if let Some(usage) = response.usage {
+        append_openai_chat_stream_usage_fields_chunk(
+            &mut out,
+            response.id,
+            response.created,
+            response.model,
+            usage,
+        );
+    }
+    out.push_str("data: [DONE]\n");
+    out
+}
+
 pub fn format_openai_chat_stream_http(
     enable_cors: bool,
     response: &OpenAiChatStream<'_>,
 ) -> String {
+    let body = format_openai_chat_stream_sse(response);
+    format_openai_chat_stream_http_body(enable_cors, &body)
+}
+
+pub fn format_openai_chat_tool_stream_http(
+    enable_cors: bool,
+    response: &OpenAiChatToolStream<'_>,
+) -> String {
+    let body = format_openai_chat_tool_stream_sse(response);
+    format_openai_chat_stream_http_body(enable_cors, &body)
+}
+
+fn format_openai_chat_stream_http_body(enable_cors: bool, body: &str) -> String {
     let mut out = String::new();
     out.push_str(
         "HTTP/1.1 200 OK\r\n\
@@ -136,21 +217,21 @@ Cache-Control: no-cache\r\n",
         append_cors_headers(&mut out);
     }
     out.push_str("Connection: close\r\n\r\n");
-    out.push_str(&format_openai_chat_stream_sse(response));
+    out.push_str(body);
     out
 }
 
-fn append_openai_chat_stream_prefix(out: &mut String, response: &OpenAiChatStream<'_>) {
+fn append_openai_chat_stream_prefix(out: &mut String, id: &str, created: i64, model: &str) {
     out.push_str("data: {\"id\":");
-    out.push_str(&json_escape_string(response.id));
+    out.push_str(&json_escape_string(id));
     out.push_str(",\"object\":\"chat.completion.chunk\",\"created\":");
-    out.push_str(&response.created.to_string());
+    out.push_str(&created.to_string());
     out.push_str(",\"model\":");
-    out.push_str(&json_escape_string(response.model));
+    out.push_str(&json_escape_string(model));
 }
 
-fn append_openai_chat_stream_role_chunk(out: &mut String, response: &OpenAiChatStream<'_>) {
-    append_openai_chat_stream_prefix(out, response);
+fn append_openai_chat_stream_role_chunk(out: &mut String, id: &str, created: i64, model: &str) {
+    append_openai_chat_stream_prefix(out, id, created, model);
     out.push_str(
         ",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n",
     );
@@ -161,16 +242,32 @@ fn append_openai_chat_stream_content_chunk(
     response: &OpenAiChatStream<'_>,
     delta: &str,
 ) {
-    append_openai_chat_stream_prefix(out, response);
+    append_openai_chat_stream_prefix(out, response.id, response.created, response.model);
     out.push_str(",\"choices\":[{\"index\":0,\"delta\":{\"content\":");
     out.push_str(&json_escape_string(delta));
     out.push_str("},\"finish_reason\":null}]}\n\n");
 }
 
 fn append_openai_chat_stream_finish_chunk(out: &mut String, response: &OpenAiChatStream<'_>) {
-    append_openai_chat_stream_prefix(out, response);
+    append_openai_chat_stream_finish_fields_chunk(
+        out,
+        response.id,
+        response.created,
+        response.model,
+        response.finish_reason,
+    );
+}
+
+fn append_openai_chat_stream_finish_fields_chunk(
+    out: &mut String,
+    id: &str,
+    created: i64,
+    model: &str,
+    finish_reason: &str,
+) {
+    append_openai_chat_stream_prefix(out, id, created, model);
     out.push_str(",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":");
-    out.push_str(&json_escape_string(response.finish_reason));
+    out.push_str(&json_escape_string(finish_reason));
     out.push_str("}]}\n\n");
 }
 
@@ -179,10 +276,68 @@ fn append_openai_chat_stream_usage_chunk(
     response: &OpenAiChatStream<'_>,
     usage: OpenAiUsage,
 ) {
-    append_openai_chat_stream_prefix(out, response);
+    append_openai_chat_stream_usage_fields_chunk(
+        out,
+        response.id,
+        response.created,
+        response.model,
+        usage,
+    );
+}
+
+fn append_openai_chat_stream_usage_fields_chunk(
+    out: &mut String,
+    id: &str,
+    created: i64,
+    model: &str,
+    usage: OpenAiUsage,
+) {
+    append_openai_chat_stream_prefix(out, id, created, model);
     out.push_str(",\"choices\":[],\"usage\":");
     append_openai_usage_json(out, usage);
     out.push_str("}\n\n");
+}
+
+fn append_openai_chat_tool_stream_start_chunk(
+    out: &mut String,
+    response: &OpenAiChatToolStream<'_>,
+    index: usize,
+    id: &str,
+    name: &str,
+) {
+    append_openai_chat_stream_prefix(out, response.id, response.created, response.model);
+    out.push_str(",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":");
+    out.push_str(&index.to_string());
+    out.push_str(",\"id\":");
+    out.push_str(&json_escape_string(id));
+    out.push_str(",\"type\":\"function\",\"function\":{\"name\":");
+    out.push_str(&json_escape_string(name));
+    out.push_str(",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n");
+}
+
+fn append_openai_chat_tool_stream_arguments_chunk(
+    out: &mut String,
+    response: &OpenAiChatToolStream<'_>,
+    index: usize,
+    fragment: &str,
+) {
+    append_openai_chat_stream_prefix(out, response.id, response.created, response.model);
+    out.push_str(",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":");
+    out.push_str(&index.to_string());
+    out.push_str(",\"function\":{\"arguments\":");
+    out.push_str(&json_escape_string(fragment));
+    out.push_str("}}]},\"finish_reason\":null}]}\n\n");
+}
+
+fn append_openai_chat_tool_stream_full_calls_chunk(
+    out: &mut String,
+    response: &OpenAiChatToolStream<'_>,
+    calls: &[DsmlJsonCall],
+) {
+    append_openai_chat_stream_prefix(out, response.id, response.created, response.model);
+    out.push_str(",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":");
+    append_openai_tool_call_deltas_json(out, response.id, calls);
+    out.push_str("},\"finish_reason\":null}]}\n\n");
 }
 
 fn append_openai_usage_json(out: &mut String, usage: OpenAiUsage) {
@@ -212,6 +367,34 @@ fn append_openai_tool_calls_json(out: &mut String, id_prefix: &str, tool_calls: 
         }
         let default_id = format!("{id_prefix}_tool_{index}");
         out.push_str("{\"id\":");
+        out.push_str(&json_escape_string(
+            call.id.as_deref().unwrap_or(&default_id),
+        ));
+        out.push_str(",\"type\":\"function\",\"function\":{\"name\":");
+        out.push_str(&json_escape_string(&call.name));
+        out.push_str(",\"arguments\":");
+        out.push_str(&json_escape_string(&normalize_json_object_or_empty(
+            &call.arguments,
+        )));
+        out.push_str("}}");
+    }
+    out.push(']');
+}
+
+fn append_openai_tool_call_deltas_json(
+    out: &mut String,
+    id_prefix: &str,
+    tool_calls: &[DsmlJsonCall],
+) {
+    out.push('[');
+    for (index, call) in tool_calls.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let default_id = format!("{id_prefix}_tool_{index}");
+        out.push_str("{\"index\":");
+        out.push_str(&index.to_string());
+        out.push_str(",\"id\":");
         out.push_str(&json_escape_string(
             call.id.as_deref().unwrap_or(&default_id),
         ));
@@ -459,6 +642,107 @@ mod tests {
         let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
         assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_STREAM_HEADERS);
         assert_eq!(body, CHAT_STREAM);
+    }
+
+    #[test]
+    fn tool_stream_emits_start_argument_finish_and_usage_chunks() {
+        let events = [
+            OpenAiToolCallStreamEvent::Start {
+                index: 0,
+                id: "call_stream_0",
+                name: "search \"docs\"",
+            },
+            OpenAiToolCallStreamEvent::Arguments {
+                index: 0,
+                fragment: "{\"query\":\"line\nquote\",",
+            },
+            OpenAiToolCallStreamEvent::Arguments {
+                index: 0,
+                fragment: "\"limit\":2}",
+            },
+        ];
+        assert_eq!(
+            format_openai_chat_tool_stream_sse(&OpenAiChatToolStream {
+                id: "chatcmpl-tool-stream",
+                created: 7,
+                model: "model \"x\"",
+                events: &events,
+                finish_reason: "tool_calls",
+                usage: Some(OpenAiUsage::new(5, 3, 1, 4)),
+            }),
+            concat!(
+                r#"data: {"id":"chatcmpl-tool-stream","object":"chat.completion.chunk","created":7,"model":"model \"x\"","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}"#,
+                "\n\n",
+                r#"data: {"id":"chatcmpl-tool-stream","object":"chat.completion.chunk","created":7,"model":"model \"x\"","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_stream_0","type":"function","function":{"name":"search \"docs\"","arguments":""}}]},"finish_reason":null}]}"#,
+                "\n\n",
+                r#"data: {"id":"chatcmpl-tool-stream","object":"chat.completion.chunk","created":7,"model":"model \"x\"","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"query\":\"line\nquote\","}}]},"finish_reason":null}]}"#,
+                "\n\n",
+                r#"data: {"id":"chatcmpl-tool-stream","object":"chat.completion.chunk","created":7,"model":"model \"x\"","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"limit\":2}"}}]},"finish_reason":null}]}"#,
+                "\n\n",
+                r#"data: {"id":"chatcmpl-tool-stream","object":"chat.completion.chunk","created":7,"model":"model \"x\"","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#,
+                "\n\n",
+                r#"data: {"id":"chatcmpl-tool-stream","object":"chat.completion.chunk","created":7,"model":"model \"x\"","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8,"prompt_tokens_details":{"cached_tokens":1,"cache_write_tokens":4}}}"#,
+                "\n\n",
+                "data: [DONE]\n"
+            )
+        );
+    }
+
+    #[test]
+    fn tool_stream_full_call_delta_generates_ids_and_normalizes_arguments() {
+        let calls = [
+            DsmlJsonCall {
+                id: None,
+                name: "list_files".to_string(),
+                arguments: "{\"path\": \".\"}".to_string(),
+            },
+            DsmlJsonCall {
+                id: Some("call_exact".to_string()),
+                name: "bad_args".to_string(),
+                arguments: "not json".to_string(),
+            },
+        ];
+        let events = [OpenAiToolCallStreamEvent::FullCalls { calls: &calls }];
+        assert_eq!(
+            format_openai_chat_tool_stream_sse(&OpenAiChatToolStream {
+                id: "chatcmpl-fallback",
+                created: 11,
+                model: "deepseek-chat",
+                events: &events,
+                finish_reason: "tool_calls",
+                usage: None,
+            }),
+            concat!(
+                r#"data: {"id":"chatcmpl-fallback","object":"chat.completion.chunk","created":11,"model":"deepseek-chat","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}"#,
+                "\n\n",
+                r#"data: {"id":"chatcmpl-fallback","object":"chat.completion.chunk","created":11,"model":"deepseek-chat","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"chatcmpl-fallback_tool_0","type":"function","function":{"name":"list_files","arguments":"{\"path\":\".\"}"}},{"index":1,"id":"call_exact","type":"function","function":{"name":"bad_args","arguments":"{}"}}]},"finish_reason":null}]}"#,
+                "\n\n",
+                r#"data: {"id":"chatcmpl-fallback","object":"chat.completion.chunk","created":11,"model":"deepseek-chat","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#,
+                "\n\n",
+                "data: [DONE]\n"
+            )
+        );
+    }
+
+    #[test]
+    fn formats_tool_stream_http_headers() {
+        let events = [OpenAiToolCallStreamEvent::Start {
+            index: 0,
+            id: "call_stream_0",
+            name: "list_files",
+        }];
+        let stream = OpenAiChatToolStream {
+            id: "chatcmpl-tool-stream",
+            created: 7,
+            model: "deepseek-chat",
+            events: &events,
+            finish_reason: "tool_calls",
+            usage: None,
+        };
+        let response = format_openai_chat_tool_stream_http(false, &stream);
+        let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
+        assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_STREAM_HEADERS);
+        assert_eq!(body, format_openai_chat_tool_stream_sse(&stream));
     }
 
     #[test]

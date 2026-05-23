@@ -2937,7 +2937,7 @@
 
 ### M9.6c1: Tool-Call SSE Event Formatter
 
-- Status: active
+- Status: complete
 - Goal: add pure OpenAI chat SSE helpers for streamed `tool_calls` deltas:
   role chunk, tool-call start delta, argument-fragment deltas, full-call
   fallback delta, finish chunk, optional usage chunk, and `[DONE]`.
@@ -2959,14 +2959,14 @@
 - Review gate: ask Claude to review SSE byte shape, field ordering, generated
   ID fallback, escaping, usage chunk placement, and separation from parser and
   runtime policy.
-- Validation needed: targeted SSE formatter tests, existing response formatter
-  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, and
+- Validation passed: targeted `cargo test -p ds4-gguf server_response -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
   `git diff --check`.
 - Owner path: `rust/ds4-gguf/src/server_response.rs`, `.memory/status.md`.
 
 ### M9.6c2: Incremental DSML Tool-Call Stream Translator
 
-- Status: pending
+- Status: active
 - Goal: translate incremental generated DSML bytes into the M9.6c1 OpenAI
   tool-call start/argument delta events while holding incomplete tags,
   parameter close sentinels, DSML entities, and UTF-8 tails.

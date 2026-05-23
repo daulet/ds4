@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6c1 Tool-Call SSE Event Formatter
-- Last validated source commit: M9.6c docs-only streaming split in this
+- Active item: M9.6c2 Incremental DSML Tool-Call Stream Translator
+- Last validated source commit: M9.6c1 tool-call SSE event formatter in this
   commit; prior pushed source commit
-  `664d65aab7f5a4f105b1cfcdd9584bdb1af53b39`
+  `f7d90484f17f035f78e0b0272718737463f45270`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,29 @@
 
 ## Last Evidence
 
+- M9.6c1 added model-free OpenAI chat tool-stream SSE helpers in
+  `ds4_gguf::server_response` for role chunks, live tool-call start deltas,
+  argument-fragment deltas, full-call fallback deltas, finish chunks, optional
+  usage chunks, stream headers, and `[DONE]`.
+- M9.6c1 keeps parser/runtime policy out of the formatter by accepting explicit
+  stream events and parsed fallback `DsmlJsonCall` values; full-call fallback
+  deltas reuse the M9.6a argument normalizer and `{chat_id}_tool_{index}`
+  generated-ID shape.
+- M9.6c1 exact byte tests cover escaped tool names, argument fragments
+  containing JSON escapes and newlines, generated and explicit full-call IDs,
+  invalid-argument `{}` fallback, usage placement, finish `tool_calls`, stream
+  headers, and unchanged existing M9.5 SSE responses.
+- M9.6c1 local validation passed for targeted
+  `cargo test -p ds4-gguf server_response -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.6c1 did not need B300 validation because it is a pure model-free SSE
+  formatter; model-backed streaming replay remains owned by M9.6c3.
+- M9.6c1 Claude review returned no blockers after checking exact C-shaped
+  start/argument/full-call/finish SSE byte shapes, field ordering, generated-ID
+  fallback, argument normalization/escaping, usage and `[DONE]` placement,
+  unchanged M9.5 stream output, and the absence of parser/runtime policy in
+  the formatter API.
 - M9.6c was split before implementation because byte-level SSE event
   formatting, incremental DSML-to-delta translation, and model-backed runtime
   replay have distinct oracle/comparator surfaces.
