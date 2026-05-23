@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.13c Rust CLI One-Shot Core Transcript Surface
-- Last validated source commit: M8.13b Rust session sampling runtime boundary
-  in this commit; prior pushed source commit
-  `4a1be769d3b11482255c07aa59e03b572522ca87`
+- Active item: M8.13d Rust CLI One-Shot Runtime-Control Surface
+- Last validated source commit: M8.13c Rust CLI one-shot core transcript
+  surface in this commit; prior pushed source commit
+  `63dd830c0779957c08657e198f22778ddd83adf1`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1206,3 +1206,31 @@
   full `cargo test --workspace`, `python3 -m py_compile
   ds4-parity/compare_cli_session_runtime.py
   ds4-parity/compare_cli_argmax_runtime.py`, and `git diff --check`.
+- M8.13c extends `rust/ds4-gguf/src/cli_parse.rs` so `CliConfig` retains the
+  core one-shot generation surface: system prompt, context, token limit,
+  temperature, top-p, min-p, optional seed, and thinking mode.
+- M8.13c adds `ds4-cli-one-shot-rs`, which parses the exact M8.12a argv through
+  the shared Rust CLI parser, routes `--temp 0` cases through the M8.13a argmax
+  boundary, routes the seeded non-greedy case through the M8.13b session
+  boundary, and rejects non-generation modes outside this milestone.
+- M8.13c adds `ds4-parity/compare_cli_one_shot_runtime.py`, which runs
+  `target/debug/ds4-cli-one-shot-rs` against all five M8.12a current-C cases:
+  `greedy_inline_nothink`, `prompt_file_think`, `think_max_downgrade`,
+  `seeded_sampling_nothink`, and `ctx_too_small`.
+- M8.13c B300 validation over `/workspace/ds4/ds4flash.gguf` passed after
+  overlaying the M8.13c files on the pushed M8.13b commit, building with
+  `CARGO_HOME=/tmp/ds4-cargo RUSTUP_HOME=/tmp/ds4-rustup
+  PATH=/tmp/ds4-cargo/bin:$PATH CUDA_ARCH=native cargo build -p ds4-engine
+  --bin ds4-cli-one-shot-rs`, and running
+  `python3 ds4-parity/compare_cli_one_shot_runtime.py
+  ds4-parity/baselines/cli/m8.12a/current-c.json --candidate-binary
+  target/debug/ds4-cli-one-shot-rs --negative-test`.
+- M8.13c B300 comparator reported `CLI one-shot runtime comparator: PASS, 144
+  checks` and `CLI one-shot runtime negative tests: PASS, 5 checks`.
+- M8.13c local validation passed for `cargo fmt --all -- --check`, `cargo test
+  -p ds4-gguf cli_parse -- --nocapture`, `cargo build -p ds4-engine --bin
+  ds4-cli-one-shot-rs`, `cargo test -p ds4-engine`, full
+  `cargo test --workspace`, `python3 -m py_compile
+  ds4-parity/compare_cli_one_shot_runtime.py
+  ds4-parity/compare_cli_argmax_runtime.py
+  ds4-parity/compare_cli_session_runtime.py`, and `git diff --check`.

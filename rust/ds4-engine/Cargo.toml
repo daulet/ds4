@@ -25,3 +25,7 @@ path = "src/bin/ds4-argmax-runtime-rs.rs"
 [[bin]]
 name = "ds4-session-runtime-rs"
 path = "src/bin/ds4-session-runtime-rs.rs"
+
+[[bin]]
+name = "ds4-cli-one-shot-rs"
+path = "src/bin/ds4-cli-one-shot-rs.rs"

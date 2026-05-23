@@ -1,3 +1,4 @@
+use crate::prompt::ThinkMode;
 use std::{fs, str};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,10 +15,18 @@ pub struct CliParseResult {
     pub stderr: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CliConfig {
     pub model_path: String,
     pub prompt: Option<String>,
+    pub system: String,
+    pub n_predict: i32,
+    pub ctx_size: i32,
+    pub temperature: f32,
+    pub top_p: f32,
+    pub min_p: f32,
+    pub seed: Option<u64>,
+    pub think_mode: ThinkMode,
     pub dump_tokens: bool,
     pub inspect: bool,
     pub backend: CliBackend,
@@ -30,6 +39,14 @@ impl Default for CliConfig {
         Self {
             model_path: "ds4flash.gguf".to_string(),
             prompt: None,
+            system: "You are a helpful assistant".to_string(),
+            n_predict: 50000,
+            ctx_size: 32768,
+            temperature: 1.0,
+            top_p: 1.0,
+            min_p: 0.05,
+            seed: None,
+            think_mode: ThinkMode::High,
             dump_tokens: false,
             inspect: false,
             backend: CliBackend::default_backend(),
@@ -203,6 +220,7 @@ where
                     Err(result) => return Err(result),
                 };
                 match arg {
+                    "-sys" | "--system" => state.config.system = value,
                     "--perplexity-file" => state.perplexity_file = Some(value),
                     "--imatrix-dataset" => state.imatrix_dataset = Some(value),
                     "--imatrix-out" => state.imatrix_out = Some(value),
@@ -210,10 +228,6 @@ where
                 }
             }
             "--mtp-draft"
-            | "-n"
-            | "--tokens"
-            | "-c"
-            | "--ctx"
             | "-t"
             | "--threads"
             | "--logprobs-top-k"
@@ -231,18 +245,47 @@ where
                     ));
                 }
             }
-            "--seed" => {
+            "-n" | "--tokens" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
                     Err(result) => return Err(result),
                 };
-                if parse_positive_u64(value).is_none() {
+                let Some(parsed) = parse_positive_i32(value) else {
                     return Err(exit(
                         2,
                         "",
                         &format!("ds4: invalid value for {arg}: {value}\n"),
                     ));
-                }
+                };
+                state.config.n_predict = parsed;
+            }
+            "-c" | "--ctx" => {
+                let value = match need_arg(&argv, &mut i, arg) {
+                    Ok(value) => value,
+                    Err(result) => return Err(result),
+                };
+                let Some(parsed) = parse_positive_i32(value) else {
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
+                };
+                state.config.ctx_size = parsed;
+            }
+            "--seed" => {
+                let value = match need_arg(&argv, &mut i, arg) {
+                    Ok(value) => value,
+                    Err(result) => return Err(result),
+                };
+                let Some(parsed) = parse_positive_u64(value) else {
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
+                };
+                state.config.seed = Some(parsed);
             }
             "--mtp-margin" => {
                 let value = match need_arg(&argv, &mut i, arg) {
@@ -262,25 +305,31 @@ where
                     Ok(value) => value,
                     Err(result) => return Err(result),
                 };
-                if parse_float_range(value, 0.0, 100.0).is_none() {
+                let Some(parsed) = parse_float_range(value, 0.0, 100.0) else {
                     return Err(exit(
                         2,
                         "",
                         &format!("ds4: invalid value for {arg}: {value}\n"),
                     ));
-                }
+                };
+                state.config.temperature = parsed;
             }
             "--top-p" | "--min-p" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
                     Err(result) => return Err(result),
                 };
-                if parse_float_range(value, 0.0, 1.0).is_none() {
+                let Some(parsed) = parse_float_range(value, 0.0, 1.0) else {
                     return Err(exit(
                         2,
                         "",
                         &format!("ds4: invalid value for {arg}: {value}\n"),
                     ));
+                };
+                if arg == "--top-p" {
+                    state.config.top_p = parsed;
+                } else {
+                    state.config.min_p = parsed;
                 }
             }
             "--dir-steering-ffn" | "--dir-steering-attn" => {
@@ -335,6 +384,9 @@ where
                 "--dump-tokens" => state.config.dump_tokens = true,
                 "--inspect" => state.config.inspect = true,
                 "--warm-weights" => state.config.warm_weights = true,
+                "--think" => state.config.think_mode = ThinkMode::High,
+                "--think-max" => state.config.think_mode = ThinkMode::Max,
+                "--nothink" => state.config.think_mode = ThinkMode::None,
                 _ => {}
             },
             "--metal-graph-generate" => {
@@ -501,6 +553,9 @@ mod tests {
 
         assert_eq!(config.model_path, "tokenizer.gguf");
         assert_eq!(config.prompt.as_deref(), Some("prompt text"));
+        assert_eq!(config.system, "ignored");
+        assert_eq!(config.ctx_size, 393216);
+        assert_eq!(config.think_mode, ThinkMode::Max);
         assert!(config.dump_tokens);
         assert!(!config.inspect);
     }
@@ -524,5 +579,41 @@ mod tests {
         assert!(config.warm_weights);
         assert!(config.quality);
         assert!(!config.dump_tokens);
+    }
+
+    #[test]
+    fn config_retains_generation_controls() {
+        let config = parse_cli_config([
+            "--cuda",
+            "-m",
+            "model.gguf",
+            "--ctx",
+            "128",
+            "--tokens",
+            "2",
+            "--temp",
+            "0.7",
+            "--top-p",
+            "0.9",
+            "--min-p",
+            "0.05",
+            "--seed",
+            "12345",
+            "--nothink",
+            "-p",
+            "prompt",
+        ])
+        .expect("valid generation config");
+
+        assert_eq!(config.backend, CliBackend::Cuda);
+        assert_eq!(config.model_path, "model.gguf");
+        assert_eq!(config.prompt.as_deref(), Some("prompt"));
+        assert_eq!(config.ctx_size, 128);
+        assert_eq!(config.n_predict, 2);
+        assert_eq!(config.temperature, 0.7);
+        assert_eq!(config.top_p, 0.9);
+        assert_eq!(config.min_p, 0.05);
+        assert_eq!(config.seed, Some(12345));
+        assert_eq!(config.think_mode, ThinkMode::None);
     }
 }

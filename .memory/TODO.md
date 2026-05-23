@@ -1804,7 +1804,7 @@
 
 ### M8.13c: Rust CLI One-Shot Core Transcript Surface
 
-- Status: pending
+- Status: done
 - Goal: route the Rust CLI one-shot core surface through the M8.13a/M8.13b
   runtime boundaries.
 - Source evidence needed: committed M8.12a current-C transcript fixture, Rust
@@ -1819,14 +1819,21 @@
   current-C JSON replay as a substitute for execution.
 - Drift policy: only documented progress/timing/path normalization.
 - Review gate: ask Claude to review CLI orchestration and normalization.
-- Validation needed: comparator with negative tests, targeted Rust CLI tests,
-  B300 comparison run, `cargo test --workspace`, and `git diff --check`.
-- Owner path: Rust CLI one-shot path, CLI transcript comparator,
-  `ds4-parity/`, `.memory/status.md`.
+- Validation passed: B300 `cargo build -p ds4-engine --bin
+  ds4-cli-one-shot-rs` with `CUDA_ARCH=native`; B300
+  `python3 ds4-parity/compare_cli_one_shot_runtime.py
+  ds4-parity/baselines/cli/m8.12a/current-c.json --candidate-binary
+  target/debug/ds4-cli-one-shot-rs --negative-test` (`CLI one-shot runtime
+  comparator: PASS, 144 checks`; negative tests `PASS, 5 checks`); local
+  parser tests; local `cargo build -p ds4-engine --bin ds4-cli-one-shot-rs`;
+  local `cargo test --workspace`; local `python3 -m py_compile` for M8.13a
+  through M8.13c comparators; and `git diff --check`.
+- Owner path: `rust/ds4-gguf/src/cli_parse.rs`, `rust/ds4-engine/`,
+  `ds4-parity/compare_cli_one_shot_runtime.py`, `.memory/status.md`.
 
 ### M8.13d: Rust CLI One-Shot Runtime-Control Surface
 
-- Status: pending after M8.13c
+- Status: pending
 - Goal: extend Rust CLI one-shot parity to the M8.12b runtime-control cases.
 - Source evidence needed: committed M8.12b current-C transcript fixture, Rust
   CLI parse/dispatch code, advanced runtime-control plumbing, and support
