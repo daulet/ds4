@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8d Disk-KV Policy Completion
-- Last validated source commit: M9.8c live continuation and visible-prefix
-  state in this commit; prior pushed source commit
-  `302c4e95a96c23b327f1298d5b2af3f2b7fb5a10`
+- Active item: M9.8e KV Tool-Map Trailer Restore
+- Last validated source commit: M9.8d disk-KV policy completion in this
+  commit; prior pushed source commit
+  `cad2815269794d7cb18f740ce2469251b3bb7097`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,21 @@
 
 ## Last Evidence
 
+- M9.8d adds Rust policy helpers for C's continued-checkpoint bookkeeping:
+  `note_store`, `suppress_continued_store`, and
+  `restore_suppressed_continued`. These preserve the C rule that a cold store
+  on a continued frontier can suppress the duplicate continued write and then
+  restore the prior frontier if the cold write fails.
+- M9.8d tests cover note-only-increases behavior, duplicate continued-boundary
+  suppression, restored frontier re-enabling, no-op suppression for already
+  stored or unaligned frontiers, and no-op restore for non-suppressed states.
+- M9.8d also revalidated the existing no-model KV policy comparator against
+  the current-C M7.2 oracle: `check_kv_policy_dump.py --negative-test` and
+  `compare_kv_policy.py --negative-test` both passed.
+- M9.8d validation passed targeted `cargo test -p ds4-gguf kv_policy --
+  --nocapture`, full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, NUL scan over touched Rust files, and non-interactive
+  Claude review with no blockers.
 - M9.8c extends Rust live continuation state with live-token frontiers,
   Responses visible transcript keys, Anthropic call-id frontiers, and
   tool-less thinking visible transcript keys.

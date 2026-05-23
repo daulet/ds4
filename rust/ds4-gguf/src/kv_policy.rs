@@ -646,6 +646,31 @@ pub fn continued_store_target(config: KvPolicyConfig, live_tokens: i32) -> i32 {
     live_tokens
 }
 
+pub fn note_store(config: &mut KvPolicyConfig, tokens: i32) {
+    if tokens > config.continued_last_store_tokens {
+        config.continued_last_store_tokens = tokens;
+    }
+}
+
+pub fn suppress_continued_store(config: &mut KvPolicyConfig, tokens: i32) -> i32 {
+    if continued_store_target(*config, tokens) != tokens {
+        return -1;
+    }
+    let old = config.continued_last_store_tokens;
+    note_store(config, tokens);
+    old
+}
+
+pub fn restore_suppressed_continued(
+    config: &mut KvPolicyConfig,
+    old_tokens: i32,
+    suppressed_tokens: i32,
+) {
+    if old_tokens >= 0 && config.continued_last_store_tokens == suppressed_tokens {
+        config.continued_last_store_tokens = old_tokens;
+    }
+}
+
 pub fn file_size_fits(
     budget_bytes: u64,
     text_bytes: u64,
@@ -1011,6 +1036,42 @@ mod tests {
             cache_replay_decision(16, 39, 1, 0).memory_miss_reason,
             "token-mismatch"
         );
+    }
+
+    #[test]
+    fn continued_store_note_suppress_and_restore_match_c_policy() {
+        let mut config = KvPolicyConfig::default();
+        note_store(&mut config, 4096);
+        assert_eq!(config.continued_last_store_tokens, 4096);
+        note_store(&mut config, 2048);
+        assert_eq!(config.continued_last_store_tokens, 4096);
+        assert_eq!(continued_store_target(config, 10240), 10240);
+
+        let old = suppress_continued_store(&mut config, 10240);
+        assert_eq!(old, 4096);
+        assert_eq!(config.continued_last_store_tokens, 10240);
+        assert_eq!(continued_store_target(config, 10240), 0);
+
+        restore_suppressed_continued(&mut config, old, 10240);
+        assert_eq!(config.continued_last_store_tokens, 4096);
+        assert_eq!(continued_store_target(config, 10240), 10240);
+    }
+
+    #[test]
+    fn continued_store_restore_ignores_non_suppressed_frontiers() {
+        let mut config = KvPolicyConfig {
+            continued_last_store_tokens: 10240,
+            ..KvPolicyConfig::default()
+        };
+        assert_eq!(suppress_continued_store(&mut config, 10240), -1);
+        assert_eq!(config.continued_last_store_tokens, 10240);
+        assert_eq!(suppress_continued_store(&mut config, 18432), -1);
+        assert_eq!(config.continued_last_store_tokens, 10240);
+
+        restore_suppressed_continued(&mut config, -1, 10240);
+        assert_eq!(config.continued_last_store_tokens, 10240);
+        restore_suppressed_continued(&mut config, 4096, 20480);
+        assert_eq!(config.continued_last_store_tokens, 10240);
     }
 
     #[test]

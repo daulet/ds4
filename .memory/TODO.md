@@ -3245,7 +3245,7 @@
 
 ### M9.8d: Disk-KV Policy Completion
 
-- Status: active
+- Status: done
 - Goal: complete Rust disk-KV policy parity for store boundaries, continued
   checkpoints, file-size budgeting, lookup, and eviction.
 - Oracle: C tests for `kv_cache_store_len`, `kv_cache_chat_anchor_pos`,
@@ -3263,16 +3263,21 @@
   exact; timestamps and paths are normalized.
 - Review gate: ask Claude to review boundary trimming, budget math, and
   eviction protection.
-- Validation needed: targeted KV policy tests,
-  `python3 ds4-parity/check_kv_policy_dump.py --negative-test`,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
-  and non-interactive Claude review with no blockers.
+- Validation passed: targeted `cargo test -p ds4-gguf kv_policy -- --nocapture`,
+  `python3 ds4-parity/check_kv_policy_dump.py --negative-test`, `python3
+  ds4-parity/compare_kv_policy.py --negative-test`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, NUL scan
+  over touched Rust files, and non-interactive Claude review with no blockers.
+- Validation gate: targeted KV policy tests, `python3
+  ds4-parity/check_kv_policy_dump.py --negative-test`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
 - Owner path: `rust/ds4-gguf/src/kv_policy.rs`, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.8e: KV Tool-Map Trailer Restore
 
-- Status: pending
+- Status: active
 - Goal: port KV tool-map trailer serialization/decoding and restore exact DSML
   tool memory before prompt rendering.
 - Oracle: C test `test_kv_tool_map_restores_before_prompt_render`,
