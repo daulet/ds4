@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.10b Current-C CLI Imatrix Output Oracle (blocked)
-- Last validated source commit: M8.10a current-C CLI imatrix feasibility guard
-  in this commit; prior pushed source commit
-  `bfd96275d077e33970d368a92a99963451e3384d`
+- Active item: M8.12 Current-C CLI One-Shot Generation Oracle
+- Last validated source commit: M8.11 blocked state and M8.12 queue in this
+  commit; prior pushed source commit
+  `5a0ac15b08133f6aabb01c059af4773fd356f44f`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1076,3 +1076,9 @@
   the workspace on this `x86_64` host with `51539607552` bytes of RAM, so a
   local Metal capture of the recorded q2-imatrix model is not currently
   feasible.
+- M8.11 is blocked because it requires the committed M8.10b current-C imatrix
+  output fixture. It should not be implemented against the M8.10a failure proof
+  or a synthetic `.dat` substitute.
+- M8.12 is the next runnable roadmap item because it captures current-C
+  one-shot generation transcripts on the B300 CUDA model host and does not
+  depend on the blocked imatrix output oracle.

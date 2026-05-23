@@ -101,3 +101,14 @@ available directly from the repo.
   float fixtures should use raw bit fixtures plus an unoptimized bit-classifier
   helper for JSON output, then run `python3 -m json.tool` or an equivalent
   parser before committing the baseline.
+
+## 2026-05-22: B300 Cannot Capture Current-C Imatrix Output Today
+
+- Symptom: the M8.10 current-C imatrix capture attempt on the B300 pod exited
+  before writing `/tmp/m8.10-imatrix.dat`.
+- Root cause: `--imatrix-out` forces the CLI backend to Metal, while the B300
+  build is CUDA-linked. The observed stderr was `backend=metal` followed by
+  `ds4: Metal backend requested but this build is linked with CUDA, not Metal`.
+- Permanent rule: do not try to refresh imatrix `.dat` output baselines on the
+  B300 CUDA pod until current C supports CUDA imatrix collection. Use a
+  Metal-capable host with the recorded model, or keep M8.10b/M8.11 blocked.

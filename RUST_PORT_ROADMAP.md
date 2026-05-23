@@ -1529,7 +1529,7 @@ Work items:
 - Goal: implement Rust CLI parity for imatrix capture mode.
 - Oracle: committed M8.10b current-C imatrix fixture.
 - Fixture: same dataset, limit, context, backend, and output-path cases as
-  M8.10.
+  M8.10b.
 - Comparator: C/Rust imatrix comparator for output file hash/size, limit
   accounting, exit status, and normalized stderr categories.
 - Acceptance: Rust writes the same imatrix output bytes for the committed
