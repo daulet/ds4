@@ -3,9 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.3a HTTP Framing And CORS Response Surface
-- Last validated source commit: M9.3 HTTP skeleton split in this commit;
-  prior pushed source commit `a032667cf9a5ea2b8f14658691794c1b8abbb1aa`
+- Active item: M9.3b Model Metadata And Route Dispatch Surface
+- Last validated source commit: M9.3a HTTP helper surface in this commit;
+  prior pushed source commit `80b26bb7d3ae80ded5898d284ecfa1dd2d5039cb`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +25,17 @@
 
 ## Last Evidence
 
+- M9.3a added `rust/ds4-gguf/src/server_http.rs` with in-memory HTTP request
+  parsing plus C-shaped response/error formatting and exported the helper
+  surface from `ds4_gguf`.
+- M9.3a covers C-style CRLF and LF-only header terminators, query stripping,
+  case-insensitive `Content-Length`, exact body slicing, malformed/incomplete
+  request categories, 200 JSON response bytes, 204 no-content preflight bytes,
+  opt-in CORS header order, and JSON error body escaping.
+- M9.3a validation passed for targeted
+  `cargo test -p ds4-gguf server_http -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.3 was split before implementation because byte-level HTTP
   framing/CORS, no-model route/model metadata dispatch, and socket/process
   replay have distinct C oracles, fixture families, and validation gates.

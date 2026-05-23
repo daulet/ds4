@@ -10,6 +10,7 @@ pub mod kv_policy;
 pub mod prompt;
 pub mod sampling;
 pub mod server_chat;
+pub mod server_http;
 pub mod session_payload;
 mod tokenizer;
 
@@ -41,6 +42,9 @@ pub use server_chat::{
     request_exceeds_context, think_mode_for_context, AnthropicLiveState, AnthropicRequest,
     OpenAiChatRequest, ResponsesLiveState, ResponsesRequest, ServerRequestError,
     ServerRequestErrorCategory, ToolSchemaOrder,
+};
+pub use server_http::{
+    format_http_error, format_http_response, parse_http_request, HttpRequest, HttpRequestParseError,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

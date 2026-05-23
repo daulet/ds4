@@ -2459,7 +2459,7 @@
 
 ### M9.3a: HTTP Framing And CORS Response Surface
 
-- Status: active
+- Status: done
 - Goal: port the byte-level HTTP request parser and response formatting helpers
   without adding a listener or model-backed request execution.
 - Oracle: C `read_http_request`, `header_end`, `content_length`,
@@ -2477,13 +2477,14 @@
   request cases compare by stable reject/accept category.
 - Review gate: ask Claude to review header parsing bounds, content-length
   handling, query stripping, CORS header parity, and response byte order.
-- Validation needed: targeted Rust HTTP helper tests, `cargo test --workspace`,
+- Validation passed: targeted `cargo test -p ds4-gguf server_http -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
   and `git diff --check`.
 - Owner path: Rust server HTTP helper modules, `.memory/status.md`.
 
 ### M9.3b: Model Metadata And Route Dispatch Surface
 
-- Status: pending
+- Status: active
 - Goal: port no-model route dispatch for OPTIONS, `/v1/models`,
   `/v1/models/deepseek-v4-flash`, and unknown endpoints on top of the M9.3a
   HTTP helpers.
