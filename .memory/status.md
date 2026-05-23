@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.4 Non-Streaming Chat Completion Runtime
-- Last validated source commit: M9.3c2 no-model server binary and socket
-  replay in this commit; prior pushed source commit
-  `8bad7b24160e84e300f94a973a40d0d7c6b6a71f`
+- Active item: M9.4a Model-Backed Server Runtime Boundary
+- Last validated source commit: M9.4 split docs in this commit; prior pushed
+  source commit `c8ccf1b8e0b02f902b2a4a385edb9dca87762a1e`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,20 @@
 
 ## Last Evidence
 
+- M9.4 was split before implementation because model-backed server ownership,
+  non-streaming response formatting, no-cache B300 generation replay, and
+  memory-token cache continuation have distinct oracles and validation gates.
+- M9.4a now owns the model-backed Rust server runtime boundary, engine/session
+  lifetime, model-load smoke replay, tokenizer-backed prompt-token counting,
+  and preservation of M9.3 no-model route/error behavior.
+- M9.4b now owns pure OpenAI non-streaming chat response/usage/header
+  formatting, with IDs and timestamps injected or normalized outside the
+  builder.
+- M9.4c now owns B300 no-cache non-streaming `/v1/chat/completions` replay for
+  `chat_basic` and `chat_thinking_disabled`.
+- M9.4d now owns live memory-token cache seed/continuation replay for
+  `chat_cache_seed` and `chat_cache_continuation`, leaving disk KV/tool-memory
+  behavior to M9.8.
 - M9.3c2 added the `ds4-server-rs` binary with model-free `--host`, `--port`,
   `--ctx`, `--tokens`, and `--cors` startup flags plus C-style localhost
   binding behavior.

@@ -2580,7 +2580,7 @@
 
 ### M9.4: Non-Streaming Chat Completion Runtime
 
-- Status: active
+- Status: split into M9.4a, M9.4b, M9.4c, and M9.4d before implementation
 - Goal: implement model-backed Rust `/v1/chat/completions` non-streaming
   generation for the M0.4 non-streaming OpenAI cases.
 - Oracle: M0.4 `chat_basic`, `chat_thinking_disabled`, `chat_cache_seed`, and
@@ -2599,6 +2599,130 @@
 - Validation needed: B300 non-streaming comparator with negative tests, local
   parser tests, `cargo test --workspace`, and `git diff --check`.
 - Owner path: Rust server runtime path, `ds4-parity/`, `.memory/status.md`.
+
+### M9.4a: Model-Backed Server Runtime Boundary
+
+- Status: active
+- Goal: give the Rust server a model-backed runtime boundary that can load
+  `ds4flash.gguf`, own the engine/session lifetime from the server binary, and
+  keep M9.3 no-model route/error behavior available while generation remains
+  explicitly scoped to later M9.4 items.
+- Oracle: C `parse_options`, `client_main`, `listen_on`,
+  `configure_client_socket`, Rust `ds4-engine` model-open/session APIs, M9.3
+  socket replay behavior, and M0.4 B300 server startup logs.
+- Fixture: M9.3 no-model socket fixtures, M0.4 `models.json`, bad-generation
+  requests, B300 model path/SHA records, and current-C server startup command.
+- Comparator: local no-model replay must still pass through the server
+  boundary, and a B300 smoke command must start the Rust server with `-m
+  /workspace/ds4/ds4flash.gguf`, answer `OPTIONS`/model metadata/error routes,
+  and reject valid chat generation with the planned-not-implemented response.
+- Acceptance: model loading and socket ownership live in the Rust runtime
+  crate without introducing a dependency cycle, CLI startup flags match the
+  C server subset needed by M0.4, tokenizer-backed context-limit checks are
+  available when a model is loaded, and valid non-streaming generation is not
+  silently handled by the no-model path.
+- Drift policy: startup timing and log rates may differ; model identity,
+  bind behavior, HTTP error bodies, model metadata, and prompt-token counts are
+  exact.
+- Review gate: ask Claude to review crate ownership, engine lifetime, CLI flag
+  parity, prompt-token counting, socket shutdown behavior, and no-model
+  regression coverage.
+- Validation needed: local no-model socket replay, B300 model-load smoke replay,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Owner path: `rust/ds4-engine`, Rust server binary/modules, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M9.4b: OpenAI Non-Streaming Response And Usage Builder
+
+- Status: pending
+- Goal: add pure Rust helpers for non-streaming OpenAI chat-completion response
+  JSON, HTTP headers, usage accounting, finish reasons, and trace-ready
+  request metadata without running the model.
+- Oracle: C `openai_completion_json`, `append_openai_usage_json`,
+  context-length helpers, M0.4 `chat_basic`/`chat_thinking_disabled` response
+  JSON, and M0.4 non-streaming headers.
+- Fixture: normalized M0.4 non-streaming response JSON for `chat_basic` and
+  `chat_thinking_disabled`, header files, usage/cache detail vectors, and
+  parser output from M9.2.
+- Comparator: local unit tests compare normalized JSON and headers while
+  allowing only IDs and timestamps to be injected; cache-read/cache-write usage
+  values are supplied as explicit inputs.
+- Acceptance: the builder emits C-shaped non-streaming chat JSON and HTTP
+  responses for fixed generated text, usage counts, finish reasons, model
+  names, cache details, and error cases, with no model runtime or cache policy
+  embedded in the formatting layer.
+- Drift policy: IDs and timestamps are injected or normalized only; JSON field
+  names, ordering, finish reasons, usage counts, model names, and headers are
+  exact.
+- Review gate: ask Claude to review JSON shape, usage accounting,
+  cache-detail clamping, header parity, and separation from runtime/cache
+  policy.
+- Validation needed: targeted response-builder tests,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Owner path: Rust server formatting modules, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M9.4c: No-Cache Non-Streaming Chat Generation Replay
+
+- Status: pending
+- Goal: route model-backed non-streaming `/v1/chat/completions` requests
+  through the Rust engine for the no-cache M0.4 cases, returning the M9.4b
+  response surface for `chat_basic` and `chat_thinking_disabled`.
+- Oracle: M0.4 `chat_basic` and `chat_thinking_disabled` request/response
+  JSON, headers, trace segments, generated text, usage counts, and C
+  request-to-runtime option mapping.
+- Fixture: M0.4 `chat_basic.json`, `chat_thinking_disabled.json`,
+  corresponding response/header/trace files, B300 model path/SHA records, and
+  local parser vectors for thinking-disabled aliases.
+- Comparator: B300 replay against the Rust server compares normalized response
+  JSON, headers, generated bytes, finish reason, prompt/completion/total token
+  counts, sampling options, and trace-rendered prompt fields.
+- Acceptance: Rust matches current C for the two no-cache non-streaming
+  OpenAI chat fixtures, keeps unsupported tools/streaming out of this path,
+  and does not regress existing M8 CLI model-backed comparators.
+- Drift policy: normalize IDs, timestamps, startup timing, and token rates
+  only; generated text, finish reason, prompt text, prompt tokens,
+  completion tokens, and usage fields are exact.
+- Review gate: ask Claude to review request-to-runtime option mapping,
+  prompt-token accounting, thinking-disabled behavior, response assembly,
+  unsupported-route fallbacks, and B300 comparator normalization.
+- Validation needed: B300 no-cache non-streaming comparator, local parser/error
+  tests, existing M8 runtime comparator or documented B300 skip,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Owner path: Rust server runtime path, `ds4-parity/`, `.memory/status.md`.
+
+### M9.4d: Memory-Token Cache Seed And Continuation Replay
+
+- Status: pending
+- Goal: add the in-memory server session/cache behavior needed for M0.4
+  `chat_cache_seed` and `chat_cache_continuation`, including cache read/write
+  usage fields and trace cache decisions.
+- Oracle: M0.4 `chat_cache_seed` and `chat_cache_continuation`
+  request/response JSON, headers, trace cache sections, server log cache
+  messages, and C live-session common-prefix behavior.
+- Fixture: M0.4 cache seed/continuation request JSON, response/header/trace
+  files, server log cache lines, and B300 replay command records.
+- Comparator: B300 sequential replay against one Rust server process compares
+  normalized responses, generated bytes, finish reasons, usage/cache detail
+  fields, trace prompt/cache sections, and live cache-source decisions.
+- Acceptance: Rust preserves the live session across the seed and continuation
+  requests, reports the same cached and cache-write token counts as current C,
+  produces matching generated text and usage, and leaves disk KV/tool-memory
+  behavior to M9.8.
+- Drift policy: normalize IDs, timestamps, paths, startup timing, and token
+  rates only; cache source, cached token counts, cache-write counts,
+  generated text, finish reason, and prompt trace fields are exact.
+- Review gate: ask Claude to review session reuse, common-prefix calculation,
+  cache usage accounting, trace cache fields, request ordering assumptions, and
+  M9.8 boundary separation.
+- Validation needed: B300 sequential cache replay comparator, local
+  response-builder/cache-accounting tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Owner path: Rust server runtime/cache path, `ds4-parity/`,
+  `.memory/status.md`.
 
 ### M9.5: Streaming Chat Completion SSE Surface
 
