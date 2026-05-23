@@ -122,6 +122,12 @@ pub struct ResponsesFinalResponse<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResponsesStreamResponse<'a> {
+    pub response: ResponsesFinalResponse<'a>,
+    pub reasoning_closed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnthropicMessageResponse<'a> {
     pub id: &'a str,
     pub model: &'a str,
@@ -646,6 +652,172 @@ pub fn format_anthropic_message_http(
     format_http_response(enable_cors, 200, Some("application/json"), &body)
 }
 
+pub fn format_responses_stream_sse(
+    stream: &ResponsesStreamResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let response = &stream.response;
+    let item_status = responses_item_status_for_finish(response.finish_reason);
+    let mut out = String::new();
+    let mut sequence = 0;
+    let mut next_output_index = 0usize;
+    let mut reasoning_index = None;
+    let mut message_index = None;
+
+    let mut body = String::new();
+    body.push_str("{\"type\":\"response.created\",\"response\":{\"id\":");
+    body.push_str(&json_escape_string(response.id));
+    body.push_str(",\"object\":\"response\",\"created_at\":");
+    body.push_str(&response.created_at.to_string());
+    body.push_str(",\"status\":\"in_progress\",\"model\":");
+    body.push_str(&json_escape_string(response.model));
+    body.push_str(",\"output\":[]}}");
+    append_responses_sse_event_body(&mut out, &mut sequence, &body);
+
+    if let Some(reasoning) = response
+        .reasoning
+        .filter(|reasoning| response.reasoning_summary_emit && !reasoning.is_empty())
+    {
+        let index = next_output_index;
+        next_output_index += 1;
+        reasoning_index = Some(index);
+        append_responses_reasoning_events(
+            &mut out,
+            &mut sequence,
+            response,
+            index,
+            reasoning,
+            stream.reasoning_closed,
+        );
+    }
+
+    if !response.content.is_empty() {
+        let index = next_output_index;
+        next_output_index += 1;
+        message_index = Some(index);
+        append_responses_message_events(&mut out, &mut sequence, response, index, item_status);
+    }
+
+    let tool_output_index = next_output_index;
+    for (index, call) in tool_calls.iter().enumerate() {
+        let output_index = tool_output_index + index;
+        let item = responses_tool_item(response, call, index);
+        append_responses_function_call_event(
+            &mut out,
+            &mut sequence,
+            call,
+            &item,
+            output_index,
+            "in_progress",
+            false,
+            response.tool_orders,
+        );
+        append_responses_function_call_argument_events(
+            &mut out,
+            &mut sequence,
+            call,
+            &item,
+            output_index,
+            response.tool_orders,
+        );
+        append_responses_function_call_event(
+            &mut out,
+            &mut sequence,
+            call,
+            &item,
+            output_index,
+            item_status,
+            true,
+            response.tool_orders,
+        );
+    }
+
+    append_responses_terminal_event(
+        &mut out,
+        &mut sequence,
+        response,
+        stream.reasoning_closed,
+        reasoning_index,
+        message_index,
+        tool_calls,
+    );
+    out
+}
+
+pub fn format_responses_stream_http(
+    enable_cors: bool,
+    stream: &ResponsesStreamResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let body = format_responses_stream_sse(stream, tool_calls);
+    format_openai_chat_stream_http_body(enable_cors, &body)
+}
+
+pub fn format_anthropic_message_stream_sse(
+    response: &AnthropicMessageResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let mut out = String::new();
+    let mut next_index = 0usize;
+    let mut sent_text = false;
+
+    let mut body = String::new();
+    body.push_str("{\"type\":\"message_start\",\"message\":{\"id\":");
+    body.push_str(&json_escape_string(response.id));
+    body.push_str(",\"type\":\"message\",\"role\":\"assistant\",\"model\":");
+    body.push_str(&json_escape_string(response.model));
+    body.push_str(",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":");
+    append_anthropic_start_usage_json(&mut body, response.usage);
+    body.push_str("}}");
+    append_sse_event(&mut out, "message_start", &body);
+
+    if let Some(reasoning) = response.reasoning.filter(|reasoning| !reasoning.is_empty()) {
+        append_anthropic_thinking_stream_block(&mut out, next_index, response.id, reasoning);
+        next_index += 1;
+    }
+
+    if !response.content.is_empty() {
+        append_anthropic_text_stream_block(&mut out, next_index, response.content);
+        next_index += 1;
+        sent_text = true;
+    }
+
+    for (call_index, call) in tool_calls.iter().enumerate() {
+        append_anthropic_tool_stream_block(&mut out, next_index, response.id, call_index, call);
+        next_index += 1;
+    }
+
+    if response
+        .reasoning
+        .is_some_and(|reasoning| !reasoning.is_empty())
+        && !sent_text
+        && tool_calls.is_empty()
+    {
+        append_anthropic_empty_text_stream_block(&mut out, next_index);
+    }
+
+    body.clear();
+    body.push_str("{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":");
+    body.push_str(&json_escape_string(anthropic_stop_reason(
+        response.finish_reason,
+    )));
+    body.push_str(",\"stop_sequence\":null},\"usage\":{\"output_tokens\":");
+    body.push_str(&response.usage.completion_tokens.to_string());
+    body.push_str("}}");
+    append_sse_event(&mut out, "message_delta", &body);
+    append_sse_event(&mut out, "message_stop", "{\"type\":\"message_stop\"}");
+    out
+}
+
+pub fn format_anthropic_message_stream_http(
+    enable_cors: bool,
+    response: &AnthropicMessageResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let body = format_anthropic_message_stream_sse(response, tool_calls);
+    format_openai_chat_stream_http_body(enable_cors, &body)
+}
+
 pub fn format_openai_chat_stream_sse(response: &OpenAiChatStream<'_>) -> String {
     let mut out = String::new();
     append_openai_chat_stream_role_chunk(&mut out, response.id, response.created, response.model);
@@ -992,6 +1164,20 @@ struct ResponsesToolItem {
     call_id: String,
 }
 
+fn responses_tool_item(
+    response: &ResponsesFinalResponse<'_>,
+    call: &DsmlJsonCall,
+    index: usize,
+) -> ResponsesToolItem {
+    ResponsesToolItem {
+        function_call_id: format!("{}{}", response.function_call_id_prefix, index),
+        call_id: call
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("{}{}", response.call_id_prefix, index)),
+    }
+}
+
 fn append_responses_function_call_item(
     out: &mut String,
     call: &DsmlJsonCall,
@@ -1045,6 +1231,329 @@ fn append_responses_function_call_item(
     out.push('}');
 }
 
+fn append_responses_sse_event_body(out: &mut String, sequence: &mut i32, body: &str) {
+    out.push_str("data: ");
+    if let Some(type_close) = responses_event_type_close(body) {
+        out.push_str(&body[..type_close]);
+        out.push_str(",\"sequence_number\":");
+        out.push_str(&sequence.to_string());
+        out.push_str(&body[type_close..]);
+    } else {
+        out.push_str(body);
+    }
+    out.push_str("\n\n");
+    *sequence += 1;
+}
+
+fn responses_event_type_close(body: &str) -> Option<usize> {
+    let tail = body.strip_prefix("{\"type\":\"")?;
+    let mut escaped = false;
+    for (offset, ch) in tail.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if ch == '"' {
+            return Some("{\"type\":\"".len() + offset + 1);
+        }
+    }
+    None
+}
+
+fn append_responses_reasoning_events(
+    out: &mut String,
+    sequence: &mut i32,
+    response: &ResponsesFinalResponse<'_>,
+    output_index: usize,
+    reasoning: &str,
+    reasoning_closed: bool,
+) {
+    let mut body = String::new();
+    body.push_str("{\"type\":\"response.output_item.added\",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"item\":{\"id\":");
+    body.push_str(&json_escape_string(response.reasoning_id));
+    body.push_str(",\"type\":\"reasoning\",\"status\":\"in_progress\",\"summary\":[]}}");
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.reasoning_summary_part.added\",\"item_id\":");
+    body.push_str(&json_escape_string(response.reasoning_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"summary_index\":0,\"part\":{\"type\":\"summary_text\",\"text\":\"\"}}");
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":");
+    body.push_str(&json_escape_string(response.reasoning_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"summary_index\":0,\"delta\":");
+    body.push_str(&json_escape_string(reasoning));
+    body.push('}');
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.reasoning_summary_text.done\",\"item_id\":");
+    body.push_str(&json_escape_string(response.reasoning_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"summary_index\":0,\"text\":");
+    body.push_str(&json_escape_string(reasoning));
+    body.push('}');
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.reasoning_summary_part.done\",\"item_id\":");
+    body.push_str(&json_escape_string(response.reasoning_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"summary_index\":0,\"part\":{\"type\":\"summary_text\",\"text\":");
+    body.push_str(&json_escape_string(reasoning));
+    body.push_str("}}");
+    append_responses_sse_event_body(out, sequence, &body);
+
+    let reasoning_status = if reasoning_closed {
+        "completed"
+    } else {
+        "incomplete"
+    };
+    body.clear();
+    body.push_str("{\"type\":\"response.output_item.done\",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"item\":{\"id\":");
+    body.push_str(&json_escape_string(response.reasoning_id));
+    body.push_str(",\"type\":\"reasoning\",\"status\":");
+    body.push_str(&json_escape_string(reasoning_status));
+    body.push_str(",\"summary\":[{\"type\":\"summary_text\",\"text\":");
+    body.push_str(&json_escape_string(reasoning));
+    body.push_str("}]}}");
+    append_responses_sse_event_body(out, sequence, &body);
+}
+
+fn append_responses_message_events(
+    out: &mut String,
+    sequence: &mut i32,
+    response: &ResponsesFinalResponse<'_>,
+    output_index: usize,
+    item_status: &str,
+) {
+    let mut body = String::new();
+    body.push_str("{\"type\":\"response.output_item.added\",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"item\":{\"id\":");
+    body.push_str(&json_escape_string(response.message_id));
+    body.push_str(
+        ",\"type\":\"message\",\"status\":\"in_progress\",\"role\":\"assistant\",\"content\":[]}}",
+    );
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.content_part.added\",\"item_id\":");
+    body.push_str(&json_escape_string(response.message_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(
+        ",\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"\",\"annotations\":[]}}",
+    );
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.output_text.delta\",\"item_id\":");
+    body.push_str(&json_escape_string(response.message_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"content_index\":0,\"delta\":");
+    body.push_str(&json_escape_string(response.content));
+    body.push('}');
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.output_text.done\",\"item_id\":");
+    body.push_str(&json_escape_string(response.message_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"content_index\":0,\"text\":");
+    body.push_str(&json_escape_string(response.content));
+    body.push('}');
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.content_part.done\",\"item_id\":");
+    body.push_str(&json_escape_string(response.message_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":");
+    body.push_str(&json_escape_string(response.content));
+    body.push_str(",\"annotations\":[]}}");
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.output_item.done\",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"item\":{\"id\":");
+    body.push_str(&json_escape_string(response.message_id));
+    body.push_str(",\"type\":\"message\",\"status\":");
+    body.push_str(&json_escape_string(item_status));
+    body.push_str(",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":");
+    body.push_str(&json_escape_string(response.content));
+    body.push_str(",\"annotations\":[]}]}}");
+    append_responses_sse_event_body(out, sequence, &body);
+}
+
+fn append_responses_function_call_event(
+    out: &mut String,
+    sequence: &mut i32,
+    call: &DsmlJsonCall,
+    item: &ResponsesToolItem,
+    output_index: usize,
+    item_status: &str,
+    with_args: bool,
+    tool_orders: &[ToolSchemaOrder],
+) {
+    let mut body = String::new();
+    body.push_str("{\"type\":\"response.output_item.");
+    body.push_str(if with_args { "done" } else { "added" });
+    body.push_str("\",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"item\":");
+    append_responses_function_call_item(&mut body, call, item, item_status, with_args, tool_orders);
+    body.push('}');
+    append_responses_sse_event_body(out, sequence, &body);
+}
+
+fn append_responses_function_call_argument_events(
+    out: &mut String,
+    sequence: &mut i32,
+    call: &DsmlJsonCall,
+    item: &ResponsesToolItem,
+    output_index: usize,
+    tool_orders: &[ToolSchemaOrder],
+) {
+    let order = tool_order_for_name(tool_orders, &call.name);
+    if responses_tool_call_is_tool_search(call, order) {
+        return;
+    }
+    let arguments = json_escape_string(&normalize_json_object_or_empty(&call.arguments));
+    let mut body = String::new();
+    body.push_str("{\"type\":\"response.function_call_arguments.delta\",\"item_id\":");
+    body.push_str(&json_escape_string(&item.function_call_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"delta\":");
+    body.push_str(&arguments);
+    body.push('}');
+    append_responses_sse_event_body(out, sequence, &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"response.function_call_arguments.done\",\"item_id\":");
+    body.push_str(&json_escape_string(&item.function_call_id));
+    body.push_str(",\"output_index\":");
+    body.push_str(&output_index.to_string());
+    body.push_str(",\"name\":");
+    body.push_str(&json_escape_string(
+        order
+            .and_then(|order| order.wire_name.as_deref())
+            .unwrap_or(&call.name),
+    ));
+    if let Some(namespace) = order.and_then(|order| order.namespace.as_deref()) {
+        body.push_str(",\"namespace\":");
+        body.push_str(&json_escape_string(namespace));
+    }
+    body.push_str(",\"arguments\":");
+    body.push_str(&arguments);
+    body.push('}');
+    append_responses_sse_event_body(out, sequence, &body);
+}
+
+fn append_responses_terminal_event(
+    out: &mut String,
+    sequence: &mut i32,
+    response: &ResponsesFinalResponse<'_>,
+    reasoning_closed: bool,
+    reasoning_index: Option<usize>,
+    message_index: Option<usize>,
+    tool_calls: &[DsmlJsonCall],
+) {
+    let event_type = responses_terminal_event_type(response.finish_reason);
+    let status = responses_status_for_finish(response.finish_reason);
+    let item_status = responses_item_status_for_finish(response.finish_reason);
+    let mut body = String::new();
+    body.push_str("{\"type\":");
+    body.push_str(&json_escape_string(event_type));
+    body.push_str(",\"response\":{\"id\":");
+    body.push_str(&json_escape_string(response.id));
+    body.push_str(",\"object\":\"response\",\"created_at\":");
+    body.push_str(&response.created_at.to_string());
+    body.push_str(",\"status\":");
+    body.push_str(&json_escape_string(status));
+    body.push_str(",\"model\":");
+    body.push_str(&json_escape_string(response.model));
+    match response.finish_reason {
+        "error" => body
+            .push_str(",\"error\":{\"code\":\"server_error\",\"message\":\"generation failed\"}"),
+        "length" => body.push_str(",\"incomplete_details\":{\"reason\":\"max_tokens\"}"),
+        _ => {}
+    }
+    body.push_str(",\"output\":[");
+    let mut wrote = false;
+    if let (Some(_), Some(reasoning)) = (
+        reasoning_index,
+        response
+            .reasoning
+            .filter(|reasoning| response.reasoning_summary_emit && !reasoning.is_empty()),
+    ) {
+        append_separator(&mut body, &mut wrote);
+        let reasoning_status = if reasoning_closed {
+            "completed"
+        } else {
+            "incomplete"
+        };
+        body.push_str("{\"id\":");
+        body.push_str(&json_escape_string(response.reasoning_id));
+        body.push_str(",\"type\":\"reasoning\",\"status\":");
+        body.push_str(&json_escape_string(reasoning_status));
+        body.push_str(",\"summary\":[{\"type\":\"summary_text\",\"text\":");
+        body.push_str(&json_escape_string(reasoning));
+        body.push_str("}]}");
+    }
+    if message_index.is_some() {
+        append_separator(&mut body, &mut wrote);
+        body.push_str("{\"id\":");
+        body.push_str(&json_escape_string(response.message_id));
+        body.push_str(",\"type\":\"message\",\"status\":");
+        body.push_str(&json_escape_string(item_status));
+        body.push_str(",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":");
+        body.push_str(&json_escape_string(response.content));
+        body.push_str(",\"annotations\":[]}]}");
+    }
+    for (index, call) in tool_calls.iter().enumerate() {
+        append_separator(&mut body, &mut wrote);
+        let item = responses_tool_item(response, call, index);
+        append_responses_function_call_item(
+            &mut body,
+            call,
+            &item,
+            item_status,
+            true,
+            response.tool_orders,
+        );
+    }
+    body.push_str("],\"usage\":");
+    append_responses_usage_json(&mut body, response.usage);
+    body.push_str("}}");
+    append_responses_sse_event_body(out, sequence, &body);
+}
+
+fn responses_terminal_event_type(finish_reason: &str) -> &'static str {
+    match finish_reason {
+        "error" => "response.failed",
+        "length" => "response.incomplete",
+        _ => "response.completed",
+    }
+}
+
 fn append_anthropic_content(
     out: &mut String,
     content: &str,
@@ -1081,6 +1590,123 @@ fn append_anthropic_content(
         out.push_str("{\"type\":\"text\",\"text\":\"\"}");
     }
     out.push(']');
+}
+
+fn append_anthropic_start_usage_json(out: &mut String, usage: OpenAiUsage) {
+    let start_usage = OpenAiUsage {
+        completion_tokens: 0,
+        ..usage
+    };
+    append_anthropic_usage_json(out, start_usage);
+}
+
+fn append_anthropic_thinking_stream_block(
+    out: &mut String,
+    index: usize,
+    signature: &str,
+    reasoning: &str,
+) {
+    let mut body = String::new();
+    body.push_str("{\"type\":\"content_block_start\",\"index\":");
+    body.push_str(&index.to_string());
+    body.push_str(
+        ",\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}",
+    );
+    append_sse_event(out, "content_block_start", &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"content_block_delta\",\"index\":");
+    body.push_str(&index.to_string());
+    body.push_str(",\"delta\":{\"type\":\"thinking_delta\",\"thinking\":");
+    body.push_str(&json_escape_string(reasoning));
+    body.push_str("}}");
+    append_sse_event(out, "content_block_delta", &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"content_block_delta\",\"index\":");
+    body.push_str(&index.to_string());
+    body.push_str(",\"delta\":{\"type\":\"signature_delta\",\"signature\":");
+    body.push_str(&json_escape_string(signature));
+    body.push_str("}}");
+    append_sse_event(out, "content_block_delta", &body);
+
+    append_anthropic_content_block_stop(out, index);
+}
+
+fn append_anthropic_text_stream_block(out: &mut String, index: usize, text: &str) {
+    let mut body = String::new();
+    body.push_str("{\"type\":\"content_block_start\",\"index\":");
+    body.push_str(&index.to_string());
+    body.push_str(",\"content_block\":{\"type\":\"text\",\"text\":\"\"}}");
+    append_sse_event(out, "content_block_start", &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"content_block_delta\",\"index\":");
+    body.push_str(&index.to_string());
+    body.push_str(",\"delta\":{\"type\":\"text_delta\",\"text\":");
+    body.push_str(&json_escape_string(text));
+    body.push_str("}}");
+    append_sse_event(out, "content_block_delta", &body);
+
+    append_anthropic_content_block_stop(out, index);
+}
+
+fn append_anthropic_empty_text_stream_block(out: &mut String, index: usize) {
+    let mut body = String::new();
+    body.push_str("{\"type\":\"content_block_start\",\"index\":");
+    body.push_str(&index.to_string());
+    body.push_str(",\"content_block\":{\"type\":\"text\",\"text\":\"\"}}");
+    append_sse_event(out, "content_block_start", &body);
+    append_anthropic_content_block_stop(out, index);
+}
+
+fn append_anthropic_tool_stream_block(
+    out: &mut String,
+    block_index: usize,
+    id_prefix: &str,
+    call_index: usize,
+    call: &DsmlJsonCall,
+) {
+    let default_id = format!("toolu_{id_prefix}_{call_index}");
+    let mut body = String::new();
+    body.push_str("{\"type\":\"content_block_start\",\"index\":");
+    body.push_str(&block_index.to_string());
+    body.push_str(",\"content_block\":{\"type\":\"tool_use\",\"id\":");
+    body.push_str(&json_escape_string(
+        call.id.as_deref().unwrap_or(&default_id),
+    ));
+    body.push_str(",\"name\":");
+    body.push_str(&json_escape_string(&call.name));
+    body.push_str(",\"input\":{}}}");
+    append_sse_event(out, "content_block_start", &body);
+
+    body.clear();
+    body.push_str("{\"type\":\"content_block_delta\",\"index\":");
+    body.push_str(&block_index.to_string());
+    body.push_str(",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":");
+    body.push_str(&json_escape_string(&normalize_json_object_or_empty(
+        &call.arguments,
+    )));
+    body.push_str("}}");
+    append_sse_event(out, "content_block_delta", &body);
+
+    append_anthropic_content_block_stop(out, block_index);
+}
+
+fn append_anthropic_content_block_stop(out: &mut String, index: usize) {
+    let mut body = String::new();
+    body.push_str("{\"type\":\"content_block_stop\",\"index\":");
+    body.push_str(&index.to_string());
+    body.push('}');
+    append_sse_event(out, "content_block_stop", &body);
+}
+
+fn append_sse_event(out: &mut String, event: &str, data: &str) {
+    out.push_str("event: ");
+    out.push_str(event);
+    out.push_str("\ndata: ");
+    out.push_str(data);
+    out.push_str("\n\n");
 }
 
 fn append_anthropic_tool_use(out: &mut String, call: &DsmlJsonCall, id_prefix: &str, index: usize) {
@@ -1339,6 +1965,16 @@ mod tests {
     const CHAT_TOOL_CALL_HEADERS: &str = include_str!(
         "../../../ds4-parity/baselines/server-traces/m0.4/headers/chat_tool_call.headers.txt"
     );
+
+    fn assert_ordered(haystack: &str, needles: &[&str]) {
+        let mut last = 0;
+        for needle in needles {
+            let rel = haystack[last..]
+                .find(needle)
+                .unwrap_or_else(|| panic!("missing ordered needle {needle:?}"));
+            last += rel + needle.len();
+        }
+    }
 
     #[test]
     fn formats_m04_non_streaming_chat_response_bodies() {
@@ -1711,6 +2347,272 @@ mod tests {
         let text = reasoning_only.find(r#""type":"text","text":"""#).unwrap();
         assert!(thinking < text);
         assert!(reasoning_only.contains(r#""stop_reason":"max_tokens""#));
+    }
+
+    #[test]
+    fn formats_responses_stream_sse_lifecycle() {
+        let orders = [ToolSchemaOrder {
+            name: "bash".to_string(),
+            wire_name: None,
+            namespace: None,
+            responses_tool_search: false,
+            properties: vec![],
+        }];
+        let calls = [DsmlJsonCall {
+            id: None,
+            name: "bash".to_string(),
+            arguments: "{\"description\":\"list files\",\"command\":\"ls -la\"}".to_string(),
+        }];
+        let body = format_responses_stream_sse(
+            &ResponsesStreamResponse {
+                response: ResponsesFinalResponse {
+                    id: "resp_stream",
+                    created_at: 1234,
+                    model: "deepseek-chat",
+                    content: "Hello.",
+                    reasoning: Some("need a tool"),
+                    reasoning_summary_emit: true,
+                    finish_reason: "tool_calls",
+                    usage: OpenAiUsage::new(10, 8, 7, 3),
+                    reasoning_id: "rs_stream",
+                    message_id: "msg_stream",
+                    function_call_id_prefix: "fc_stream_",
+                    call_id_prefix: "call_stream_",
+                    tool_orders: &orders,
+                },
+                reasoning_closed: true,
+            },
+            &calls,
+        );
+
+        for sequence in 0..=17 {
+            assert!(
+                body.contains(&format!(r#""sequence_number":{sequence}"#)),
+                "missing sequence {sequence}"
+            );
+        }
+        assert_ordered(
+            &body,
+            &[
+                r#""type":"response.created","sequence_number":0"#,
+                r#""type":"response.output_item.added","sequence_number":1"#,
+                r#""type":"response.reasoning_summary_part.added","sequence_number":2"#,
+                r#""type":"response.reasoning_summary_text.delta","sequence_number":3"#,
+                r#""type":"response.reasoning_summary_text.done","sequence_number":4"#,
+                r#""type":"response.reasoning_summary_part.done","sequence_number":5"#,
+                r#""type":"response.output_item.done","sequence_number":6"#,
+                r#""type":"response.output_item.added","sequence_number":7"#,
+                r#""type":"response.content_part.added","sequence_number":8"#,
+                r#""type":"response.output_text.delta","sequence_number":9"#,
+                r#""type":"response.output_text.done","sequence_number":10"#,
+                r#""type":"response.content_part.done","sequence_number":11"#,
+                r#""type":"response.output_item.done","sequence_number":12"#,
+                r#""type":"response.output_item.added","sequence_number":13"#,
+                r#""type":"response.function_call_arguments.delta","sequence_number":14"#,
+                r#""type":"response.function_call_arguments.done","sequence_number":15"#,
+                r#""type":"response.output_item.done","sequence_number":16"#,
+                r#""type":"response.completed","sequence_number":17"#,
+            ],
+        );
+        assert!(
+            body.contains(r#""delta":"{\"description\":\"list files\",\"command\":\"ls -la\"}""#)
+        );
+        assert!(body
+            .contains(r#""arguments":"{\"description\":\"list files\",\"command\":\"ls -la\"}""#));
+        assert!(body.contains(r#""usage":{"input_tokens":10"#));
+        assert!(!body.contains("[DONE]"));
+    }
+
+    #[test]
+    fn responses_stream_tool_search_skips_argument_events_and_maps_length() {
+        let orders = [ToolSchemaOrder {
+            name: "tool_search".to_string(),
+            wire_name: None,
+            namespace: None,
+            responses_tool_search: true,
+            properties: vec![],
+        }];
+        let calls = [DsmlJsonCall {
+            id: Some("call_search".to_string()),
+            name: "tool_search".to_string(),
+            arguments: "{\"limit\":3,\"query\":\"perplexity\"}".to_string(),
+        }];
+        let body = format_responses_stream_sse(
+            &ResponsesStreamResponse {
+                response: ResponsesFinalResponse {
+                    id: "resp_search",
+                    created_at: 1234,
+                    model: "deepseek-chat",
+                    content: "",
+                    reasoning: None,
+                    reasoning_summary_emit: true,
+                    finish_reason: "length",
+                    usage: OpenAiUsage::new(6, 4, 0, 9),
+                    reasoning_id: "rs_unused",
+                    message_id: "msg_unused",
+                    function_call_id_prefix: "fc_",
+                    call_id_prefix: "call_",
+                    tool_orders: &orders,
+                },
+                reasoning_closed: true,
+            },
+            &calls,
+        );
+
+        assert_ordered(
+            &body,
+            &[
+                r#""type":"response.created","sequence_number":0"#,
+                r#""type":"response.output_item.added","sequence_number":1"#,
+                r#""type":"response.output_item.done","sequence_number":2"#,
+                r#""type":"response.incomplete","sequence_number":3"#,
+            ],
+        );
+        assert!(!body.contains("response.function_call_arguments."));
+        assert!(body.contains(r#""type":"tool_search_call","status":"in_progress""#));
+        assert!(body.contains(r#""type":"tool_search_call","status":"incomplete""#));
+        assert!(body.contains(r#""incomplete_details":{"reason":"max_tokens"}"#));
+        assert!(
+            body.contains(r#""input_tokens_details":{"cached_tokens":0,"cache_write_tokens":6}"#)
+        );
+    }
+
+    #[test]
+    fn responses_stream_marks_unclosed_reasoning_incomplete() {
+        let body = format_responses_stream_sse(
+            &ResponsesStreamResponse {
+                response: ResponsesFinalResponse {
+                    id: "resp_reasoning",
+                    created_at: 1234,
+                    model: "deepseek-chat",
+                    content: "",
+                    reasoning: Some("partial hidden"),
+                    reasoning_summary_emit: true,
+                    finish_reason: "stop",
+                    usage: OpenAiUsage::new(3, 1, 0, 0),
+                    reasoning_id: "rs_partial",
+                    message_id: "msg_unused",
+                    function_call_id_prefix: "fc_",
+                    call_id_prefix: "call_",
+                    tool_orders: &[],
+                },
+                reasoning_closed: false,
+            },
+            &[],
+        );
+
+        assert!(body.contains(r#""type":"response.completed""#));
+        assert!(body.contains(r#""id":"rs_partial","type":"reasoning","status":"incomplete""#));
+    }
+
+    #[test]
+    fn formats_anthropic_message_stream_sse_lifecycle() {
+        let calls = [DsmlJsonCall {
+            id: None,
+            name: "bash".to_string(),
+            arguments: "{\"description\":\"list files\",\"command\":\"ls -la\"}".to_string(),
+        }];
+        let body = format_anthropic_message_stream_sse(
+            &AnthropicMessageResponse {
+                id: "msg_stream",
+                model: "deepseek-v4-flash",
+                content: "done",
+                reasoning: Some("thinking text"),
+                finish_reason: "tool_calls",
+                usage: OpenAiUsage::new(10, 2, 7, 3),
+            },
+            &calls,
+        );
+
+        assert_ordered(
+            &body,
+            &[
+                "event: message_start",
+                r#""usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":7,"cache_creation_input_tokens":3}"#,
+                r#""content_block":{"type":"thinking","thinking":"","signature":""}"#,
+                r#""delta":{"type":"thinking_delta","thinking":"thinking text"}"#,
+                r#""delta":{"type":"signature_delta","signature":"msg_stream"}"#,
+                r#""type":"content_block_stop","index":0"#,
+                r#""content_block":{"type":"text","text":""}"#,
+                r#""delta":{"type":"text_delta","text":"done"}"#,
+                r#""type":"content_block_stop","index":1"#,
+                r#""content_block":{"type":"tool_use","id":"toolu_msg_stream_0","name":"bash","input":{}}"#,
+                r#""delta":{"type":"input_json_delta","partial_json":"{\"description\":\"list files\",\"command\":\"ls -la\"}"}"#,
+                r#""type":"content_block_stop","index":2"#,
+                r#""type":"message_delta","delta":{"stop_reason":"tool_use""#,
+                r#""usage":{"output_tokens":2}"#,
+                "event: message_stop",
+            ],
+        );
+        assert!(!body.contains("[DONE]"));
+    }
+
+    #[test]
+    fn anthropic_stream_reasoning_only_adds_empty_text_block() {
+        let body = format_anthropic_message_stream_sse(
+            &AnthropicMessageResponse {
+                id: "msg_reasoning",
+                model: "deepseek-chat",
+                content: "",
+                reasoning: Some("hidden"),
+                finish_reason: "length",
+                usage: OpenAiUsage::new(3, 1, 0, 0),
+            },
+            &[],
+        );
+
+        assert_ordered(
+            &body,
+            &[
+                r#""content_block":{"type":"thinking","thinking":"","signature":""}"#,
+                r#""delta":{"type":"thinking_delta","thinking":"hidden"}"#,
+                r#""type":"content_block_stop","index":0"#,
+                r#""content_block":{"type":"text","text":""}"#,
+                r#""type":"content_block_stop","index":1"#,
+                r#""type":"message_delta","delta":{"stop_reason":"max_tokens""#,
+            ],
+        );
+    }
+
+    #[test]
+    fn protocol_stream_http_wrappers_use_sse_headers() {
+        let responses_stream = ResponsesStreamResponse {
+            response: ResponsesFinalResponse {
+                id: "resp_http",
+                created_at: 1234,
+                model: "deepseek-chat",
+                content: "ok",
+                reasoning: None,
+                reasoning_summary_emit: true,
+                finish_reason: "stop",
+                usage: OpenAiUsage::new(3, 1, 0, 0),
+                reasoning_id: "rs_unused",
+                message_id: "msg_http",
+                function_call_id_prefix: "fc_",
+                call_id_prefix: "call_",
+                tool_orders: &[],
+            },
+            reasoning_closed: true,
+        };
+        let response_http = format_responses_stream_http(false, &responses_stream, &[]);
+        let (headers, body) = response_http.split_once("\r\n\r\n").expect("HTTP response");
+        assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_STREAM_HEADERS);
+        assert_eq!(body, format_responses_stream_sse(&responses_stream, &[]));
+
+        let anthropic = AnthropicMessageResponse {
+            id: "msg_http",
+            model: "deepseek-chat",
+            content: "ok",
+            reasoning: None,
+            finish_reason: "stop",
+            usage: OpenAiUsage::new(3, 1, 0, 0),
+        };
+        let anthropic_http = format_anthropic_message_stream_http(false, &anthropic, &[]);
+        let (headers, body) = anthropic_http
+            .split_once("\r\n\r\n")
+            .expect("HTTP response");
+        assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_STREAM_HEADERS);
+        assert_eq!(body, format_anthropic_message_stream_sse(&anthropic, &[]));
     }
 
     #[test]

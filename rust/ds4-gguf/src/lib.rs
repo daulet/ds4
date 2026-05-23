@@ -59,14 +59,16 @@ pub use server_no_model::{
 };
 pub use server_response::{
     format_anthropic_message_http, format_anthropic_message_json,
+    format_anthropic_message_stream_http, format_anthropic_message_stream_sse,
     format_openai_chat_completion_http, format_openai_chat_completion_json,
     format_openai_chat_stream_http, format_openai_chat_stream_sse,
     format_openai_chat_tool_completion_http, format_openai_chat_tool_completion_json,
     format_openai_chat_tool_stream_http, format_openai_chat_tool_stream_sse,
     format_responses_final_response_http, format_responses_final_response_json,
-    AnthropicMessageResponse, OpenAiChatCompletion, OpenAiChatStream, OpenAiChatToolStream,
-    OpenAiToolCallStreamEvent, OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator,
-    OpenAiUsage, ResponsesFinalResponse,
+    format_responses_stream_http, format_responses_stream_sse, AnthropicMessageResponse,
+    OpenAiChatCompletion, OpenAiChatStream, OpenAiChatToolStream, OpenAiToolCallStreamEvent,
+    OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator, OpenAiUsage,
+    ResponsesFinalResponse, ResponsesStreamResponse,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

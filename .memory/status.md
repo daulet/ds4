@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.7b Responses And Anthropic Streaming Event Builders
-- Last validated source commit: M9.7a Responses/Anthropic final response
-  formatters in this commit; prior pushed source commit
-  `597361391a78a35c17a3b030c14211a2e03da31a`
+- Active item: M9.8 Server Cache, KV Restore, And Tool Memory
+- Last validated source commit: M9.7b Responses/Anthropic streaming event
+  builders in this commit; prior pushed source commit
+  `c98a40f12f38a303e89d370a47c920d660441c8d`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,35 @@
 
 ## Last Evidence
 
+- M9.7b adds exported model-free SSE formatters and HTTP wrappers for
+  Responses and Anthropic protocol streams:
+  `format_responses_stream_sse`, `format_responses_stream_http`,
+  `format_anthropic_message_stream_sse`, and
+  `format_anthropic_message_stream_http`, plus `ResponsesStreamResponse`.
+- M9.7b Responses streaming emits C-shaped `data:` events with monotonic
+  `sequence_number` insertion after each `type` field, covering
+  `response.created`, reasoning summary lifecycle events, message content-part
+  lifecycle events, function-call argument delta/done events, tool-search
+  output items that skip argument events, and terminal
+  `response.completed`/`response.incomplete`/`response.failed` payloads.
+- M9.7b Responses streaming keeps C's reasoning replay rule: a reasoning item
+  that did not close naturally is marked `incomplete` both in
+  `response.output_item.done` and in the terminal response output even when the
+  response-level finish maps to `completed`.
+- M9.7b Anthropic streaming emits `event:`-framed message/content-block
+  lifecycles for thinking, text, tool-use input JSON deltas, terminal
+  `message_delta`, and `message_stop`; thinking blocks include the message ID
+  as the signature delta, tool-use deltas carry normalized JSON fragments, and
+  reasoning-only streams add the empty text block required by the C path.
+- M9.7b local validation passed targeted `cargo test -p ds4-gguf
+  server_response -- --nocapture` with 30 server-response tests, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and a NUL scan over the touched Rust files; this slice is model-free, so B300
+  execution was not required.
+- M9.7b non-interactive Claude review returned `NO BLOCKERS` for sequence
+  numbers, event order, reasoning incomplete semantics, function/tool-search
+  argument events, Anthropic content-block lifecycle, usage fields, and exported
+  API shape.
 - M9.7a adds exported Rust final-response formatters for Responses and
   Anthropic non-streaming protocol bodies plus HTTP wrappers:
   `format_responses_final_response_json`,

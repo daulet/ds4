@@ -3076,7 +3076,7 @@
 
 ### M9.7: Responses And Anthropic Protocol Surface
 
-- Status: active via M9.7b
+- Status: done via M9.7a and M9.7b
 - Goal: port Responses and Anthropic request/response/stream protocol surfaces
   that share the server request and tool-memory core.
 - Oracle: C Responses/Anthropic parsers, live-tail/tool-output validation
@@ -3131,7 +3131,7 @@
 
 ### M9.7b: Responses And Anthropic Streaming Event Builders
 
-- Status: active
+- Status: done
 - Goal: port model-free Responses and Anthropic SSE event/body builders for
   reasoning deltas, output text deltas, tool-call lifecycle events, terminal
   usage events, and Anthropic content-block deltas.
@@ -3151,15 +3151,16 @@
   and tool argument JSON are exact; random IDs and timestamps are injected.
 - Review gate: ask Claude to review lifecycle ordering and hidden reasoning
   replay semantics before runtime integration.
-- Validation needed: targeted streaming protocol tests, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
-  review with no blockers.
+- Validation passed: targeted `cargo test -p ds4-gguf server_response -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, NUL scan, and non-interactive Claude review with no
+  blockers.
 - Owner path: `rust/ds4-gguf/src/server_response.rs`,
   `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`, `.memory/status.md`.
 
 ### M9.8: Server Cache, KV Restore, And Tool Memory
 
-- Status: pending
+- Status: active
 - Goal: port server cache decisions, disk-KV restore, continued-frontier logic,
   eviction policy, and tool-memory replay.
 - Oracle: M0.4 cache continuation, M0.5 KV replay artifacts, KV/cache unit
