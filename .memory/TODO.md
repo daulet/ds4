@@ -2077,7 +2077,7 @@
 
 ### M9.2: Server Request Parse And Prompt Render Surface
 
-- Status: split into M9.2a, M9.2b, and M9.2c before implementation
+- Status: done via M9.2a, M9.2b, and M9.2c
 - Goal: port the model-free request parsing and prompt-rendering surface needed
   by the server before adding an HTTP listener.
 - Oracle: C `parse_chat_request`, `parse_anthropic_request`,
@@ -2095,8 +2095,8 @@
   comparison for path/limit-bearing error text.
 - Review gate: ask Claude to review parser coverage for OpenAI chat, Responses,
   Anthropic, thinking controls, stop lists, and context-limit errors.
-- Validation needed: source inspection, roadmap/board diff, and `git
-  diff --check`.
+- Validation passed: targeted parser tests, full `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` across child items.
 - Owner path: Rust server parser modules, `ds4-parity/`, `.memory/status.md`.
 
 ### M9.2a: OpenAI Chat Request Core Parse And Render
@@ -2152,7 +2152,7 @@
 
 ### M9.2c: Responses And Anthropic Request Parse Surface
 
-- Status: split into M9.2c1, M9.2c2, and M9.2c3 before implementation
+- Status: done via M9.2c1, M9.2c2, and M9.2c3
 - Goal: port model-free Responses and Anthropic request parsing/rendering inputs
   while leaving response/event emission for M9.7.
 - Oracle: C `parse_responses_request`, `parse_anthropic_request`,
@@ -2174,8 +2174,9 @@
 - Review gate: ask Claude to review protocol-specific state, reasoning replay
   requirements, namespace tool schema restoration, and Anthropic tool-result ID
   validation.
-- Validation needed: source inspection, roadmap/board diff, and `git
-  diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` across child items.
 - Owner path: Rust server protocol parser modules, `ds4-parity/`,
   `.memory/status.md`.
 
@@ -2326,7 +2327,7 @@
 
 ### M9.2c3: Anthropic Message And Tool Result Parse Surface
 
-- Status: split into M9.2c3a, M9.2c3b, and M9.2c3c before implementation
+- Status: done via M9.2c3a, M9.2c3b, and M9.2c3c
 - Goal: split the Anthropic parser surface into reviewable core-message,
   tool-history/schema, and live-continuation work before implementation.
 - Oracle: M9.2c3a through M9.2c3c below, each tied to the current C
@@ -2342,7 +2343,9 @@
 - Drift policy: documentation-only; no source behavior drift.
 - Review gate: ask Claude to review boundary completeness and whether any
   Anthropic C branch is unassigned.
-- Validation needed: roadmap/board diff and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` across child items.
 - Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.2c3a: Anthropic Core Message And Control Parse Surface
@@ -2407,7 +2410,7 @@
 
 ### M9.2c3c: Anthropic Live Tool Result Validation Surface
 
-- Status: active
+- Status: done
 - Goal: port model-free Anthropic live continuation validation outputs:
   missing `tool_use_id` errors, live-state requirement flags, live tool-use ID
   collection, and visible live suffix rendering for trailing tool results.
@@ -2429,13 +2432,14 @@
   tool-use ID ordering/deduplication, and live-tail bytes.
 - Review gate: ask Claude to review missing-state rejection, live-state flag
   assignment, prior tool_use detection, and live-tail construction.
-- Validation needed: targeted Rust Anthropic live-tail tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.3: Rust HTTP Skeleton And Model Metadata Endpoints
 
-- Status: pending
+- Status: active
 - Goal: add a Rust server binary with HTTP framing, request routing, CORS
   behavior, `/v1/models`, and no-generation error paths.
 - Oracle: current `ds4-server` socket behavior, M0.4 `models.json`,

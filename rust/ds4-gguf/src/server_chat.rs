@@ -60,6 +60,9 @@ pub struct AnthropicRequest {
     pub stops: Vec<String>,
     pub prompt_text: String,
     pub prompt_preserves_reasoning: bool,
+    pub anthropic_requires_live_tool_state: bool,
+    pub anthropic_live_call_ids: Vec<String>,
+    pub anthropic_live_suffix_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -68,6 +71,25 @@ pub struct ResponsesLiveState {
 }
 
 impl ResponsesLiveState {
+    pub fn with_call_ids(call_ids: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let mut state = Self::default();
+        for call_id in call_ids {
+            push_unique_id(&mut state.call_ids, call_id.into());
+        }
+        state
+    }
+
+    fn has_call_id(&self, call_id: &str) -> bool {
+        self.call_ids.iter().any(|id| id == call_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AnthropicLiveState {
+    pub call_ids: Vec<String>,
+}
+
+impl AnthropicLiveState {
     pub fn with_call_ids(call_ids: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let mut state = Self::default();
         for call_id in call_ids {
@@ -98,6 +120,7 @@ pub enum ServerRequestErrorCategory {
     UnsupportedDurableState,
     UnsupportedToolChoice,
     MissingResponsesContinuationState,
+    MissingAnthropicContinuationState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,6 +170,15 @@ impl ServerRequestError {
             category: ServerRequestErrorCategory::MissingResponsesContinuationState,
             message: format!(
                 "Responses continuation state is not available for call_id {call_id}; retry by replaying the full input history"
+            ),
+        }
+    }
+
+    fn missing_anthropic_continuation_state(tool_use_id: &str) -> Self {
+        Self {
+            category: ServerRequestErrorCategory::MissingAnthropicContinuationState,
+            message: format!(
+                "Anthropic continuation state is not available for tool_use_id {tool_use_id}; retry by replaying the full messages history"
             ),
         }
     }
@@ -473,6 +505,20 @@ pub fn parse_anthropic_core_request(
     def_tokens: i32,
     ctx_size: i32,
 ) -> Result<AnthropicRequest, ServerRequestError> {
+    parse_anthropic_core_request_with_live_state(
+        body,
+        def_tokens,
+        ctx_size,
+        &AnthropicLiveState::default(),
+    )
+}
+
+pub fn parse_anthropic_core_request_with_live_state(
+    body: &str,
+    def_tokens: i32,
+    ctx_size: i32,
+    live_state: &AnthropicLiveState,
+) -> Result<AnthropicRequest, ServerRequestError> {
     let fields = JsonParser::new(body)
         .parse_root_object_fields_raw()
         .map_err(|_| ServerRequestError::invalid_json())?;
@@ -574,6 +620,8 @@ pub fn parse_anthropic_core_request(
     };
     let prompt_preserves_reasoning = chat_history_uses_tool_context(&messages, active_tool_schemas);
     let prompt_text = render_chat_prompt_text(&messages, active_tool_schemas, think_mode);
+    let live_validation = validate_anthropic_tool_results(&messages, live_state)?;
+    let live_continuation = prepare_anthropic_live_continuation(&messages, think_mode);
 
     Ok(AnthropicRequest {
         model,
@@ -588,6 +636,9 @@ pub fn parse_anthropic_core_request(
         stops,
         prompt_text,
         prompt_preserves_reasoning,
+        anthropic_requires_live_tool_state: live_validation.requires_live_tool_state,
+        anthropic_live_call_ids: live_continuation.call_ids,
+        anthropic_live_suffix_text: live_continuation.suffix_text,
     })
 }
 
@@ -599,6 +650,17 @@ struct ResponsesLiveValidation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct ResponsesLiveContinuation {
+    call_ids: Vec<String>,
+    suffix_text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct AnthropicLiveValidation {
+    requires_live_tool_state: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct AnthropicLiveContinuation {
     call_ids: Vec<String>,
     suffix_text: Option<String>,
 }
@@ -700,6 +762,76 @@ fn find_prior_assistant_call_message<'a>(
     messages[..before].iter().rev().find(|message| {
         message.role == "assistant" && message.tool_calls.iter().any(|call| call.id == id)
     })
+}
+
+fn anthropic_msg_is_tool_result_tail(message: &ChatMessage) -> bool {
+    message.role == "user" && !message.tool_call_ids.is_empty()
+}
+
+fn validate_anthropic_tool_results(
+    messages: &[ChatMessage],
+    live_state: &AnthropicLiveState,
+) -> Result<AnthropicLiveValidation, ServerRequestError> {
+    let mut validation = AnthropicLiveValidation::default();
+    for (idx, message) in messages.iter().enumerate() {
+        if !anthropic_msg_is_tool_result_tail(message) {
+            continue;
+        }
+        let ids = collect_tool_result_call_ids(message);
+        for id in ids {
+            let live_known = live_state.has_call_id(&id);
+            let prior = find_prior_assistant_call_message(messages, idx, &id);
+            if !live_known && prior.is_none() {
+                return Err(ServerRequestError::missing_anthropic_continuation_state(
+                    &id,
+                ));
+            }
+            if prior.is_none() {
+                validation.requires_live_tool_state = true;
+            }
+        }
+    }
+    Ok(validation)
+}
+
+fn prepare_anthropic_live_continuation(
+    messages: &[ChatMessage],
+    think_mode: ThinkMode,
+) -> AnthropicLiveContinuation {
+    if messages.is_empty() {
+        return AnthropicLiveContinuation::default();
+    }
+
+    let mut tail_end = messages.len();
+    while tail_end > 0 && role_is_system_message(&messages[tail_end - 1]) {
+        tail_end -= 1;
+    }
+    let mut tail_start = tail_end;
+    while tail_start > 0 && anthropic_msg_is_tool_result_tail(&messages[tail_start - 1]) {
+        tail_start -= 1;
+    }
+    if tail_start == tail_end {
+        return AnthropicLiveContinuation::default();
+    }
+
+    let mut call_ids = Vec::new();
+    for message in &messages[tail_start..] {
+        for id in collect_tool_result_call_ids(message) {
+            push_unique_id(&mut call_ids, id);
+        }
+    }
+    if call_ids.is_empty() {
+        return AnthropicLiveContinuation::default();
+    }
+
+    AnthropicLiveContinuation {
+        call_ids,
+        suffix_text: Some(render_live_tool_tail_text(messages, tail_start, think_mode)),
+    }
+}
+
+fn role_is_system_message(message: &ChatMessage) -> bool {
+    message.role == "system" || message.role == "developer"
 }
 
 fn push_unique_id(ids: &mut Vec<String>, id: String) {
@@ -2859,6 +2991,67 @@ mod tests {
             req.prompt_text,
             "<｜begin▁of▁sentence｜><｜User｜>run<｜Assistant｜><think>need tool</think>\n\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"Bash\">\n<｜DSML｜parameter name=\"description\" string=\"true\">list</｜DSML｜parameter>\n<｜DSML｜parameter name=\"command\" string=\"true\">ls -la</｜DSML｜parameter>\n<｜DSML｜parameter name=\"timeout\" string=\"false\">2.0</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls><｜end▁of▁sentence｜><｜User｜><tool_result>result &lt;/tool_result> & raw</tool_result><｜Assistant｜><think>"
         );
+    }
+
+    #[test]
+    fn anthropic_tool_result_only_requires_live_state_or_prior_use() {
+        let body = r#"{
+            "messages":[{"role":"user","content":[
+                {"type":"tool_result","tool_use_id":"toolu_missing","content":"out </tool_result>"}
+            ]}]
+        }"#;
+        let missing = parse_anthropic_core_request(body, 128, 32_768)
+            .expect_err("missing live state rejected");
+        assert_eq!(
+            missing.category(),
+            ServerRequestErrorCategory::MissingAnthropicContinuationState
+        );
+        assert_eq!(
+            missing.message(),
+            "Anthropic continuation state is not available for tool_use_id toolu_missing; retry by replaying the full messages history"
+        );
+
+        let live_state = AnthropicLiveState::with_call_ids(["toolu_missing"]);
+        let req = parse_anthropic_core_request_with_live_state(body, 128, 32_768, &live_state)
+            .expect("live-known tool result parses");
+        assert!(req.anthropic_requires_live_tool_state);
+        assert_eq!(req.anthropic_live_call_ids, ["toolu_missing"]);
+        assert_eq!(
+            req.anthropic_live_suffix_text.as_deref(),
+            Some(
+                "<｜end▁of▁sentence｜><｜User｜><tool_result>out &lt;/tool_result></tool_result><｜Assistant｜><think>"
+            )
+        );
+        assert_eq!(
+            req.prompt_text,
+            "<｜begin▁of▁sentence｜><｜User｜><tool_result>out &lt;/tool_result></tool_result><｜Assistant｜><think>"
+        );
+    }
+
+    #[test]
+    fn anthropic_replayed_tool_use_prevents_live_state_requirement_and_builds_tail() {
+        let req = parse_anthropic_fixture(
+            r#"{
+                "system":"sys",
+                "messages":[
+                    {"content":[
+                        {"type":"tool_use","id":"toolu_replay","name":"Bash","input":{"command":"pwd"}}
+                    ],"role":"assistant"},
+                    {"role":"user","content":[
+                        {"type":"tool_result","tool_use_id":"toolu_replay","content":"ok"}
+                    ]}
+                ]
+            }"#,
+        );
+        assert!(!req.anthropic_requires_live_tool_state);
+        assert_eq!(req.anthropic_live_call_ids, ["toolu_replay"]);
+        let suffix = req.anthropic_live_suffix_text.as_deref().expect("suffix");
+        assert_eq!(
+            suffix,
+            "<｜end▁of▁sentence｜><｜User｜><tool_result>ok</tool_result><｜Assistant｜><think>"
+        );
+        assert!(!suffix.contains("Bash"));
+        assert!(!suffix.contains("sys"));
     }
 
     #[test]

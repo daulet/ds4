@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c3c Anthropic Live Tool Result Validation Surface
-- Last validated source commit: M9.2c3b Anthropic tool parser in this commit;
-  prior pushed source commit `1a2f9eb6af35eafdb07f1b4225fa75e8433a0d2a`
+- Active item: M9.3 Rust HTTP Skeleton And Model Metadata Endpoints
+- Last validated source commit: M9.2c3c Anthropic live validation in this
+  commit; prior pushed source commit
+  `5813c77a747f80fe86e622812a752e5b658fb9d0`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,27 @@
 
 ## Last Evidence
 
+- M9.2c3c added exported Rust `AnthropicLiveState` plus
+  `parse_anthropic_core_request_with_live_state` so parser tests can exercise
+  live-known Anthropic tool-result continuations without touching server KV or
+  tool-memory side effects.
+- M9.2c3c validates Anthropic `tool_result.tool_use_id` like C: missing
+  tool-result-only state returns the exact Anthropic continuation error,
+  live-known IDs set `anthropic_requires_live_tool_state`, and replayed prior
+  assistant `tool_use` blocks avoid the live-state requirement.
+- M9.2c3c collects trailing Anthropic tool-result IDs, renders the visible
+  live suffix from EOS through user tool results to the next assistant prefix,
+  and ignores appended system messages when locating the final tool-result
+  tail.
+- M9.2c3c validation covered missing live state, live-known tool-result-only
+  continuation, replayed prior `tool_use` with `content` before `role`, exact
+  error text, delimiter escaping, collected IDs, and live-tail prompt bytes.
+- M9.2c3c validation passed for targeted
+  `cargo test -p ds4-gguf server_chat -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.2 request parse and prompt-render surface is now complete enough for the
+  roadmap to move to M9.3 HTTP skeleton work.
 - M9.2c3b extended Rust Anthropic request parsing for top-level `tools`,
   `tool_choice.type`, active tool-schema prompting, assistant `tool_use`
   blocks, user `tool_result` blocks, tool-use IDs, and DSML request-history
