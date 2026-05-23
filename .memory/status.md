@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4b Rust Decode Runtime State Bridge
-- Last validated source commit: M10.5c4a Rust decode execution trace oracle in this
-  commit; prior pushed source commit
-  `5e6026e5715c630fde5468aea68024b94d8be1c1`
+- Active item: M10.5c4c Rust One-Token Decode B300 Execution
+- Last validated source commit: M10.5c4b Rust decode runtime state bridge in
+  this commit; prior pushed source commit
+  `78112153c139367eab6375c766810668eb5e7883`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,29 @@
 
 ## Last Evidence
 
+- M10.5c4b adds `rust/ds4-gpu/src/decode_runtime.rs` and
+  `ds4-decode-runtime-bridge`, a no-execute runtime-state bridge for
+  `ctx32768_mtp_off` that resolves M10.5c2 graph-state handles, initial
+  per-layer cache counters, M10.5c4a facade tensor arguments, and selected
+  M10.5c1 weight-role slices before GPU execution.
+- M10.5c4b records dense, ratio-4, ratio-128, and hash-layer weight presence
+  expectations for base/layer roles, keeps routed MoE expert tensors explicitly
+  in the weight source path, and preserves graph-state owned/view/lazy/external
+  ownership without allocating backend tensors.
+- M10.5c4b adds `ds4-parity/compare_decode_runtime_bridge.py`, which compares
+  bridge handles to `ds4-graph-state-plan`, validates initial counters, checks
+  every M10.5c4a trace facade tensor argument has a state or weight source, and
+  verifies selected weight roles against the M10.5c1 structured weight table.
+  It is wired into the unified parity report as `M10.5c4b Rust decode runtime
+  bridge comparator`.
+- M10.5c4b validation passed `cargo test -p ds4-gpu decode_runtime --lib`,
+  `cargo run -p ds4-gpu --bin ds4-decode-runtime-bridge --quiet | python3 -m
+  json.tool`, `python3 ds4-parity/compare_decode_runtime_bridge.py
+  --negative-test`, `python3 -m py_compile
+  ds4-parity/compare_decode_runtime_bridge.py ds4-parity/run_parity_report.py`,
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and NUL scan
+  over touched files.
 - M10.5c4a adds `rust/ds4-gpu/src/decode_trace.rs` and
   `ds4-decode-trace`, a no-FFI dry-run execution trace that expands every
   M10.5b decode-plan case into default M10.5c3 facade calls, existing
@@ -54,10 +77,8 @@
 - M10.5c4 was split before implementation because the original item spans
   dry-run scheduling, runtime tensor/weight bridge construction, B300 numeric
   execution, continuation-state validation, and optional directional-steering
-  coverage. The active next slice is M10.5c4a, a no-FFI Rust decode execution
-  trace oracle that must prove default one-token facade call order, tensor
-  roles, cache-counter deltas, split flush, read, and synchronize markers
-  before GPU kernels are launched from Rust.
+  coverage. The active next slice is M10.5c4c, the first B300 one-token
+  execution/checkpoint slice using the c4a trace and c4b runtime bridge.
 - M10.5c4b is the runtime-state bridge from M10.5c1/M10.5c2 weights and
   tensor plans. M10.5c4c is the first B300 one-token execution/checkpoint
   slice, and M10.5c4d closes continuation and optional directional-steering

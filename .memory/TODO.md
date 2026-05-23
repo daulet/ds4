@@ -3804,7 +3804,7 @@
 
 ### M10.5c4b: Rust Decode Runtime State Bridge
 
-- Status: active
+- Status: completed
 - Goal: instantiate the decode graph runtime state from M10.5c2 tensor plans
   and M10.5c1 structured weights, still without launching kernels.
 - Oracle: M10.5c1 structured weight table, M10.5c2 graph-state allocation
@@ -3821,7 +3821,7 @@
   and initial counters are exact; backend kernel values remain out of scope.
 - Review gate: ask Claude to review lifetime ownership, optional tensor
   handling, and weight-role mapping.
-- Validation needed: runtime-state comparator with negative test, `cargo test
+- Validation passed: runtime-state comparator with negative test, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 - Owner path: Rust graph runtime state bridge, `ds4-parity/`,
@@ -3829,7 +3829,7 @@
 
 ### M10.5c4c: Rust One-Token Decode B300 Execution
 
-- Status: pending
+- Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
   on B300 and capture Rust checkpoints for the M10.4 decode cases.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order

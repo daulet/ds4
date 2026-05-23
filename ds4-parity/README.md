@@ -260,6 +260,21 @@ sync markers, raw/compressed/indexer cache-counter transitions, and default
 decode operation coverage. Its negative test mutates summary, operation, and
 state data, including split-flush and emit-cadence fields, in memory.
 
+Compare the Rust M10.5c4b dry-run decode runtime bridge against the graph-state
+plan, structured weight table, and decode trace:
+
+```sh
+python3 ds4-parity/compare_decode_runtime_bridge.py
+python3 ds4-parity/compare_decode_runtime_bridge.py --negative-test
+```
+
+The comparator runs `ds4-decode-runtime-bridge`, checks graph-state handle
+ownership/storage against M10.5c2, validates initial cache counters, resolves
+facade tensor arguments from the M10.5c4a trace, and checks selected dense,
+ratio-4, ratio-128, and hash-layer weight roles against the M10.5c1 structured
+weight table. Its negative test mutates summary, handle, binding, and
+weight-role data in memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
