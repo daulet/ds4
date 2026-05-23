@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b2b2b2b2b2 Rust One-Token Decode B300 Execution
 - Last validated source commit before the current stage:
-  the current M10.5c4c2b2b2b2b2a Rust layer-0 FFN-output execution commit.
+  local M10.5c4c2b2b2b2b2b1 output-head execution work, based on
+  `07e6a2df98353c28cff64271c033ad91737d6987`.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,46 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b1 adds `ds4-layer0-output-head-oracle-dump` and
+  `ds4_dump_layer0_output_head_oracle_json`, which emit
+  `ds4.layer0_output_head_oracle.v1` for token `0`, layer `0`, position `0`
+  using the current-C model loader, config validation, weight binding, model
+  fd/map bridge, the production `metal_graph_encode_decode_layer` for layer 0,
+  and the production `metal_graph_encode_output_head` path.
+- M10.5c4c2b2b2b2b2b1 adds `ds4-decode-layer0-output-head`, which maps the real
+  GGUF on B300, binds DS4 weights, launches the validated layer-0 prefix plus
+  `rms_norm_plain`, output HC preprojection, `output_hc_weights`,
+  `hc_weighted_sum`, output RMS norm, and vocab projection through the safe Rust
+  facade in one command batch, synchronizes, and reads back `after_ffn_hc`,
+  `output_pre`, `output_weights`, `output_embd`, `output_norm`, and `logits`.
+- The B300 paired layer-0 output-head validator passed 399 pinned checks with
+  full-buffer FNV digests `after_ffn_hc=3d49316c93ce351f`,
+  `output_pre=67cd67e9413ba488`, `output_weights=b7b3f62be8581476`,
+  `output_embd=0b0d4f86243397e3`, `output_norm=24029c3b5c92306e`, and
+  `logits=27d2e668424d8d9f`. Pinned output-head weights are
+  `output_hc_fn=(86157337440,131072,1,f16)`,
+  `output_hc_scale=(86157468512,4,0,f32)`,
+  `output_hc_base=(86157337408,16,0,f32)`,
+  `output_norm=(86720095104,16384,0,f32)`, and
+  `output=(86157468544,562626560,8,q8_0)`.
+- M10.5c4c2b2b2b2b2b1 validation passed `python3
+  ds4-parity/compare_decode_layer0_output_head.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer0_output_head.py`, `python3 -m py_compile
+  ds4-parity/compare_decode_layer0_output_head.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer0-output-head-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer0-output-head`, B300 current-C oracle plus Rust candidate
+  paired validation, pinned B300 artifact rerun, and B300 c2b2b2b2b2a
+  layer-0 FFN-output rerun with 885 checks, local `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 31 passed, 21
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, a touched-file NUL scan, and non-interactive Claude
+  review with no blockers.
+- M10.5c4c2b2b2b2b2b splits the remaining one-token scheduler item into a
+  layer-0 output-head execution bridge and the next full scheduler/cache/logits
+  slice M10.5c4c2b2b2b2b2b2. The split keeps the next commit comparable at the
+  HC collapse and vocab-projection boundary before all 43 layers and cache
+  transitions are introduced together.
 - M10.5c4c2b2b2b2b2a adds `ds4-layer0-ffn-output-oracle-dump` and
   `ds4_dump_layer0_ffn_output_oracle_json`, which emit
   `ds4.layer0_ffn_output_oracle.v1` for token `0`, layer `0`, position `0`

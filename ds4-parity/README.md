@@ -455,6 +455,26 @@ python3 ds4-parity/compare_decode_layer0_ffn_output.py \
   --candidate /tmp/ds4-c2b2b2b2b2a-layer0-ffn-output-rust.json
 ```
 
+Compare the M10.5c4c2b2b2b2b2b1 Rust layer-0 output-head body before
+expanding to the full one-token scheduler:
+
+```sh
+python3 ds4-parity/compare_decode_layer0_output_head.py
+python3 ds4-parity/compare_decode_layer0_output_head.py --negative-test
+```
+
+The comparator checks that `ds4-layer0-output-head-oracle-dump` emits the
+current-C GPU tensor path through the production decode-layer encoder and
+production output-head encoder, then compares post-FFN HC, output HC collapse,
+output embedding norm, and logits readback. On B300, validate the current-C
+oracle and Rust readback together:
+
+```sh
+python3 ds4-parity/compare_decode_layer0_output_head.py \
+  --oracle /tmp/ds4-c2b2b2b2b2b1-layer0-output-head-oracle.json \
+  --candidate /tmp/ds4-c2b2b2b2b2b1-layer0-output-head-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
