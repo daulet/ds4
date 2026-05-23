@@ -3277,7 +3277,7 @@
 
 ### M9.8e: KV Tool-Map Trailer Restore
 
-- Status: active
+- Status: done
 - Goal: port KV tool-map trailer serialization/decoding and restore exact DSML
   tool memory before prompt rendering.
 - Oracle: C test `test_kv_tool_map_restores_before_prompt_render`,
@@ -3296,7 +3296,13 @@
   restore points.
 - Review gate: ask Claude to review binary bounds checks and restore-before-
   render ordering.
-- Validation needed: targeted KV tool-map tests, `cargo test --workspace`,
+- Validation passed: targeted `cargo test -p ds4-gguf tool_memory --
+  --nocapture`, targeted `cargo test -p ds4-gguf tool_map -- --nocapture`,
+  `python3 ds4-parity/compare_kv_trailer.py --negative-test`, `cargo test -p
+  ds4-gguf --bin ds4-kv-trailer-dump-rs`, full `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, NUL scan over touched Rust
+  files, and non-interactive Claude review with no blockers.
+- Validation gate: targeted KV tool-map tests, `cargo test --workspace`,
   `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
   review with no blockers.
 - Owner path: `rust/ds4-gguf/src/kv_policy.rs`, Rust tool-memory module,
@@ -3304,7 +3310,7 @@
 
 ### M9.8f: Runtime Cache/KV Replay Integration
 
-- Status: pending
+- Status: active
 - Goal: wire Rust server runtime cache decisions, disk-KV restore/store,
   continued-frontier accounting, tool-memory replay, and cache usage fields
   through the request path.

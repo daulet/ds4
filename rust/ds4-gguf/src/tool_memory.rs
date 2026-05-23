@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
+use crate::kv_policy::{read_kvc_file, read_tool_map_trailer, ToolMapEntry, EXT_TOOL_MAP};
 use crate::prompt::ChatMessage;
 
 pub const TOOL_MEMORY_DEFAULT_MAX_IDS: usize = 100_000;
@@ -124,6 +125,53 @@ impl ToolMemory {
         }
     }
 
+    pub fn restore_tool_map_entries(
+        &mut self,
+        entries: &[ToolMapEntry],
+        wanted_ids: Option<&[String]>,
+    ) -> usize {
+        let mut loaded = 0;
+        for entry in entries {
+            if entry.id.is_empty() || entry.dsml.is_empty() {
+                continue;
+            }
+            if let Some(wanted) = wanted_ids {
+                if !wanted.iter().any(|id| id == &entry.id) {
+                    continue;
+                }
+            }
+            let dsml = String::from_utf8_lossy(&entry.dsml);
+            self.put_source(&entry.id, dsml.as_ref(), ToolMemorySource::Disk);
+            loaded += 1;
+        }
+        loaded
+    }
+
+    pub fn restore_tool_map_from_kvc(&mut self, bytes: &[u8], wanted_ids: &[String]) -> usize {
+        if wanted_ids.is_empty() {
+            return 0;
+        }
+        let Ok(kvc) = read_kvc_file(bytes) else {
+            return 0;
+        };
+        if kvc.header.ext_flags & EXT_TOOL_MAP == 0 {
+            return 0;
+        }
+        let decode = match read_tool_map_trailer(&kvc.trailer, self.max_entries) {
+            Ok(decode) | Err((_, decode)) => decode,
+        };
+        self.restore_tool_map_entries(&decode.entries, Some(wanted_ids))
+    }
+
+    pub fn restore_tool_map_from_kvc_for_messages(
+        &mut self,
+        bytes: &[u8],
+        messages: &[ChatMessage],
+    ) -> usize {
+        let wanted = collect_tool_memory_call_ids(messages);
+        self.restore_tool_map_from_kvc(bytes, &wanted)
+    }
+
     pub fn attach_to_messages(&mut self, messages: &mut [ChatMessage]) -> ToolReplayStats {
         let mut stats = ToolReplayStats::default();
         for message in messages {
@@ -211,6 +259,26 @@ impl ToolMemory {
     }
 }
 
+pub fn collect_tool_memory_call_ids(messages: &[ChatMessage]) -> Vec<String> {
+    let mut ids = Vec::new();
+    for message in messages {
+        for id in &message.tool_call_ids {
+            push_unique_id(&mut ids, id);
+        }
+        for call in &message.tool_calls {
+            push_unique_id(&mut ids, &call.id);
+        }
+    }
+    ids
+}
+
+fn push_unique_id(ids: &mut Vec<String>, id: &str) {
+    if id.is_empty() || ids.iter().any(|existing| existing == id) {
+        return;
+    }
+    ids.push(id.to_string());
+}
+
 fn entry_bytes(id: &str, dsml: &str) -> usize {
     id.len()
         .saturating_add(1)
@@ -221,6 +289,10 @@ fn entry_bytes(id: &str, dsml: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kv_policy::{
+        write_kvc_file, write_tool_map_trailer, KvHeader, EXT_TOOL_MAP, REASON_CONTINUED,
+        TOOL_MAP_DEFAULT_MAX_ENTRIES,
+    };
     use crate::{
         parse_generated_message, render_chat_prompt_text, ChatMessage, ThinkMode, ToolArgument,
         ToolCall,
@@ -396,5 +468,163 @@ mod tests {
         let stats = memory.attach_to_messages(&mut messages);
         assert_eq!(stats.mem, 1);
         assert_eq!(stats.disk, 0);
+    }
+
+    #[test]
+    fn tool_map_restore_filters_wanted_ids_as_disk_memory() {
+        let keep_dsml = "\n\n<｜DSML｜tool_calls>\n\
+<｜DSML｜invoke name=\"bash\">\n\
+<｜DSML｜parameter name=\"command\" string=\"true\">pwd</｜DSML｜parameter>\n\
+</｜DSML｜invoke>\n\
+</｜DSML｜tool_calls>";
+        let drop_dsml = "\n\n<｜DSML｜tool_calls>\n\
+<｜DSML｜invoke name=\"bash\">\n\
+<｜DSML｜parameter name=\"command\" string=\"true\">zzzz</｜DSML｜parameter>\n\
+</｜DSML｜invoke>\n\
+</｜DSML｜tool_calls>";
+        let text = keep_dsml.as_bytes();
+        let entries = vec![
+            ToolMapEntry {
+                id: "call_keep".to_string(),
+                dsml: keep_dsml.as_bytes().to_vec(),
+            },
+            ToolMapEntry {
+                id: "call_drop".to_string(),
+                dsml: drop_dsml.as_bytes().to_vec(),
+            },
+        ];
+        let trailer = write_tool_map_trailer(text, &entries, false).expect("write trailer");
+        let decoded =
+            read_tool_map_trailer(&trailer, TOOL_MAP_DEFAULT_MAX_ENTRIES).expect("decode trailer");
+
+        let mut memory = ToolMemory::new();
+        let wanted = vec!["call_keep".to_string()];
+        assert_eq!(
+            memory.restore_tool_map_entries(&decoded.entries, Some(&wanted)),
+            1
+        );
+        assert!(memory.contains_id("call_keep"));
+        assert!(!memory.contains_id("call_drop"));
+
+        let mut messages = vec![
+            ChatMessage::new("assistant", "").with_tool_calls(vec![bash_call(
+                "call_keep",
+                vec![ToolArgument::string("command", "canonical keep")],
+            )]),
+            ChatMessage::new("assistant", "").with_tool_calls(vec![bash_call(
+                "call_drop",
+                vec![ToolArgument::string("command", "canonical drop")],
+            )]),
+        ];
+        let stats = memory.attach_to_messages(&mut messages);
+        assert_eq!(
+            stats,
+            ToolReplayStats {
+                mem: 0,
+                disk: 1,
+                canonical: 1,
+                missing_ids: 1,
+            }
+        );
+        assert!(messages[0]
+            .raw_tool_calls_dsml
+            .as_deref()
+            .expect("raw DSML")
+            .contains("pwd"));
+        assert!(messages[1].raw_tool_calls_dsml.is_none());
+    }
+
+    #[test]
+    fn kvc_tool_map_restores_before_prompt_render() {
+        let dsml = "\n\n<｜DSML｜tool_calls>\n\
+<｜DSML｜invoke name=\"bash\">\n\
+<｜DSML｜parameter name=\"command\" string=\"true\">echo exact</｜DSML｜parameter>\n\
+</｜DSML｜invoke>\n\
+</｜DSML｜tool_calls>";
+        let entries = [ToolMapEntry {
+            id: "call_disk".to_string(),
+            dsml: dsml.as_bytes().to_vec(),
+        }];
+        let trailer =
+            write_tool_map_trailer(dsml.as_bytes(), &entries, false).expect("write trailer");
+        let header = KvHeader {
+            quant_bits: 2,
+            reason: REASON_CONTINUED,
+            ext_flags: EXT_TOOL_MAP,
+            tokens: 512,
+            hits: 0,
+            ctx_size: 32_768,
+            created_at: 100,
+            last_used: 100,
+            payload_bytes: 0,
+        };
+        let kvc = write_kvc_file(&header, dsml.as_bytes(), &[], &trailer).expect("write KVC");
+
+        let mut messages = vec![ChatMessage::new("assistant", "").with_tool_calls(vec![
+            bash_call(
+                "call_disk",
+                vec![ToolArgument::string("command", "echo canonical")],
+            ),
+        ])];
+        let mut memory = ToolMemory::new();
+        assert_eq!(
+            memory.restore_tool_map_from_kvc_for_messages(&kvc, &messages),
+            1
+        );
+
+        let stats = memory.attach_to_messages(&mut messages);
+        assert_eq!(stats.disk, 1);
+        assert_eq!(stats.canonical, 0);
+        let prompt = render_chat_prompt_text(&messages, None, ThinkMode::High);
+        assert!(prompt.contains("echo exact"));
+        assert!(!prompt.contains("echo canonical"));
+    }
+
+    #[test]
+    fn kvc_tool_map_restore_keeps_partial_entries_from_truncated_trailer() {
+        let dsml = b"\n\n<tool_calls>\n<invoke name=\"bash\"></invoke>\n</tool_calls>";
+        let mut trailer = Vec::new();
+        trailer.extend_from_slice(b"KTM");
+        trailer.push(1);
+        trailer.extend_from_slice(&2_u32.to_le_bytes());
+        trailer.extend_from_slice(&9_u32.to_le_bytes());
+        trailer.extend_from_slice(&(dsml.len() as u32).to_le_bytes());
+        trailer.extend_from_slice(b"call_keep");
+        trailer.extend_from_slice(dsml);
+        trailer.extend_from_slice(&9_u32.to_le_bytes());
+        trailer.extend_from_slice(&4_u32.to_le_bytes());
+        trailer.extend_from_slice(b"call_");
+        let header = KvHeader {
+            quant_bits: 2,
+            reason: REASON_CONTINUED,
+            ext_flags: EXT_TOOL_MAP,
+            tokens: 512,
+            hits: 0,
+            ctx_size: 32_768,
+            created_at: 100,
+            last_used: 100,
+            payload_bytes: 0,
+        };
+        let kvc = write_kvc_file(&header, dsml, &[], &trailer).expect("write KVC");
+        let mut tool_result = ChatMessage::new("tool", "ok");
+        tool_result.add_tool_call_id("call_keep");
+        tool_result.add_tool_call_id("call_drop");
+        let messages = vec![
+            ChatMessage::new("assistant", "")
+                .with_tool_calls(vec![bash_call("call_keep", Vec::new())]),
+            tool_result,
+        ];
+        assert_eq!(
+            collect_tool_memory_call_ids(&messages),
+            ["call_keep".to_string(), "call_drop".to_string()]
+        );
+
+        let mut memory = ToolMemory::new();
+        assert_eq!(
+            memory.restore_tool_map_from_kvc_for_messages(&kvc, &messages),
+            1
+        );
+        assert!(memory.contains_id("call_keep"));
+        assert!(!memory.contains_id("call_drop"));
     }
 }

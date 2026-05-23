@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8e KV Tool-Map Trailer Restore
-- Last validated source commit: M9.8d disk-KV policy completion in this
+- Active item: M9.8f Runtime Cache/KV Replay Integration
+- Last validated source commit: M9.8e KV tool-map trailer restore in this
   commit; prior pushed source commit
-  `cad2815269794d7cb18f740ce2469251b3bb7097`
+  `38aeab7c7b85fe7c062db17d860a1d24150aeb2a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,22 @@
 
 ## Last Evidence
 
+- M9.8e adds Rust restore plumbing for KVC tool-map trailers: it collects
+  wanted tool-call ids from assistant calls and tool-result ids, decodes a KVC
+  trailer only when `EXT_TOOL_MAP` is set, restores matching entries into
+  `ToolMemory` as disk-sourced DSML, and keeps C-equivalent partial entries
+  from malformed trailers.
+- M9.8e tests cover wanted-id filtering, disk replay stats, restore-before-
+  prompt-render ordering, canonical fallback for missing ids, and partial
+  restore from a truncated second trailer entry.
+- M9.8e revalidated the existing C/Rust trailer comparator:
+  `python3 ds4-parity/compare_kv_trailer.py --negative-test` passed 432
+  positive checks and 8 negative checks.
+- M9.8e validation passed targeted `cargo test -p ds4-gguf tool_memory --
+  --nocapture`, targeted `cargo test -p ds4-gguf tool_map -- --nocapture`,
+  `cargo test -p ds4-gguf --bin ds4-kv-trailer-dump-rs`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, NUL scan
+  over touched Rust files, and non-interactive Claude review with no blockers.
 - M9.8d adds Rust policy helpers for C's continued-checkpoint bookkeeping:
   `note_store`, `suppress_continued_store`, and
   `restore_suppressed_continued`. These preserve the C rule that a cold store
