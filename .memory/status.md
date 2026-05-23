@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2 Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b2b2b2b2b Rust One-Token Decode B300 Execution
 - Last validated source commit before the current stage:
-  M10.5c4c2b2b2b2b1 Rust layer-0 attention-output execution in the commit
-  produced by this stage.
+  the current M10.5c4c2b2b2b2b2a Rust layer-0 FFN-output execution commit.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,51 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2a adds `ds4-layer0-ffn-output-oracle-dump` and
+  `ds4_dump_layer0_ffn_output_oracle_json`, which emit
+  `ds4.layer0_ffn_output_oracle.v1` for token `0`, layer `0`, position `0`
+  using the current-C model loader, config validation, weight binding, model
+  fd/map bridge, the validated attention-output GPU prefix, FFN HC-pre, router
+  selection, routed MoE, shared expert SwiGLU, shared down projection, and
+  final FFN HC expansion.
+- M10.5c4c2b2b2b2b2a adds `ds4-decode-layer0-ffn-output`, which maps the real
+  GGUF on B300, binds DS4 weights, launches the attention-output prefix plus
+  `hc_split_weighted_sum_norm`, `router_select`, `routed_moe_one`,
+  `shared_gate_up_swiglu_q8_0`, and `shared_down_hc_expand_q8_0` through the
+  safe Rust facade in one command batch, synchronizes, and reads back
+  `after_attn_hc`, `ffn_cur`, `ffn_norm`, `router_logits`, `router_probs`,
+  `router_selected`, `router_weights`, `routed_mid`, `routed_out`,
+  `shared_mid`, `shared_out`, and `after_ffn_hc`.
+- The B300 paired layer-0 FFN-output validator passed 819 checks before
+  pinning and 885 checks after pinning exact weight metadata, router metadata,
+  and full-buffer FNV digests: `after_attn_hc=ad09657ac6584898`,
+  `ffn_cur=6a4fadf124b872b9`, `ffn_norm=51f4215200d2855c`,
+  `router_logits=ea0d089c828257f3`, `router_probs=8435f2b23e429e02`,
+  `router_selected=6028192a0e6c3c3e`,
+  `router_weights=0a7ff588f5caa574`, `routed_mid=a51a0c8b6f39b89a`,
+  `routed_out=507a5d29b2e806e9`, `shared_mid=8fb3b60df337c136`,
+  `shared_out=3f90851fbe0be24c`, and `after_ffn_hc=3d49316c93ce351f`.
+- M10.5c4c2b2b2b2b2a predecessor validation reran the B300
+  c2b2b2b2b1 layer-0 attention-output paired check and passed 493 checks with
+  the pinned `kv`, `raw_cache_row`, `heads`, `attn_low`, `attn_out`, and
+  `after_attn_hc` digests unchanged.
+- M10.5c4c2b2b2b2b2a validation passed `python3
+  ds4-parity/compare_decode_layer0_ffn_output.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer0_ffn_output.py`, `python3 -m py_compile
+  ds4-parity/compare_decode_layer0_ffn_output.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer0-ffn-output-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer0-ffn-output`, B300 current-C oracle plus Rust candidate
+  paired validation, pinned B300 artifact rerun, B300 c2b2b2b2b1
+  layer-0 attention-output rerun, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+- M10.5c4c2b2b2b2b2 splits the remaining one-token scheduler item into a
+  layer-0 FFN-output execution bridge and the next full scheduler/logits slice
+  M10.5c4c2b2b2b2b2b. The split keeps the next commit comparable at a tensor
+  boundary before all 43 layers, compressed-cache transitions, and logits are
+  introduced together.
 - M10.5c4c2b2b2b2b1 splits the remaining one-token scheduler item into a
   layer-0 attention-output execution bridge and the next active full scheduler
   slice M10.5c4c2b2b2b2b2.
