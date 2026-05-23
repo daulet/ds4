@@ -58,8 +58,9 @@ pub use server_no_model::{
     route_no_model_server_request_with_prompt_tokens,
 };
 pub use server_response::{
-    format_openai_chat_completion_http, format_openai_chat_completion_json, OpenAiChatCompletion,
-    OpenAiUsage,
+    format_openai_chat_completion_http, format_openai_chat_completion_json,
+    format_openai_chat_stream_http, format_openai_chat_stream_sse, OpenAiChatCompletion,
+    OpenAiChatStream, OpenAiUsage,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

@@ -2757,7 +2757,7 @@
 
 ### M9.5a: OpenAI Chat SSE Formatter And Header Builder
 
-- Status: active
+- Status: done
 - Goal: add pure Rust helpers for OpenAI chat-completion SSE headers, role
   chunk, content delta chunks, final finish chunk, optional usage chunk, and
   `[DONE]` terminator without running the model.
@@ -2777,15 +2777,17 @@
   headers, blank lines, and `[DONE]` are exact.
 - Review gate: ask Claude to review SSE JSON/header shape, usage accounting,
   escaping, event ordering, and separation from runtime/cache policy.
-- Validation needed: targeted SSE formatter tests, decode-policy streaming hold
-  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, and
+- Validation passed: targeted SSE formatter tests
+  `cargo test -p ds4-gguf server_response -- --nocapture`, decode-policy
+  streaming hold tests `cargo test -p ds4-gguf decode_policy -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
   `git diff --check`.
 - Owner path: Rust server formatting modules, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.5b: Model-Backed Streaming Chat Replay
 
-- Status: pending
+- Status: active
 - Goal: route supported streaming `/v1/chat/completions` requests through the
   Rust server runtime for the M0.4 `chat_stream` fixture, preserving per-token
   content deltas and usage reporting through the M9.5a formatter.

@@ -1,4 +1,4 @@
-use crate::server_http::{format_http_response, json_escape_string};
+use crate::server_http::{append_cors_headers, format_http_response, json_escape_string};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpenAiUsage {
@@ -35,6 +35,16 @@ pub struct OpenAiChatCompletion<'a> {
     pub usage: OpenAiUsage,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OpenAiChatStream<'a> {
+    pub id: &'a str,
+    pub created: i64,
+    pub model: &'a str,
+    pub content_deltas: &'a [&'a str],
+    pub finish_reason: &'a str,
+    pub usage: Option<OpenAiUsage>,
+}
+
 pub fn format_openai_chat_completion_json(response: &OpenAiChatCompletion<'_>) -> String {
     let mut out = String::new();
     out.push_str("{\"id\":");
@@ -66,6 +76,85 @@ pub fn format_openai_chat_completion_http(
 ) -> String {
     let body = format_openai_chat_completion_json(response);
     format_http_response(enable_cors, 200, Some("application/json"), &body)
+}
+
+pub fn format_openai_chat_stream_sse(response: &OpenAiChatStream<'_>) -> String {
+    let mut out = String::new();
+    append_openai_chat_stream_role_chunk(&mut out, response);
+    for delta in response.content_deltas {
+        if !delta.is_empty() {
+            append_openai_chat_stream_content_chunk(&mut out, response, delta);
+        }
+    }
+    append_openai_chat_stream_finish_chunk(&mut out, response);
+    if let Some(usage) = response.usage {
+        append_openai_chat_stream_usage_chunk(&mut out, response, usage);
+    }
+    out.push_str("data: [DONE]\n");
+    out
+}
+
+pub fn format_openai_chat_stream_http(
+    enable_cors: bool,
+    response: &OpenAiChatStream<'_>,
+) -> String {
+    let mut out = String::new();
+    out.push_str(
+        "HTTP/1.1 200 OK\r\n\
+Content-Type: text/event-stream\r\n\
+Cache-Control: no-cache\r\n",
+    );
+    if enable_cors {
+        append_cors_headers(&mut out);
+    }
+    out.push_str("Connection: close\r\n\r\n");
+    out.push_str(&format_openai_chat_stream_sse(response));
+    out
+}
+
+fn append_openai_chat_stream_prefix(out: &mut String, response: &OpenAiChatStream<'_>) {
+    out.push_str("data: {\"id\":");
+    out.push_str(&json_escape_string(response.id));
+    out.push_str(",\"object\":\"chat.completion.chunk\",\"created\":");
+    out.push_str(&response.created.to_string());
+    out.push_str(",\"model\":");
+    out.push_str(&json_escape_string(response.model));
+}
+
+fn append_openai_chat_stream_role_chunk(out: &mut String, response: &OpenAiChatStream<'_>) {
+    append_openai_chat_stream_prefix(out, response);
+    out.push_str(
+        ",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n",
+    );
+}
+
+fn append_openai_chat_stream_content_chunk(
+    out: &mut String,
+    response: &OpenAiChatStream<'_>,
+    delta: &str,
+) {
+    append_openai_chat_stream_prefix(out, response);
+    out.push_str(",\"choices\":[{\"index\":0,\"delta\":{\"content\":");
+    out.push_str(&json_escape_string(delta));
+    out.push_str("},\"finish_reason\":null}]}\n\n");
+}
+
+fn append_openai_chat_stream_finish_chunk(out: &mut String, response: &OpenAiChatStream<'_>) {
+    append_openai_chat_stream_prefix(out, response);
+    out.push_str(",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":");
+    out.push_str(&json_escape_string(response.finish_reason));
+    out.push_str("}]}\n\n");
+}
+
+fn append_openai_chat_stream_usage_chunk(
+    out: &mut String,
+    response: &OpenAiChatStream<'_>,
+    usage: OpenAiUsage,
+) {
+    append_openai_chat_stream_prefix(out, response);
+    out.push_str(",\"choices\":[],\"usage\":");
+    append_openai_usage_json(out, usage);
+    out.push_str("}\n\n");
 }
 
 fn append_openai_usage_json(out: &mut String, usage: OpenAiUsage) {
@@ -114,6 +203,11 @@ mod tests {
     );
     const CHAT_BASIC_HEADERS: &str = include_str!(
         "../../../ds4-parity/baselines/server-traces/m0.4/headers/chat_basic.headers.txt"
+    );
+    const CHAT_STREAM: &str =
+        include_str!("../../../ds4-parity/baselines/server-traces/m0.4/responses/chat_stream.sse");
+    const CHAT_STREAM_HEADERS: &str = include_str!(
+        "../../../ds4-parity/baselines/server-traces/m0.4/headers/chat_stream.headers.txt"
     );
 
     #[test]
@@ -189,6 +283,71 @@ mod tests {
         let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
         assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_BASIC_HEADERS);
         assert_eq!(body, CHAT_BASIC);
+    }
+
+    #[test]
+    fn formats_m04_chat_stream_sse_body() {
+        assert_eq!(
+            format_openai_chat_stream_sse(&OpenAiChatStream {
+                id: "chatcmpl-2",
+                created: 1_779_416_174,
+                model: "deepseek-chat",
+                content_deltas: &["stream", " baseline"],
+                finish_reason: "stop",
+                usage: Some(OpenAiUsage::new(11, 2, 0, 11)),
+            }),
+            CHAT_STREAM
+        );
+    }
+
+    #[test]
+    fn formats_m04_chat_stream_http_headers() {
+        let response = format_openai_chat_stream_http(
+            false,
+            &OpenAiChatStream {
+                id: "chatcmpl-2",
+                created: 1_779_416_174,
+                model: "deepseek-chat",
+                content_deltas: &["stream", " baseline"],
+                finish_reason: "stop",
+                usage: Some(OpenAiUsage::new(11, 2, 0, 11)),
+            },
+        );
+        let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
+        assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_STREAM_HEADERS);
+        assert_eq!(body, CHAT_STREAM);
+    }
+
+    #[test]
+    fn stream_usage_chunk_is_optional() {
+        let body = format_openai_chat_stream_sse(&OpenAiChatStream {
+            id: "chatcmpl-no-usage",
+            created: 1,
+            model: "deepseek-chat",
+            content_deltas: &["x"],
+            finish_reason: "stop",
+            usage: None,
+        });
+        assert!(!body.contains("\"usage\""));
+        assert!(body.ends_with("data: [DONE]\n"));
+    }
+
+    #[test]
+    fn stream_chunks_escape_model_delta_and_finish_reason() {
+        assert_eq!(
+            format_openai_chat_stream_sse(&OpenAiChatStream {
+                id: "chatcmpl-stream-escape",
+                created: 1,
+                model: "model \"x\"",
+                content_deltas: &["line\n\"quoted\""],
+                finish_reason: "stop",
+                usage: None,
+            }),
+            "data: {\"id\":\"chatcmpl-stream-escape\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"model \\\"x\\\"\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"chatcmpl-stream-escape\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"model \\\"x\\\"\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"line\\n\\\"quoted\\\"\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"chatcmpl-stream-escape\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"model \\\"x\\\"\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n"
+        );
     }
 
     #[test]

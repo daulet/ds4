@@ -233,7 +233,7 @@ fn reason_phrase(code: u16) -> &'static str {
     }
 }
 
-fn append_cors_headers(out: &mut String) {
+pub(crate) fn append_cors_headers(out: &mut String) {
     out.push_str(
         "Access-Control-Allow-Origin: *\r\n\
 Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
