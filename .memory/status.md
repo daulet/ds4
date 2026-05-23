@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6c2 Incremental DSML Tool-Call Stream Translator
-- Last validated source commit: M9.6c1 tool-call SSE event formatter in this
-  commit; prior pushed source commit
-  `f7d90484f17f035f78e0b0272718737463f45270`
+- Active item: M9.6c3 Model-Backed Streaming Tool-Call Replay
+- Last validated source commit: M9.6c2 incremental DSML tool-call stream
+  translator in this commit; prior pushed source commit
+  `ae0b44d0fece5ca5fc99059e95b673e8e13aa54a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,32 @@
 
 ## Last Evidence
 
+- M9.6c2 added a model-free `OpenAiToolCallStreamTranslator` that consumes
+  generated DSML byte chunks and emits owned M9.6c1 tool-call stream events
+  without model/runtime routing or SSE framing policy.
+- M9.6c2 mirrors the C OpenAI tool-stream state machine across search,
+  between-invokes, between-params, and param-value states, including generated
+  deterministic stream call IDs from an injected prefix and cached call IDs for
+  final parsed-call alignment.
+- M9.6c2 preserves raw JSON parameter fragments, JSON-escapes string
+  parameter fragments after DSML entity unescape, emits parameter commas and
+  string close quotes at the same boundaries as C, and holds partial
+  invoke/parameter tags, partial parameter-close sentinels, partial DSML
+  entities, and split UTF-8 tails.
+- M9.6c2 exact event tests cover canonical and plain DSML syntaxes, string
+  entity holds, raw JSON argument preservation, comma insertion, partial invoke
+  tags, partial parameter-close sentinels, split UTF-8, done/error state
+  probes, and unchanged existing M9.6c1/M9.5 formatter tests.
+- M9.6c2 local validation passed for targeted
+  `cargo test -p ds4-gguf server_response -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.6c2 Claude review returned no blockers after checking state transitions,
+  partial tag and tail holds, entity/UTF-8 boundaries, raw JSON preservation,
+  string escaping/unescaping, deterministic stream IDs, malformed-tail behavior,
+  public API suitability for M9.6c3, and absence of runtime/model policy.
+- M9.6c2 did not need B300 validation because it is still model-free; B300
+  replay remains owned by M9.6c3.
 - M9.6c1 added model-free OpenAI chat tool-stream SSE helpers in
   `ds4_gguf::server_response` for role chunks, live tool-call start deltas,
   argument-fragment deltas, full-call fallback deltas, finish chunks, optional

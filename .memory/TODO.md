@@ -2966,7 +2966,7 @@
 
 ### M9.6c2: Incremental DSML Tool-Call Stream Translator
 
-- Status: active
+- Status: complete
 - Goal: translate incremental generated DSML bytes into the M9.6c1 OpenAI
   tool-call start/argument delta events while holding incomplete tags,
   parameter close sentinels, DSML entities, and UTF-8 tails.
@@ -2989,15 +2989,15 @@
 - Review gate: ask Claude to review state transitions, partial-hold logic,
   UTF-8/entity boundaries, malformed tail recovery, and non-tool streaming
   regression coverage.
-- Validation needed: targeted stream-translator tests, existing SSE formatter
-  tests, DSML parser tests, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_response -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: `rust/ds4-gguf/src/server_response.rs`,
   `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`, `.memory/status.md`.
 
 ### M9.6c3: Model-Backed Streaming Tool-Call Replay
 
-- Status: pending
+- Status: active
 - Goal: route supported streaming OpenAI tool chat requests through the Rust
   server runtime, feed per-token bytes through the M9.6c2 translator, and emit
   the M9.6c1 SSE response shape.

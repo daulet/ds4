@@ -1,5 +1,52 @@
+use crate::decode_policy::utf8_stream_safe_len;
 use crate::dsml::{normalize_json_object_or_empty, DsmlJsonCall};
 use crate::server_http::{append_cors_headers, format_http_response, json_escape_string};
+
+const DS4_TOOL_CALLS_START: &[u8] = "<｜DSML｜tool_calls>".as_bytes();
+const DS4_TOOL_CALLS_END: &[u8] = "</｜DSML｜tool_calls>".as_bytes();
+const DS4_INVOKE_START: &[u8] = "<｜DSML｜invoke".as_bytes();
+const DS4_INVOKE_END: &[u8] = "</｜DSML｜invoke>".as_bytes();
+const DS4_PARAM_START: &[u8] = "<｜DSML｜parameter".as_bytes();
+const DS4_PARAM_END: &[u8] = "</｜DSML｜parameter>".as_bytes();
+const DS4_TOOL_CALLS_START_SHORT: &[u8] = "<DSML｜tool_calls>".as_bytes();
+const DS4_TOOL_CALLS_END_SHORT: &[u8] = "</DSML｜tool_calls>".as_bytes();
+const DS4_INVOKE_START_SHORT: &[u8] = "<DSML｜invoke".as_bytes();
+const DS4_INVOKE_END_SHORT: &[u8] = "</DSML｜invoke>".as_bytes();
+const DS4_PARAM_START_SHORT: &[u8] = "<DSML｜parameter".as_bytes();
+const DS4_PARAM_END_SHORT: &[u8] = "</DSML｜parameter>".as_bytes();
+const PLAIN_TOOL_CALLS_START: &[u8] = b"<tool_calls>";
+const PLAIN_TOOL_CALLS_END: &[u8] = b"</tool_calls>";
+const PLAIN_INVOKE_START: &[u8] = b"<invoke";
+const PLAIN_INVOKE_END: &[u8] = b"</invoke>";
+const PLAIN_PARAM_START: &[u8] = b"<parameter";
+const PLAIN_PARAM_END: &[u8] = b"</parameter>";
+
+const DSML_TOOL_SYNTAXES: &[DsmlToolSyntax] = &[
+    DsmlToolSyntax {
+        tool_calls_start: DS4_TOOL_CALLS_START,
+        tool_calls_end: DS4_TOOL_CALLS_END,
+        invoke_start: DS4_INVOKE_START,
+        invoke_end: DS4_INVOKE_END,
+        param_start: DS4_PARAM_START,
+        param_end: DS4_PARAM_END,
+    },
+    DsmlToolSyntax {
+        tool_calls_start: DS4_TOOL_CALLS_START_SHORT,
+        tool_calls_end: DS4_TOOL_CALLS_END_SHORT,
+        invoke_start: DS4_INVOKE_START_SHORT,
+        invoke_end: DS4_INVOKE_END_SHORT,
+        param_start: DS4_PARAM_START_SHORT,
+        param_end: DS4_PARAM_END_SHORT,
+    },
+    DsmlToolSyntax {
+        tool_calls_start: PLAIN_TOOL_CALLS_START,
+        tool_calls_end: PLAIN_TOOL_CALLS_END,
+        invoke_start: PLAIN_INVOKE_START,
+        invoke_end: PLAIN_INVOKE_END,
+        param_start: PLAIN_PARAM_START,
+        param_end: PLAIN_PARAM_END,
+    },
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpenAiUsage {
@@ -70,6 +117,326 @@ pub enum OpenAiToolCallStreamEvent<'a> {
     FullCalls {
         calls: &'a [DsmlJsonCall],
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpenAiToolCallStreamEventOwned {
+    Start {
+        index: usize,
+        id: String,
+        name: String,
+    },
+    Arguments {
+        index: usize,
+        fragment: String,
+    },
+}
+
+impl OpenAiToolCallStreamEventOwned {
+    pub fn as_borrowed(&self) -> OpenAiToolCallStreamEvent<'_> {
+        match self {
+            Self::Start { index, id, name } => OpenAiToolCallStreamEvent::Start {
+                index: *index,
+                id,
+                name,
+            },
+            Self::Arguments { index, fragment } => OpenAiToolCallStreamEvent::Arguments {
+                index: *index,
+                fragment,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenAiToolCallStreamTranslator {
+    state: DsmlToolStreamState,
+    raw: Vec<u8>,
+    parse_pos: usize,
+    syntax: Option<DsmlToolSyntax>,
+    call_id_prefix: String,
+    call_ids: Vec<String>,
+    index: usize,
+    args_open: bool,
+    first_param: bool,
+    param_is_string: bool,
+    emitted_any: bool,
+}
+
+impl OpenAiToolCallStreamTranslator {
+    pub fn new(call_id_prefix: impl Into<String>) -> Self {
+        Self {
+            state: DsmlToolStreamState::Search,
+            raw: Vec::new(),
+            parse_pos: 0,
+            syntax: None,
+            call_id_prefix: call_id_prefix.into(),
+            call_ids: Vec::new(),
+            index: 0,
+            args_open: false,
+            first_param: true,
+            param_is_string: false,
+            emitted_any: false,
+        }
+    }
+
+    pub fn feed(&mut self, bytes: &[u8]) -> Vec<OpenAiToolCallStreamEventOwned> {
+        if matches!(
+            self.state,
+            DsmlToolStreamState::Done | DsmlToolStreamState::Error
+        ) {
+            return Vec::new();
+        }
+        self.raw.extend_from_slice(bytes);
+        let mut events = Vec::new();
+        self.parse(&mut events);
+        events
+    }
+
+    pub fn emitted_any(&self) -> bool {
+        self.emitted_any
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.state == DsmlToolStreamState::Done
+    }
+
+    pub fn is_error(&self) -> bool {
+        self.state == DsmlToolStreamState::Error
+    }
+
+    pub fn call_ids(&self) -> &[String] {
+        &self.call_ids
+    }
+
+    fn parse(&mut self, events: &mut Vec<OpenAiToolCallStreamEventOwned>) {
+        loop {
+            match self.state {
+                DsmlToolStreamState::Search => {
+                    let Some((start, syntax)) = find_tool_start_from(&self.raw, self.parse_pos)
+                    else {
+                        self.parse_pos = self
+                            .raw
+                            .len()
+                            .saturating_sub(max_tool_start_len().saturating_sub(1));
+                        return;
+                    };
+                    self.syntax = Some(syntax);
+                    self.parse_pos = start + syntax.tool_calls_start.len();
+                    self.state = DsmlToolStreamState::BetweenInvokes;
+                }
+                DsmlToolStreamState::BetweenInvokes => {
+                    let Some(syntax) = self.syntax else {
+                        self.state = DsmlToolStreamState::Error;
+                        return;
+                    };
+                    self.skip_ascii_ws();
+                    if self.parse_pos >= self.raw.len() {
+                        return;
+                    }
+                    if raw_full_lit(&self.raw, self.parse_pos, syntax.tool_calls_end) {
+                        self.parse_pos += syntax.tool_calls_end.len();
+                        self.state = DsmlToolStreamState::Done;
+                        return;
+                    }
+                    if raw_partial_any(
+                        &self.raw,
+                        self.parse_pos,
+                        syntax.tool_calls_end,
+                        syntax.invoke_start,
+                    ) {
+                        return;
+                    }
+                    if raw_full_lit(&self.raw, self.parse_pos, syntax.invoke_start) {
+                        if !self.start_invoke(events) {
+                            return;
+                        }
+                        continue;
+                    }
+                    self.state = DsmlToolStreamState::Error;
+                    return;
+                }
+                DsmlToolStreamState::BetweenParams => {
+                    let Some(syntax) = self.syntax else {
+                        self.state = DsmlToolStreamState::Error;
+                        return;
+                    };
+                    self.skip_ascii_ws();
+                    if self.parse_pos >= self.raw.len() {
+                        return;
+                    }
+                    if raw_full_lit(&self.raw, self.parse_pos, syntax.invoke_end) {
+                        if self.args_open {
+                            events.push(OpenAiToolCallStreamEventOwned::Arguments {
+                                index: self.index,
+                                fragment: "}".to_string(),
+                            });
+                        }
+                        self.args_open = false;
+                        self.parse_pos += syntax.invoke_end.len();
+                        self.index += 1;
+                        self.state = DsmlToolStreamState::BetweenInvokes;
+                        continue;
+                    }
+                    if raw_partial_any(
+                        &self.raw,
+                        self.parse_pos,
+                        syntax.invoke_end,
+                        syntax.param_start,
+                    ) {
+                        return;
+                    }
+                    if raw_full_lit(&self.raw, self.parse_pos, syntax.param_start) {
+                        if !self.start_param(events) {
+                            return;
+                        }
+                        continue;
+                    }
+                    self.state = DsmlToolStreamState::Error;
+                    return;
+                }
+                DsmlToolStreamState::ParamValue => {
+                    let Some(syntax) = self.syntax else {
+                        self.state = DsmlToolStreamState::Error;
+                        return;
+                    };
+                    if let Some(rel) = find_bytes(&self.raw[self.parse_pos..], syntax.param_end) {
+                        let value_end = self.parse_pos + rel;
+                        self.emit_param_value(value_end, events);
+                        if self.param_is_string {
+                            events.push(OpenAiToolCallStreamEventOwned::Arguments {
+                                index: self.index,
+                                fragment: "\"".to_string(),
+                            });
+                        }
+                        self.parse_pos = value_end + syntax.param_end.len();
+                        self.state = DsmlToolStreamState::BetweenParams;
+                        continue;
+                    }
+
+                    let limit = tool_param_value_stream_safe_len(
+                        &self.raw,
+                        self.parse_pos,
+                        self.raw.len(),
+                        syntax.param_end,
+                        self.param_is_string,
+                    );
+                    if limit > self.parse_pos {
+                        self.emit_param_value(limit, events);
+                        self.parse_pos = limit;
+                    }
+                    return;
+                }
+                DsmlToolStreamState::Done | DsmlToolStreamState::Error => return,
+            }
+        }
+    }
+
+    fn start_invoke(&mut self, events: &mut Vec<OpenAiToolCallStreamEventOwned>) -> bool {
+        let Some(tag_end_rel) = self.raw[self.parse_pos..]
+            .iter()
+            .position(|&byte| byte == b'>')
+        else {
+            return false;
+        };
+        let tag_end = self.parse_pos + tag_end_rel + 1;
+        let Some(name) = parse_dsml_attr(&self.raw[self.parse_pos..tag_end], b"name") else {
+            self.state = DsmlToolStreamState::Error;
+            return false;
+        };
+        let id = self.tool_id(self.index);
+        events.push(OpenAiToolCallStreamEventOwned::Start {
+            index: self.index,
+            id,
+            name,
+        });
+        events.push(OpenAiToolCallStreamEventOwned::Arguments {
+            index: self.index,
+            fragment: "{".to_string(),
+        });
+        self.emitted_any = true;
+        self.args_open = true;
+        self.first_param = true;
+        self.parse_pos = tag_end;
+        self.state = DsmlToolStreamState::BetweenParams;
+        true
+    }
+
+    fn start_param(&mut self, events: &mut Vec<OpenAiToolCallStreamEventOwned>) -> bool {
+        let Some(tag_end_rel) = self.raw[self.parse_pos..]
+            .iter()
+            .position(|&byte| byte == b'>')
+        else {
+            return false;
+        };
+        let tag_end = self.parse_pos + tag_end_rel + 1;
+        let tag = &self.raw[self.parse_pos..tag_end];
+        let Some(name) = parse_dsml_attr(tag, b"name") else {
+            self.state = DsmlToolStreamState::Error;
+            return false;
+        };
+        let Some(is_string) = parse_dsml_attr(tag, b"string") else {
+            self.state = DsmlToolStreamState::Error;
+            return false;
+        };
+        self.param_is_string = is_string == "true";
+
+        let mut fragment = String::new();
+        if self.first_param {
+            self.first_param = false;
+        } else {
+            fragment.push(',');
+        }
+        fragment.push_str(&json_escape_string(&name));
+        fragment.push(':');
+        if self.param_is_string {
+            fragment.push('"');
+        }
+        events.push(OpenAiToolCallStreamEventOwned::Arguments {
+            index: self.index,
+            fragment,
+        });
+        self.parse_pos = tag_end;
+        self.state = DsmlToolStreamState::ParamValue;
+        true
+    }
+
+    fn emit_param_value(&self, value_end: usize, events: &mut Vec<OpenAiToolCallStreamEventOwned>) {
+        if value_end <= self.parse_pos {
+            return;
+        }
+        let value = String::from_utf8_lossy(&self.raw[self.parse_pos..value_end]);
+        let fragment = if self.param_is_string {
+            json_escape_fragment(&dsml_unescape_text(&value))
+        } else {
+            value.into_owned()
+        };
+        if !fragment.is_empty() {
+            events.push(OpenAiToolCallStreamEventOwned::Arguments {
+                index: self.index,
+                fragment,
+            });
+        }
+    }
+
+    fn skip_ascii_ws(&mut self) {
+        while self
+            .raw
+            .get(self.parse_pos)
+            .is_some_and(|byte| byte.is_ascii_whitespace())
+        {
+            self.parse_pos += 1;
+        }
+    }
+
+    fn tool_id(&mut self, index: usize) -> String {
+        while self.call_ids.len() <= index {
+            let next = self.call_ids.len();
+            self.call_ids
+                .push(format!("{}{:016x}", self.call_id_prefix, next));
+        }
+        self.call_ids[index].clone()
+    }
 }
 
 pub fn format_openai_chat_completion_json(response: &OpenAiChatCompletion<'_>) -> String {
@@ -409,6 +776,166 @@ fn append_openai_tool_call_deltas_json(
     out.push(']');
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DsmlToolSyntax {
+    tool_calls_start: &'static [u8],
+    tool_calls_end: &'static [u8],
+    invoke_start: &'static [u8],
+    invoke_end: &'static [u8],
+    param_start: &'static [u8],
+    param_end: &'static [u8],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DsmlToolStreamState {
+    Search,
+    BetweenInvokes,
+    BetweenParams,
+    ParamValue,
+    Done,
+    Error,
+}
+
+fn find_tool_start_from(raw: &[u8], start: usize) -> Option<(usize, DsmlToolSyntax)> {
+    let mut best: Option<(usize, DsmlToolSyntax)> = None;
+    for syntax in DSML_TOOL_SYNTAXES {
+        if let Some(rel) = find_bytes(raw.get(start..)?, syntax.tool_calls_start) {
+            let pos = start + rel;
+            if best.is_none_or(|(best_pos, _)| pos < best_pos) {
+                best = Some((pos, *syntax));
+            }
+        }
+    }
+    best
+}
+
+fn max_tool_start_len() -> usize {
+    DSML_TOOL_SYNTAXES
+        .iter()
+        .map(|syntax| syntax.tool_calls_start.len())
+        .max()
+        .unwrap_or(0)
+}
+
+fn raw_full_lit(raw: &[u8], pos: usize, lit: &[u8]) -> bool {
+    pos <= raw.len() && raw[pos..].starts_with(lit)
+}
+
+fn raw_partial_lit(raw: &[u8], pos: usize, lit: &[u8]) -> bool {
+    if pos > raw.len() || raw.len() - pos >= lit.len() {
+        return false;
+    }
+    lit.starts_with(&raw[pos..])
+}
+
+fn raw_partial_any(raw: &[u8], pos: usize, a: &[u8], b: &[u8]) -> bool {
+    raw_partial_lit(raw, pos, a) || raw_partial_lit(raw, pos, b)
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn parse_dsml_attr(tag: &[u8], name: &[u8]) -> Option<String> {
+    let mut pattern = Vec::with_capacity(name.len() + 2);
+    pattern.extend_from_slice(name);
+    pattern.extend_from_slice(b"=\"");
+    let start = find_bytes(tag, &pattern)? + pattern.len();
+    let end = tag[start..].iter().position(|&byte| byte == b'"')? + start;
+    let raw = String::from_utf8_lossy(&tag[start..end]);
+    Some(dsml_unescape_text(&raw))
+}
+
+fn tool_param_value_stream_safe_len(
+    raw: &[u8],
+    start: usize,
+    raw_len: usize,
+    param_end: &[u8],
+    is_string: bool,
+) -> usize {
+    let raw_len = raw_len.min(raw.len());
+    let mut limit = raw_len;
+    let scan = if raw_len > start + param_end.len() {
+        raw_len - param_end.len()
+    } else {
+        start
+    };
+    for i in (scan + 1..=raw_len).rev() {
+        if raw[i - 1] != b'<' {
+            continue;
+        }
+        let marker = i - 1;
+        let tail = raw_len - marker;
+        if tail < param_end.len() && param_end.starts_with(&raw[marker..raw_len]) {
+            limit = marker;
+        }
+        break;
+    }
+    if is_string {
+        limit = dsml_entity_stream_safe_len(raw, start, limit);
+    }
+    utf8_stream_safe_len(raw, start, limit, false)
+}
+
+fn dsml_entity_stream_safe_len(raw: &[u8], start: usize, limit: usize) -> usize {
+    const ENTITIES: &[&[u8]] = &[b"&amp;", b"&lt;", b"&gt;", b"&quot;", b"&apos;"];
+    let scan = limit.saturating_sub(6).max(start);
+    for i in (scan + 1..=limit).rev() {
+        if raw[i - 1] != b'&' {
+            continue;
+        }
+        let amp = i - 1;
+        let tail = limit - amp;
+        if ENTITIES
+            .iter()
+            .any(|entity| tail < entity.len() && entity.starts_with(&raw[amp..limit]))
+        {
+            return amp;
+        }
+        break;
+    }
+    limit
+}
+
+fn dsml_unescape_text(value: &str) -> String {
+    let mut out = String::new();
+    let mut rest = value;
+    while !rest.is_empty() {
+        if let Some(tail) = rest.strip_prefix("&amp;") {
+            out.push('&');
+            rest = tail;
+        } else if let Some(tail) = rest.strip_prefix("&lt;") {
+            out.push('<');
+            rest = tail;
+        } else if let Some(tail) = rest.strip_prefix("&gt;") {
+            out.push('>');
+            rest = tail;
+        } else if let Some(tail) = rest.strip_prefix("&quot;") {
+            out.push('"');
+            rest = tail;
+        } else if let Some(tail) = rest.strip_prefix("&apos;") {
+            out.push('\'');
+            rest = tail;
+        } else {
+            let mut chars = rest.chars();
+            let ch = chars.next().expect("non-empty string");
+            out.push(ch);
+            rest = chars.as_str();
+        }
+    }
+    out
+}
+
+fn json_escape_fragment(value: &str) -> String {
+    let escaped = json_escape_string(value);
+    escaped[1..escaped.len() - 1].to_string()
+}
+
 fn clamp_usage_tokens(value: i32, max: i32) -> i32 {
     if value < 0 {
         0
@@ -743,6 +1270,189 @@ mod tests {
         let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
         assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_STREAM_HEADERS);
         assert_eq!(body, format_openai_chat_tool_stream_sse(&stream));
+    }
+
+    #[test]
+    fn tool_stream_translator_emits_string_argument_fragments_incrementally() {
+        let mut translator = OpenAiToolCallStreamTranslator::new("call_0000000000000001");
+        let mut events = Vec::new();
+        events.extend(
+            translator.feed("<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"bash\">\n".as_bytes()),
+        );
+        events.extend(
+            translator
+                .feed("<｜DSML｜parameter name=\"command\" string=\"true\">echo &l".as_bytes()),
+        );
+        events.extend(
+            translator.feed(
+                "t;ok</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>".as_bytes(),
+            ),
+        );
+
+        assert_eq!(
+            events,
+            vec![
+                OpenAiToolCallStreamEventOwned::Start {
+                    index: 0,
+                    id: "call_00000000000000010000000000000000".to_string(),
+                    name: "bash".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "{".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "\"command\":\"".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "echo ".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "<ok".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "\"".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "}".to_string(),
+                },
+            ]
+        );
+        assert!(translator.emitted_any());
+        assert!(translator.is_done());
+        assert_eq!(
+            translator.call_ids(),
+            ["call_00000000000000010000000000000000"]
+        );
+    }
+
+    #[test]
+    fn tool_stream_translator_preserves_raw_json_arguments_and_commas() {
+        let mut translator = OpenAiToolCallStreamTranslator::new("call_");
+        let events = translator.feed(
+            concat!(
+                "<tool_calls>\n",
+                "<invoke name=\"calc\">\n",
+                "<parameter name=\"query\" string=\"true\">sum</parameter>\n",
+                "<parameter name=\"config\" string=\"false\">{\"x\": 1}</parameter>\n",
+                "</invoke>\n",
+                "</tool_calls>",
+            )
+            .as_bytes(),
+        );
+
+        assert_eq!(
+            events,
+            vec![
+                OpenAiToolCallStreamEventOwned::Start {
+                    index: 0,
+                    id: "call_0000000000000000".to_string(),
+                    name: "calc".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "{".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "\"query\":\"".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "sum".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "\"".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: ",\"config\":".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "{\"x\": 1}".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "}".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn tool_stream_translator_holds_partial_tags_and_split_utf8() {
+        let mut translator = OpenAiToolCallStreamTranslator::new("call_");
+        assert!(translator
+            .feed("<｜DSML｜tool_calls>\n<｜DSML｜inv".as_bytes())
+            .is_empty());
+        let start = translator.feed("oke name=\"note\">\n".as_bytes());
+        assert_eq!(
+            start,
+            vec![
+                OpenAiToolCallStreamEventOwned::Start {
+                    index: 0,
+                    id: "call_0000000000000000".to_string(),
+                    name: "note".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "{".to_string(),
+                },
+            ]
+        );
+
+        let mut param_chunk = "<｜DSML｜parameter name=\"text\" string=\"true\">caf"
+            .as_bytes()
+            .to_vec();
+        param_chunk.push(0xc3);
+        let param = translator.feed(&param_chunk);
+        assert_eq!(
+            param,
+            vec![
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "\"text\":\"".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "caf".to_string(),
+                },
+            ]
+        );
+
+        let mut close_start = vec![0xa9];
+        close_start.extend_from_slice("</｜DSML｜par".as_bytes());
+        assert_eq!(
+            translator.feed(&close_start),
+            vec![OpenAiToolCallStreamEventOwned::Arguments {
+                index: 0,
+                fragment: "é".to_string(),
+            }]
+        );
+        let finish =
+            translator.feed("ameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>".as_bytes());
+        assert_eq!(
+            finish,
+            vec![
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "\"".to_string(),
+                },
+                OpenAiToolCallStreamEventOwned::Arguments {
+                    index: 0,
+                    fragment: "}".to_string(),
+                },
+            ]
+        );
+        assert!(translator.is_done());
+        assert!(!translator.is_error());
     }
 
     #[test]

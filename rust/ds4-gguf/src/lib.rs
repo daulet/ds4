@@ -62,7 +62,8 @@ pub use server_response::{
     format_openai_chat_stream_http, format_openai_chat_stream_sse,
     format_openai_chat_tool_completion_http, format_openai_chat_tool_completion_json,
     format_openai_chat_tool_stream_http, format_openai_chat_tool_stream_sse, OpenAiChatCompletion,
-    OpenAiChatStream, OpenAiChatToolStream, OpenAiToolCallStreamEvent, OpenAiUsage,
+    OpenAiChatStream, OpenAiChatToolStream, OpenAiToolCallStreamEvent,
+    OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator, OpenAiUsage,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 
