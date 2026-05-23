@@ -3334,7 +3334,7 @@
 
 ### M9.8f2: Runtime Cache Configuration And Trace Contract
 
-- Status: active
+- Status: done
 - Goal: add the Rust runtime server cache configuration/state and trace
   contract needed for disk cache decisions without yet loading or writing KVC
   payloads.
@@ -3355,12 +3355,17 @@
 - Validation needed: targeted runtime cache-surface tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Validation passed: targeted `cargo test -p ds4-engine --bin
+  ds4-server-runtime-rs -- --nocapture`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, NUL scan
+  over touched Rust files, and non-interactive Claude review with no blockers.
 - Owner path: `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`,
   `rust/ds4-gguf/src/kv_policy.rs`, `.memory/status.md`.
 
 ### M9.8f3: Runtime Disk-KV Lookup And Payload Restore
 
-- Status: pending
+- Status: active
 - Goal: wire text-prefix KVC lookup, session payload restore, effective prompt
   suffix tokenization, and tool-map trailer restore into the runtime request
   path before generation.

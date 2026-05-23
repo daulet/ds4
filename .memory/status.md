@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8f2 Runtime Cache Configuration And Trace Contract
-- Last validated source commit: M9.8f1 runtime cache/KV integration split in
-  this commit; prior pushed source commit
-  `b35a8540acd3d0f7a02658c3db1713614f6b8220`
+- Active item: M9.8f3 Runtime Disk-KV Lookup And Payload Restore
+- Last validated source commit: M9.8f2 runtime cache configuration and trace
+  contract in this commit; prior pushed source commit
+  `16ca80e67b79500ead82833647b4f4dccb8da74d`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,19 @@
 
 ## Last Evidence
 
+- M9.8f2 adds the Rust runtime server cache configuration surface for C's
+  disk-KV flags: cache directory, disk budget, min/cold/continued/boundary
+  policy options, cross-quant rejection, exact DSML tool replay disablement,
+  and tool-memory ID limit.
+- M9.8f2 keeps this stage model-execution-neutral: runtime trace decisions
+  report none/memory-token/disk-text cache contract rows, including
+  `tool_replay`, `disk_cached_tokens`, and optional `disk_cache_file`, but disk
+  KVC lookup/loading/writing remains split into M9.8f3 and M9.8f4.
+- M9.8f2 validation passed targeted `cargo test -p ds4-engine --bin
+  ds4-server-runtime-rs -- --nocapture`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, NUL scan
+  over touched Rust files, and non-interactive Claude review with no blockers.
 - M9.8f1 split the broad runtime cache/KV request-path item into four
   implementation stages plus a B300 comparator-closure stage:
   M9.8f2 runtime cache configuration and trace contract, M9.8f3 disk-KV lookup

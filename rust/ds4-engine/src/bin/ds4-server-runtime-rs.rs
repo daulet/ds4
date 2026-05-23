@@ -2,6 +2,7 @@ use ds4_engine::{
     context_memory_estimate, Backend, Engine, EngineOptions, ServerGenerationOptions,
     ServerSession, ThinkMode,
 };
+use ds4_gguf::kv_policy::{KvOptions, KvPolicyConfig, DEFAULT_MB as KV_DEFAULT_MB};
 use ds4_gguf::{
     format_http_error, format_http_response, format_openai_chat_completion_http,
     format_openai_chat_stream_http, format_openai_chat_tool_completion_http,
@@ -11,7 +12,7 @@ use ds4_gguf::{
     utf8_stream_safe_len, DsmlJsonCall, HttpRequest, HttpRequestParseError, NoModelRouteConfig,
     OpenAiChatCompletion, OpenAiChatRequest, OpenAiChatStream, OpenAiChatToolStream,
     OpenAiToolCallStreamEvent, OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator,
-    OpenAiUsage,
+    OpenAiUsage, ToolReplayStats, TOOL_MEMORY_DEFAULT_MAX_IDS,
 };
 use std::env;
 use std::fs::File;
@@ -42,6 +43,7 @@ struct ServerConfig {
     trace_path: Option<String>,
     context_length: i32,
     default_tokens: i32,
+    cache: RuntimeCacheConfig,
     enable_cors: bool,
 }
 
@@ -64,7 +66,57 @@ impl Default for ServerConfig {
             trace_path: None,
             context_length: 32768,
             default_tokens: 393216,
+            cache: RuntimeCacheConfig::default(),
             enable_cors: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeCacheConfig {
+    disk_dir: Option<String>,
+    disk_space_mb: u64,
+    policy: KvOptions,
+    reject_different_quant: bool,
+    disable_exact_dsml_tool_replay: bool,
+    tool_memory_max_ids: usize,
+}
+
+impl Default for RuntimeCacheConfig {
+    fn default() -> Self {
+        Self {
+            disk_dir: None,
+            disk_space_mb: 0,
+            policy: KvOptions::default(),
+            reject_different_quant: false,
+            disable_exact_dsml_tool_replay: false,
+            tool_memory_max_ids: TOOL_MEMORY_DEFAULT_MAX_IDS,
+        }
+    }
+}
+
+impl RuntimeCacheConfig {
+    fn disk_enabled(&self) -> bool {
+        self.disk_dir.is_some()
+    }
+
+    fn effective_disk_space_mb(&self) -> u64 {
+        if !self.disk_enabled() {
+            0
+        } else if self.disk_space_mb == 0 {
+            KV_DEFAULT_MB
+        } else {
+            self.disk_space_mb
+        }
+    }
+
+    fn policy_config(&self) -> KvPolicyConfig {
+        KvPolicyConfig {
+            enabled: self.disk_enabled(),
+            budget_bytes: self.effective_disk_space_mb().saturating_mul(1024 * 1024),
+            reject_different_quant: self.reject_different_quant,
+            options: self.policy,
+            continued_last_store_tokens: 0,
         }
     }
 }
@@ -123,6 +175,7 @@ fn serve<'a>(
             None => None,
         },
         session,
+        cache: RuntimeCacheState::new(config.cache.clone()),
     };
     for stream in listener.incoming() {
         match stream {
@@ -143,6 +196,31 @@ struct RuntimeState<'a> {
     sequence: u64,
     trace: Option<File>,
     session: ServerSession<'a>,
+    cache: RuntimeCacheState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeCacheState {
+    config: RuntimeCacheConfig,
+}
+
+impl RuntimeCacheState {
+    fn new(config: RuntimeCacheConfig) -> Self {
+        Self { config }
+    }
+
+    fn trace_decision(
+        &self,
+        prompt_tokens: i32,
+        generated: &ds4_engine::ServerGenerationResult,
+    ) -> RuntimeCacheDecision {
+        let mut decision = RuntimeCacheDecision::from_generation(prompt_tokens, generated);
+        if !self.config.policy_config().enabled {
+            decision.disk_cached_tokens = 0;
+            decision.disk_cache_file = None;
+        }
+        decision
+    }
 }
 
 fn handle_client(
@@ -232,16 +310,19 @@ fn route_chat_completions(
     let id = format!("chatcmpl-{}", state.sequence);
     let parsed_generation =
         parse_chat_generation(&parsed, &generated, &generated_text, state.sequence);
+    let cache_decision = state
+        .cache
+        .trace_decision(generated.prompt_tokens, &generated);
     if let Some(trace) = state.trace.as_mut() {
-        if let Err(err) = write_chat_trace(
+        if let Err(err) = write_chat_trace_with_cache_decision(
             trace,
             state.sequence,
             &request.body,
             &parsed,
-            generated.prompt_tokens,
             &generated,
             &generated_text,
             &parsed_generation,
+            &cache_decision,
         ) {
             eprintln!("ds4-server-runtime-rs: failed to write trace: {err}");
         }
@@ -489,30 +570,42 @@ fn write_chat_trace<W: Write>(
     generated_text: &str,
     parsed: &ParsedChatGeneration,
 ) -> io::Result<()> {
-    let cached_tokens = generated.cache_read_tokens.clamp(0, prompt_tokens.max(0));
-    let live_prompt_common = generated.live_prompt_common.max(0);
-    let memory_token_reusable = if cached_tokens > 0 { 1 } else { 0 };
-    let memory_miss_reason = if cached_tokens > 0 {
-        "live-prefix-match"
-    } else if generated.live_tokens_before > 0 {
-        "token-mismatch"
-    } else {
-        "no-live-checkpoint"
-    };
-    let cache_source = if cached_tokens > 0 {
-        "memory-token"
-    } else {
-        "none"
-    };
+    let cache = RuntimeCacheDecision::from_generation(prompt_tokens, generated);
+    write_chat_trace_with_cache_decision(
+        trace,
+        sequence,
+        raw_body,
+        request,
+        generated,
+        generated_text,
+        parsed,
+        &cache,
+    )
+}
+
+fn write_chat_trace_with_cache_decision<W: Write>(
+    trace: &mut W,
+    sequence: u64,
+    raw_body: &str,
+    request: &OpenAiChatRequest,
+    generated: &ds4_engine::ServerGenerationResult,
+    generated_text: &str,
+    parsed: &ParsedChatGeneration,
+    cache: &RuntimeCacheDecision,
+) -> io::Result<()> {
     writeln!(trace, "===== request {sequence} =====")?;
     writeln!(trace, "kind: chat")?;
     writeln!(trace, "model: {}", request.model)?;
     writeln!(trace, "stream: {}", if request.stream { 1 } else { 0 })?;
     writeln!(trace, "tools: {}", if request.has_tools { 1 } else { 0 })?;
     writeln!(trace, "think_mode: {}", request.think_mode.name())?;
-    writeln!(trace, "prompt_tokens: {prompt_tokens}")?;
-    writeln!(trace, "effective_prompt_tokens: {prompt_tokens}")?;
-    writeln!(trace, "cached_tokens: {cached_tokens}")?;
+    writeln!(trace, "prompt_tokens: {}", cache.prompt_tokens)?;
+    writeln!(
+        trace,
+        "effective_prompt_tokens: {}",
+        cache.effective_prompt_tokens
+    )?;
+    writeln!(trace, "cached_tokens: {}", cache.cached_tokens)?;
     writeln!(trace, "max_tokens: {}", request.max_tokens)?;
     writeln!(trace, "temperature: {:.3}", request.sampling.temperature)?;
     writeln!(trace, "top_k: {}", request.sampling.top_k)?;
@@ -526,19 +619,33 @@ fn write_chat_trace<W: Write>(
     )?;
     writeln!(trace)?;
     writeln!(trace, "--- cache decision ---")?;
+    writeln!(trace, "live_tokens_before: {}", cache.live_tokens_before)?;
+    writeln!(trace, "prompt_tokens: {}", cache.prompt_tokens)?;
+    writeln!(trace, "live_prompt_common: {}", cache.live_prompt_common)?;
     writeln!(
         trace,
-        "live_tokens_before: {}",
-        generated.live_tokens_before.max(0)
+        "memory_token_reusable: {}",
+        if cache.memory_token_reusable() { 1 } else { 0 }
     )?;
-    writeln!(trace, "prompt_tokens: {prompt_tokens}")?;
-    writeln!(trace, "live_prompt_common: {live_prompt_common}")?;
-    writeln!(trace, "memory_token_reusable: {memory_token_reusable}")?;
-    writeln!(trace, "memory_miss_reason: {memory_miss_reason}")?;
-    writeln!(trace, "tool_replay: mem=0 disk=0 canonical=0 missing_ids=0")?;
-    writeln!(trace, "cache_source: {cache_source}")?;
-    writeln!(trace, "cached_tokens: {cached_tokens}")?;
-    writeln!(trace, "disk_cached_tokens: 0")?;
+    writeln!(trace, "memory_miss_reason: {}", cache.memory_miss_reason())?;
+    writeln!(
+        trace,
+        "tool_replay: mem={} disk={} canonical={} missing_ids={}",
+        cache.tool_replay.mem,
+        cache.tool_replay.disk,
+        cache.tool_replay.canonical,
+        cache.tool_replay.missing_ids
+    )?;
+    writeln!(trace, "cache_source: {}", cache.cache_source)?;
+    writeln!(trace, "cached_tokens: {}", cache.cached_tokens)?;
+    writeln!(trace, "disk_cached_tokens: {}", cache.disk_cached_tokens)?;
+    if let Some(path) = cache
+        .disk_cache_file
+        .as_deref()
+        .filter(|path| !path.is_empty())
+    {
+        writeln!(trace, "disk_cache_file: {path}")?;
+    }
     writeln!(trace)?;
     writeln!(trace, "--- raw request json ---")?;
     writeln!(trace, "{raw_body}")?;
@@ -588,6 +695,57 @@ fn write_chat_trace<W: Write>(
     writeln!(trace, "===== end request {sequence} =====")?;
     writeln!(trace)?;
     trace.flush()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeCacheDecision {
+    live_tokens_before: i32,
+    prompt_tokens: i32,
+    effective_prompt_tokens: i32,
+    live_prompt_common: i32,
+    tool_replay: ToolReplayStats,
+    cache_source: &'static str,
+    cached_tokens: i32,
+    disk_cached_tokens: i32,
+    disk_cache_file: Option<String>,
+}
+
+impl RuntimeCacheDecision {
+    fn from_generation(prompt_tokens: i32, generated: &ds4_engine::ServerGenerationResult) -> Self {
+        let cached_tokens = generated.cache_read_tokens.clamp(0, prompt_tokens.max(0));
+        let cache_source = if cached_tokens > 0 {
+            "memory-token"
+        } else {
+            "none"
+        };
+        Self {
+            live_tokens_before: generated.live_tokens_before.max(0),
+            prompt_tokens,
+            effective_prompt_tokens: prompt_tokens,
+            live_prompt_common: generated.live_prompt_common.max(0),
+            tool_replay: ToolReplayStats::default(),
+            cache_source,
+            cached_tokens,
+            disk_cached_tokens: 0,
+            disk_cache_file: None,
+        }
+    }
+
+    fn memory_token_reusable(&self) -> bool {
+        self.live_tokens_before > 0
+            && self.live_prompt_common == self.live_tokens_before
+            && self.prompt_tokens >= self.live_tokens_before
+    }
+
+    fn memory_miss_reason(&self) -> &'static str {
+        if self.memory_token_reusable() {
+            "live-prefix-match"
+        } else if self.live_tokens_before > 0 {
+            "token-mismatch"
+        } else {
+            "no-live-checkpoint"
+        }
+    }
 }
 
 fn route_config(config: &ServerConfig) -> NoModelRouteConfig {
@@ -756,6 +914,43 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<ServerCon
             "--cors" => {
                 config.enable_cors = true;
             }
+            "--kv-disk-dir" => {
+                config.cache.disk_dir = Some(need_arg(&mut args, &arg)?);
+            }
+            "--kv-disk-space-mb" => {
+                config.cache.disk_space_mb =
+                    parse_positive_i32(&need_arg(&mut args, &arg)?, &arg)? as u64;
+            }
+            "--kv-cache-min-tokens" => {
+                config.cache.policy.min_tokens =
+                    parse_positive_i32(&need_arg(&mut args, &arg)?, &arg)?;
+            }
+            "--kv-cache-cold-max-tokens" => {
+                config.cache.policy.cold_max_tokens =
+                    parse_nonnegative_i32(&need_arg(&mut args, &arg)?, &arg)?;
+            }
+            "--kv-cache-continued-interval-tokens" => {
+                config.cache.policy.continued_interval_tokens =
+                    parse_nonnegative_i32(&need_arg(&mut args, &arg)?, &arg)?;
+            }
+            "--kv-cache-boundary-trim-tokens" => {
+                config.cache.policy.boundary_trim_tokens =
+                    parse_nonnegative_i32(&need_arg(&mut args, &arg)?, &arg)?;
+            }
+            "--kv-cache-boundary-align-tokens" => {
+                config.cache.policy.boundary_align_tokens =
+                    parse_nonnegative_i32(&need_arg(&mut args, &arg)?, &arg)?;
+            }
+            "--kv-cache-reject-different-quant" => {
+                config.cache.reject_different_quant = true;
+            }
+            "--disable-exact-dsml-tool-replay" => {
+                config.cache.disable_exact_dsml_tool_replay = true;
+            }
+            "--tool-memory-max-ids" => {
+                config.cache.tool_memory_max_ids =
+                    parse_positive_i32(&need_arg(&mut args, &arg)?, &arg)? as usize;
+            }
             _ => {
                 return Err(CliExit {
                     code: 2,
@@ -768,6 +963,17 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<ServerCon
 
     if config.directional_steering_file.is_some() && !directional_steering_scale_set {
         config.directional_steering_ffn = 1.0;
+    }
+    if config.cache.policy.cold_max_tokens > 0
+        && config.cache.policy.cold_max_tokens < config.cache.policy.min_tokens
+    {
+        return Err(CliExit {
+            code: 2,
+            stdout: String::new(),
+            stderr:
+                "ds4-server-runtime-rs: --kv-cache-cold-max-tokens must be 0 or >= --kv-cache-min-tokens\n"
+                    .to_string(),
+        });
     }
     Ok(Some(config))
 }
@@ -783,6 +989,13 @@ fn need_arg(args: &mut impl Iterator<Item = String>, option: &str) -> Result<Str
 fn parse_positive_i32(value: &str, option: &str) -> Result<i32, CliExit> {
     match value.parse::<i64>() {
         Ok(value) if (1..=i32::MAX as i64).contains(&value) => Ok(value as i32),
+        _ => Err(invalid_value(option, value)),
+    }
+}
+
+fn parse_nonnegative_i32(value: &str, option: &str) -> Result<i32, CliExit> {
+    match value.parse::<i64>() {
+        Ok(value) if (0..=i32::MAX as i64).contains(&value) => Ok(value as i32),
         _ => Err(invalid_value(option, value)),
     }
 }
@@ -868,11 +1081,33 @@ HTTP API:\n\
   --cors\n\
       Add Access-Control-Allow-* headers for browser JS clients. Does not change --host.\n\
   --trace FILE\n\
-      Write a human-readable no-cache chat trace for supported M9.4c requests.\n\
+      Write a human-readable session trace: prompts, cache decisions, output, tool calls.\n\
   -c, --ctx N\n\
       Context size used for request parsing and prompt-token limits. Default: 32768\n\
   -n, --tokens N\n\
       Default max output tokens when the client omits a limit. Default: 393216 (384K)\n\
+\n\
+Disk KV cache:\n\
+  --kv-disk-dir DIR\n\
+      Enable disk KV checkpoints in DIR. The directory is created if needed.\n\
+  --kv-disk-space-mb N\n\
+      Disk budget for checkpoint files. Default when enabled: 4096\n\
+  --kv-cache-min-tokens N\n\
+      Do not save or load checkpoints shorter than N tokens. Default: 512\n\
+  --kv-cache-cold-max-tokens N\n\
+      Cold first prompts in [min,N] are saved automatically. 0 disables cold saves. Default: 30000\n\
+  --kv-cache-continued-interval-tokens N\n\
+      Save at absolute aligned frontiers spaced about N tokens apart. 0 disables. Default: 10000\n\
+  --kv-cache-boundary-trim-tokens N\n\
+      Trim this many tail tokens before cold boundary saves to avoid tokenizer boundary merges. Default: 32\n\
+  --kv-cache-boundary-align-tokens N\n\
+      Align cold boundary saves down to this token multiple. 0 disables alignment. Default: 2048\n\
+  --kv-cache-reject-different-quant\n\
+      Refuse checkpoints written by the same model with a different routed-expert quantization.\n\
+  --disable-exact-dsml-tool-replay\n\
+      Disable the tool-id -> exact sampled DSML map. Tool history falls back to canonical JSON rendering.\n\
+  --tool-memory-max-ids N\n\
+      Maximum exact tool-call IDs kept in RAM for replay. Default: 100000\n\
 \n\
   -h, --help\n\
       Show this help.\n"
@@ -959,9 +1194,71 @@ mod tests {
                 trace_path: Some("server.trace".to_string()),
                 context_length: 16,
                 default_tokens: 64,
+                cache: RuntimeCacheConfig::default(),
                 enable_cors: true,
             })
         );
+    }
+
+    #[test]
+    fn parses_runtime_cache_config_flags() {
+        let config = parse(&[
+            "--kv-disk-dir",
+            "/tmp/ds4-kv",
+            "--kv-disk-space-mb",
+            "8192",
+            "--kv-cache-min-tokens",
+            "1024",
+            "--kv-cache-cold-max-tokens",
+            "0",
+            "--kv-cache-continued-interval-tokens",
+            "20000",
+            "--kv-cache-boundary-trim-tokens",
+            "0",
+            "--kv-cache-boundary-align-tokens",
+            "4096",
+            "--kv-cache-reject-different-quant",
+            "--disable-exact-dsml-tool-replay",
+            "--tool-memory-max-ids",
+            "7",
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            config.cache,
+            RuntimeCacheConfig {
+                disk_dir: Some("/tmp/ds4-kv".to_string()),
+                disk_space_mb: 8192,
+                policy: KvOptions {
+                    min_tokens: 1024,
+                    cold_max_tokens: 0,
+                    continued_interval_tokens: 20_000,
+                    boundary_trim_tokens: 0,
+                    boundary_align_tokens: 4096,
+                },
+                reject_different_quant: true,
+                disable_exact_dsml_tool_replay: true,
+                tool_memory_max_ids: 7,
+            }
+        );
+        let policy = config.cache.policy_config();
+        assert!(policy.enabled);
+        assert_eq!(policy.budget_bytes, 8192 * 1024 * 1024);
+        assert!(policy.reject_different_quant);
+    }
+
+    #[test]
+    fn runtime_cache_config_uses_c_default_budget_when_enabled() {
+        let mut cache = RuntimeCacheConfig {
+            disk_dir: Some("kv".to_string()),
+            ..RuntimeCacheConfig::default()
+        };
+        assert_eq!(cache.effective_disk_space_mb(), 4096);
+        assert_eq!(cache.policy_config().budget_bytes, 4096 * 1024 * 1024);
+
+        cache.disk_dir = None;
+        assert_eq!(cache.effective_disk_space_mb(), 0);
+        assert!(!cache.policy_config().enabled);
     }
 
     #[test]
@@ -1045,6 +1342,55 @@ mod tests {
         assert!(unknown
             .stderr
             .starts_with("ds4-server-runtime-rs: unknown option: --bad\n"));
+        assert_eq!(
+            parse(&["--kv-cache-min-tokens", "1024", "--kv-cache-cold-max-tokens", "1"])
+                .unwrap_err(),
+            CliExit {
+                code: 2,
+                stdout: String::new(),
+                stderr:
+                    "ds4-server-runtime-rs: --kv-cache-cold-max-tokens must be 0 or >= --kv-cache-min-tokens\n"
+                        .to_string(),
+            }
+        );
+        assert_eq!(
+            parse(&["--kv-cache-boundary-trim-tokens", "-1"]).unwrap_err(),
+            CliExit {
+                code: 2,
+                stdout: String::new(),
+                stderr:
+                    "ds4-server-runtime-rs: invalid value for --kv-cache-boundary-trim-tokens: -1\n"
+                        .to_string(),
+            }
+        );
+        assert_eq!(
+            parse(&["--kv-disk-space-mb", "2147483648"]).unwrap_err(),
+            CliExit {
+                code: 2,
+                stdout: String::new(),
+                stderr: "ds4-server-runtime-rs: invalid value for --kv-disk-space-mb: 2147483648\n"
+                    .to_string(),
+            }
+        );
+        assert_eq!(
+            parse(&["--tool-memory-max-ids", "0"]).unwrap_err(),
+            CliExit {
+                code: 2,
+                stdout: String::new(),
+                stderr: "ds4-server-runtime-rs: invalid value for --tool-memory-max-ids: 0\n"
+                    .to_string(),
+            }
+        );
+        assert_eq!(
+            parse(&["--tool-memory-max-ids", "2147483648"]).unwrap_err(),
+            CliExit {
+                code: 2,
+                stdout: String::new(),
+                stderr:
+                    "ds4-server-runtime-rs: invalid value for --tool-memory-max-ids: 2147483648\n"
+                        .to_string(),
+            }
+        );
     }
 
     #[test]
@@ -1237,6 +1583,61 @@ mod tests {
         assert!(trace.contains("dsml_start: 0\n"));
         assert!(trace.contains("dsml_end: 0\n"));
         assert!(trace.contains("\ncontent:\ncache continued\n"));
+    }
+
+    #[test]
+    fn trace_contract_reports_disk_text_cache_and_tool_replay() {
+        let parsed = parse_chat(CHAT_CACHE_CONTINUATION);
+        let generated = ds4_engine::ServerGenerationResult {
+            exit_code: 0,
+            text: b"cache continued".to_vec(),
+            token_texts: vec![b"cache".to_vec(), b" continued".to_vec()],
+            prompt_tokens: 50,
+            cache_read_tokens: 41,
+            cache_write_tokens: 9,
+            live_tokens_before: 0,
+            live_prompt_common: 0,
+            completion_tokens: 2,
+            finish_reason: "stop",
+        };
+        let parsed_generation = parse_chat_generation(&parsed, &generated, "cache continued", 6);
+        let cache = RuntimeCacheDecision {
+            live_tokens_before: 0,
+            prompt_tokens: generated.prompt_tokens,
+            effective_prompt_tokens: 50,
+            live_prompt_common: 0,
+            tool_replay: ToolReplayStats {
+                mem: 0,
+                disk: 1,
+                canonical: 2,
+                missing_ids: 3,
+            },
+            cache_source: "disk-text",
+            cached_tokens: 41,
+            disk_cached_tokens: 41,
+            disk_cache_file: Some("/tmp/ds4-kv/abc.kv".to_string()),
+        };
+        let mut trace = Vec::new();
+        write_chat_trace_with_cache_decision(
+            &mut trace,
+            7,
+            CHAT_CACHE_CONTINUATION,
+            &parsed,
+            &generated,
+            "cache continued",
+            &parsed_generation,
+            &cache,
+        )
+        .unwrap();
+        let trace = String::from_utf8(trace).unwrap();
+        assert!(trace.contains("effective_prompt_tokens: 50\n"));
+        assert!(trace.contains("memory_token_reusable: 0\n"));
+        assert!(trace.contains("memory_miss_reason: no-live-checkpoint\n"));
+        assert!(trace.contains("tool_replay: mem=0 disk=1 canonical=2 missing_ids=3\n"));
+        assert!(trace.contains("cache_source: disk-text\n"));
+        assert!(trace.contains("cached_tokens: 41\n"));
+        assert!(trace.contains("disk_cached_tokens: 41\n"));
+        assert!(trace.contains("disk_cache_file: /tmp/ds4-kv/abc.kv\n"));
     }
 
     #[test]
