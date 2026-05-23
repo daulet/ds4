@@ -3,10 +3,9 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.13 Rust CLI One-Shot Generation Parity
-- Last validated source commit: M8.12b current-C CLI one-shot runtime-control
-  oracle in this commit; prior pushed source commit
-  `dad2b7d95cb0ad8fcdce6044dac860ae9bf68a44`
+- Active item: M8.13a Rust Argmax One-Shot Runtime Boundary
+- Last validated source commit: M8.13 split in this commit; prior pushed source
+  commit `845f8ea17637d17875505c455cd9c4f27c6aef60`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1135,3 +1134,19 @@
   ds4-parity/baselines/cli/m8.12b/manifest.json --negative-test` with oracle
   `PASS, 158 checks`, manifest `PASS, 16 checks`, and negative tests `PASS, 5
   checks`.
+- M8.13 has been split in `RUST_PORT_ROADMAP.md` into M8.13a argmax one-shot
+  runtime boundary, M8.13b session sampling runtime boundary, M8.13c core CLI
+  transcript surface, and M8.13d runtime-control CLI transcript surface.
+- M8.13 source inspection found that `rust/ds4-engine/src/lib.rs` currently
+  wraps `ds4_engine_open`, `ds4_engine_summary`, and `ds4_engine_close`, but
+  does not expose prompt encoding, generated-token text, argmax generation, or
+  session sampling.
+- M8.13 source inspection found that
+  `rust/ds4-engine/src/bin/ds4-cli-inspect-rs.rs` still exits 99 for the
+  non-inspect model-backed path, so it cannot produce M8.12a/M8.12b one-shot
+  transcripts.
+- M8.13 source inspection found the needed current-C runtime APIs in `ds4.h`:
+  `ds4_encode_chat_prompt`, `ds4_tokenize_rendered_chat`,
+  `ds4_engine_generate_argmax`, `ds4_token_text`, `ds4_tokens_free`,
+  `ds4_session_create`, `ds4_session_sync`, `ds4_session_sample`, and
+  `ds4_session_eval`.
