@@ -1519,16 +1519,70 @@
 
 ### M8.10: Current-C CLI Imatrix Capture Oracle
 
-- Status: pending
-- Goal: capture the current-C CLI imatrix execution mode.
+- Status: split into M8.10a and M8.10b before output-oracle implementation
+- Goal: split the original current-C CLI imatrix capture oracle because the
+  roadmap assumed B300 could run it, but current C forces `--imatrix-out` to
+  the Metal backend and the imatrix collector requires Metal.
+- Source evidence needed: `ds4_cli.c` imatrix option parsing,
+  `ds4_engine_open`, `ds4_engine_collect_imatrix`, B300 failure proof, and
+  local model-host availability.
+- Oracle: source evidence plus B300 execution evidence from the recorded model
+  host.
+- Comparator: roadmap/board review against source and the B300 failure proof.
+- Acceptance: no output `.dat` oracle is claimed from the B300 CUDA host; the
+  output-hash oracle remains blocked until a valid Metal-capable model host or
+  current-C CUDA imatrix support exists.
+- Drift policy: no source behavior changes; this is roadmap scope control.
+- Review gate: ask Claude to review whether the split avoids overstating
+  current-C output coverage and preserves an exact future capture contract.
+- Validation passed: B300 proof command showed exit 1, zero stdout bytes,
+  `backend=metal`, `Metal backend requested but this build is linked with CUDA,
+  not Metal`, and no output `.dat`; local check found no `ds4flash.gguf` or
+  imatrix GGUF in the workspace on this 48 GiB host; `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
+
+### M8.10a: Current-C CLI Imatrix Feasibility Guard
+
+- Status: done
+- Goal: capture the current reason the original M8.10 output oracle cannot run
+  on the B300 CUDA model host.
+- Source evidence needed: `ds4_cli.c`, `ds4.c`, B300 `./ds4
+  --imatrix-dataset --imatrix-out` proof, and local model availability check.
+- Oracle: current C `./ds4 --imatrix-dataset --imatrix-out` on B300 with a
+  tiny fixed dataset and the recorded model path.
+- Fixture: tiny one-prompt dataset, `--ctx 64`, `--imatrix-max-prompts 1`,
+  `--imatrix-max-tokens 16`, `/workspace/ds4/ds4flash.gguf`, and B300
+  `hou2-prod1` pod identity.
+- Comparator: status evidence requires exit code 1, zero stdout bytes,
+  `backend=metal` in context-buffer stderr, `Metal backend requested but this
+  build is linked with CUDA, not Metal`, and no output `.dat`.
+- Acceptance: the B300 blocker is recorded exactly enough to prevent an
+  invalid `.dat` hash oracle from being committed.
+- Drift policy: workspace paths may drift; backend mismatch category, exit
+  status, and missing output are exact.
+- Review gate: ask Claude to review source and evidence for the Metal-only
+  conclusion.
+- Validation passed: source inspection; B300 proof command; local model
+  availability check; `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
+
+### M8.10b: Current-C CLI Imatrix Output Oracle
+
+- Status: blocked
+- Goal: capture the current-C CLI imatrix execution mode once a valid host is
+  available.
 - Source evidence needed: current `./ds4 --imatrix-dataset --imatrix-out`
-  behavior, fixed imatrix dataset, B300 model/backend identity, imatrix limit
-  flags, output file metadata, and stderr/progress categories.
-- Oracle: current `./ds4 --imatrix-dataset --imatrix-out` on the recorded B300
-  model.
+  behavior on a Metal-capable host with the recorded model, fixed imatrix
+  dataset, imatrix limit flags, output file metadata, and stderr/progress
+  categories.
+- Oracle: current `./ds4 --imatrix-dataset --imatrix-out` on the recorded model
+  from a Metal-capable host, or on B300 after current C gains CUDA imatrix
+  collection support.
 - Fixture: fixed imatrix dataset, output `.dat` file hash/size, `--ctx`,
   `--imatrix-max-prompts`, `--imatrix-max-tokens`, backend/model identity,
-  progress stderr categories, and exact B300 refresh commands.
+  progress stderr categories, and exact refresh commands.
 - Comparator: schema/hash checker for output file metadata, prompt/token limit
   accounting, exit status, stderr categories, and refresh commands.
 - Acceptance: output file hash/size and limit accounting match current C for
@@ -1537,8 +1591,8 @@
   output bytes, limit semantics, model identity, and exit status are exact.
 - Review gate: ask Claude to review imatrix dataset coverage and limit
   semantics.
-- Validation needed: B300 capture or exact skipped recapture command, local
-  checker with negative tests, and `git diff --check`.
+- Validation needed: output capture, local checker with negative tests, and
+  `git diff --check`.
 - Owner path: CLI imatrix oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/cli/`, `.memory/status.md`.
 

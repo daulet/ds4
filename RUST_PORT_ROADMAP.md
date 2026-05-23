@@ -1462,14 +1462,57 @@ Work items:
   B300 comparison when required, `cargo test --workspace`, and
   `git diff --check`.
 
-#### M8.10: Current-C CLI Imatrix Capture Oracle
+#### M8.10: Current-C CLI Imatrix Capture Oracle Split
 
-- Goal: capture the current-C CLI imatrix execution mode.
-- Oracle: current `./ds4 --imatrix-dataset --imatrix-out` on the recorded B300
-  model.
+- Goal: split the original current-C CLI imatrix capture oracle because the
+  roadmap assumed the B300 model host could execute it, but the current C
+  imatrix collector is Metal-only and `--imatrix-out` forces the CLI backend to
+  Metal before collection.
+- Oracle: source evidence in `ds4_cli.c` and `ds4.c`, plus B300 execution
+  evidence from the recorded model host.
+- Comparator: roadmap/board review against `ds4_cli.c` option parsing,
+  `ds4_engine_open`, and `ds4_engine_collect_imatrix`.
+- Acceptance: the original output-hash oracle is not claimed from a B300 CUDA
+  run; it is decomposed into a captured feasibility guard and a blocked
+  output-oracle item that requires either a Metal-capable host with the
+  recorded model or current-C CUDA imatrix support.
+- Drift policy: no source behavior changes; this is roadmap scope control.
+- Review gate: ask Claude to review whether the split avoids overstating
+  current-C output coverage and preserves an exact future capture contract.
+- Validation gate: B300 forced-Metal failure proof, local model-host
+  availability check, `git diff --check`, and review.
+
+#### M8.10a: Current-C CLI Imatrix Feasibility Guard
+
+- Goal: capture the current reason the original M8.10 output oracle cannot run
+  on the B300 CUDA model host.
+- Oracle: current C `./ds4 --imatrix-dataset --imatrix-out` on B300 with a
+  tiny fixed dataset and the recorded model path.
+- Fixture: tiny one-prompt dataset, `--ctx 64`, `--imatrix-max-prompts 1`,
+  `--imatrix-max-tokens 16`, `/workspace/ds4/ds4flash.gguf`, and B300
+  `hou2-prod1` pod identity.
+- Comparator: status evidence requires exit code 1, zero stdout bytes,
+  `backend=metal` in context-buffer stderr, `Metal backend requested but this
+  build is linked with CUDA, not Metal`, and no output `.dat`.
+- Acceptance: the B300 blocker is recorded exactly enough to prevent an
+  invalid `.dat` hash oracle from being committed.
+- Drift policy: workspace paths may drift; backend mismatch category, exit
+  status, and missing output are exact.
+- Review gate: ask Claude to review source and evidence for the Metal-only
+  conclusion.
+- Validation gate: B300 proof command, local model availability check, and
+  `git diff --check`.
+
+#### M8.10b: Current-C CLI Imatrix Output Oracle
+
+- Goal: capture the current-C CLI imatrix execution mode once a valid host is
+  available.
+- Oracle: current `./ds4 --imatrix-dataset --imatrix-out` on the recorded model
+  from a Metal-capable host, or on B300 after current C gains CUDA imatrix
+  collection support.
 - Fixture: fixed imatrix dataset, output `.dat` file hash/size, `--ctx`,
   `--imatrix-max-prompts`, `--imatrix-max-tokens`, backend/model identity,
-  progress stderr categories, and exact B300 refresh commands.
+  progress stderr categories, and exact refresh commands.
 - Comparator: schema/hash checker for output file metadata, prompt/token limit
   accounting, exit status, stderr categories, and refresh commands.
 - Acceptance: output file hash/size and limit accounting match current C for
@@ -1478,13 +1521,13 @@ Work items:
   output bytes, limit semantics, model identity, and exit status are exact.
 - Review gate: ask Claude to review imatrix dataset coverage and limit
   semantics.
-- Validation gate: B300 capture or exact skipped recapture command, local
-  checker with negative tests, and `git diff --check`.
+- Validation gate: output capture, checker with negative tests, and
+  `git diff --check`.
 
 #### M8.11: Rust CLI Imatrix Capture Parity
 
 - Goal: implement Rust CLI parity for imatrix capture mode.
-- Oracle: committed M8.10 current-C imatrix fixture.
+- Oracle: committed M8.10b current-C imatrix fixture.
 - Fixture: same dataset, limit, context, backend, and output-path cases as
   M8.10.
 - Comparator: C/Rust imatrix comparator for output file hash/size, limit

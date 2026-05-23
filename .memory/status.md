@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.10 Current-C CLI Imatrix Capture Oracle
-- Last validated source commit: M8.9b Rust CLI inspect output surface in this
-  commit; prior pushed source commit
-  `514c59e002f2e60c81f4b3e850981ff5ea511599`
+- Active item: M8.10b Current-C CLI Imatrix Output Oracle (blocked)
+- Last validated source commit: M8.10a current-C CLI imatrix feasibility guard
+  in this commit; prior pushed source commit
+  `bfd96275d077e33970d368a92a99963451e3384d`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1054,3 +1054,25 @@
   ds4-parity/baselines/cli/m8.8/current-c.json --candidate-binary
   target/debug/ds4-cli-inspect-rs --use-case-argv --negative-test` (`CLI
   inspect comparator: PASS, 68 checks`; negative tests `PASS, 5 checks`).
+- M8.10 is not implemented as an output-hash oracle because current C forces
+  `--imatrix-out` to the Metal backend in `ds4_cli.c`, and
+  `ds4_engine_collect_imatrix` requires `DS4_BACKEND_METAL` plus `metal_ready`.
+  The B300 model host is a CUDA build, so it cannot write a valid imatrix
+  `.dat` artifact today.
+- M8.10 has been split in `RUST_PORT_ROADMAP.md` into M8.10a, the completed
+  feasibility guard, and M8.10b, the blocked current-C imatrix output oracle.
+- M8.10a B300 proof refreshed `/workspace/ds4` to
+  `bfd96275d077e33970d368a92a99963451e3384d`, built `make ds4
+  CUDA_ARCH=native`, wrote a tiny `/tmp/m8.10-imatrix-dataset.txt`, and ran
+  `./ds4 -m /workspace/ds4/ds4flash.gguf --ctx 64 --imatrix-dataset
+  /tmp/m8.10-imatrix-dataset.txt --imatrix-out /tmp/m8.10-imatrix.dat
+  --imatrix-max-prompts 1 --imatrix-max-tokens 16`.
+- M8.10a B300 proof returned exit 1, stdout bytes 0, stderr
+  `ds4: context buffers 22.51 MiB (ctx=64, backend=metal, prefill_chunk=64,
+  raw_kv_rows=256, compressed_kv_rows=18)` followed by
+  `ds4: Metal backend requested but this build is linked with CUDA, not Metal`,
+  and no `/tmp/m8.10-imatrix.dat` output file.
+- M8.10a local availability check found no `ds4flash.gguf` or imatrix GGUF in
+  the workspace on this `x86_64` host with `51539607552` bytes of RAM, so a
+  local Metal capture of the recorded q2-imatrix model is not currently
+  feasible.
