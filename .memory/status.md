@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2 Server Request Parse And Prompt Render Surface
-- Last validated source commit: M9.1 server surface work item breakdown in
-  this commit; prior pushed source commit
-  `34f3025101e72475bb5f26e08fc4b48db0b70c5d`
+- Active item: M9.2a OpenAI Chat Request Core Parse And Render
+- Last validated source commit: M9.2 server request parse/render split in this
+  commit; prior pushed source commit
+  `912d46ac4b178ae0f1c74ffd558d8f00ac03e8eb`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1411,3 +1411,13 @@
   restore with KV headers, rendered text, traces, and cache decisions.
 - M9.1 validation passed with source/fixture inspection, roadmap/board diff, and
   `git diff --check`.
+- M9.2 was split before implementation because the full request parse/render
+  surface spans OpenAI core chat, OpenAI tool/DSML prompt rendering, and
+  Responses/Anthropic protocol inputs.
+- M9.2a is the next executable item and is intentionally limited to model-free
+  OpenAI `/v1/chat/completions` core fields and prompt rendering, excluding
+  tool-call payloads and alternate protocols.
+- M9.2b covers OpenAI tool schema parsing and DSML prompt rendering, while M9.2c
+  covers Responses and Anthropic request parsing/rendering inputs; later M9.6
+  and M9.7 remain responsible for model-backed tool/protocol response behavior.
+- M9.2 split validation passed with roadmap/board diff and `git diff --check`.

@@ -2077,7 +2077,7 @@
 
 ### M9.2: Server Request Parse And Prompt Render Surface
 
-- Status: pending
+- Status: split into M9.2a, M9.2b, and M9.2c before implementation
 - Goal: port the model-free request parsing and prompt-rendering surface needed
   by the server before adding an HTTP listener.
 - Oracle: C `parse_chat_request`, `parse_anthropic_request`,
@@ -2095,10 +2095,86 @@
   comparison for path/limit-bearing error text.
 - Review gate: ask Claude to review parser coverage for OpenAI chat, Responses,
   Anthropic, thinking controls, stop lists, and context-limit errors.
+- Validation needed: source inspection, roadmap/board diff, and `git
+  diff --check`.
+- Owner path: Rust server parser modules, `ds4-parity/`, `.memory/status.md`.
+
+### M9.2a: OpenAI Chat Request Core Parse And Render
+
+- Status: pending
+- Goal: port the model-free OpenAI `/v1/chat/completions` core request parser
+  and prompt renderer, excluding tool-call payloads and alternate protocols.
+- Oracle: C `parse_chat_request`, `render_chat_prompt_text`, request default
+  tests, thinking-control tests, stop-list tests, context-limit error tests, and
+  M0.4 non-tool OpenAI request fixtures.
+- Fixture: M0.4 `chat_basic`, `chat_stream`, `chat_thinking_disabled`,
+  `chat_cache_seed`, and `chat_cache_continuation` request JSON plus unit
+  vectors for defaults, stream options, stop lists, and thinking controls.
+- Comparator: Rust unit tests and/or dump helper comparing normalized request
+  fields, rendered prompt bytes, stream flags, generation options, thinking
+  mode, stop lists, max-token/context decisions, and error categories.
+- Acceptance: Rust matches C parser/render semantics for non-tool OpenAI chat
+  requests without opening sockets or loading the model.
+- Drift policy: exact for semantic fields and prompt bytes; stable-category
+  comparison for path/limit-bearing error text.
+- Review gate: ask Claude to review OpenAI field coverage, default values,
+  stream option handling, thinking mode mapping, and context-limit errors.
 - Validation needed: targeted Rust parser/render tests, `cargo test
   --workspace`, `python3 ds4-parity/run_cli_parity_report.py`, and `git
   diff --check`.
 - Owner path: Rust server parser modules, `ds4-parity/`, `.memory/status.md`.
+
+### M9.2b: OpenAI Tool Schema And DSML Prompt Render Surface
+
+- Status: pending
+- Goal: port model-free OpenAI tool schema parsing and DSML prompt rendering
+  without implementing model-backed tool-call generation.
+- Oracle: C `parse_tools_value`, `openai_function_schema_from_tool`,
+  `append_tools_prompt_text`, `append_dsml_tool_calls_text`, tool schema order
+  tests, DSML parser tests, and M0.4 `chat_tool_call` request/trace prompt.
+- Fixture: M0.4 `chat_tool_call.json`, M0.4 tool trace prompt segment, and unit
+  vectors for schema property order, DSML argument ordering, malformed tool-call
+  recovery, partial tool-call holds, and loose nested parameters.
+- Comparator: Rust unit tests/dump helper comparing tool schema normalization,
+  rendered tool prompt bytes, DSML call text, executable-tool boundary
+  categories, and recoverable parse categories.
+- Acceptance: Rust model-free tool parsing and prompt rendering match current C
+  for OpenAI tool requests before server response generation is ported.
+- Drift policy: exact for schema names, argument order, prompt bytes, and DSML
+  text; random call IDs are out of scope for this parser-only item.
+- Review gate: ask Claude to review schema ordering, DSML state-machine edges,
+  malformed/recoverable tool parsing, and prompt placement before system text.
+- Validation needed: targeted Rust tool/DSML tests, `cargo test --workspace`,
+  `python3 ds4-parity/run_cli_parity_report.py`, and `git diff --check`.
+- Owner path: Rust server tool/DSML parser modules, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M9.2c: Responses And Anthropic Request Parse Surface
+
+- Status: pending
+- Goal: port model-free Responses and Anthropic request parsing/rendering inputs
+  while leaving response/event emission for M9.7.
+- Oracle: C `parse_responses_request`, `parse_anthropic_request`,
+  `parse_responses_input`, `parse_anthropic_messages`, protocol system/tool
+  validation tests, and live-tail requirement tests.
+- Fixture: unit vectors for Responses namespace/tool_search schemas, reasoning
+  inputs, function_call outputs, tool outputs, Anthropic content blocks, private
+  system filtering, tool use/results, and live-tail validation.
+- Comparator: Rust protocol unit tests/dump helper comparing normalized request
+  fields, rendered prompt/live-tail text, tool-output validation categories,
+  reasoning requirements, usage-relevant flags, and stream flags.
+- Acceptance: Rust matches current C request semantics for Responses and
+  Anthropic without opening sockets, emitting protocol responses, or loading the
+  model.
+- Drift policy: exact for semantic fields, validation categories, prompt bytes,
+  and live-tail text; random IDs and response timestamps are out of scope here.
+- Review gate: ask Claude to review protocol-specific state, reasoning replay
+  requirements, namespace tool schema restoration, and Anthropic tool-result ID
+  validation.
+- Validation needed: targeted Rust protocol parser tests, `cargo test
+  --workspace`, and `git diff --check`.
+- Owner path: Rust server protocol parser modules, `ds4-parity/`,
+  `.memory/status.md`.
 
 ### M9.3: Rust HTTP Skeleton And Model Metadata Endpoints
 
