@@ -8,6 +8,7 @@ use core::ptr::NonNull;
 
 pub use ds4_gpu_sys as sys;
 
+pub mod decode_backend;
 pub mod decode_plan;
 pub mod graph_plan;
 pub mod graph_state;
@@ -174,6 +175,20 @@ impl Tensor {
         tensor_byte_len(self.raw.as_ptr())
     }
 
+    pub fn as_tensor_ref(&self) -> TensorRef<'_> {
+        TensorRef {
+            raw: self.raw.as_ptr(),
+            _lifetime: PhantomData,
+        }
+    }
+
+    pub fn as_tensor_mut(&mut self) -> TensorMut<'_> {
+        TensorMut {
+            raw: self.raw.as_ptr(),
+            _lifetime: PhantomData,
+        }
+    }
+
     pub fn write_bytes(&mut self, offset: u64, data: &[u8]) -> Result<(), GpuError> {
         tensor_write(self.raw.as_ptr(), offset, data)
     }
@@ -250,6 +265,20 @@ impl TensorView<'_> {
         tensor_byte_len(self.raw.as_ptr())
     }
 
+    pub fn as_tensor_ref(&self) -> TensorRef<'_> {
+        TensorRef {
+            raw: self.raw.as_ptr(),
+            _lifetime: PhantomData,
+        }
+    }
+
+    pub fn as_tensor_mut(&mut self) -> TensorMut<'_> {
+        TensorMut {
+            raw: self.raw.as_ptr(),
+            _lifetime: PhantomData,
+        }
+    }
+
     pub fn write_bytes(&mut self, offset: u64, data: &[u8]) -> Result<(), GpuError> {
         tensor_write(self.raw.as_ptr(), offset, data)
     }
@@ -276,6 +305,30 @@ impl Drop for TensorView<'_> {
         unsafe {
             sys::ds4_gpu_tensor_free(self.raw.as_ptr());
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TensorRef<'a> {
+    raw: *const sys::Ds4GpuTensor,
+    _lifetime: PhantomData<&'a sys::Ds4GpuTensor>,
+}
+
+impl TensorRef<'_> {
+    pub(crate) const fn raw(self) -> *const sys::Ds4GpuTensor {
+        self.raw
+    }
+}
+
+#[derive(Debug)]
+pub struct TensorMut<'a> {
+    raw: *mut sys::Ds4GpuTensor,
+    _lifetime: PhantomData<&'a mut sys::Ds4GpuTensor>,
+}
+
+impl TensorMut<'_> {
+    pub(crate) const fn raw(self) -> *mut sys::Ds4GpuTensor {
+        self.raw
     }
 }
 

@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c3 Rust Decode Backend Facade
-- Last validated source commit: M10.5c2 Rust decode graph tensor state in this
+- Active item: M10.5c4 Rust Single-Token Decode Graph Execution
+- Last validated source commit: M10.5c3 Rust decode backend facade in this
   commit; prior pushed source commit
-  `07a6c5e876b0f25915b1cf837e36f84f9ce11665`
+  `82dd43aa71910e52516e2fef772210688bd61699`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,33 @@
 
 ## Last Evidence
 
+- M10.5c3 adds `rust/ds4-gpu/src/decode_backend.rs`, a safe facade over the
+  default fused one-token decode backend primitives. The facade uses
+  `TensorRef`/`TensorMut` handles from `Tensor` and `TensorView`, keeps raw
+  `sys::ds4_gpu_*` calls behind the facade/lifecycle modules, and covers the
+  C default decode operation list for embedding, QKV/norm, KV store,
+  compressor/indexer, attention, router/MoE, hyper-connection, output head,
+  command/read/view, and synchronize-on-failure.
+- M10.5c3 adds `ModelMap` and `DecodeBackend` wrappers for model-map pointer
+  and size threading. Optional compressed attention tensors are checked before
+  FFI so nonzero compressed counts or mask flags cannot pass null pointers to
+  `ds4_gpu_attention_decode_heads_tensor`.
+- M10.5c3 adds `ds4-parity/compare_decode_backend_facade.py`, which verifies
+  the facade operation table against the M10.2 operation oracle and M10.5a ABI
+  declarations, checks tensor argument order from Rust method signatures,
+  anchors existing command/read/view/sync wrappers, and fails closed on missing
+  facade entry, tensor-order drift, and missing raw sys-call mutations. It is
+  wired into the unified parity report as
+  `M10.5c3 Rust decode backend facade comparator`.
+- M10.5c3 validation passed `cargo test -p ds4-gpu decode_backend --lib`,
+  `python3 ds4-parity/compare_decode_backend_facade.py --negative-test`,
+  `python3 -m py_compile ds4-parity/compare_decode_backend_facade.py
+  ds4-parity/run_parity_report.py`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with `18 passed, 10
+  skipped, 0 failed`, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and NUL scan over touched files. Non-interactive Claude
+  review returned no blockers; a follow-up review after the optional null
+  guard also returned no blockers.
 - M10.5c2 adds the no-execute decode graph tensor state plan in
   `rust/ds4-gpu/src/graph_state.rs`. It covers the decode-scope owner groups
   from M10.2: `GraphDecodeState`, `GraphPersistentKvState`,

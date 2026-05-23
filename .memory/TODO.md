@@ -3727,7 +3727,7 @@
 
 ### M10.5c3: Rust Decode Backend Facade
 
-- Status: active
+- Status: completed
 - Goal: add safe Rust facade methods for the subset of M10.5a backend
   primitives used by default fused one-token decode, without owning the full
   decode schedule yet.
@@ -3746,7 +3746,7 @@
   numeric execution is compared in this item.
 - Review gate: ask Claude to review unsafe FFI encapsulation and tensor
   argument ordering.
-- Validation needed: facade comparator with negative test, `cargo test
+- Validation passed: facade comparator with negative test, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 - Owner path: `rust/ds4-gpu/`, `rust/ds4-gpu-sys/`, `ds4-parity/`,
@@ -3754,7 +3754,7 @@
 
 ### M10.5c4: Rust Single-Token Decode Graph Execution
 
-- Status: pending
+- Status: active
 - Goal: move one-token decode scheduling for the target model into Rust while
   calling existing backend primitives through the M10.5c3 facade.
 - Oracle: M10.4 decode checkpoints and the M10.5b call-order plan.

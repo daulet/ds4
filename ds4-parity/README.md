@@ -232,6 +232,20 @@ persistent cache zero-fill obligations, and selected raw/ratio-4/ratio-128
 cache byte sizes. Its negative test mutates summary, field, and view data in
 memory.
 
+Compare the Rust M10.5c3 decode backend facade against the default fused
+one-token decode primitive list:
+
+```sh
+python3 ds4-parity/compare_decode_backend_facade.py
+python3 ds4-parity/compare_decode_backend_facade.py --negative-test
+```
+
+The comparator checks the facade operation table against the M10.2 operation
+inventory and M10.5a ABI declarations, verifies tensor argument order from each
+safe Rust method signature, and keeps command, read, view, and sync operations
+anchored to the existing lifecycle wrappers. Its negative test mutates a
+facade entry, tensor argument order, and raw sys call in memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
