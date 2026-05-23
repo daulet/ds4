@@ -1,5 +1,6 @@
 use ds4_engine::{
-    context_memory_estimate, Backend, Engine, EngineOptions, ServerGenerationOptions, ThinkMode,
+    context_memory_estimate, Backend, Engine, EngineOptions, ServerGenerationOptions,
+    ServerSession, ThinkMode,
 };
 use ds4_gguf::{
     format_http_error, format_http_response, format_openai_chat_completion_http,
@@ -95,12 +96,16 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         Err(err) => return Err(Box::new(err)),
     };
     log_context_memory(config.backend, config.context_length);
-    let _session = engine.create_chat_session("", config.context_length, ThinkMode::High)?;
-    serve(config, &engine)?;
+    let session = engine.create_server_session(config.context_length)?;
+    serve(config, &engine, session)?;
     Ok(0)
 }
 
-fn serve(config: ServerConfig, engine: &Engine) -> io::Result<()> {
+fn serve<'a>(
+    config: ServerConfig,
+    engine: &'a Engine,
+    session: ServerSession<'a>,
+) -> io::Result<()> {
     let host = bind_host(&config.host)?;
     let addr = SocketAddrV4::new(host, config.port);
     let listener = TcpListener::bind(addr)?;
@@ -113,6 +118,7 @@ fn serve(config: ServerConfig, engine: &Engine) -> io::Result<()> {
             Some(path) => Some(File::create(path)?),
             None => None,
         },
+        session,
     };
     for stream in listener.incoming() {
         match stream {
@@ -129,16 +135,17 @@ fn serve(config: ServerConfig, engine: &Engine) -> io::Result<()> {
     Ok(())
 }
 
-struct RuntimeState {
+struct RuntimeState<'a> {
     sequence: u64,
     trace: Option<File>,
+    session: ServerSession<'a>,
 }
 
 fn handle_client(
     stream: &mut TcpStream,
     config: &ServerConfig,
     engine: &Engine,
-    state: &mut RuntimeState,
+    state: &mut RuntimeState<'_>,
 ) -> io::Result<()> {
     stream.set_read_timeout(Some(READ_TIMEOUT))?;
     stream.set_write_timeout(Some(WRITE_TIMEOUT))?;
@@ -153,7 +160,7 @@ fn route_runtime_http(
     input: &[u8],
     config: &ServerConfig,
     engine: &Engine,
-    state: &mut RuntimeState,
+    state: &mut RuntimeState<'_>,
 ) -> String {
     let route_config = route_config(config);
     let request = match parse_http_request(input) {
@@ -175,7 +182,7 @@ fn route_chat_completions(
     request: &HttpRequest,
     config: &ServerConfig,
     engine: &Engine,
-    state: &mut RuntimeState,
+    state: &mut RuntimeState<'_>,
 ) -> String {
     let parsed = match parse_openai_chat_request(
         &request.body,
@@ -201,7 +208,7 @@ fn route_chat_completions(
         return format_http_error(config.enable_cors, 503, message);
     }
 
-    let generated = engine.generate_server_text(
+    let generated = state.session.generate(
         &prompt,
         ServerGenerationOptions {
             n_predict: parsed.max_tokens,
@@ -244,8 +251,8 @@ fn route_chat_completions(
             usage: OpenAiUsage::new(
                 generated.prompt_tokens,
                 generated.completion_tokens,
-                0,
-                generated.prompt_tokens,
+                generated.cache_read_tokens,
+                generated.cache_write_tokens,
             ),
         },
     )
@@ -265,8 +272,8 @@ fn unsupported_chat_generation_message(parsed: &OpenAiChatRequest) -> Option<&'s
     }
 }
 
-fn write_chat_trace(
-    trace: &mut File,
+fn write_chat_trace<W: Write>(
+    trace: &mut W,
     sequence: u64,
     raw_body: &str,
     request: &OpenAiChatRequest,
@@ -274,6 +281,21 @@ fn write_chat_trace(
     generated: &ds4_engine::ServerGenerationResult,
     content: &str,
 ) -> io::Result<()> {
+    let cached_tokens = generated.cache_read_tokens.clamp(0, prompt_tokens.max(0));
+    let live_prompt_common = generated.live_prompt_common.max(0);
+    let memory_token_reusable = if cached_tokens > 0 { 1 } else { 0 };
+    let memory_miss_reason = if cached_tokens > 0 {
+        "live-prefix-match"
+    } else if generated.live_tokens_before > 0 {
+        "token-mismatch"
+    } else {
+        "no-live-checkpoint"
+    };
+    let cache_source = if cached_tokens > 0 {
+        "memory-token"
+    } else {
+        "none"
+    };
     writeln!(trace, "===== request {sequence} =====")?;
     writeln!(trace, "kind: chat")?;
     writeln!(trace, "model: {}", request.model)?;
@@ -282,7 +304,7 @@ fn write_chat_trace(
     writeln!(trace, "think_mode: {}", request.think_mode.name())?;
     writeln!(trace, "prompt_tokens: {prompt_tokens}")?;
     writeln!(trace, "effective_prompt_tokens: {prompt_tokens}")?;
-    writeln!(trace, "cached_tokens: 0")?;
+    writeln!(trace, "cached_tokens: {cached_tokens}")?;
     writeln!(trace, "max_tokens: {}", request.max_tokens)?;
     writeln!(trace, "temperature: {:.3}", request.sampling.temperature)?;
     writeln!(trace, "top_k: {}", request.sampling.top_k)?;
@@ -296,13 +318,18 @@ fn write_chat_trace(
     )?;
     writeln!(trace)?;
     writeln!(trace, "--- cache decision ---")?;
-    writeln!(trace, "live_tokens_before: 0")?;
+    writeln!(
+        trace,
+        "live_tokens_before: {}",
+        generated.live_tokens_before.max(0)
+    )?;
     writeln!(trace, "prompt_tokens: {prompt_tokens}")?;
-    writeln!(trace, "live_prompt_common: 0")?;
-    writeln!(trace, "memory_token_reusable: 0")?;
-    writeln!(trace, "memory_miss_reason: no-live-checkpoint")?;
-    writeln!(trace, "cache_source: none")?;
-    writeln!(trace, "cached_tokens: 0")?;
+    writeln!(trace, "live_prompt_common: {live_prompt_common}")?;
+    writeln!(trace, "memory_token_reusable: {memory_token_reusable}")?;
+    writeln!(trace, "memory_miss_reason: {memory_miss_reason}")?;
+    writeln!(trace, "tool_replay: mem=0 disk=0 canonical=0 missing_ids=0")?;
+    writeln!(trace, "cache_source: {cache_source}")?;
+    writeln!(trace, "cached_tokens: {cached_tokens}")?;
     writeln!(trace, "disk_cached_tokens: 0")?;
     writeln!(trace)?;
     writeln!(trace, "--- raw request json ---")?;
@@ -622,6 +649,9 @@ mod tests {
     const CHAT_THINKING_DISABLED: &str = include_str!(
         "../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_thinking_disabled.json"
     );
+    const CHAT_CACHE_CONTINUATION: &str = include_str!(
+        "../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json"
+    );
 
     fn parse(args: &[&str]) -> Result<Option<ServerConfig>, CliExit> {
         parse_args(args.iter().copied().map(str::to_string))
@@ -811,5 +841,40 @@ mod tests {
             )),
             Some("stop sequences are not implemented yet")
         );
+    }
+
+    #[test]
+    fn trace_reports_memory_token_cache_reuse() {
+        let parsed = parse_chat(CHAT_CACHE_CONTINUATION);
+        let generated = ds4_engine::ServerGenerationResult {
+            exit_code: 0,
+            text: b"cache continued".to_vec(),
+            prompt_tokens: 50,
+            cache_read_tokens: 41,
+            cache_write_tokens: 9,
+            live_tokens_before: 41,
+            live_prompt_common: 41,
+            completion_tokens: 2,
+            finish_reason: "stop",
+        };
+        let mut trace = Vec::new();
+        write_chat_trace(
+            &mut trace,
+            6,
+            CHAT_CACHE_CONTINUATION,
+            &parsed,
+            generated.prompt_tokens,
+            &generated,
+            "cache continued",
+        )
+        .unwrap();
+        let trace = String::from_utf8(trace).unwrap();
+        assert!(trace.contains("cached_tokens: 41\n"));
+        assert!(trace.contains("live_tokens_before: 41\n"));
+        assert!(trace.contains("live_prompt_common: 41\n"));
+        assert!(trace.contains("memory_token_reusable: 1\n"));
+        assert!(trace.contains("memory_miss_reason: live-prefix-match\n"));
+        assert!(trace.contains("cache_source: memory-token\n"));
+        assert!(trace.contains("generated_tokens: 2\n"));
     }
 }

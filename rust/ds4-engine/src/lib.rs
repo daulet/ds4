@@ -221,6 +221,10 @@ pub struct ServerGenerationResult {
     pub exit_code: i32,
     pub text: Vec<u8>,
     pub prompt_tokens: i32,
+    pub cache_read_tokens: i32,
+    pub cache_write_tokens: i32,
+    pub live_tokens_before: i32,
+    pub live_prompt_common: i32,
     pub completion_tokens: i32,
     pub finish_reason: &'static str,
 }
@@ -241,6 +245,12 @@ pub struct ChatSession<'a> {
     session: Session,
     transcript: Tokens,
     ctx_size: i32,
+}
+
+#[derive(Debug)]
+pub struct ServerSession<'a> {
+    engine: &'a Engine,
+    session: Session,
 }
 
 impl Engine {
@@ -446,6 +456,10 @@ impl Engine {
                 exit_code: if rc == 0 { 1 } else { rc },
                 text: Vec::new(),
                 prompt_tokens: prompt.len(),
+                cache_read_tokens: 0,
+                cache_write_tokens: prompt.len(),
+                live_tokens_before: 0,
+                live_prompt_common: 0,
                 completion_tokens: 0,
                 finish_reason: "error",
             };
@@ -466,6 +480,10 @@ impl Engine {
                 exit_code: sync_rc,
                 text: Vec::new(),
                 prompt_tokens: prompt.len(),
+                cache_read_tokens: 0,
+                cache_write_tokens: prompt.len(),
+                live_tokens_before: 0,
+                live_prompt_common: 0,
                 completion_tokens: 0,
                 finish_reason: "error",
             };
@@ -504,6 +522,10 @@ impl Engine {
                     exit_code: eval_rc,
                     text,
                     prompt_tokens: prompt.len(),
+                    cache_read_tokens: 0,
+                    cache_write_tokens: prompt.len(),
+                    live_tokens_before: 0,
+                    live_prompt_common: 0,
                     completion_tokens,
                     finish_reason: "error",
                 };
@@ -518,9 +540,20 @@ impl Engine {
             exit_code: 0,
             text,
             prompt_tokens: prompt.len(),
+            cache_read_tokens: 0,
+            cache_write_tokens: prompt.len(),
+            live_tokens_before: 0,
+            live_prompt_common: 0,
             completion_tokens,
             finish_reason,
         }
+    }
+
+    pub fn create_server_session(&self, ctx_size: i32) -> Result<ServerSession<'_>, EngineError> {
+        Ok(ServerSession {
+            engine: self,
+            session: self.create_session(ctx_size)?,
+        })
     }
 
     pub fn create_chat_session(
@@ -747,6 +780,109 @@ impl ChatSession<'_> {
             rate(generated, decode_elapsed)
         );
         Ok(0)
+    }
+}
+
+impl ServerSession<'_> {
+    pub fn generate(
+        &mut self,
+        prompt: &Tokens,
+        options: ServerGenerationOptions,
+    ) -> ServerGenerationResult {
+        let live_tokens_before = self.session.pos();
+        let live_prompt_common = self.session.common_prefix(prompt);
+        let cache_read_tokens =
+            if live_prompt_common == live_tokens_before && prompt.len() >= live_tokens_before {
+                live_prompt_common
+            } else {
+                0
+            };
+        let cache_write_tokens = (prompt.len() - cache_read_tokens).max(0);
+        let mut err = [0 as c_char; 160];
+        let sync_rc = unsafe {
+            ds4_session_sync(
+                self.session.raw.as_ptr(),
+                &prompt.raw,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if sync_rc != 0 {
+            eprintln!("ds4: prompt processing failed: {}", c_error(&err));
+            return ServerGenerationResult {
+                exit_code: sync_rc,
+                text: Vec::new(),
+                prompt_tokens: prompt.len(),
+                cache_read_tokens,
+                cache_write_tokens,
+                live_tokens_before,
+                live_prompt_common,
+                completion_tokens: 0,
+                finish_reason: "error",
+            };
+        }
+
+        let room = self.session.ctx() - self.session.pos();
+        let max_tokens = options.n_predict.max(0).min(room.max(0));
+        let mut rng = options.seed;
+        let eos = self.engine.token_eos();
+        let mut text = Vec::new();
+        let mut completion_tokens = 0;
+        let mut finish_reason = "length";
+        while completion_tokens < max_tokens && self.session.pos() < self.session.ctx() {
+            let token = unsafe {
+                ds4_session_sample(
+                    self.session.raw.as_ptr(),
+                    options.temperature,
+                    options.top_k,
+                    options.top_p,
+                    options.min_p,
+                    &mut rng,
+                )
+            };
+            if token == eos {
+                finish_reason = "stop";
+                break;
+            }
+            let eval_rc = unsafe {
+                ds4_session_eval(
+                    self.session.raw.as_ptr(),
+                    token,
+                    err.as_mut_ptr(),
+                    err.len(),
+                )
+            };
+            if eval_rc != 0 {
+                eprintln!("ds4: decode failed: {}", c_error(&err));
+                return ServerGenerationResult {
+                    exit_code: eval_rc,
+                    text,
+                    prompt_tokens: prompt.len(),
+                    cache_read_tokens,
+                    cache_write_tokens,
+                    live_tokens_before,
+                    live_prompt_common,
+                    completion_tokens,
+                    finish_reason: "error",
+                };
+            }
+            unsafe {
+                append_token_text_bytes(self.engine.raw.as_ptr(), &mut text, token);
+            }
+            completion_tokens += 1;
+        }
+
+        ServerGenerationResult {
+            exit_code: 0,
+            text,
+            prompt_tokens: prompt.len(),
+            cache_read_tokens,
+            cache_write_tokens,
+            live_tokens_before,
+            live_prompt_common,
+            completion_tokens,
+            finish_reason,
+        }
     }
 }
 

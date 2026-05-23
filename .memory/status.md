@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.4d Memory-Token Cache Seed And Continuation Replay
-- Last validated source commit: M9.4c no-cache non-streaming chat generation
+- Active item: M9.5 Streaming Chat Completion SSE Surface
+- Last validated source commit: M9.4d memory-token cache seed and continuation
   replay in this commit; prior pushed source commit
-  `2eb85baac18f7856b4c1795cb2495875a57b702b`
+  `65012c263ec6d055b5e67e6ae4be45fb59c6b9bd`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,31 @@
 
 ## Last Evidence
 
+- M9.4d added a reusable `ServerSession` path for model-backed server
+  generation so `/v1/chat/completions` requests in one Rust server process can
+  reuse the live token prefix from prior completions.
+- M9.4d reports server-generation cache read/write counts,
+  `live_tokens_before`, and `live_prompt_common` from the Rust session, then
+  forwards those counts into OpenAI usage details and `--trace` cache-decision
+  fields.
+- M9.4d local validation passed for targeted
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.4d B300 validation used `/workspace/ds4-m94d` and model
+  `/workspace/ds4/ds4flash.gguf`; targeted runtime tests passed, and a single
+  server replay on port `18197` normalized only IDs/timestamps while matching
+  `chat_cache_seed` content `cache ready`, finish `stop`, usage `39/2/41`,
+  cache `0/39`, and `chat_cache_continuation` content `cache continued`,
+  finish `stop`, usage `50/2/52`, cache `41/9`.
+- M9.4d B300 trace validation checked rendered prompts, `cache_source: none`
+  for the seed, `cache_source: memory-token`, `cached_tokens: 41`,
+  `live_tokens_before: 41`, `live_prompt_common: 41`,
+  `memory_token_reusable: 1`, generated token counts, and final content for
+  the continuation. Artifacts remain in the pod at
+  `/tmp/ds4-m94d-server.trace`, `/tmp/ds4-m94d-server.stderr`, and
+  `/tmp/ds4-m94d-*.json`; the server process was stopped by the validation
+  script.
 - M9.4c added server-generation runtime support in `ds4-engine` that syncs a
   rendered prompt into a fresh session, samples raw token text without the CLI
   trailing-newline printer, returns prompt/completion token counts, and reports

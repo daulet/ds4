@@ -2702,7 +2702,7 @@
 
 ### M9.4d: Memory-Token Cache Seed And Continuation Replay
 
-- Status: active
+- Status: done
 - Goal: add the in-memory server session/cache behavior needed for M0.4
   `chat_cache_seed` and `chat_cache_continuation`, including cache read/write
   usage fields and trace cache decisions.
@@ -2724,15 +2724,18 @@
 - Review gate: ask Claude to review session reuse, common-prefix calculation,
   cache usage accounting, trace cache fields, request ordering assumptions, and
   M9.8 boundary separation.
-- Validation needed: B300 sequential cache replay comparator, local
-  response-builder/cache-accounting tests, `cargo test --workspace`,
+- Validation passed: targeted runtime tests
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  full `cargo test --workspace`, B300 sequential cache replay for
+  `chat_cache_seed` and `chat_cache_continuation` from `/workspace/ds4-m94d`
+  using `/workspace/ds4/ds4flash.gguf`, B300 trace cache-field checks,
   `cargo fmt --all -- --check`, and `git diff --check`.
 - Owner path: Rust server runtime/cache path, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.5: Streaming Chat Completion SSE Surface
 
-- Status: pending
+- Status: active
 - Goal: implement Rust streaming `/v1/chat/completions` SSE framing and usage
   reporting for the M0.4 stream case.
 - Oracle: M0.4 `chat_stream.sse`, stream headers, stream trace, and unit tests
