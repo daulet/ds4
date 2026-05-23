@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c2b Responses Tool Search And Namespace Schema Loading
-- Last validated source commit: M9.2c2a Responses function/tool input parser in
+- Active item: M9.2c2c Responses Live Tail Validation Surface
+- Last validated source commit: M9.2c2b Responses dynamic tool schema parser in
   this commit; prior pushed source commit
-  `0f063ac8ac610c2434acc903221615f208780611`
+  `91d5f1c543357218d9a2699a9b1c3b6261f6449a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,22 @@
 
 ## Last Evidence
 
+- M9.2c2b extended `ToolSchemaOrder` with namespace, wire-name, and hosted
+  `tool_search` metadata needed by Responses schema parsing.
+- M9.2c2b extended Rust `parse_tools_value` to match C handling for top-level
+  hosted `tool_search`, normal functions named `tool_search`, namespace tool
+  flattening, property order capture, and dynamic `tool_search_output.tools`
+  schema loading.
+- M9.2c2b combines top-level tool schemas before dynamically loaded schemas in
+  prompt text while preserving parser field-order replacement semantics in
+  `tool_orders`.
+- M9.2c2b validation covered hosted `tool_search` distinction, namespace
+  prompt-name flattening with namespace/wire metadata, dynamic schema loading
+  after top-level schemas, and malformed dynamic tool-list rejection.
+- M9.2c2b validation passed for targeted
+  `cargo test -p ds4-gguf server_chat -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.2c2a extended the Rust prompt data model with stable tool-call IDs on
   assistant calls and tool result messages without changing existing prompt
   rendering for non-tool histories.

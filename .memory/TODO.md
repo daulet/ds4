@@ -2266,7 +2266,7 @@
 
 ### M9.2c2b: Responses Tool Search And Namespace Schema Loading
 
-- Status: active
+- Status: done
 - Goal: port Responses dynamic tool schema parsing: top-level `tool_search`,
   namespace tool groups, tool-search-output `tools` loading, combined
   top-level plus loaded schemas, and namespace/wire-name metadata.
@@ -2289,13 +2289,14 @@
   property order, prompt schema line order, and malformed-schema categories.
 - Review gate: ask Claude to review namespace flattening, hosted tool-search
   distinction, loaded-schema ordering, and malformed dynamic-tool handling.
-- Validation needed: targeted Rust Responses schema-loading tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.2c2c: Responses Live Tail Validation Surface
 
-- Status: pending
+- Status: active
 - Goal: port model-free Responses live continuation validation outputs:
   missing call-id errors, `requires_live_tool_state`,
   `requires_live_reasoning`, live call-id collection, and visible live suffix

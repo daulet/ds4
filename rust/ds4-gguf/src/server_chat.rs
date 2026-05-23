@@ -44,6 +44,9 @@ pub struct ResponsesRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolSchemaOrder {
     pub name: String,
+    pub wire_name: Option<String>,
+    pub namespace: Option<String>,
+    pub responses_tool_search: bool,
     pub properties: Vec<String>,
 }
 
@@ -264,6 +267,7 @@ pub fn parse_responses_core_request(
     let mut messages = None;
     let mut instructions = None;
     let mut tool_schemas = None;
+    let mut loaded_tool_schemas = String::new();
     let mut tool_orders = Vec::new();
     let mut tool_choice_none = false;
     let mut max_tokens = def_tokens;
@@ -277,7 +281,10 @@ pub fn parse_responses_core_request(
     for (key, raw, value) in fields {
         match key.as_str() {
             "input" => {
-                messages = Some(parse_responses_core_input(&raw)?);
+                let parsed = parse_responses_core_input(&raw)?;
+                messages = Some(parsed.messages);
+                loaded_tool_schemas = parsed.loaded_tool_schemas;
+                merge_tool_schema_orders(&mut tool_orders, parsed.tool_orders);
             }
             "instructions" => {
                 instructions = Some(match value {
@@ -289,7 +296,7 @@ pub fn parse_responses_core_request(
             "tools" => {
                 let parsed = parse_tools_value(&raw)?;
                 tool_schemas = Some(parsed.schemas);
-                tool_orders = parsed.orders;
+                merge_tool_schema_orders(&mut tool_orders, parsed.orders);
             }
             "tool_choice" => match value {
                 JsonValue::String(choice) => {
@@ -360,12 +367,11 @@ pub fn parse_responses_core_request(
     if !got_thinking && model_alias_enables_thinking(&model) {
         thinking_enabled = true;
     }
-    let has_tools = tool_schemas
-        .as_deref()
-        .is_some_and(|schemas| !schemas.is_empty())
-        && !tool_choice_none;
+    let has_any_tool_schema_source = tool_schemas.is_some() || !loaded_tool_schemas.is_empty();
+    let combined_tool_schemas = combine_tool_schemas(tool_schemas.as_deref(), &loaded_tool_schemas);
+    let has_tools = !combined_tool_schemas.is_empty() && !tool_choice_none;
     let active_tool_schemas = if has_tools {
-        tool_schemas.as_deref()
+        Some(combined_tool_schemas.as_str())
     } else {
         None
     };
@@ -380,7 +386,7 @@ pub fn parse_responses_core_request(
         model,
         messages,
         has_tools,
-        tool_schemas,
+        tool_schemas: has_any_tool_schema_source.then_some(combined_tool_schemas),
         tool_orders,
         max_tokens,
         sampling,
@@ -492,6 +498,13 @@ struct ToolParseResult {
     orders: Vec<ToolSchemaOrder>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResponsesInputParse {
+    messages: Vec<ChatMessage>,
+    loaded_tool_schemas: String,
+    tool_orders: Vec<ToolSchemaOrder>,
+}
+
 fn parse_tools_value(raw: &str) -> Result<ToolParseResult, ServerRequestError> {
     let value = JsonParser::new(raw)
         .parse()
@@ -509,10 +522,25 @@ fn parse_tools_value(raw: &str) -> Result<ToolParseResult, ServerRequestError> {
     let mut orders = Vec::new();
     for raw_tool in raw_tools {
         let function = openai_function_schema_from_tool(&raw_tool)?;
-        let schema = function.unwrap_or(raw_tool);
-        append_raw_json_line(&mut schemas, schema.trim());
-        if let Some(order) = tool_schema_order_from_json(schema.trim())? {
-            push_tool_schema_order(&mut orders, order);
+        if let Some(function) = function {
+            append_raw_json_line(&mut schemas, function.trim());
+            if let Some(order) = tool_schema_order_from_json(function.trim())? {
+                push_tool_schema_order(&mut orders, order);
+            }
+        } else if let Some(parsed) = responses_namespace_tool_schemas(&raw_tool)? {
+            append_raw_json_line(&mut schemas, parsed.schemas.trim());
+            merge_tool_schema_orders(&mut orders, parsed.orders);
+        } else if let Some(special) = responses_special_schema_from_tool(&raw_tool)? {
+            append_raw_json_line(&mut schemas, special.trim());
+            if let Some(order) = tool_schema_order_from_json_wire(special.trim(), None, None, true)?
+            {
+                push_tool_schema_order(&mut orders, order);
+            }
+        } else {
+            append_raw_json_line(&mut schemas, raw_tool.trim());
+            if let Some(order) = tool_schema_order_from_json(raw_tool.trim())? {
+                push_tool_schema_order(&mut orders, order);
+            }
         }
     }
     Ok(ToolParseResult { schemas, orders })
@@ -543,7 +571,196 @@ fn openai_function_schema_from_tool(raw: &str) -> Result<Option<String>, ServerR
     Ok(None)
 }
 
+fn responses_special_schema_from_tool(raw: &str) -> Result<Option<String>, ServerRequestError> {
+    if !raw.trim_start().starts_with('{') {
+        return Ok(None);
+    }
+    let fields = JsonParser::new(raw)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    let mut tool_type = None;
+    let mut description = None;
+    let mut parameters = None;
+    for (key, raw, value) in fields {
+        match key.as_str() {
+            "type" => {
+                if let Some(value) = value.as_str() {
+                    tool_type = Some(value.to_string());
+                } else {
+                    return Ok(None);
+                }
+            }
+            "description" => {
+                if let Some(value) = value.as_str() {
+                    description = Some(value.to_string());
+                } else {
+                    return Ok(None);
+                }
+            }
+            "parameters" => {
+                parameters = Some(raw);
+            }
+            _ => {}
+        }
+    }
+    if tool_type.as_deref() != Some("tool_search") {
+        return Ok(None);
+    }
+
+    Ok(Some(format!(
+        "{{\"name\":\"tool_search\",\"description\":{},\"parameters\":{}}}",
+        json_escape_string(description.as_deref().unwrap_or("Search available tools.")),
+        parameters
+            .as_deref()
+            .unwrap_or("{\"type\":\"object\",\"properties\":{}}")
+    )))
+}
+
+fn responses_namespace_tool_schemas(
+    raw: &str,
+) -> Result<Option<ToolParseResult>, ServerRequestError> {
+    if !raw.trim_start().starts_with('{') {
+        return Ok(None);
+    }
+    let fields = JsonParser::new(raw)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    let mut tool_type = None;
+    let mut namespace = None;
+    let mut tools = None;
+    for (key, raw, value) in fields {
+        match key.as_str() {
+            "type" => {
+                if let Some(value) = value.as_str() {
+                    tool_type = Some(value.to_string());
+                } else {
+                    return Ok(None);
+                }
+            }
+            "name" => {
+                if let Some(value) = value.as_str() {
+                    namespace = Some(value.to_string());
+                } else {
+                    return Ok(None);
+                }
+            }
+            "tools" => {
+                tools = Some(raw);
+            }
+            _ => {}
+        }
+    }
+    let Some(namespace) = namespace else {
+        return Ok(None);
+    };
+    if tool_type.as_deref() != Some("namespace") {
+        return Ok(None);
+    }
+    let Some(tools) = tools else {
+        return Ok(None);
+    };
+    let Ok(raw_tools) = JsonParser::new(&tools).parse_root_array_values_raw() else {
+        return Ok(None);
+    };
+
+    let mut schemas = String::new();
+    let mut orders = Vec::new();
+    for raw_tool in raw_tools {
+        if let Some((schema, wire_name)) =
+            responses_namespace_function_schema_from_tool(&raw_tool, &namespace)?
+        {
+            append_raw_json_line(&mut schemas, &schema);
+            if let Some(order) = tool_schema_order_from_json_wire(
+                &schema,
+                Some(namespace.clone()),
+                Some(wire_name),
+                false,
+            )? {
+                push_tool_schema_order(&mut orders, order);
+            }
+        }
+    }
+    if schemas.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(ToolParseResult { schemas, orders }))
+    }
+}
+
+fn responses_namespace_function_schema_from_tool(
+    raw: &str,
+    namespace: &str,
+) -> Result<Option<(String, String)>, ServerRequestError> {
+    if !raw.trim_start().starts_with('{') {
+        return Ok(None);
+    }
+    let fields = JsonParser::new(raw)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    let mut tool_type = None;
+    let mut name = None;
+    let mut description = None;
+    let mut parameters = None;
+    for (key, raw, value) in fields {
+        match key.as_str() {
+            "type" => {
+                if let Some(value) = value.as_str() {
+                    tool_type = Some(value.to_string());
+                } else {
+                    return Ok(None);
+                }
+            }
+            "name" => {
+                if let Some(value) = value.as_str() {
+                    name = Some(value.to_string());
+                } else {
+                    return Ok(None);
+                }
+            }
+            "description" => {
+                if let Some(value) = value.as_str() {
+                    description = Some(value.to_string());
+                } else {
+                    return Ok(None);
+                }
+            }
+            "parameters" | "input_schema" => {
+                parameters = Some(raw);
+            }
+            _ => {}
+        }
+    }
+    if tool_type
+        .as_deref()
+        .is_some_and(|tool_type| tool_type != "function")
+    {
+        return Ok(None);
+    }
+    let Some(name) = name.filter(|name| !name.is_empty()) else {
+        return Ok(None);
+    };
+    let prompt_name = format!("{namespace}{name}");
+    let schema = format!(
+        "{{\"name\":{},\"description\":{},\"parameters\":{}}}",
+        json_escape_string(&prompt_name),
+        json_escape_string(description.as_deref().unwrap_or("")),
+        parameters
+            .as_deref()
+            .unwrap_or("{\"type\":\"object\",\"properties\":{}}")
+    );
+    Ok(Some((schema, name)))
+}
+
 fn tool_schema_order_from_json(raw: &str) -> Result<Option<ToolSchemaOrder>, ServerRequestError> {
+    tool_schema_order_from_json_wire(raw, None, None, false)
+}
+
+fn tool_schema_order_from_json_wire(
+    raw: &str,
+    namespace: Option<String>,
+    wire_name: Option<String>,
+    responses_tool_search: bool,
+) -> Result<Option<ToolSchemaOrder>, ServerRequestError> {
     if !raw.trim_start().starts_with('{') {
         return Ok(None);
     }
@@ -568,7 +785,13 @@ fn tool_schema_order_from_json(raw: &str) -> Result<Option<ToolSchemaOrder>, Ser
             _ => {}
         }
     }
-    Ok(name.map(|name| ToolSchemaOrder { name, properties }))
+    Ok(name.map(|name| ToolSchemaOrder {
+        name,
+        wire_name,
+        namespace,
+        responses_tool_search,
+        properties,
+    }))
 }
 
 fn parse_schema_properties(raw: &str) -> Result<Vec<String>, ServerRequestError> {
@@ -599,6 +822,26 @@ fn push_tool_schema_order(orders: &mut Vec<ToolSchemaOrder>, order: ToolSchemaOr
     } else {
         orders.push(order);
     }
+}
+
+fn merge_tool_schema_orders(orders: &mut Vec<ToolSchemaOrder>, new_orders: Vec<ToolSchemaOrder>) {
+    for order in new_orders {
+        push_tool_schema_order(orders, order);
+    }
+}
+
+fn combine_tool_schemas(top_level: Option<&str>, loaded: &str) -> String {
+    let mut out = String::new();
+    if let Some(top_level) = top_level.filter(|schemas| !schemas.is_empty()) {
+        out.push_str(top_level);
+    }
+    if !loaded.is_empty() {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(loaded);
+    }
+    out
 }
 
 fn parse_tool_calls_value(value: &JsonValue) -> Result<Vec<ToolCall>, ServerRequestError> {
@@ -669,12 +912,16 @@ fn tool_arguments_from_json(json: &str) -> Option<Vec<ToolArgument>> {
     Some(args)
 }
 
-fn parse_responses_core_input(raw: &str) -> Result<Vec<ChatMessage>, ServerRequestError> {
+fn parse_responses_core_input(raw: &str) -> Result<ResponsesInputParse, ServerRequestError> {
     let value = JsonParser::new(raw)
         .parse()
         .map_err(|_| ServerRequestError::invalid_json())?;
     if let JsonValue::String(value) = value {
-        return Ok(vec![ChatMessage::new("user", value.clone())]);
+        return Ok(ResponsesInputParse {
+            messages: vec![ChatMessage::new("user", value.clone())],
+            loaded_tool_schemas: String::new(),
+            tool_orders: Vec::new(),
+        });
     }
     if !matches!(value, JsonValue::Array(_)) {
         return Err(ServerRequestError::invalid_json());
@@ -684,6 +931,8 @@ fn parse_responses_core_input(raw: &str) -> Result<Vec<ChatMessage>, ServerReque
         .map_err(|_| ServerRequestError::invalid_json())?;
 
     let mut messages = Vec::new();
+    let mut loaded_tool_schemas = String::new();
+    let mut tool_orders = Vec::new();
     let mut pending_reasoning = String::new();
     for item in items {
         let fields = JsonParser::new(&item)
@@ -870,6 +1119,13 @@ fn parse_responses_core_input(raw: &str) -> Result<Vec<ChatMessage>, ServerReque
             | "tool_search_output"
             | "tool_search_call_output"
             | "image_generation_call_output" => {
+                if item_type == "tool_search_output" {
+                    if let Some(tools_json) = tools_json.as_deref() {
+                        let parsed = parse_tools_value(tools_json)?;
+                        append_raw_json_line(&mut loaded_tool_schemas, &parsed.schemas);
+                        merge_tool_schema_orders(&mut tool_orders, parsed.orders);
+                    }
+                }
                 let body = output.or(result).or(tools_json).unwrap_or_default();
                 let mut msg = ChatMessage::new("tool", body);
                 if let Some(id) = call_id.or(item_id) {
@@ -886,7 +1142,11 @@ fn parse_responses_core_input(raw: &str) -> Result<Vec<ChatMessage>, ServerReque
         msg.reasoning = pending_reasoning;
         messages.push(msg);
     }
-    Ok(messages)
+    Ok(ResponsesInputParse {
+        messages,
+        loaded_tool_schemas,
+        tool_orders,
+    })
 }
 
 fn responses_item_consumes_reasoning(item_type: &str, role: Option<&str>) -> bool {
@@ -1989,6 +2249,102 @@ mod tests {
             .prompt_text
             .contains("<tool_result>{\"ok\":true}</tool_result>"));
         assert!(req.prompt_text.ends_with("<｜Assistant｜><think>"));
+    }
+
+    #[test]
+    fn responses_hosted_tool_search_schema_is_distinct_from_plain_function() {
+        let req = parse_responses_fixture(
+            r#"{
+                "input":"search",
+                "tools":[{"type":"tool_search","execution":"client","description":"Search deferred tools","parameters":{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"number"}}}}]
+            }"#,
+        );
+        let schemas = req.tool_schemas.as_deref().expect("schemas");
+        assert!(schemas.contains("\"name\":\"tool_search\""));
+        assert!(schemas.contains("\"description\":\"Search deferred tools\""));
+        assert_eq!(req.tool_orders.len(), 1);
+        assert_eq!(req.tool_orders[0].name, "tool_search");
+        assert!(req.tool_orders[0].responses_tool_search);
+        assert_eq!(req.tool_orders[0].properties, ["query", "limit"]);
+
+        let function = parse_responses_fixture(
+            r#"{
+                "input":"search",
+                "tools":[{"type":"function","function":{"name":"tool_search","description":"plain function","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}}]
+            }"#,
+        );
+        assert_eq!(function.tool_orders.len(), 1);
+        assert_eq!(function.tool_orders[0].name, "tool_search");
+        assert!(!function.tool_orders[0].responses_tool_search);
+    }
+
+    #[test]
+    fn responses_namespace_tools_flatten_prompt_name_and_keep_wire_metadata() {
+        let req = parse_responses_fixture(
+            r#"{
+                "input":"use namespace",
+                "tools":[{"type":"namespace","name":"mcp__perplexity__","description":"Perplexity tools","tools":[{"type":"function","name":"perplexity_search","description":"Search the web","parameters":{"type":"object","properties":{"query":{"type":"string"},"recency":{"type":"number"}}}}]}]
+            }"#,
+        );
+        let schemas = req.tool_schemas.as_deref().expect("schemas");
+        assert!(schemas.contains("\"name\":\"mcp__perplexity__perplexity_search\""));
+        assert!(!schemas.contains("\"name\":\"perplexity_search\""));
+        assert_eq!(req.tool_orders.len(), 1);
+        assert_eq!(
+            req.tool_orders[0].name,
+            "mcp__perplexity__perplexity_search"
+        );
+        assert_eq!(
+            req.tool_orders[0].namespace.as_deref(),
+            Some("mcp__perplexity__")
+        );
+        assert_eq!(
+            req.tool_orders[0].wire_name.as_deref(),
+            Some("perplexity_search")
+        );
+        assert_eq!(req.tool_orders[0].properties, ["query", "recency"]);
+        assert!(req
+            .prompt_text
+            .find("mcp__perplexity__perplexity_search")
+            .is_some());
+    }
+
+    #[test]
+    fn responses_tool_search_output_loads_dynamic_schemas_after_top_level_tools() {
+        let req = parse_responses_fixture(
+            r#"{
+                "input":[
+                    {"type":"tool_search_call","call_id":"call_search","arguments":{"query":"perplexity"}},
+                    {"type":"tool_search_output","call_id":"call_search","status":"completed","tools":[{"type":"namespace","name":"mcp__perplexity__","tools":[{"type":"function","name":"perplexity_search","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}]}]}
+                ],
+                "tools":[{"type":"function","function":{"name":"top_level","parameters":{"type":"object","properties":{"arg":{"type":"string"}}}}}]
+            }"#,
+        );
+        let schemas = req.tool_schemas.as_deref().expect("schemas");
+        let top = schemas
+            .find("\"name\":\"top_level\"")
+            .expect("top-level schema");
+        let loaded = schemas
+            .find("\"name\":\"mcp__perplexity__perplexity_search\"")
+            .expect("loaded schema");
+        assert!(top < loaded);
+        assert_eq!(req.tool_orders.len(), 2);
+        assert_eq!(
+            req.tool_orders[0].name,
+            "mcp__perplexity__perplexity_search"
+        );
+        assert_eq!(req.tool_orders[1].name, "top_level");
+        assert!(req.has_tools);
+        assert!(req.prompt_text.contains("## Tools"));
+        assert!(req.messages[1].content.contains("mcp__perplexity__"));
+
+        let bad = parse_responses_core_request(
+            r#"{"input":[{"type":"tool_search_output","call_id":"call_search","status":"completed","tools":{"not":"a tool array"}}]}"#,
+            128,
+            32_768,
+        )
+        .expect_err("malformed dynamic tool list rejected");
+        assert_eq!(bad.category(), ServerRequestErrorCategory::InvalidJson);
     }
 
     #[test]
