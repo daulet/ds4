@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4a Rust Decode Execution Trace Oracle
-- Last validated source commit: M10.5c4 work-item split in this
+- Active item: M10.5c4b Rust Decode Runtime State Bridge
+- Last validated source commit: M10.5c4a Rust decode execution trace oracle in this
   commit; prior pushed source commit
-  `07d84fc2fbea6f49614e3bea364bbdec619b19b7`
+  `5e6026e5715c630fde5468aea68024b94d8be1c1`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,31 @@
 
 ## Last Evidence
 
+- M10.5c4a adds `rust/ds4-gpu/src/decode_trace.rs` and
+  `ds4-decode-trace`, a no-FFI dry-run execution trace that expands every
+  M10.5b decode-plan case into default M10.5c3 facade calls, existing
+  command/read/sync wrappers, per-layer stage markers, and per-layer
+  raw/compressed/indexer cache-counter state events.
+- M10.5c4a records default fused decode behavior before backend execution:
+  dense layers use `attention_decode_heads`, ratio-4 layers switch to
+  `attention_indexed_mixed_batch_heads` after the strict `> 512` indexer
+  threshold, ratio-4/ratio-128 emit cases update compressed counters, split
+  flush remains a token-level stage attached after layer 3, and no-logits
+  cases omit output-head and read events.
+- M10.5c4a adds `ds4-parity/compare_decode_trace.py`, which runs
+  `ds4-decode-trace`, checks schema/cases, layer stage order, facade
+  method/tensor-argument coverage from M10.5c3, command/read/sync markers,
+  raw/compressed/indexer state transitions, and fails closed on summary,
+  operation, split-flush, and state mutations. It is wired into the unified
+  parity report as `M10.5c4a Rust decode trace comparator`.
+- M10.5c4a validation passed `cargo test -p ds4-gpu decode_trace --lib`,
+  `cargo run -p ds4-gpu --bin ds4-decode-trace --quiet -- --case
+  ratio_emit_boundary | python3 -m json.tool`, `python3
+  ds4-parity/compare_decode_trace.py --negative-test`, `python3 -m py_compile
+  ds4-parity/compare_decode_trace.py ds4-parity/run_parity_report.py`,
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and NUL scan
+  over touched files. Non-interactive Claude review returned no blockers.
 - M10.5c4 was split before implementation because the original item spans
   dry-run scheduling, runtime tensor/weight bridge construction, B300 numeric
   execution, continuation-state validation, and optional directional-steering

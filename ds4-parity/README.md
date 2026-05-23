@@ -246,6 +246,20 @@ safe Rust method signature, and keeps command, read, view, and sync operations
 anchored to the existing lifecycle wrappers. Its negative test mutates a
 facade entry, tensor argument order, and raw sys call in memory.
 
+Compare the Rust M10.5c4a dry-run decode execution trace against the M10.5b
+decode plan oracle:
+
+```sh
+python3 ds4-parity/compare_decode_trace.py
+python3 ds4-parity/compare_decode_trace.py --negative-test
+```
+
+The comparator runs `ds4-decode-trace`, checks the dry-run trace schema, case
+set, layer stage order, facade method/tensor-argument coverage, command/read/
+sync markers, raw/compressed/indexer cache-counter transitions, and default
+decode operation coverage. Its negative test mutates summary, operation, and
+state data, including split-flush and emit-cadence fields, in memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

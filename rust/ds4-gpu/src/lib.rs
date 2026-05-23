@@ -10,6 +10,7 @@ pub use ds4_gpu_sys as sys;
 
 pub mod decode_backend;
 pub mod decode_plan;
+pub mod decode_trace;
 pub mod graph_plan;
 pub mod graph_state;
 

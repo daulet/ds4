@@ -3778,7 +3778,7 @@
 
 ### M10.5c4a: Rust Decode Execution Trace Oracle
 
-- Status: active
+- Status: completed
 - Goal: add a Rust dry-run decode execution trace that expands the M10.5b
   token/layer plan into facade method calls and cache-counter transitions,
   without calling backend kernels.
@@ -3796,7 +3796,7 @@
   boundaries are exact; no tensor values or GPU execution are compared.
 - Review gate: ask Claude to review trace completeness against C default
   branches and M10.5c3 facade coverage.
-- Validation needed: trace comparator with negative test, `cargo test
+- Validation passed: trace comparator with negative test, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 - Owner path: Rust graph decode trace modules, `ds4-parity/`,
@@ -3804,7 +3804,7 @@
 
 ### M10.5c4b: Rust Decode Runtime State Bridge
 
-- Status: pending
+- Status: active
 - Goal: instantiate the decode graph runtime state from M10.5c2 tensor plans
   and M10.5c1 structured weights, still without launching kernels.
 - Oracle: M10.5c1 structured weight table, M10.5c2 graph-state allocation
