@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.7 Responses And Anthropic Protocol Surface
-- Last validated source commit: M9.6d tool-call quality parity hook in this
-  commit; prior pushed source commit
-  `45f8350db38f144d6d03fd40e823883f71b21add`
+- Active item: M9.7b Responses And Anthropic Streaming Event Builders
+- Last validated source commit: M9.7a Responses/Anthropic final response
+  formatters in this commit; prior pushed source commit
+  `597361391a78a35c17a3b030c14211a2e03da31a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,37 @@
 
 ## Last Evidence
 
+- M9.7a adds exported Rust final-response formatters for Responses and
+  Anthropic non-streaming protocol bodies plus HTTP wrappers:
+  `format_responses_final_response_json`,
+  `format_responses_final_response_http`, `format_anthropic_message_json`, and
+  `format_anthropic_message_http`.
+- M9.7a Responses formatting mirrors C `responses_final_response`: injected
+  response/reasoning/message/tool IDs and timestamps for deterministic tests,
+  `completed`/`incomplete`/`failed` response status mapping, item status
+  mapping, `max_tokens` incomplete details, server-error body, output text,
+  optional reasoning summary emission, function-call output items, and cache
+  usage fields with clamped `cached_tokens` and `cache_write_tokens`.
+- M9.7a Responses tool output preserves C's protocol-specific tool identity
+  rules: namespace tool calls emit the original wire name plus `namespace`,
+  hosted `tool_search` calls emit `tool_search_call` with object arguments and
+  `execution:"client"`, while plain user functions named `tool_search` remain
+  `function_call` when their `ToolSchemaOrder` is not marked as a hosted
+  Responses tool search.
+- M9.7a Anthropic formatting mirrors C `anthropic_final_response` and
+  `append_anthropic_content`: thinking blocks precede text/tool blocks,
+  generated tool-use IDs default to `toolu_<message-id>_<index>`, tool
+  arguments are normalized object JSON, empty content still emits an empty text
+  block, reasoning-only content emits thinking followed by empty text, and
+  `tool_calls`/`length`/other finishes map to `tool_use`/`max_tokens`/
+  `end_turn`.
+- M9.7a local validation passed targeted `cargo test -p ds4-gguf
+  server_response -- --nocapture`, full `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`; this slice is
+  model-free, so B300 execution was not required.
+- M9.7a non-interactive Claude review returned `NO BLOCKERS`; the only
+  non-blocking note was that Responses `output_tokens_details.reasoning_tokens`
+  remains hard-coded to `0`, matching C `append_responses_usage_json`.
 - M9.6d added `ds4-parity/run_tool_call_quality.py`, a documented Rust
   server-runtime equivalent runner for the C `./ds4_test --tool-call-quality`
   surface.

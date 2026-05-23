@@ -1,5 +1,6 @@
 use crate::decode_policy::utf8_stream_safe_len;
 use crate::dsml::{normalize_json_object_or_empty, DsmlJsonCall};
+use crate::server_chat::ToolSchemaOrder;
 use crate::server_http::{append_cors_headers, format_http_response, json_escape_string};
 
 const DS4_TOOL_CALLS_START: &[u8] = "<｜DSML｜tool_calls>".as_bytes();
@@ -101,6 +102,33 @@ pub struct OpenAiChatToolStream<'a> {
     pub events: &'a [OpenAiToolCallStreamEvent<'a>],
     pub finish_reason: &'a str,
     pub usage: Option<OpenAiUsage>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResponsesFinalResponse<'a> {
+    pub id: &'a str,
+    pub created_at: i64,
+    pub model: &'a str,
+    pub content: &'a str,
+    pub reasoning: Option<&'a str>,
+    pub reasoning_summary_emit: bool,
+    pub finish_reason: &'a str,
+    pub usage: OpenAiUsage,
+    pub reasoning_id: &'a str,
+    pub message_id: &'a str,
+    pub function_call_id_prefix: &'a str,
+    pub call_id_prefix: &'a str,
+    pub tool_orders: &'a [ToolSchemaOrder],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AnthropicMessageResponse<'a> {
+    pub id: &'a str,
+    pub model: &'a str,
+    pub content: &'a str,
+    pub reasoning: Option<&'a str>,
+    pub finish_reason: &'a str,
+    pub usage: OpenAiUsage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -502,6 +530,122 @@ pub fn format_openai_chat_tool_completion_http(
     format_http_response(enable_cors, 200, Some("application/json"), &body)
 }
 
+pub fn format_responses_final_response_json(
+    response: &ResponsesFinalResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let status = responses_status_for_finish(response.finish_reason);
+    let item_status = responses_item_status_for_finish(response.finish_reason);
+    let mut out = String::new();
+    out.push_str("{\"id\":");
+    out.push_str(&json_escape_string(response.id));
+    out.push_str(",\"object\":\"response\",\"created_at\":");
+    out.push_str(&response.created_at.to_string());
+    out.push_str(",\"status\":");
+    out.push_str(&json_escape_string(status));
+    out.push_str(",\"model\":");
+    out.push_str(&json_escape_string(response.model));
+    match response.finish_reason {
+        "error" => {
+            out.push_str(",\"error\":{\"code\":\"server_error\",\"message\":\"generation failed\"}")
+        }
+        "length" => out.push_str(",\"incomplete_details\":{\"reason\":\"max_tokens\"}"),
+        _ => {}
+    }
+    out.push_str(",\"output\":[");
+    let mut wrote = false;
+    if let Some(reasoning) = response
+        .reasoning
+        .filter(|reasoning| response.reasoning_summary_emit && !reasoning.is_empty())
+    {
+        append_separator(&mut out, &mut wrote);
+        out.push_str("{\"id\":");
+        out.push_str(&json_escape_string(response.reasoning_id));
+        out.push_str(",\"type\":\"reasoning\",\"status\":");
+        out.push_str(&json_escape_string(item_status));
+        out.push_str(",\"summary\":[{\"type\":\"summary_text\",\"text\":");
+        out.push_str(&json_escape_string(reasoning));
+        out.push_str("}]}");
+    }
+    if !response.content.is_empty() {
+        append_separator(&mut out, &mut wrote);
+        out.push_str("{\"id\":");
+        out.push_str(&json_escape_string(response.message_id));
+        out.push_str(",\"type\":\"message\",\"status\":");
+        out.push_str(&json_escape_string(item_status));
+        out.push_str(",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":");
+        out.push_str(&json_escape_string(response.content));
+        out.push_str(",\"annotations\":[]}]}");
+    }
+    for (index, call) in tool_calls.iter().enumerate() {
+        append_separator(&mut out, &mut wrote);
+        let item = ResponsesToolItem {
+            function_call_id: format!("{}{}", response.function_call_id_prefix, index),
+            call_id: call
+                .id
+                .clone()
+                .unwrap_or_else(|| format!("{}{}", response.call_id_prefix, index)),
+        };
+        append_responses_function_call_item(
+            &mut out,
+            call,
+            &item,
+            item_status,
+            true,
+            response.tool_orders,
+        );
+    }
+    out.push_str("],\"usage\":");
+    append_responses_usage_json(&mut out, response.usage);
+    out.push('}');
+    out
+}
+
+pub fn format_responses_final_response_http(
+    enable_cors: bool,
+    response: &ResponsesFinalResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let body = format_responses_final_response_json(response, tool_calls);
+    format_http_response(enable_cors, 200, Some("application/json"), &body)
+}
+
+pub fn format_anthropic_message_json(
+    response: &AnthropicMessageResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let mut out = String::new();
+    out.push_str("{\"id\":");
+    out.push_str(&json_escape_string(response.id));
+    out.push_str(",\"type\":\"message\",\"role\":\"assistant\",\"model\":");
+    out.push_str(&json_escape_string(response.model));
+    out.push_str(",\"content\":");
+    append_anthropic_content(
+        &mut out,
+        response.content,
+        response.reasoning,
+        tool_calls,
+        response.id,
+    );
+    out.push_str(",\"stop_reason\":");
+    out.push_str(&json_escape_string(anthropic_stop_reason(
+        response.finish_reason,
+    )));
+    out.push_str(",\"stop_sequence\":null,\"usage\":");
+    append_anthropic_usage_json(&mut out, response.usage);
+    out.push_str("}\n");
+    out
+}
+
+pub fn format_anthropic_message_http(
+    enable_cors: bool,
+    response: &AnthropicMessageResponse<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let body = format_anthropic_message_json(response, tool_calls);
+    format_http_response(enable_cors, 200, Some("application/json"), &body)
+}
+
 pub fn format_openai_chat_stream_sse(response: &OpenAiChatStream<'_>) -> String {
     let mut out = String::new();
     append_openai_chat_stream_role_chunk(&mut out, response.id, response.created, response.model);
@@ -756,6 +900,43 @@ fn append_openai_usage_json(out: &mut String, usage: OpenAiUsage) {
     out.push_str("}}");
 }
 
+fn append_responses_usage_json(out: &mut String, usage: OpenAiUsage) {
+    let cached_tokens = clamp_usage_tokens(usage.cache_read_tokens, usage.prompt_tokens);
+    let cache_write_tokens = clamp_usage_tokens(
+        usage.cache_write_tokens,
+        usage.prompt_tokens - cached_tokens,
+    );
+    out.push_str("{\"input_tokens\":");
+    out.push_str(&usage.prompt_tokens.to_string());
+    out.push_str(",\"input_tokens_details\":{\"cached_tokens\":");
+    out.push_str(&cached_tokens.to_string());
+    out.push_str(",\"cache_write_tokens\":");
+    out.push_str(&cache_write_tokens.to_string());
+    out.push_str("},\"output_tokens\":");
+    out.push_str(&usage.completion_tokens.to_string());
+    out.push_str(",\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":");
+    out.push_str(&(usage.prompt_tokens + usage.completion_tokens).to_string());
+    out.push('}');
+}
+
+fn append_anthropic_usage_json(out: &mut String, usage: OpenAiUsage) {
+    let cache_read_tokens = clamp_usage_tokens(usage.cache_read_tokens, usage.prompt_tokens);
+    let cache_write_tokens = clamp_usage_tokens(
+        usage.cache_write_tokens,
+        usage.prompt_tokens - cache_read_tokens,
+    );
+    let input_tokens = (usage.prompt_tokens - cache_read_tokens - cache_write_tokens).max(0);
+    out.push_str("{\"input_tokens\":");
+    out.push_str(&input_tokens.to_string());
+    out.push_str(",\"output_tokens\":");
+    out.push_str(&usage.completion_tokens.to_string());
+    out.push_str(",\"cache_read_input_tokens\":");
+    out.push_str(&cache_read_tokens.to_string());
+    out.push_str(",\"cache_creation_input_tokens\":");
+    out.push_str(&cache_write_tokens.to_string());
+    out.push('}');
+}
+
 fn append_openai_tool_calls_json(out: &mut String, id_prefix: &str, tool_calls: &[DsmlJsonCall]) {
     out.push('[');
     for (index, call) in tool_calls.iter().enumerate() {
@@ -804,6 +985,159 @@ fn append_openai_tool_call_deltas_json(
         out.push_str("}}");
     }
     out.push(']');
+}
+
+struct ResponsesToolItem {
+    function_call_id: String,
+    call_id: String,
+}
+
+fn append_responses_function_call_item(
+    out: &mut String,
+    call: &DsmlJsonCall,
+    item: &ResponsesToolItem,
+    item_status: &str,
+    with_args: bool,
+    tool_orders: &[ToolSchemaOrder],
+) {
+    let order = tool_order_for_name(tool_orders, &call.name);
+    if responses_tool_call_is_tool_search(call, order) {
+        out.push_str("{\"id\":");
+        out.push_str(&json_escape_string(&item.function_call_id));
+        out.push_str(",\"type\":\"tool_search_call\",\"status\":");
+        out.push_str(&json_escape_string(item_status));
+        out.push_str(",\"call_id\":");
+        out.push_str(&json_escape_string(&item.call_id));
+        out.push_str(",\"execution\":\"client\",\"arguments\":");
+        if with_args {
+            out.push_str(&normalize_json_object_or_empty(&call.arguments));
+        } else {
+            out.push_str("{}");
+        }
+        out.push('}');
+        return;
+    }
+
+    out.push_str("{\"id\":");
+    out.push_str(&json_escape_string(&item.function_call_id));
+    out.push_str(",\"type\":\"function_call\",\"status\":");
+    out.push_str(&json_escape_string(item_status));
+    out.push_str(",\"name\":");
+    out.push_str(&json_escape_string(
+        order
+            .and_then(|order| order.wire_name.as_deref())
+            .unwrap_or(&call.name),
+    ));
+    if let Some(namespace) = order.and_then(|order| order.namespace.as_deref()) {
+        out.push_str(",\"namespace\":");
+        out.push_str(&json_escape_string(namespace));
+    }
+    out.push_str(",\"call_id\":");
+    out.push_str(&json_escape_string(&item.call_id));
+    out.push_str(",\"arguments\":");
+    if with_args {
+        out.push_str(&json_escape_string(&normalize_json_object_or_empty(
+            &call.arguments,
+        )));
+    } else {
+        out.push_str("\"\"");
+    }
+    out.push('}');
+}
+
+fn append_anthropic_content(
+    out: &mut String,
+    content: &str,
+    reasoning: Option<&str>,
+    tool_calls: &[DsmlJsonCall],
+    id_prefix: &str,
+) {
+    out.push('[');
+    let mut wrote = false;
+    let mut wrote_after_thinking = false;
+    if let Some(reasoning) = reasoning.filter(|reasoning| !reasoning.is_empty()) {
+        append_separator(out, &mut wrote);
+        out.push_str("{\"type\":\"thinking\",\"thinking\":");
+        out.push_str(&json_escape_string(reasoning));
+        out.push_str(",\"signature\":");
+        out.push_str(&json_escape_string(id_prefix));
+        out.push('}');
+    }
+    if !content.is_empty() {
+        append_separator(out, &mut wrote);
+        out.push_str("{\"type\":\"text\",\"text\":");
+        out.push_str(&json_escape_string(content));
+        out.push('}');
+        wrote_after_thinking = true;
+    }
+    for (index, call) in tool_calls.iter().enumerate() {
+        append_separator(out, &mut wrote);
+        append_anthropic_tool_use(out, call, id_prefix, index);
+        wrote_after_thinking = true;
+    }
+    if !wrote || (reasoning.is_some_and(|reasoning| !reasoning.is_empty()) && !wrote_after_thinking)
+    {
+        append_separator(out, &mut wrote);
+        out.push_str("{\"type\":\"text\",\"text\":\"\"}");
+    }
+    out.push(']');
+}
+
+fn append_anthropic_tool_use(out: &mut String, call: &DsmlJsonCall, id_prefix: &str, index: usize) {
+    let default_id = format!("toolu_{id_prefix}_{index}");
+    out.push_str("{\"type\":\"tool_use\",\"id\":");
+    out.push_str(&json_escape_string(
+        call.id.as_deref().unwrap_or(&default_id),
+    ));
+    out.push_str(",\"name\":");
+    out.push_str(&json_escape_string(&call.name));
+    out.push_str(",\"input\":");
+    out.push_str(&normalize_json_object_or_empty(&call.arguments));
+    out.push('}');
+}
+
+fn responses_tool_call_is_tool_search(
+    call: &DsmlJsonCall,
+    order: Option<&ToolSchemaOrder>,
+) -> bool {
+    call.name == "tool_search" && order.is_none_or(|order| order.responses_tool_search)
+}
+
+fn tool_order_for_name<'a>(
+    tool_orders: &'a [ToolSchemaOrder],
+    name: &str,
+) -> Option<&'a ToolSchemaOrder> {
+    tool_orders.iter().find(|order| order.name == name)
+}
+
+fn responses_status_for_finish(finish_reason: &str) -> &'static str {
+    match finish_reason {
+        "length" => "incomplete",
+        "error" => "failed",
+        _ => "completed",
+    }
+}
+
+fn responses_item_status_for_finish(finish_reason: &str) -> &'static str {
+    match finish_reason {
+        "length" | "error" => "incomplete",
+        _ => "completed",
+    }
+}
+
+fn anthropic_stop_reason(finish_reason: &str) -> &'static str {
+    match finish_reason {
+        "tool_calls" => "tool_use",
+        "length" => "max_tokens",
+        _ => "end_turn",
+    }
+}
+
+fn append_separator(out: &mut String, wrote: &mut bool) {
+    if *wrote {
+        out.push(',');
+    }
+    *wrote = true;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1166,6 +1500,217 @@ mod tests {
         assert!(
             json.contains("\"content\":\"before\",\"reasoning_content\":\"why\",\"tool_calls\"")
         );
+    }
+
+    #[test]
+    fn formats_responses_final_response_body() {
+        let orders = [ToolSchemaOrder {
+            name: "bash".to_string(),
+            wire_name: None,
+            namespace: None,
+            responses_tool_search: false,
+            properties: vec!["command".to_string(), "description".to_string()],
+        }];
+        let calls = [DsmlJsonCall {
+            id: None,
+            name: "bash".to_string(),
+            arguments: "{\"description\":\"list files\",\"command\":\"ls -la\",\"timeout\":10}"
+                .to_string(),
+        }];
+
+        assert_eq!(
+            format_responses_final_response_json(
+                &ResponsesFinalResponse {
+                    id: "resp_test",
+                    created_at: 1234,
+                    model: "deepseek-v4-flash",
+                    content: "Hello.",
+                    reasoning: Some("need a tool"),
+                    reasoning_summary_emit: true,
+                    finish_reason: "tool_calls",
+                    usage: OpenAiUsage::new(10, 2, 7, 3),
+                    reasoning_id: "rs_test",
+                    message_id: "msg_test",
+                    function_call_id_prefix: "fc_test_",
+                    call_id_prefix: "call_test_",
+                    tool_orders: &orders,
+                },
+                &calls,
+            ),
+            concat!(
+                r#"{"id":"resp_test","object":"response","created_at":1234,"status":"completed","model":"deepseek-v4-flash","output":["#,
+                r#"{"id":"rs_test","type":"reasoning","status":"completed","summary":[{"type":"summary_text","text":"need a tool"}]},"#,
+                r#"{"id":"msg_test","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello.","annotations":[]}]},"#,
+                r#"{"id":"fc_test_0","type":"function_call","status":"completed","name":"bash","call_id":"call_test_0","arguments":"{\"description\":\"list files\",\"command\":\"ls -la\",\"timeout\":10}"}"#,
+                r#"],"usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":7,"cache_write_tokens":3},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":12}}"#
+            )
+        );
+    }
+
+    #[test]
+    fn responses_final_restores_namespace_and_tool_search_shapes() {
+        let orders = [
+            ToolSchemaOrder {
+                name: "mcp__perplexity__perplexity_search".to_string(),
+                wire_name: Some("perplexity_search".to_string()),
+                namespace: Some("mcp__perplexity__".to_string()),
+                responses_tool_search: false,
+                properties: vec![],
+            },
+            ToolSchemaOrder {
+                name: "tool_search".to_string(),
+                wire_name: None,
+                namespace: None,
+                responses_tool_search: true,
+                properties: vec![],
+            },
+        ];
+        let calls = [
+            DsmlJsonCall {
+                id: Some("call_ns".to_string()),
+                name: "mcp__perplexity__perplexity_search".to_string(),
+                arguments: "{\"query\":\"deepseek\",\"recency\":7}".to_string(),
+            },
+            DsmlJsonCall {
+                id: Some("call_search".to_string()),
+                name: "tool_search".to_string(),
+                arguments: "{\"limit\":3,\"query\":\"perplexity\"}".to_string(),
+            },
+        ];
+        let json = format_responses_final_response_json(
+            &ResponsesFinalResponse {
+                id: "resp_tools",
+                created_at: 1234,
+                model: "deepseek-chat",
+                content: "",
+                reasoning: Some("hidden"),
+                reasoning_summary_emit: false,
+                finish_reason: "length",
+                usage: OpenAiUsage::new(6, 4, 0, 9),
+                reasoning_id: "rs_unused",
+                message_id: "msg_unused",
+                function_call_id_prefix: "fc_",
+                call_id_prefix: "call_",
+                tool_orders: &orders,
+            },
+            &calls,
+        );
+
+        assert!(json.contains(r#""status":"incomplete""#));
+        assert!(json.contains(r#""incomplete_details":{"reason":"max_tokens"}"#));
+        assert!(!json.contains("hidden"));
+        assert!(json.contains(
+            r#""type":"function_call","status":"incomplete","name":"perplexity_search","namespace":"mcp__perplexity__","call_id":"call_ns""#
+        ));
+        assert!(!json.contains("mcp__perplexity__perplexity_search"));
+        assert!(json.contains(
+            r#""type":"tool_search_call","status":"incomplete","call_id":"call_search","execution":"client","arguments":{"limit":3,"query":"perplexity"}"#
+        ));
+        assert!(
+            json.contains(r#""input_tokens_details":{"cached_tokens":0,"cache_write_tokens":6}"#)
+        );
+    }
+
+    #[test]
+    fn responses_function_named_tool_search_stays_function_call_with_plain_order() {
+        let orders = [ToolSchemaOrder {
+            name: "tool_search".to_string(),
+            wire_name: None,
+            namespace: None,
+            responses_tool_search: false,
+            properties: vec![],
+        }];
+        let calls = [DsmlJsonCall {
+            id: Some("call_user_tool_search".to_string()),
+            name: "tool_search".to_string(),
+            arguments: "{\"query\":\"plain function\"}".to_string(),
+        }];
+        let json = format_responses_final_response_json(
+            &ResponsesFinalResponse {
+                id: "resp_user_tool_search",
+                created_at: 1234,
+                model: "deepseek-chat",
+                content: "",
+                reasoning: None,
+                reasoning_summary_emit: true,
+                finish_reason: "stop",
+                usage: OpenAiUsage::new(1, 1, 0, 0),
+                reasoning_id: "rs_unused",
+                message_id: "msg_unused",
+                function_call_id_prefix: "fc_",
+                call_id_prefix: "call_",
+                tool_orders: &orders,
+            },
+            &calls,
+        );
+
+        assert!(json.contains(r#""type":"function_call""#));
+        assert!(!json.contains(r#""type":"tool_search_call""#));
+    }
+
+    #[test]
+    fn formats_anthropic_message_body() {
+        let calls = [DsmlJsonCall {
+            id: None,
+            name: "bash".to_string(),
+            arguments: "{\"description\":\"list files\",\"command\":\"ls -la\",\"timeout\":10}"
+                .to_string(),
+        }];
+
+        assert_eq!(
+            format_anthropic_message_json(
+                &AnthropicMessageResponse {
+                    id: "msg_test",
+                    model: "deepseek-v4-flash",
+                    content: "done",
+                    reasoning: Some("thinking text"),
+                    finish_reason: "tool_calls",
+                    usage: OpenAiUsage::new(10, 2, 7, 3),
+                },
+                &calls,
+            ),
+            concat!(
+                r#"{"id":"msg_test","type":"message","role":"assistant","model":"deepseek-v4-flash","content":["#,
+                r#"{"type":"thinking","thinking":"thinking text","signature":"msg_test"},"#,
+                r#"{"type":"text","text":"done"},"#,
+                r#"{"type":"tool_use","id":"toolu_msg_test_0","name":"bash","input":{"description":"list files","command":"ls -la","timeout":10}}"#,
+                r#"],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":2,"cache_read_input_tokens":7,"cache_creation_input_tokens":3}}"#,
+                "\n"
+            )
+        );
+    }
+
+    #[test]
+    fn anthropic_empty_or_reasoning_only_content_keeps_text_block() {
+        let empty = format_anthropic_message_json(
+            &AnthropicMessageResponse {
+                id: "msg_empty",
+                model: "deepseek-chat",
+                content: "",
+                reasoning: None,
+                finish_reason: "stop",
+                usage: OpenAiUsage::new(3, 1, 0, 0),
+            },
+            &[],
+        );
+        assert!(empty.contains(r#""content":[{"type":"text","text":""}]"#));
+        assert!(empty.contains(r#""stop_reason":"end_turn""#));
+
+        let reasoning_only = format_anthropic_message_json(
+            &AnthropicMessageResponse {
+                id: "msg_reasoning",
+                model: "deepseek-chat",
+                content: "",
+                reasoning: Some("hidden"),
+                finish_reason: "length",
+                usage: OpenAiUsage::new(3, 1, 0, 0),
+            },
+            &[],
+        );
+        let thinking = reasoning_only.find(r#""type":"thinking""#).unwrap();
+        let text = reasoning_only.find(r#""type":"text","text":"""#).unwrap();
+        assert!(thinking < text);
+        assert!(reasoning_only.contains(r#""stop_reason":"max_tokens""#));
     }
 
     #[test]

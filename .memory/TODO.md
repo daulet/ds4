@@ -3076,7 +3076,7 @@
 
 ### M9.7: Responses And Anthropic Protocol Surface
 
-- Status: active
+- Status: active via M9.7b
 - Goal: port Responses and Anthropic request/response/stream protocol surfaces
   that share the server request and tool-memory core.
 - Oracle: C Responses/Anthropic parsers, live-tail/tool-output validation
@@ -3097,6 +3097,65 @@
   and `git diff --check`.
 - Owner path: Rust server protocol modules, `ds4-parity/`,
   `.memory/status.md`.
+
+### M9.7a: Responses And Anthropic Final Response Formatters
+
+- Status: done
+- Goal: port model-free non-streaming Responses and Anthropic response body and
+  HTTP formatting for assistant text, reasoning, tool calls, finish mapping,
+  and cache usage fields.
+- Oracle: C `responses_final_response`, `anthropic_final_response`,
+  `responses_append_function_call_item`, `append_anthropic_content`,
+  `append_responses_usage_json`, `append_anthropic_usage_json`, and associated
+  server unit vectors.
+- Fixture: unit vectors with assistant text, reasoning summaries, empty and
+  reasoning-only Anthropic content, function calls, namespace-restored
+  Responses calls, Responses `tool_search_call` output, plain functions named
+  `tool_search`, finish reasons, and cache read/write usage details.
+- Comparator: Rust formatter tests compare exact JSON/HTTP bodies after
+  injecting deterministic IDs and timestamps for fields that C randomizes.
+- Acceptance: Rust exposes final Responses and Anthropic response formatters
+  that match C protocol semantics without opening sockets, loading a model, or
+  routing through the runtime.
+- Drift policy: random IDs and timestamps are injected in tests; item/event
+  names, finish/status mappings, usage fields, namespace restoration,
+  `tool_search` discrimination, and empty-content behavior are exact.
+- Review gate: ask Claude to review formatter parity against C helpers,
+  especially cache usage clamping, Responses namespace restoration,
+  `tool_search` discrimination, and Anthropic empty content.
+- Validation passed: targeted `cargo test -p ds4-gguf server_response -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and non-interactive Claude review with no blockers.
+- Owner path: `rust/ds4-gguf/src/server_response.rs`,
+  `rust/ds4-gguf/src/lib.rs`, `.memory/status.md`.
+
+### M9.7b: Responses And Anthropic Streaming Event Builders
+
+- Status: active
+- Goal: port model-free Responses and Anthropic SSE event/body builders for
+  reasoning deltas, output text deltas, tool-call lifecycle events, terminal
+  usage events, and Anthropic content-block deltas.
+- Oracle: C `responses_sse_*`, `anthropic_sse_*`, `responses_sse_completed`,
+  `anthropic_sse_finish_live`, and streaming server unit vectors for live
+  reasoning, text, tool use, cache usage, and terminal status.
+- Fixture: unit vectors for Responses created/output_item/content_part/
+  function_call events, Anthropic message/content_block/delta events, partial
+  DSML tool arguments, reasoning close behavior, terminal length/error/tool
+  statuses, and cache usage fields.
+- Comparator: model-free Rust SSE formatter tests comparing event order, event
+  names, JSON payload fields, sequence numbers where applicable, and terminal
+  bodies after deterministic ID/timestamp injection.
+- Acceptance: Rust can format Responses and Anthropic streaming protocol events
+  equivalent to C without needing model-backed runtime integration.
+- Drift policy: event ordering, lifecycle names, status fields, usage fields,
+  and tool argument JSON are exact; random IDs and timestamps are injected.
+- Review gate: ask Claude to review lifecycle ordering and hidden reasoning
+  replay semantics before runtime integration.
+- Validation needed: targeted streaming protocol tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+- Owner path: `rust/ds4-gguf/src/server_response.rs`,
+  `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`, `.memory/status.md`.
 
 ### M9.8: Server Cache, KV Restore, And Tool Memory
 
