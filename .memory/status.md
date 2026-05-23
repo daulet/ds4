@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c3 Anthropic Message And Tool Result Parse Surface
-- Last validated source commit: M9.2c2c Responses live continuation validation
-  parser in this commit; prior pushed source commit
-  `b5ec9e507a6023d67b18111b4a4c802511728359`
+- Active item: M9.2c3a Anthropic Core Message And Control Parse Surface
+- Last validated source commit: M9.2c3 Anthropic parser split in this commit;
+  prior pushed source commit `6c51443c07af95a4b7c3e438ea8dcdb2aa7baea2`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,18 @@
 
 ## Last Evidence
 
+- M9.2c3 was split before implementation because Anthropic core
+  message/system/control parsing, tool schema/tool history parsing, and live
+  tool-result continuation validation have distinct C branches, fixture
+  families, and validation comparators.
+- M9.2c3a now owns Anthropic `messages`, `system`, text content, private system
+  filtering, scalar controls, stop sequences, stream flag, thinking/effort
+  controls, model alias fallbacks, and non-tool prompt rendering.
+- M9.2c3b now owns Anthropic tool schemas, `tool_choice.type`, assistant
+  `tool_use`, user `tool_result`, tool-use IDs, tool-result prompt rendering,
+  and DSML request-history rendering.
+- M9.2c3c now owns Anthropic missing/live `tool_use_id` validation, live-state
+  requirement flags, live tool-use ID collection, and live suffix rendering.
 - M9.2c2c added a Rust `ResponsesLiveState` stub plus request metadata for
   `responses_requires_live_tool_state`, `responses_requires_live_reasoning`,
   `responses_live_call_ids`, and `responses_live_suffix_text`.

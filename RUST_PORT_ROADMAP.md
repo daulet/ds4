@@ -2087,30 +2087,101 @@ Acceptance:
 
 #### M9.2c3: Anthropic Message And Tool Result Parse Surface
 
-- Goal: port model-free Anthropic request parsing for system/content blocks,
-  tools, tool choice, stop sequences, thinking controls, tool-use/tool-result
-  messages, and live-tail validation.
-- Oracle: `parse_anthropic_request`, `parse_anthropic_system`,
-  `parse_anthropic_system_object`, `parse_anthropic_content`,
-  `parse_anthropic_messages`, `anthropic_validate_tool_results`, and
-  `anthropic_prepare_live_continuation`.
-- Fixture: unit vectors for string and block system prompts, text content
-  arrays, tool_use/tool_result blocks, private system filtering,
-  `tool_choice.type`, `stop_sequences`, `output_config.effort`, bare
-  `reasoning_effort`, missing live tool state, and live tool-result suffix
-  rendering.
+- Goal: split the Anthropic parser surface into reviewable core-message,
+  tool-history/schema, and live-continuation work before implementation.
+- Oracle: M9.2c3a through M9.2c3c below, each tied to the current C
+  `parse_anthropic_*` and live validation helpers.
+- Fixture: documentation-only split assigning system/message/control vectors,
+  tool schema/tool history vectors, and live-tail validation vectors to
+  separate commits.
+- Comparator: roadmap and active-board review that every child item has an
+  oracle, fixture, comparator, acceptance rule, drift policy, review gate, and
+  validation gate.
+- Acceptance: the original M9.2c3 scope is fully covered by child items before
+  any source behavior changes.
+- Drift policy: documentation-only; no source behavior drift.
+- Review gate: ask Claude to review boundary completeness and whether any
+  Anthropic C branch is unassigned.
+- Validation gate: roadmap/board diff and `git diff --check`.
+
+#### M9.2c3a: Anthropic Core Message And Control Parse Surface
+
+- Goal: port model-free Anthropic core request parsing for `messages`,
+  `system`, string/text content blocks, private system filtering, scalar
+  generation controls, stop sequences, stream flag, `thinking`,
+  `output_config.effort`, bare `reasoning_effort`, model alias fallbacks, and
+  prompt rendering without tools.
+- Oracle: `parse_anthropic_request`, `parse_anthropic_messages`,
+  `parse_anthropic_content`, `parse_anthropic_content_block` text branches,
+  `parse_anthropic_system`, `parse_anthropic_system_object`,
+  `parse_output_config_effort`, `parse_thinking_control_value`, `parse_stop`,
+  and model alias thinking logic.
+- Fixture: unit vectors for missing messages, string and block system prompts,
+  private system blocks, string content, text content arrays, scalar controls,
+  stop sequences, stream flag, thinking enabled/disabled, `output_config.effort`,
+  bare `reasoning_effort`, and prompt bytes.
 - Comparator: Rust unit tests comparing normalized request fields, rendered
-  prompt/live-tail bytes, stop lists, thinking mode, tool schemas, validation
-  categories, and Anthropic live-state requirement flags.
-- Acceptance: Rust matches current C Anthropic request semantics without
-  emitting Anthropic protocol events, sockets, or model loading. Tests use
-  no-op server state for live validation; actual KV/tool-memory replay side
-  effects remain assigned to M9.8.
-- Drift policy: exact for prompt/live-tail bytes and semantic fields;
-  stable-category comparison for live-state validation errors.
-- Review gate: ask Claude to review Anthropic block parsing, private system
-  filtering, tool-result ID validation, and live-tail construction.
-- Validation gate: targeted Rust Anthropic parser tests,
+  prompt bytes, stop lists, thinking mode, generation controls, stream flag,
+  and stable error categories.
+- Acceptance: Rust matches current C Anthropic core request semantics without
+  tool schemas, tool history, live state, sockets, or model loading.
+- Drift policy: exact for semantic fields and prompt bytes; stable-category
+  comparison for missing/invalid request errors.
+- Review gate: ask Claude to review system block filtering, text-content
+  parsing, stop/thinking controls, effort precedence, and prompt bytes.
+- Validation gate: targeted Rust Anthropic core parser tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M9.2c3b: Anthropic Tool Schema And Tool History Parse Surface
+
+- Goal: port model-free Anthropic tool schemas, `tool_choice.type`,
+  assistant `tool_use` content blocks, user `tool_result` blocks, tool-use IDs,
+  tool result prompt rendering, and DSML request-history rendering.
+- Oracle: `parse_anthropic_request` tool/tool_choice branches,
+  `parse_tools_value`, `parse_anthropic_content_block` `tool_use` and
+  `tool_result` branches, `chat_msg_add_tool_call_id`, and
+  `render_chat_prompt_text`.
+- Fixture: unit vectors for direct Anthropic tool schemas, OpenAI-compatible
+  wrapped tools when accepted by shared parsing, tool_choice auto/any/none,
+  assistant tool_use blocks with ordered object input, user tool_result blocks
+  with string and content-array bodies, delimiter escaping, and prompt bytes.
+- Comparator: Rust unit tests comparing tool schema lines, `ToolSchemaOrder`
+  property order, parsed `ToolCall` fields and IDs, tool-result call IDs,
+  rendered DSML, prompt bytes, and tool-choice suppression.
+- Acceptance: Rust matches current C Anthropic tool schema and visible tool
+  history semantics without live tool-result validation or protocol response
+  emission.
+- Drift policy: exact for schema/property order, tool IDs, tool/result body
+  text, prompt bytes, and DSML rendering.
+- Review gate: ask Claude to review tool_use input parsing, tool_result body
+  handling, tool_choice behavior, call-id preservation, and prompt rendering.
+- Validation gate: targeted Rust Anthropic tool parser tests,
+  `cargo test --workspace`, and `git diff --check`.
+
+#### M9.2c3c: Anthropic Live Tool Result Validation Surface
+
+- Goal: port model-free Anthropic live continuation validation outputs:
+  missing `tool_use_id` errors, live-state requirement flags, live tool-use ID
+  collection, and visible live suffix rendering for trailing tool results.
+- Oracle: `anthropic_validate_tool_results`,
+  `anthropic_prepare_live_continuation`, `anthropic_msg_is_tool_result_tail`,
+  `responses_find_prior_call_msg`, `chat_msg_collect_tool_call_ids`,
+  `render_live_tool_tail`, and related C unit vectors.
+- Fixture: unit vectors for tool-result-only missing state, live-known
+  tool-result-only continuation, stateless replay with prior assistant
+  `tool_use`, role/order edge cases where `tool_use` appears before `role`,
+  and live suffix text.
+- Comparator: Rust unit tests using an explicit no-op/live stub state to
+  compare validation category, requirement flags, collected tool-use IDs, and
+  live-tail prompt bytes.
+- Acceptance: Rust reports the same Anthropic live-continuation parser state as
+  C without touching real server KV/tool-memory side effects, which remain
+  assigned to M9.8.
+- Drift policy: exact for error strings, live-state requirement flags,
+  tool-use ID ordering/deduplication, and live-tail bytes.
+- Review gate: ask Claude to review missing-state rejection, live-state flag
+  assignment, prior tool_use detection, and live-tail construction.
+- Validation gate: targeted Rust Anthropic live-tail tests,
   `cargo test --workspace`, and `git diff --check`.
 
 #### M9.3: Rust HTTP Skeleton And Model Metadata Endpoints
