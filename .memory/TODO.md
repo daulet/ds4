@@ -3182,7 +3182,7 @@
 
 ### M9.8b: Tool-Memory Replay Core
 
-- Status: active
+- Status: done
 - Goal: port exact sampled DSML tool-call memory replay for OpenAI/Responses
   and Anthropic histories before prompt rendering.
 - Oracle: C tests `test_tool_memory_replays_sampled_dsml`,
@@ -3202,7 +3202,11 @@
   outcomes.
 - Review gate: ask Claude to review raw-vs-canonical DSML selection and missing
   id stats.
-- Validation needed: targeted tool-memory tests, `cargo test --workspace`,
+- Validation passed: targeted `cargo test -p ds4-gguf tool_memory -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, NUL scan over touched Rust files, and non-interactive
+  Claude review with no blockers.
+- Validation gate: targeted tool-memory tests, `cargo test --workspace`,
   `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
   review with no blockers.
 - Owner path: Rust server chat/prompt/tool-memory modules and
@@ -3210,7 +3214,7 @@
 
 ### M9.8c: Live Continuation And Visible-Prefix State
 
-- Status: pending
+- Status: active
 - Goal: port server live continuation matching for Responses, Anthropic, and
   hidden-reasoning visible-prefix replay.
 - Oracle: C tests `test_anthropic_live_tail_renders_tool_results_only`,

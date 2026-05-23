@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8b Tool-Memory Replay Core
-- Last validated source commit: M9.8a server cache/KV/tool-memory work item
-  split in this commit; prior pushed source commit
-  `b73f2db41809587f2f1cee2ba9c8f83af907a087`
+- Active item: M9.8c Live Continuation And Visible-Prefix State
+- Last validated source commit: M9.8b tool-memory replay core in this commit;
+  prior pushed source commit `975e87c0bc861f080368218c4613083bc48207e3`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,22 @@
 
 ## Last Evidence
 
+- M9.8b adds a Rust `ToolMemory` core that stores exact sampled DSML blocks by
+  tool-call id, tracks RAM versus disk source for replay stats, upgrades disk
+  entries to RAM on matching sampled replay, and prunes least-recently-used ids
+  under configured entry/byte limits.
+- M9.8b `ToolMemory::attach_to_messages` mirrors C
+  `tool_memory_attach_to_messages`: it only attaches raw DSML when every tool
+  call id in a message resolves to the same sampled DSML block, otherwise it
+  records canonical fallback and missing-id counts without mutating the message.
+- M9.8b prompt-rendering tests cover OpenAI/Responses sampled DSML replay,
+  Anthropic sampled DSML replay, missing-id canonical fallback, split-block
+  canonical fallback, disk source stats, LRU pruning after lookup touch, and
+  disk-to-RAM source upgrade without duplicate entries.
+- M9.8b validation passed targeted `cargo test -p ds4-gguf tool_memory --
+  --nocapture`, full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, NUL scan over touched Rust files, and non-interactive
+  Claude review with no blockers.
 - M9.8a splits the broad server cache, KV restore, continued-frontier, eviction,
   and tool-memory item into separately reviewable stages: tool-memory replay
   core (M9.8b), live continuation/visible-prefix state (M9.8c), disk-KV policy

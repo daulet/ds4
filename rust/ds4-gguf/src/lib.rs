@@ -15,6 +15,7 @@ pub mod server_no_model;
 pub mod server_response;
 pub mod session_payload;
 mod tokenizer;
+pub mod tool_memory;
 
 pub use agent_dsml::{
     hex as agent_dsml_hex, AgentDsmlParser, AgentDsmlState, AgentToolArg, AgentToolCall,
@@ -71,6 +72,10 @@ pub use server_response::{
     ResponsesFinalResponse, ResponsesStreamResponse,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
+pub use tool_memory::{
+    ToolMemory, ToolMemorySource, ToolReplayStats, TOOL_MEMORY_DEFAULT_MAX_IDS,
+    TOOL_MEMORY_MAX_BYTES,
+};
 
 const GGUF_MAGIC: u32 = 0x4655_4747;
 const MAX_DIMS: usize = 8;
