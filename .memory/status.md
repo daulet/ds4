@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5b Rust Decode Call-Order And State Plan
-- Last validated source commit: M10.5a Rust GPU sys ABI surface in this commit;
-  prior pushed source commit `6e2dc0f5654dfa52ea84a739f67b9e32af93e94f`
+- Active item: M10.5c Rust Single-Token Decode Graph Execution
+- Last validated source commit: M10.5b Rust decode call-order and state plan in
+  this commit; prior pushed source commit
+  `0283f8946ecf134db3d602134528de775bd78b79`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,32 @@
 
 ## Last Evidence
 
+- M10.5b adds the no-execute Rust decode plan in
+  `rust/ds4-gpu/src/decode_plan.rs`. It mirrors the default
+  `metal_graph_eval_token_raw_swa` scheduling surface without backend calls:
+  token-level stage order, layer profile stage order, one begin/end command
+  pair, default split flush after layer 3, post-end logits read policy, raw SWA
+  row/span/start math, DS4 layer compression counts, ratio-4 and ratio-128
+  compressed-row counter transitions, and the strict `> 512` ratio-4 indexed
+  attention threshold.
+- M10.5b commits the current-C oracle at
+  `ds4-parity/baselines/graph/m10.5b/decode-plan-oracle.json`, covering
+  first-token, short-prefill decode, ratio-boundary emission, long indexed
+  decode, and no-logits/no-split cases under the same default fusion and
+  directional-steering-disabled assumptions used by M10.4.
+- M10.5b adds `ds4-parity/compare_decode_plan_rust.py`, which compares the
+  Rust source constants against the JSON oracle and fails closed on in-memory
+  stage-order, raw-start, and indexed-layer-count mutations. It is wired into
+  the unified parity report as `M10.5b Rust decode plan comparator`.
+- M10.5b validation passed `cargo test -p ds4-gpu decode_plan --lib`,
+  `python3 ds4-parity/compare_decode_plan_rust.py`, `python3
+  ds4-parity/compare_decode_plan_rust.py --negative-test`, `python3 -m
+  json.tool ds4-parity/baselines/graph/m10.5b/decode-plan-oracle.json`,
+  `python3 -m py_compile ds4-parity/compare_decode_plan_rust.py
+  ds4-parity/run_parity_report.py`, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with `15 passed, 10 skipped, 0 failed`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, NUL scan over
+  touched files, and non-interactive Claude review with `NO BLOCKERS`.
 - M10.5a splits the broad one-token decode scheduler step into reviewable
   ABI-surface, call-order/state-plan, and backend-execution stages before
   M10.6 prefill. The completed ABI slice exposes all 81 M10.2 graph backend

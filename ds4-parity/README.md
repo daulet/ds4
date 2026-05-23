@@ -189,6 +189,20 @@ M10.2 oracle is declared in Rust with matching return and parameter types. Its
 negative test removes one Rust declaration and mutates both Rust-side and
 C-header parameter types in memory.
 
+Compare the Rust M10.5b no-execute decode plan against the current-C decode
+plan oracle:
+
+```sh
+python3 ds4-parity/compare_decode_plan_rust.py
+python3 ds4-parity/compare_decode_plan_rust.py --negative-test
+```
+
+The decode plan oracle records the default `metal_graph_eval_token_raw_swa`
+stage order, split-flush boundary, raw SWA row math, and compressed/indexer
+counter transitions for representative first-token, short-prefill,
+ratio-boundary, long-indexed, and no-logits cases. The negative test mutates a
+stage, raw-start value, and indexed-layer count in memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

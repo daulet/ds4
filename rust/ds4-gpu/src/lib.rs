@@ -8,6 +8,7 @@ use core::ptr::NonNull;
 
 pub use ds4_gpu_sys as sys;
 
+pub mod decode_plan;
 pub mod graph_plan;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

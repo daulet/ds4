@@ -3650,7 +3650,7 @@
 
 ### M10.5b: Rust Decode Call-Order And State Plan
 
-- Status: active
+- Status: done
 - Goal: model one-token raw-SWA decode scheduling in Rust as an executable
   plan/trace before launching backend kernels.
 - Oracle: C `metal_graph_eval_token_raw_swa`,
@@ -3667,15 +3667,17 @@
   counters, and command boundaries are exact; tensor values remain out of
   scope.
 - Review gate: ask Claude to review decode ordering and cache-state modeling.
-- Validation needed: targeted Rust tests, plan comparator with negative test,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
-  and non-interactive Claude review with no blockers.
+- Validation passed: targeted Rust decode-plan tests, plan comparator with
+  negative test, JSON syntax check, Python syntax check, unified
+  comparator-only parity report, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, NUL scan over touched files, and
+  non-interactive Claude review with no blockers.
 - Owner path: Rust graph decode modules, backend facade, B300 comparator,
   `.memory/status.md`.
 
 ### M10.5c: Rust Single-Token Decode Graph Execution
 
-- Status: pending
+- Status: active
 - Goal: move one-token decode scheduling for the target model into Rust while
   calling existing backend primitives through the M10.5a FFI surface.
 - Oracle: M10.4 decode checkpoints and the M10.5b call-order plan.
