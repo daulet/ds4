@@ -18407,6 +18407,282 @@ cleanup:
     return rc;
 }
 
+int ds4_dump_layer2_attn_output_oracle_json(const char *model_path, int token, FILE *fp) {
+    if (!model_path || !fp || token < 0 || token >= DS4_N_VOCAB) return 1;
+
+    ds4_model model = { .fd = -1 };
+    ds4_weights weights;
+    memset(&weights, 0, sizeof(weights));
+
+    const uint32_t ctx_size = 32768u;
+    const uint32_t prefill_cap = metal_graph_prefill_cap_for_prompt((int)ctx_size);
+    const uint32_t raw_cap = metal_graph_raw_cap_for_context((int)ctx_size, prefill_cap);
+    uint32_t raw_window = DS4_N_SWA;
+    if (raw_window > ctx_size) raw_window = ctx_size;
+    if (raw_window == 0) raw_window = 1;
+    const uint32_t raw_row = 0;
+    const uint32_t n_raw = 1;
+    const uint32_t raw_start = 0;
+    const uint32_t n_comp = 0;
+    const uint32_t n_selected = 0;
+    const uint32_t layer_id = 2;
+    const uint32_t ratio = 4;
+    const uint32_t coff = 2;
+    const uint32_t emit = 0;
+    const uint64_t hc_dim = (uint64_t)DS4_N_EMBD * DS4_N_HC;
+    const uint64_t raw_row_dim = DS4_N_HEAD_DIM;
+    const uint64_t q_dim = (uint64_t)DS4_N_HEAD * DS4_N_HEAD_DIM;
+    const uint32_t n_groups = DS4_N_OUT_GROUP;
+    const uint32_t group_heads = DS4_N_HEAD / n_groups;
+    const uint64_t group_dim = (uint64_t)DS4_N_HEAD_DIM * group_heads;
+    const uint64_t rank = DS4_N_LORA_O;
+    const uint64_t low_dim = (uint64_t)n_groups * rank;
+    const uint64_t attn_state_dim = (uint64_t)(coff * DS4_N_HEAD_DIM) * (coff * ratio);
+    const uint64_t index_state_dim = (uint64_t)(coff * DS4_N_INDEXER_HEAD_DIM) * (coff * ratio);
+    const float rope_freq_scale = 1.0f / DS4_ROPE_SCALE_FACTOR;
+    const float rope_attn_factor = 1.0f / (1.0f + 0.1f * logf(1.0f / rope_freq_scale));
+
+    float *after_layer1_hc = NULL;
+    float *raw_cache_row = NULL;
+    float *attn_state_kv = NULL;
+    float *attn_state_score = NULL;
+    float *index_state_kv = NULL;
+    float *index_state_score = NULL;
+    float *heads = NULL;
+    float *attn_low = NULL;
+    float *attn_out = NULL;
+    float *after_attn_hc = NULL;
+    ds4_gpu_graph g;
+    memset(&g, 0, sizeof(g));
+    bool graph_touched = false;
+    bool commands_started = false;
+    int rc = 1;
+
+    model_open(&model, model_path, false, false);
+    config_validate_model(&model);
+    weights_bind(&weights, &model);
+
+    after_layer1_hc = xmalloc((size_t)hc_dim * sizeof(after_layer1_hc[0]));
+    raw_cache_row = xmalloc((size_t)raw_row_dim * sizeof(raw_cache_row[0]));
+    attn_state_kv = xmalloc((size_t)attn_state_dim * sizeof(attn_state_kv[0]));
+    attn_state_score = xmalloc((size_t)attn_state_dim * sizeof(attn_state_score[0]));
+    index_state_kv = xmalloc((size_t)index_state_dim * sizeof(index_state_kv[0]));
+    index_state_score = xmalloc((size_t)index_state_dim * sizeof(index_state_score[0]));
+    heads = xmalloc((size_t)q_dim * sizeof(heads[0]));
+    attn_low = xmalloc((size_t)low_dim * sizeof(attn_low[0]));
+    attn_out = xmalloc((size_t)DS4_N_EMBD * sizeof(attn_out[0]));
+    after_attn_hc = xmalloc((size_t)hc_dim * sizeof(after_attn_hc[0]));
+
+    bool ok = ds4_gpu_init() != 0;
+    if (ok) ok = ds4_gpu_set_model_fd(model.fd) != 0;
+    if (ok) {
+        ok = ds4_gpu_set_model_map_range(model.map,
+                                         model.size,
+                                         model.tensor_data_pos,
+                                         model.size - model.tensor_data_pos) != 0;
+    }
+    if (ok) {
+        graph_touched = true;
+        ok = metal_graph_alloc_raw_cap(&g, &weights, &weights.layer[0],
+                                       raw_cap, ctx_size, prefill_cap, false);
+    }
+    if (ok) {
+        commands_started = ds4_gpu_begin_commands() != 0;
+        ok = commands_started;
+    }
+    if (ok) {
+        ok = ds4_gpu_embed_token_hc_tensor(g.cur_hc,
+                                           model.map,
+                                           model.size,
+                                           weights.token_embd->abs_offset,
+                                           (uint32_t)weights.token_embd->dim[1],
+                                           (uint32_t)token,
+                                           DS4_N_EMBD,
+                                           DS4_N_HC) != 0;
+    }
+    for (uint32_t il = 0; ok && il < 2; il++) {
+        ok = metal_graph_encode_decode_layer(&g,
+                                             &model,
+                                             &weights.layer[il],
+                                             il,
+                                             0,
+                                             g.layer_raw_cache[il],
+                                             g.raw_cap,
+                                             raw_row,
+                                             n_raw,
+                                             token);
+        if (ok) {
+            ds4_gpu_tensor *tmp = g.cur_hc;
+            g.cur_hc = g.after_ffn_hc;
+            g.after_ffn_hc = tmp;
+        }
+    }
+    if (ok) {
+        ok = metal_graph_encode_decode_layer(&g,
+                                             &model,
+                                             &weights.layer[layer_id],
+                                             layer_id,
+                                             0,
+                                             g.layer_raw_cache[layer_id],
+                                             g.raw_cap,
+                                             raw_row,
+                                             n_raw,
+                                             token);
+    }
+    if (commands_started) {
+        if (ok) ok = ds4_gpu_end_commands() != 0;
+        else (void)ds4_gpu_synchronize();
+    }
+    if (ok) {
+        ok = ds4_gpu_tensor_read(g.cur_hc, 0, after_layer1_hc, hc_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.layer_raw_cache[layer_id],
+                                 (uint64_t)raw_row * DS4_N_HEAD_DIM * sizeof(float),
+                                 raw_cache_row,
+                                 raw_row_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.layer_attn_state_kv[layer_id],
+                                 0,
+                                 attn_state_kv,
+                                 attn_state_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.layer_attn_state_score[layer_id],
+                                 0,
+                                 attn_state_score,
+                                 attn_state_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.layer_index_state_kv[layer_id],
+                                 0,
+                                 index_state_kv,
+                                 index_state_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.layer_index_state_score[layer_id],
+                                 0,
+                                 index_state_score,
+                                 index_state_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.heads, 0, heads, q_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.attn_low, 0, attn_low, low_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.attn_out, 0, attn_out, (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(g.after_attn_hc, 0, after_attn_hc, hc_dim * sizeof(float)) != 0;
+    }
+    if (!ok) goto cleanup;
+
+    const ds4_layer_weights *layer = &weights.layer[layer_id];
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.layer2_attn_output_oracle.v1\",\n", fp);
+    fputs("  \"case\": \"token0_layer2_attn_output\",\n", fp);
+    fputs("  \"source\": \"current-c\",\n", fp);
+    fputs("  \"model\": {\n", fp);
+    fprintf(fp, "    \"mapped_size\": %" PRIu64 ",\n", model.size);
+    fprintf(fp, "    \"tensor_count\": %" PRIu64 ",\n", model.n_tensors);
+    fprintf(fp, "    \"tensor_data_offset\": %" PRIu64 ",\n", model.tensor_data_pos);
+    fprintf(fp, "    \"bound_layers\": %u\n", (unsigned)DS4_N_LAYER);
+    fputs("  },\n", fp);
+    fputs("  \"operation\": {\n", fp);
+    fputs("    \"name\": \"current_c_gpu_layer2_attn_output\",\n", fp);
+    fputs("    \"method\": \"metal_graph_encode_decode_layer_x2+swap_cur_after_ffn_hc+metal_graph_encode_decode_layer_layer2_read_attn_output\",\n", fp);
+    fprintf(fp, "    \"token\": %d,\n", token);
+    fputs("    \"first_layer\": 0,\n", fp);
+    fputs("    \"last_dense_layer\": 1,\n", fp);
+    fputs("    \"compressed_layer\": 2,\n", fp);
+    fputs("    \"position\": 0,\n", fp);
+    fputs("    \"decoded_layers\": 3,\n", fp);
+    fputs("    \"dense_layers\": 2,\n", fp);
+    fputs("    \"compression\": \"ratio4\",\n", fp);
+    fprintf(fp, "    \"compression_ratio\": %u,\n", ratio);
+    fprintf(fp, "    \"compressor_coefficient\": %u,\n", coff);
+    fprintf(fp, "    \"emit_compressed_row\": %u,\n", emit);
+    fprintf(fp, "    \"ctx_size\": %u,\n", ctx_size);
+    fprintf(fp, "    \"prefill_cap\": %u,\n", prefill_cap);
+    fprintf(fp, "    \"raw_cap\": %u,\n", raw_cap);
+    fprintf(fp, "    \"raw_window\": %u,\n", raw_window);
+    fprintf(fp, "    \"raw_row\": %u,\n", raw_row);
+    fprintf(fp, "    \"raw_start\": %u,\n", raw_start);
+    fprintf(fp, "    \"n_raw\": %u,\n", n_raw);
+    fprintf(fp, "    \"n_comp\": %u,\n", n_comp);
+    fprintf(fp, "    \"n_selected\": %u,\n", n_selected);
+    fputs("    \"use_mask\": 0,\n", fp);
+    fprintf(fp, "    \"layer_comp_cap\": %u,\n", g.layer_comp_cap[layer_id]);
+    fprintf(fp, "    \"layer_n_comp\": %u,\n", g.layer_n_comp[layer_id]);
+    fprintf(fp, "    \"layer_n_index_comp\": %u,\n", g.layer_n_index_comp[layer_id]);
+    fprintf(fp, "    \"n_embd\": %u,\n", (unsigned)DS4_N_EMBD);
+    fprintf(fp, "    \"n_hc\": %u,\n", (unsigned)DS4_N_HC);
+    fprintf(fp, "    \"hc_dim\": %" PRIu64 ",\n", hc_dim);
+    fprintf(fp, "    \"q_dim\": %" PRIu64 ",\n", q_dim);
+    fprintf(fp, "    \"head_dim\": %u,\n", (unsigned)DS4_N_HEAD_DIM);
+    fprintf(fp, "    \"indexer_head_dim\": %u,\n", (unsigned)DS4_N_INDEXER_HEAD_DIM);
+    fprintf(fp, "    \"attn_state_dim\": %" PRIu64 ",\n", attn_state_dim);
+    fprintf(fp, "    \"index_state_dim\": %" PRIu64 ",\n", index_state_dim);
+    fprintf(fp, "    \"n_head\": %u,\n", (unsigned)DS4_N_HEAD);
+    fprintf(fp, "    \"n_head_kv\": %u,\n", (unsigned)DS4_N_HEAD_KV);
+    fprintf(fp, "    \"n_rot\": %u,\n", (unsigned)DS4_N_ROT);
+    fprintf(fp, "    \"n_groups\": %u,\n", n_groups);
+    fprintf(fp, "    \"group_heads\": %u,\n", group_heads);
+    fprintf(fp, "    \"group_dim\": %" PRIu64 ",\n", group_dim);
+    fprintf(fp, "    \"rank\": %" PRIu64 ",\n", rank);
+    fprintf(fp, "    \"low_dim\": %" PRIu64 ",\n", low_dim);
+    fprintf(fp, "    \"rope_freq_base\": %.9g,\n", (double)DS4_COMPRESS_ROPE_FREQ_BASE);
+    fprintf(fp, "    \"rope_freq_scale\": %.9g,\n", (double)rope_freq_scale);
+    fputs("    \"rope_ext_factor\": 1,\n", fp);
+    fprintf(fp, "    \"rope_attn_factor\": %.9g,\n", (double)rope_attn_factor);
+    fprintf(fp, "    \"rope_yarn_beta_fast\": %.9g,\n", (double)DS4_ROPE_YARN_BETA_FAST);
+    fprintf(fp, "    \"rope_yarn_beta_slow\": %.9g,\n", (double)DS4_ROPE_YARN_BETA_SLOW);
+    fprintf(fp, "    \"rope_orig_ctx\": %u,\n", (unsigned)DS4_ROPE_ORIG_CTX);
+    fprintf(fp, "    \"rms_eps\": %.9g,\n", (double)DS4_RMS_EPS);
+    fprintf(fp, "    \"hc_eps\": %.9g\n", (double)DS4_HC_EPS);
+    fputs("  },\n", fp);
+    fputs("  \"weights\": {\n", fp);
+    layer0_attn_oracle_write_weight(fp, "token_embd", "base.token_embd", weights.token_embd, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_hc_attn_fn", "layer2.hc_attn_fn", layer->hc_attn_fn, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_hc_attn_scale", "layer2.hc_attn_scale", layer->hc_attn_scale, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_hc_attn_base", "layer2.hc_attn_base", layer->hc_attn_base, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_norm", "layer2.attn_norm", layer->attn_norm, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_q_a", "layer2.attn_q_a", layer->attn_q_a, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_kv", "layer2.attn_kv", layer->attn_kv, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_q_a_norm", "layer2.attn_q_a_norm", layer->attn_q_a_norm, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_kv_a_norm", "layer2.attn_kv_a_norm", layer->attn_kv_a_norm, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_q_b", "layer2.attn_q_b", layer->attn_q_b, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_compressor_kv", "layer2.attn_compressor_kv", layer->attn_compressor_kv, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_compressor_gate", "layer2.attn_compressor_gate", layer->attn_compressor_gate, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_compressor_ape", "layer2.attn_compressor_ape", layer->attn_compressor_ape, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_compressor_norm", "layer2.attn_compressor_norm", layer->attn_compressor_norm, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_indexer_compressor_kv", "layer2.indexer_compressor_kv", layer->indexer_compressor_kv, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_indexer_compressor_gate", "layer2.indexer_compressor_gate", layer->indexer_compressor_gate, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_indexer_compressor_ape", "layer2.indexer_compressor_ape", layer->indexer_compressor_ape, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_indexer_compressor_norm", "layer2.indexer_compressor_norm", layer->indexer_compressor_norm, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_sinks", "layer2.attn_sinks", layer->attn_sinks, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_output_a", "layer2.attn_output_a", layer->attn_output_a, true);
+    layer0_attn_oracle_write_weight(fp, "layer2_attn_output_b", "layer2.attn_output_b", layer->attn_output_b, false);
+    fputs("  },\n", fp);
+    fputs("  \"outputs\": {\n", fp);
+    layer0_attn_oracle_write_output(fp, "after_layer1_hc", after_layer1_hc, hc_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_raw_cache_row", raw_cache_row, raw_row_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_attn_state_kv", attn_state_kv, attn_state_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_attn_state_score", attn_state_score, attn_state_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_index_state_kv", index_state_kv, index_state_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_index_state_score", index_state_score, index_state_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_heads", heads, q_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_attn_low", attn_low, low_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_attn_out", attn_out, DS4_N_EMBD, true);
+    layer0_attn_oracle_write_output(fp, "layer2_after_attn_hc", after_attn_hc, hc_dim, false);
+    fputs("  }\n", fp);
+    fputs("}\n", fp);
+    rc = ferror(fp) ? 1 : 0;
+
+cleanup:
+    if (graph_touched) metal_graph_free(&g);
+    ds4_gpu_cleanup();
+    weights_free(&weights);
+    model_close(&model);
+    free(after_attn_hc);
+    free(attn_out);
+    free(attn_low);
+    free(heads);
+    free(index_state_score);
+    free(index_state_kv);
+    free(attn_state_score);
+    free(attn_state_kv);
+    free(raw_cache_row);
+    free(after_layer1_hc);
+    return rc;
+}
+
 static void sampling_oracle_trace_free(sampling_oracle_trace *t) {
     free(t->filtered);
     t->filtered = NULL;

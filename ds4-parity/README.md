@@ -516,6 +516,27 @@ python3 ds4-parity/compare_decode_layer2_compressor_state.py \
   --candidate /tmp/ds4-c2b2b2b2b2b2b1-layer2-compressor-state-rust.json
 ```
 
+Compare the M10.5c4c2b2b2b2b2b2b2a Rust layer-2 attention-output body before
+adding the layer-2 FFN, remaining layers, and final logits:
+
+```sh
+python3 ds4-parity/compare_decode_layer2_attn_output.py
+python3 ds4-parity/compare_decode_layer2_attn_output.py --negative-test
+```
+
+The comparator checks that `ds4-layer2-attn-output-oracle-dump` emits the
+current-C GPU tensor path through dense layers 0 and 1, the production HC
+buffer swap after each dense layer, and layer 2 through compressor-state
+mutation, raw-only attention decode, inverse compressed RoPE, attention output,
+and after-attention HC expansion. On B300, validate the current-C oracle and
+Rust readback together:
+
+```sh
+python3 ds4-parity/compare_decode_layer2_attn_output.py \
+  --oracle /tmp/ds4-c2b2b2b2b2b2b2a-layer2-attn-output-oracle.json \
+  --candidate /tmp/ds4-c2b2b2b2b2b2b2a-layer2-attn-output-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

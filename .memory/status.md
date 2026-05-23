@@ -3,10 +3,12 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2b2 Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b2b2b2b2b2b2b Rust One-Token Decode B300 Execution
 - Last validated source commit before the current stage:
-  `780afaada4958f10828c5507215030b3231c2003` (M10.5c4c2b2b2b2b2b2a Rust
-  two-dense-layer output-head execution).
+  `d1a72f183a05bb8785239b5ed994da290447227a` (M10.5c4c2b2b2b2b2b2b1 Rust
+  layer-2 compressor-state execution; this stage's layer-2 attention-output
+  validation is recorded below and its commit SHA is not available until this
+  staged change lands).
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +28,58 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2b2a adds
+  `ds4-layer2-attn-output-oracle-dump` and
+  `ds4_dump_layer2_attn_output_oracle_json`, which emit
+  `ds4.layer2_attn_output_oracle.v1` for token `0`, position `0`, dense
+  layers `0` and `1` through the production current-C decode-layer encoder and
+  HC swaps, then layer `2` through the production decode-layer path while
+  reading the layer-2 raw cache row, compressor frontier state, attention heads
+  after inverse compressed RoPE, attention low/output tensors, and
+  `after_attn_hc`.
+- M10.5c4c2b2b2b2b2b2b2a adds
+  `ds4-decode-layer2-attn-output`, which maps the real GGUF on B300, binds DS4
+  weights, launches the validated dense layer `0`/`1` prefix, swaps HC buffers
+  after each dense layer, executes layer `2` Q/KV/RoPE, raw KV store, attention
+  and indexer compressor-state mutation, then runs raw-only
+  `attention_decode_heads`, inverse compressed `rope_tail`,
+  `attention_output_low_q8`, and `matmul_q8_0_hc_expand` through the safe Rust
+  facade.
+- The B300 paired layer-2 attention-output validator passed 815 pinned checks
+  with full-buffer FNV digests `after_layer1_hc=f764d7067de5c945`,
+  `layer2_raw_cache_row=51f0a2971a59c6da`,
+  `layer2_attn_state_kv=57544afc0dfa6bcf`,
+  `layer2_attn_state_score=38d2d40c6f170ab6`,
+  `layer2_index_state_kv=2a44d6b140b6ef0b`,
+  `layer2_index_state_score=b8da053681327aec`,
+  `layer2_heads=241a32d72fe7885b`,
+  `layer2_attn_low=6d33e52dbc93ed09`,
+  `layer2_attn_out=c5a61256ab424d80`, and
+  `layer2_after_attn_hc=9c038ab7c95176b4`. Pinned layer-2 attention-output
+  weights include `layer2_attn_sinks=(79275269952,256,0,f32)`,
+  `layer2_attn_output_a=(79315790400,35651584,8,q8_0)`, and
+  `layer2_attn_output_b=(79351441984,35651584,8,q8_0)`.
+- M10.5c4c2b2b2b2b2b2b2a validation passed `python3
+  ds4-parity/compare_decode_layer2_attn_output.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer2_attn_output.py`, `python3 -m py_compile
+  ds4-parity/compare_decode_layer2_attn_output.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer2-attn-output-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer2-attn-output`, B300 current-C oracle plus Rust candidate
+  paired validation with artifact SHA256
+  `oracle=728fa6b858f9ff6669424eac7691b65d1ffe9d78e9c5f7cbe85c412cc5ce80a7`
+  and
+  `rust=8b561a5eca4874bb4ba6bbf5bc83080d761f294a7cce839435c5815ff2db9ca3`,
+  B300 c2b2b2b2b2b2b1 layer-2 compressor-state rerun with 589 checks, local
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 34
+  passed, 24 skipped, and 0 failed, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, and a touched-file NUL scan.
+- M10.5c4c2b2b2b2b2b2b2 splits the remaining one-token scheduler item into a
+  layer-2 attention-output execution bridge and the next full scheduler/logits
+  slice M10.5c4c2b2b2b2b2b2b2b. The split keeps the next commit comparable at
+  the raw-only layer-2 attention, inverse compressed RoPE, attention projection,
+  and HC expansion boundary before the layer-2 FFN and remaining scheduler are
+  introduced together.
 - M10.5c4c2b2b2b2b2b2b1 adds
   `ds4-layer2-compressor-state-oracle-dump` and
   `ds4_dump_layer2_compressor_state_oracle_json`, which emit

@@ -4342,11 +4342,78 @@
 
 ### M10.5c4c2b2b2b2b2b2b2: Rust One-Token Decode B300 Execution
 
+- Status: split
+- Split into M10.5c4c2b2b2b2b2b2b2a and
+  M10.5c4c2b2b2b2b2b2b2b so the layer-2 attention-output boundary is compared
+  after the first compressor-state mutation, before the remaining FFN,
+  all-layer scheduler, and final logits are introduced together.
+
+### M10.5c4c2b2b2b2b2b2b2a: Rust Layer-2 Attention Output B300 Execution
+
+- Status: done
+- Goal: execute dense layers `0` and `1`, then execute layer `2` through
+  raw-only attention decode, inverse compressed RoPE, low-rank attention output
+  projection, and HC expansion on B300 without yet taking the layer-2 FFN,
+  remaining layers, or final logits.
+- Oracle: the current-C GPU path for token `0`, position `0`, layers `0` and
+  `1` through production decode-layer plus HC swaps, followed by production
+  layer `2` decode. The oracle reads the layer-2 raw cache row, compressor
+  frontier state, attention heads after inverse compressed RoPE, attention
+  low/output tensors, and `after_attn_hc` after production layer `2`.
+- Fixture: B300 `ds4flash.gguf`, token `0`, position `0`, dense layers `0` and
+  `1`, ratio-4 layer `2`, `raw_row=0`, `n_raw=1`, `raw_start=0`,
+  `n_comp=0`, no indexed compressed rows, `emit_compressed_row=false`,
+  `layer_n_comp[2]=0`, and `layer_n_index_comp[2]=0`.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests for `after_layer1_hc`, layer-2 raw/cache state,
+  `layer2_heads`, `layer2_attn_low`, `layer2_attn_out`, and
+  `layer2_after_attn_hc`, plus pinned attention-output weight metadata and
+  exact raw/compressed counter fields.
+- Acceptance: Rust launches the validated dense layer `0`/`1` prefix and
+  layer-2 compressor-state prefix, then runs raw-only `attention_decode_heads`,
+  inverse compressed `rope_tail`, `attention_output_low_q8`, and
+  `matmul_q8_0_hc_expand` through the safe facade, matching the current-C GPU
+  oracle on B300.
+- Drift policy: layer id, ratio, `n_raw`, `raw_start`, `n_comp`, selected row
+  count, tensor byte sizes, and FNV digests are exact; selected f32 samples may
+  differ only by JSON formatting and must stay within `1e-6` relative or
+  absolute tolerance.
+- Review gate: ask Claude to review the no-compressed-row attention branch,
+  inverse compressed RoPE settings, attention-output dimensions, and HC
+  expansion input selection.
+- Validation needed: layer-2 attention-output comparator with negative test,
+  B300 current-C oracle plus Rust candidate paired validation, `make
+  ds4-layer2-attn-output-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-layer2-attn-output`, c2b2b2b2b2b2b1 layer-2 compressor-state
+  rerun, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
+- Owner path: current-C layer-2 attention-output oracle helper, Rust layer-2
+  attention-output JSON, paired comparator, `.memory/status.md`.
+- Evidence: B300 layer-2 attention-output paired validation passed 815 pinned
+  checks with `after_layer1_hc=f764d7067de5c945`,
+  `layer2_raw_cache_row=51f0a2971a59c6da`,
+  `layer2_attn_state_kv=57544afc0dfa6bcf`,
+  `layer2_attn_state_score=38d2d40c6f170ab6`,
+  `layer2_index_state_kv=2a44d6b140b6ef0b`,
+  `layer2_index_state_score=b8da053681327aec`,
+  `layer2_heads=241a32d72fe7885b`,
+  `layer2_attn_low=6d33e52dbc93ed09`,
+  `layer2_attn_out=c5a61256ab424d80`, and
+  `layer2_after_attn_hc=9c038ab7c95176b4`. B300 artifact SHA256 values were
+  `oracle=728fa6b858f9ff6669424eac7691b65d1ffe9d78e9c5f7cbe85c412cc5ce80a7`
+  and
+  `rust=8b561a5eca4874bb4ba6bbf5bc83080d761f294a7cce839435c5815ff2db9ca3`;
+  predecessor c2b2b2b2b2b2b1 layer-2 compressor-state B300 rerun passed 589
+  checks; local unified report passed 34/24/0, workspace tests passed,
+  fmt/diff checks passed, and the touched-file NUL scan passed.
+
+### M10.5c4c2b2b2b2b2b2b2b: Rust One-Token Decode B300 Execution
+
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
-  on B300 after the first ratio-4 compressor/indexer state mutation, two dense
-  decode layers, layer-0 FFN output, and output-head kernels are independently
-  compared.
+  on B300 after the layer-2 raw-only attention-output boundary, the first
+  ratio-4 compressor/indexer state mutation, two dense decode layers, layer-0
+  FFN output, and output-head kernels are independently compared.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
@@ -4357,8 +4424,9 @@
   M10.5c4c2b2b2b2b1 layer-0 attention-output comparator, and
   M10.5c4c2b2b2b2b2a layer-0 FFN-output comparator, and
   M10.5c4c2b2b2b2b2b1 layer-0 output-head comparator, and
-  M10.5c4c2b2b2b2b2b2a two-dense-layer output-head comparator, and
-  M10.5c4c2b2b2b2b2b2b1 layer-2 ratio-4 compressor-state comparator.
+  M10.5c4c2b2b2b2b2b2a two-dense-layer output-head comparator,
+  M10.5c4c2b2b2b2b2b2b1 layer-2 ratio-4 compressor-state comparator, and
+  M10.5c4c2b2b2b2b2b2b2a layer-2 attention-output comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -4377,9 +4445,10 @@
   rerun, c2b2b2b2b1 layer-0 attention-output rerun, c2b2b2b2b2a layer-0
   FFN-output rerun, c2b2b2b2b2b1 layer-0 output-head rerun,
   c2b2b2b2b2b2a two-dense-layer output-head rerun,
-  c2b2b2b2b2b2b1 layer-2 compressor-state rerun, `cargo test
-  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
-  non-interactive Claude review with no blockers.
+  c2b2b2b2b2b2b1 layer-2 compressor-state rerun,
+  c2b2b2b2b2b2b2a layer-2 attention-output rerun, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive
+  Claude review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 
