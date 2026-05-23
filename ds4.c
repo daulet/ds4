@@ -20059,3 +20059,453 @@ int ds4_session_pos(ds4_session *s) {
 int ds4_session_ctx(ds4_session *s) {
     return s->ctx_size;
 }
+
+#ifndef DS4_NO_GPU
+static void graph_checkpoint_write_comma(FILE *fp, bool *first) {
+    if (*first) {
+        *first = false;
+    } else {
+        fputs(",\n", fp);
+    }
+}
+
+static void graph_checkpoint_write_u64_or_null(FILE *fp, int64_t v) {
+    if (v < 0) {
+        fputs("null", fp);
+    } else {
+        fprintf(fp, "%" PRIu64, (uint64_t)v);
+    }
+}
+
+static void graph_checkpoint_copy_prefix(const token_vec *src, int n, token_vec *dst) {
+    memset(dst, 0, sizeof(*dst));
+    if (!src || n <= 0) return;
+    if (n > src->len) n = src->len;
+    for (int i = 0; i < n; i++) token_vec_push(dst, src->v[i]);
+}
+
+static bool graph_checkpoint_read_f32(const uint8_t *buf, uint64_t index, float *out) {
+    if (!buf || !out) return false;
+    memcpy(out, buf + index * sizeof(*out), sizeof(*out));
+    return true;
+}
+
+static bool graph_checkpoint_write_tensor(
+        FILE                  *fp,
+        bool                  *first,
+        const char            *name,
+        const char            *stage,
+        const char            *boundary,
+        const char            *fixture,
+        const char            *tensor_name,
+        const char            *hash_policy,
+        float                  tolerance,
+        const ds4_gpu_graph   *g,
+        const ds4_gpu_tensor  *tensor,
+        uint64_t               offset,
+        uint64_t               bytes,
+        uint64_t               elements,
+        int64_t                row,
+        int64_t                layer,
+        uint32_t               checkpoint_len) {
+    if (!fp || !first || !g || !tensor || bytes == 0 || elements == 0) return false;
+    uint8_t *buf = xmalloc((size_t)bytes);
+    if (ds4_gpu_tensor_read(tensor, offset, buf, bytes) == 0) {
+        free(buf);
+        return false;
+    }
+
+    char sha[65];
+    ds4_sha256_hex(buf, (size_t)bytes, sha);
+
+    int64_t top_index = -1;
+    float top_value = 0.0f;
+    if (bytes == elements * sizeof(float)) {
+        for (uint64_t i = 0; i < elements; i++) {
+            float v = 0.0f;
+            graph_checkpoint_read_f32(buf, i, &v);
+            if (top_index < 0 || v > top_value) {
+                top_index = (int64_t)i;
+                top_value = v;
+            }
+        }
+    }
+
+    graph_checkpoint_write_comma(fp, first);
+    fputs("    {\"name\":", fp);
+    json_cstr_write(fp, name);
+    fputs(",\"stage\":", fp);
+    json_cstr_write(fp, stage);
+    fputs(",\"boundary\":", fp);
+    json_cstr_write(fp, boundary);
+    fputs(",\"fixture\":", fp);
+    json_cstr_write(fp, fixture);
+    fputs(",\"tensor\":", fp);
+    json_cstr_write(fp, tensor_name);
+    fputs(",\"dtype\":\"f32\",\"shape\":[", fp);
+    fprintf(fp, "%" PRIu64, elements);
+    fputs("],\"element_count\":", fp);
+    fprintf(fp, "%" PRIu64, elements);
+    fputs(",\"bytes\":", fp);
+    fprintf(fp, "%" PRIu64, bytes);
+    fputs(",\"offset\":", fp);
+    fprintf(fp, "%" PRIu64, offset);
+    fputs(",\"row\":", fp);
+    graph_checkpoint_write_u64_or_null(fp, row);
+    fputs(",\"layer\":", fp);
+    graph_checkpoint_write_u64_or_null(fp, layer);
+    fputs(",\"hash_policy\":", fp);
+    json_cstr_write(fp, hash_policy);
+    fputs(",\"sha256\":\"", fp);
+    fputs(sha, fp);
+    fputs("\",\"f32_tolerance\":", fp);
+    sampling_oracle_json_f32(fp, tolerance);
+    fputs(",\"top\":{\"index\":", fp);
+    graph_checkpoint_write_u64_or_null(fp, top_index);
+    fputs(",\"value\":", fp);
+    if (top_index < 0) fputs("null", fp);
+    else sampling_oracle_json_f32(fp, top_value);
+    fputs("},\"samples\":[", fp);
+
+    uint64_t samples[5] = {0, 1, elements / 2, elements > 1 ? elements - 2 : 0, elements - 1};
+    bool first_sample = true;
+    for (size_t i = 0; i < sizeof(samples) / sizeof(samples[0]); i++) {
+        const uint64_t index = samples[i];
+        if (index >= elements) continue;
+        bool duplicate = false;
+        for (size_t j = 0; j < i; j++) {
+            if (samples[j] == index) duplicate = true;
+        }
+        if (duplicate) continue;
+        if (!first_sample) fputc(',', fp);
+        first_sample = false;
+        float v = 0.0f;
+        graph_checkpoint_read_f32(buf, index, &v);
+        fputs("{\"index\":", fp);
+        fprintf(fp, "%" PRIu64, index);
+        fputs(",\"value\":", fp);
+        sampling_oracle_json_f32(fp, v);
+        fputc('}', fp);
+    }
+
+    fputs("],\"counters\":{\"checkpoint_len\":", fp);
+    fprintf(fp, "%u", checkpoint_len);
+    fputs(",\"prefill_cap\":", fp);
+    fprintf(fp, "%u", g->prefill_cap);
+    fputs(",\"raw_cap\":", fp);
+    fprintf(fp, "%u", g->raw_cap);
+    fputs(",\"raw_window\":", fp);
+    fprintf(fp, "%u", g->raw_window);
+    fputs(",\"comp_cap\":", fp);
+    fprintf(fp, "%u", g->comp_cap);
+    fputs(",\"mtp_n_raw\":", fp);
+    fprintf(fp, "%u", g->mtp_n_raw);
+    if (layer >= 0 && layer < DS4_N_LAYER) {
+        fputs(",\"layer_comp_cap\":", fp);
+        fprintf(fp, "%u", g->layer_comp_cap[layer]);
+        fputs(",\"layer_n_comp\":", fp);
+        fprintf(fp, "%u", g->layer_n_comp[layer]);
+        fputs(",\"layer_n_index_comp\":", fp);
+        fprintf(fp, "%u", g->layer_n_index_comp[layer]);
+    }
+    fputs("}}", fp);
+
+    free(buf);
+    return true;
+}
+
+static bool graph_checkpoint_write_cache_pair(
+        FILE                *fp,
+        bool                *first,
+        const char          *prefix,
+        const char          *stage,
+        const char          *boundary,
+        const char          *fixture,
+        const ds4_session   *s,
+        uint32_t             layer) {
+    if (!s || layer >= DS4_N_LAYER) return false;
+    char name[128];
+    snprintf(name, sizeof(name), "%s_layer%u_attn_comp_cache", prefix, layer);
+    uint64_t bytes = ds4_gpu_tensor_bytes(s->graph.layer_attn_comp_cache[layer]);
+    bool ok = graph_checkpoint_write_tensor(fp, first, name, stage, boundary, fixture,
+                                            "layer_attn_comp_cache", "exact", 0.0f,
+                                            &s->graph, s->graph.layer_attn_comp_cache[layer],
+                                            0, bytes, bytes / sizeof(float),
+                                            -1, layer, (uint32_t)s->checkpoint.len);
+    if (ok && s->graph.layer_index_comp_cache[layer]) {
+        snprintf(name, sizeof(name), "%s_layer%u_index_comp_cache", prefix, layer);
+        bytes = ds4_gpu_tensor_bytes(s->graph.layer_index_comp_cache[layer]);
+        ok = graph_checkpoint_write_tensor(fp, first, name, stage, boundary, fixture,
+                                           "layer_index_comp_cache", "exact", 0.0f,
+                                           &s->graph, s->graph.layer_index_comp_cache[layer],
+                                           0, bytes, bytes / sizeof(float),
+                                           -1, layer, (uint32_t)s->checkpoint.len);
+    }
+    return ok;
+}
+
+static void graph_checkpoint_write_skip(FILE *fp, bool *first, const char *name, const char *reason) {
+    graph_checkpoint_write_comma(fp, first);
+    fputs("    {\"name\":", fp);
+    json_cstr_write(fp, name);
+    fputs(",\"reason\":", fp);
+    json_cstr_write(fp, reason);
+    fputc('}', fp);
+}
+
+static bool graph_checkpoint_prompt_tokens(ds4_engine *e, const char *path, token_vec *out) {
+    char *text = NULL;
+    size_t len = 0;
+    if (!imatrix_read_text_file(path, &text, &len)) return false;
+    (void)len;
+    memset(out, 0, sizeof(*out));
+    ds4_encode_chat_prompt(e, "", text, DS4_THINK_NONE, out);
+    free(text);
+    return out->len > 0;
+}
+
+int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *opt, FILE *fp) {
+    if (!opt || !opt->model_path || !opt->short_prompt_path || !opt->long_prompt_path || !fp) return 1;
+    if (!ds4_backend_uses_graph(opt->backend)) {
+        fprintf(stderr, "ds4: graph checkpoint oracle requires a graph backend\n");
+        return 1;
+    }
+
+    ds4_engine *e = NULL;
+    ds4_engine_options eopt = {
+        .model_path = opt->model_path,
+        .mtp_path = opt->mtp_path,
+        .backend = opt->backend,
+        .mtp_draft_tokens = 2,
+        .mtp_margin = 0.0f,
+        .quality = false,
+    };
+    if (ds4_engine_open(&e, &eopt) != 0 || !e) return 1;
+
+    token_vec short_prompt = {0};
+    token_vec long_prompt = {0};
+    token_vec long_prefix = {0};
+    token_vec long_continuation = {0};
+    ds4_session *s = NULL;
+    char err[256];
+    bool ok = graph_checkpoint_prompt_tokens(e, opt->short_prompt_path, &short_prompt) &&
+              graph_checkpoint_prompt_tokens(e, opt->long_prompt_path, &long_prompt);
+    const int ctx_size = opt->ctx_size > 0 ? opt->ctx_size : 32768;
+    bool first_checkpoint = true;
+    bool first_skip = true;
+    const char *mtp_skip = NULL;
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.graph_checkpoint_oracle.v1\",\n", fp);
+    fputs("  \"source\": \"current-c-b300-graph-checkpoints\",\n", fp);
+    fputs("  \"model_path\": ", fp);
+    json_cstr_write(fp, opt->model_path);
+    fputs(",\n  \"model_sha256\": ", fp);
+    json_cstr_write(fp, opt->model_sha256 ? opt->model_sha256 : "");
+    fputs(",\n  \"backend\": ", fp);
+    json_cstr_write(fp, ds4_backend_name(opt->backend));
+    fprintf(fp, ",\n  \"ctx_size\": %d,\n", ctx_size);
+    fprintf(fp, "  \"short_prompt_tokens\": %d,\n", short_prompt.len);
+    fprintf(fp, "  \"long_prompt_tokens\": %d,\n", long_prompt.len);
+    fputs("  \"checkpoints\": [\n", fp);
+
+    if (!ok) goto done;
+    if (ds4_session_create(&s, e, ctx_size) != 0 || !s) {
+        ok = false;
+        goto done;
+    }
+    ok = ds4_session_sync(s, &short_prompt, err, sizeof(err)) == 0;
+    if (!ok) {
+        fprintf(stderr, "ds4: graph checkpoint short prefill failed: %s\n", err);
+        goto done;
+    }
+    const char *short_prefill_boundary =
+        short_prompt.len > (int)s->prefill_cap ? "metal_graph_prefill_chunked_range" : "metal_graph_prefill_layer_major";
+    ok = graph_checkpoint_write_tensor(fp, &first_checkpoint,
+                                       "short_prefill_logits",
+                                       "output-head",
+                                       short_prefill_boundary,
+                                       "short_italian_fact",
+                                       "logits",
+                                       "exact",
+                                       1.0e-4f,
+                                       &s->graph,
+                                       s->graph.logits,
+                                       0,
+                                       (uint64_t)DS4_N_VOCAB * sizeof(float),
+                                       DS4_N_VOCAB,
+                                       -1,
+                                       -1,
+                                       (uint32_t)s->checkpoint.len);
+    int selected = ds4_session_argmax(s);
+    if (ok) ok = ds4_session_eval(s, selected, err, sizeof(err)) == 0;
+    if (!ok) {
+        fprintf(stderr, "ds4: graph checkpoint short decode failed: %s\n", err);
+        goto done;
+    }
+    ok = graph_checkpoint_write_tensor(fp, &first_checkpoint,
+                                       "short_decode_logits",
+                                       "decode",
+                                       "metal_graph_eval_token_raw_swa",
+                                       "short_italian_fact",
+                                       "logits",
+                                       "exact",
+                                       1.0e-4f,
+                                       &s->graph,
+                                       s->graph.logits,
+                                       0,
+                                       (uint64_t)DS4_N_VOCAB * sizeof(float),
+                                       DS4_N_VOCAB,
+                                       -1,
+                                       -1,
+                                       (uint32_t)s->checkpoint.len);
+    if (ok) ok = graph_checkpoint_write_cache_pair(fp, &first_checkpoint,
+                                                   "short_decode",
+                                                   "compressed-kv",
+                                                   "metal_graph_eval_token_raw_swa",
+                                                   "short_italian_fact",
+                                                   s,
+                                                   2);
+    if (ok && ds4_engine_has_mtp(e)) {
+        int accepted[4] = {0};
+        const int first_token = ds4_session_argmax(s);
+        const bool saved_engine_quality = e->quality;
+        const bool saved_graph_quality = s->graph.quality;
+        e->quality = true;
+        s->graph.quality = true;
+        const int n_accept = ds4_session_eval_speculative_argmax(s,
+                                                                 first_token,
+                                                                 3,
+                                                                 ds4_token_eos(e),
+                                                                 accepted,
+                                                                 4,
+                                                                 err,
+                                                                 sizeof(err));
+        e->quality = saved_engine_quality;
+        s->graph.quality = saved_graph_quality;
+        if (n_accept > 1) {
+            ok = graph_checkpoint_write_tensor(fp, &first_checkpoint,
+                                               "mtp_verify_decode2_logits",
+                                               "mtp-verifier",
+                                               "metal_graph_verify_decode2_exact",
+                                               "short_italian_fact",
+                                               "logits",
+                                               "exact",
+                                               1.0e-4f,
+                                               &s->graph,
+                                               s->graph.logits,
+                                               0,
+                                               (uint64_t)DS4_N_VOCAB * sizeof(float),
+                                               DS4_N_VOCAB,
+                                               -1,
+                                               -1,
+                                               (uint32_t)s->checkpoint.len);
+        } else {
+            mtp_skip = n_accept < 0 ? err : "MTP draft did not reach a two-token verifier case";
+        }
+    } else {
+        mtp_skip = "MTP support model not provided";
+    }
+    ds4_session_free(s);
+    s = NULL;
+    if (!ok) goto done;
+
+    if (ds4_session_create(&s, e, ctx_size) != 0 || !s) {
+        ok = false;
+        goto done;
+    }
+    ok = ds4_session_sync(s, &long_prompt, err, sizeof(err)) == 0;
+    if (!ok) {
+        fprintf(stderr, "ds4: graph checkpoint long prefill failed: %s\n", err);
+        goto done;
+    }
+    const char *long_boundary =
+        long_prompt.len > (int)s->prefill_cap ? "metal_graph_prefill_chunked_range" : "metal_graph_prefill_layer_major";
+    ok = graph_checkpoint_write_tensor(fp, &first_checkpoint,
+                                       "long_chunked_prefill_logits",
+                                       "prefill",
+                                       long_boundary,
+                                       "long_memory_archive",
+                                       "logits",
+                                       "tolerance",
+                                       5.0e-3f,
+                                       &s->graph,
+                                       s->graph.logits,
+                                       0,
+                                       (uint64_t)DS4_N_VOCAB * sizeof(float),
+                                       DS4_N_VOCAB,
+                                       -1,
+                                       -1,
+                                       (uint32_t)s->checkpoint.len);
+    if (ok) ok = graph_checkpoint_write_cache_pair(fp, &first_checkpoint,
+                                                   "long_chunked_prefill",
+                                                   "compressed-kv",
+                                                   long_boundary,
+                                                   "long_memory_archive",
+                                                   s,
+                                                   2);
+    ds4_session_free(s);
+    s = NULL;
+    if (!ok) goto done;
+
+    int prefix_len = long_prompt.len / 4;
+    if (prefix_len < 64) prefix_len = long_prompt.len < 64 ? long_prompt.len / 2 : 64;
+    int continuation_len = prefix_len + 512;
+    if (continuation_len > long_prompt.len) continuation_len = long_prompt.len;
+    graph_checkpoint_copy_prefix(&long_prompt, prefix_len, &long_prefix);
+    graph_checkpoint_copy_prefix(&long_prompt, continuation_len, &long_continuation);
+    if (ds4_session_create(&s, e, ctx_size) != 0 || !s) {
+        ok = false;
+        goto done;
+    }
+    ok = ds4_session_sync(s, &long_prefix, err, sizeof(err)) == 0 &&
+         ds4_session_sync(s, &long_continuation, err, sizeof(err)) == 0;
+    if (!ok) {
+        fprintf(stderr, "ds4: graph checkpoint continuation prefill failed: %s\n", err);
+        goto done;
+    }
+    ok = graph_checkpoint_write_tensor(fp, &first_checkpoint,
+                                       "cache_continuation_prefill_logits",
+                                       "cache-continuation",
+                                       "metal_graph_prefill_chunked_range",
+                                       "long_memory_archive",
+                                       "logits",
+                                       "tolerance",
+                                       5.0e-3f,
+                                       &s->graph,
+                                       s->graph.logits,
+                                       0,
+                                       (uint64_t)DS4_N_VOCAB * sizeof(float),
+                                       DS4_N_VOCAB,
+                                       -1,
+                                       -1,
+                                       (uint32_t)s->checkpoint.len);
+    if (ok) ok = graph_checkpoint_write_cache_pair(fp, &first_checkpoint,
+                                                   "cache_continuation",
+                                                   "compressed-kv",
+                                                   "metal_graph_prefill_chunked_range",
+                                                   "long_memory_archive",
+                                                   s,
+                                                   2);
+
+done:
+    if (s) ds4_session_free(s);
+    fputs("\n  ],\n  \"skips\": [\n", fp);
+    if (mtp_skip) graph_checkpoint_write_skip(fp, &first_skip, "mtp_verify_decode2_exact", mtp_skip);
+    fputs("\n  ]\n}\n", fp);
+
+    token_vec_free(&long_continuation);
+    token_vec_free(&long_prefix);
+    token_vec_free(&long_prompt);
+    token_vec_free(&short_prompt);
+    ds4_engine_close(e);
+    return ok && !ferror(fp) ? 0 : 1;
+}
+#else
+int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *opt, FILE *fp) {
+    (void)opt;
+    (void)fp;
+    fprintf(stderr, "ds4: graph checkpoint oracle requires a graph backend build\n");
+    return 1;
+}
+#endif

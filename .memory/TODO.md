@@ -3595,7 +3595,7 @@
 
 ### M10.4: Current-C Intermediate Tensor Checkpoint Oracle
 
-- Status: active
+- Status: done
 - Goal: add current-C checkpoint capture for selected graph tensors at decode,
   prefill, compressed-KV, output-head, and MTP verification boundaries.
 - Oracle: C graph execution through `metal_graph_eval_token_raw_swa`,
@@ -3615,14 +3615,17 @@
   are normalized.
 - Review gate: ask Claude to review checkpoint coverage and nondeterminism
   policy.
-- Validation needed: B300 checkpoint capture/checker, negative mutation test,
-  `git diff --check`, and non-interactive Claude review with no blockers.
+- Validation passed: B300 checkpoint capture on `ds4-rust-port-b300`, checker
+  self-compare, negative mutation test, JSON syntax checks, unified parity
+  report comparator row, local dump-target build, Python syntax check, `git
+  diff --check`, NUL scan over touched files, and non-interactive Claude
+  review with no blockers.
 - Owner path: C checkpoint oracle helper, `ds4-parity/`, B300 artifacts,
   `.memory/status.md`.
 
 ### M10.5: Rust Single-Token Decode Graph Scheduling
 
-- Status: pending
+- Status: active
 - Goal: move one-token decode scheduling for the target model into Rust while
   still calling existing backend primitives through FFI.
 - Oracle: M10.4 decode checkpoints and C `metal_graph_eval_token_raw_swa`

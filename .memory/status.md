@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.4 Current-C Intermediate Tensor Checkpoint Oracle
-- Last validated source commit: M10.3 Rust backend trait and graph plan
-  surface in this commit; prior pushed source commit
-  `67cbaf4e06858669087e200f50953b74e188ecc9`
+- Active item: M10.5 Rust Single-Token Decode Graph Scheduling
+- Last validated source commit: M10.4 current-C intermediate tensor checkpoint
+  oracle in this commit; prior pushed source commit
+  `a4d7fa4e58177aec42aed5e0ac0a38abd7495837`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,32 @@
 
 ## Last Evidence
 
+- M10.4 adds `ds4-graph-checkpoint-dump` plus
+  `ds4_dump_graph_checkpoint_oracle_json`, a current-C graph checkpoint dump
+  path that exercises the normal C graph backend without changing production
+  scheduling. The B300 baseline is committed at
+  `ds4-parity/baselines/graph/m10.4/current-c.json` with manifest
+  `ds4-parity/baselines/graph/m10.4/manifest.json`.
+- M10.4 B300 capture used pod `ds4-rust-port-b300` on node
+  `c1v17-b300n1-nic1`, backend `cuda`, ctx `32768`, model
+  `/workspace/ds4/ds4flash.gguf` SHA256
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`,
+  short prompt `short_italian_fact` with 21 tokens, and long prompt
+  `long_memory_archive` with 3353 tokens.
+- M10.4 records 10 checkpoints: short layer-major prefill logits, one-token
+  decode logits, layer-2 attention/index compressed KV after decode, long
+  chunked prefill logits and layer-2 compressed KV, and cache-continuation
+  resumed prefill logits and layer-2 compressed KV. Eight checkpoints compare
+  exact SHA256; two long-context logits checkpoints compare selected f32
+  samples with recorded tolerance. MTP verifier capture is explicitly skipped
+  because no support MTP model was provided in the B300 capture environment.
+- M10.4 validation passed `arch -arm64 make ds4-graph-checkpoint-dump`, B300
+  `make ds4-graph-checkpoint-dump CUDA_ARCH=native`, B300 capture plus
+  `python3 ds4-parity/check_graph_checkpoint_oracle.py ... --negative-test`,
+  copied artifact JSON syntax checks, local
+  `python3 ds4-parity/check_graph_checkpoint_oracle.py --negative-test`, and
+  the unified parity report comparator row. Non-interactive Claude review
+  returned `NO BLOCKERS`.
 - M10.3 adds the model-execution-neutral Rust graph surface in
   `rust/ds4-gpu/src/graph_plan.rs`: fixed DS4 graph constants, context/raw
   cap/compression plan math, the four M10.2 plan cases, backend facade targets

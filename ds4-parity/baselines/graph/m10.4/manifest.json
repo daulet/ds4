@@ -1,0 +1,46 @@
+{
+  "schema": "ds4.graph_checkpoint_manifest.v1",
+  "milestone": "M10.4",
+  "baseline": "current-c.json",
+  "baseline_sha256": "f2067c2f8a11f0723ac128ca73aa9637992f54210185bdbad465b32da92a3bb0",
+  "baseline_bytes": 8038,
+  "source": "current C graph execution on B300",
+  "model": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668",
+    "bytes": 86720111488
+  },
+  "environment": {
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "backend": "cuda",
+    "ctx_size": 32768
+  },
+  "coverage": [
+    "short prefill output head through metal_graph_prefill_layer_major",
+    "single-token decode logits through metal_graph_eval_token_raw_swa",
+    "layer 2 attention/index compressed KV caches after decode",
+    "long prompt chunked prefill logits and layer 2 compressed KV caches",
+    "cache-continuation resumed prefill logits and layer 2 compressed KV caches"
+  ],
+  "nondeterminism_policy": {
+    "exact_hashes": "compressed KV checkpoints and short logits are compared by SHA256",
+    "tolerant_logits": "long chunked and continuation logits compare selected f32 samples with the per-checkpoint tolerance",
+    "excluded": "timings, absolute local paths, and unavailable MTP verifier tensors are not compared"
+  },
+  "skips": [
+    {
+      "name": "mtp_verify_decode2_exact",
+      "reason": "MTP support model not provided in the B300 capture environment"
+    }
+  ],
+  "commands": [
+    "tar -cf - Makefile ds4.c ds4.h ds4_graph_checkpoint_dump.c ds4-parity/check_graph_checkpoint_oracle.py tests/test-vectors/prompts/short_italian_fact.txt tests/test-vectors/prompts/long_memory_archive.txt | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-graph-checkpoint-dump CUDA_ARCH=native'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; mkdir -p ds4-parity/baselines/graph/m10.4; ./ds4-graph-checkpoint-dump --backend cuda -m /workspace/ds4/ds4flash.gguf --model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668 --short-prompt tests/test-vectors/prompts/short_italian_fact.txt --long-prompt tests/test-vectors/prompts/long_memory_archive.txt -o ds4-parity/baselines/graph/m10.4/current-c.json; python3 -m json.tool ds4-parity/baselines/graph/m10.4/current-c.json >/tmp/ds4-m104-current-c.pretty.json; wc -c ds4-parity/baselines/graph/m10.4/current-c.json; sha256sum ds4-parity/baselines/graph/m10.4/current-c.json; python3 ds4-parity/check_graph_checkpoint_oracle.py ds4-parity/baselines/graph/m10.4/current-c.json --baseline ds4-parity/baselines/graph/m10.4/current-c.json --negative-test'",
+    "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/workspace/ds4/ds4-parity/baselines/graph/m10.4/current-c.json ds4-parity/baselines/graph/m10.4/current-c.json",
+    "python3 ds4-parity/check_graph_checkpoint_oracle.py --baseline ds4-parity/baselines/graph/m10.4/current-c.json --manifest ds4-parity/baselines/graph/m10.4/manifest.json --negative-test"
+  ]
+}

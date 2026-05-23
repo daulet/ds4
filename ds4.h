@@ -99,6 +99,16 @@ typedef struct {
     uint64_t cap;
 } ds4_session_snapshot;
 
+typedef struct {
+    const char *model_path;
+    const char *model_sha256;
+    const char *mtp_path;
+    const char *short_prompt_path;
+    const char *long_prompt_path;
+    ds4_backend backend;
+    int ctx_size;
+} ds4_graph_checkpoint_options;
+
 int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt);
 void ds4_engine_close(ds4_engine *e);
 void ds4_engine_summary(ds4_engine *e);
@@ -142,6 +152,7 @@ int ds4_engine_metal_graph_prompt_test(ds4_engine *e, const ds4_tokens *prompt, 
 int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *fp);
 int ds4_dump_metadata_json_ex(const char *model_path, const char *mtp_path, FILE *fp, unsigned flags);
 int ds4_dump_sampling_oracle_json(FILE *fp);
+int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *opt, FILE *fp);
 
 void ds4_tokens_push(ds4_tokens *tv, int token);
 void ds4_tokens_free(ds4_tokens *tv);

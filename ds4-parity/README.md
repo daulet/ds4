@@ -116,9 +116,9 @@ python3 ds4-parity/run_parity_report.py
 ```
 
 The unified report runs local no-model C checks, then runs the committed M1,
-M4, M5, M6, and M7 comparator reports. Model-backed B300 oracle refreshes are
-skipped by default, but each skip includes the temp-kubeconfig and
-explicit-context rerun command needed to reproduce the check. For a
+M4, M5, M6, M7, M8, M9, and M10 comparator reports. Model-backed B300 oracle
+refreshes are skipped by default, but each skip includes the temp-kubeconfig
+and explicit-context rerun command needed to reproduce the check. For a
 comparator-only report:
 
 ```sh
@@ -156,6 +156,20 @@ The Rust comparator checks `rust/ds4-gpu/src/graph_plan.rs` for matching
 backend operation facade targets, graph tensor owner groups, command-boundary
 records, and the M10.2 context/MTP plan cases. Its negative test mutates an
 operation, a tensor field, a command boundary, and an MTP plan case in memory.
+
+Validate the M10.4 current-C graph checkpoint oracle:
+
+```sh
+python3 ds4-parity/check_graph_checkpoint_oracle.py --negative-test
+```
+
+The checkpoint oracle is captured on B300 under `baselines/graph/m10.4/`.
+It records selected device tensor checkpoints for short prefill, one-token
+decode, layer-2 compressed KV state, long chunked prefill, and cache
+continuation prefill. Exact checkpoints compare SHA256; long-context logits
+compare selected f32 samples with the recorded tolerance. The MTP verifier
+entry is explicitly skipped when no support MTP model is available in the
+capture environment.
 
 ## Sampling And Logprob Parity
 
