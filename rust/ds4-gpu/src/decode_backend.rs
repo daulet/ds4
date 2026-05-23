@@ -4,9 +4,12 @@
 //! FFI calls that the default fused decode path needs so the scheduler added
 //! later can call named safe methods instead of raw `ds4_gpu_*` symbols.
 
-use core::ffi::c_void;
+use core::ffi::{c_int, c_void};
 use core::marker::PhantomData;
 use core::ptr;
+
+#[cfg(all(target_os = "linux", feature = "cuda-backend"))]
+use core::ffi::CStr;
 
 use crate::{sys, GpuError, GpuStatus, TensorMut, TensorRef};
 
@@ -196,6 +199,31 @@ pub const EXISTING_DECODE_OPERATIONS: &[ExistingDecodeOperation] = &[
     },
 ];
 
+pub const MODEL_MAP_BACKEND_OPERATIONS: &[ExistingDecodeOperation] = &[
+    ExistingDecodeOperation {
+        operation: "ds4_gpu_set_model_map",
+        wrapper: "set_model_map",
+    },
+    ExistingDecodeOperation {
+        operation: "ds4_gpu_set_model_fd",
+        wrapper: "set_model_fd",
+    },
+    ExistingDecodeOperation {
+        operation: "ds4_gpu_set_model_map_range",
+        wrapper: "set_model_map_range",
+    },
+    // Inventory parity includes the CUDA cache calls on every host; the safe
+    // wrappers are gated to Linux CUDA builds below.
+    ExistingDecodeOperation {
+        operation: "ds4_gpu_cache_model_range",
+        wrapper: "cache_model_range",
+    },
+    ExistingDecodeOperation {
+        operation: "ds4_gpu_cache_q8_f16_range",
+        wrapper: "cache_q8_f16_range",
+    },
+];
+
 #[derive(Clone, Copy, Debug)]
 pub struct ModelMap<'a> {
     ptr: *const c_void,
@@ -233,6 +261,100 @@ impl<'a> ModelMap<'a> {
 
     pub const fn size(self) -> u64 {
         self.size
+    }
+}
+
+pub fn set_model_map(model: ModelMap<'_>) -> Result<(), GpuError> {
+    unsafe {
+        GpuStatus::from_raw(sys::ds4_gpu_set_model_map(model.as_ptr(), model.size())).into_result()
+    }
+}
+
+pub fn set_model_fd(fd: c_int) -> Result<(), GpuError> {
+    unsafe { GpuStatus::from_raw(sys::ds4_gpu_set_model_fd(fd)).into_result() }
+}
+
+pub fn set_model_map_range(
+    model: ModelMap<'_>,
+    map_offset: u64,
+    map_size: u64,
+) -> Result<(), GpuError> {
+    validate_model_range(model, map_offset, map_size)?;
+    unsafe {
+        GpuStatus::from_raw(sys::ds4_gpu_set_model_map_range(
+            model.as_ptr(),
+            model.size(),
+            map_offset,
+            map_size,
+        ))
+        .into_result()
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "cuda-backend"))]
+pub fn cache_model_range(
+    model: ModelMap<'_>,
+    offset: u64,
+    bytes: u64,
+    label: Option<&CStr>,
+) -> Result<(), GpuError> {
+    validate_model_cache_range(model, offset, bytes)?;
+    let label = label.map_or(ptr::null(), CStr::as_ptr);
+    unsafe {
+        GpuStatus::from_raw(sys::ds4_gpu_cache_model_range(
+            model.as_ptr(),
+            model.size(),
+            offset,
+            bytes,
+            label,
+        ))
+        .into_result()
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "cuda-backend"))]
+pub fn cache_q8_f16_range(
+    model: ModelMap<'_>,
+    offset: u64,
+    bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+    label: Option<&CStr>,
+) -> Result<(), GpuError> {
+    validate_model_cache_range(model, offset, bytes)?;
+    let label = label.map_or(ptr::null(), CStr::as_ptr);
+    unsafe {
+        GpuStatus::from_raw(sys::ds4_gpu_cache_q8_f16_range(
+            model.as_ptr(),
+            model.size(),
+            offset,
+            bytes,
+            in_dim,
+            out_dim,
+            label,
+        ))
+        .into_result()
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "cuda-backend"))]
+fn validate_model_cache_range(
+    model: ModelMap<'_>,
+    offset: u64,
+    bytes: u64,
+) -> Result<(), GpuError> {
+    if bytes == 0 {
+        Ok(())
+    } else {
+        validate_model_range(model, offset, bytes)
+    }
+}
+
+fn validate_model_range(model: ModelMap<'_>, offset: u64, bytes: u64) -> Result<(), GpuError> {
+    if bytes == 0 || offset > model.size() || bytes > model.size() - offset {
+        Err(GpuError::invalid_range())
+    } else {
+        Ok(())
     }
 }
 
@@ -1105,6 +1227,22 @@ mod tests {
         assert!(EXISTING_DECODE_OPERATIONS
             .iter()
             .any(|spec| spec.operation == "ds4_gpu_synchronize"));
+    }
+
+    #[test]
+    fn model_map_backend_operations_are_wrapped() {
+        assert_eq!(MODEL_MAP_BACKEND_OPERATIONS.len(), 5);
+        for expected in [
+            "ds4_gpu_set_model_map",
+            "ds4_gpu_set_model_fd",
+            "ds4_gpu_set_model_map_range",
+            "ds4_gpu_cache_model_range",
+            "ds4_gpu_cache_q8_f16_range",
+        ] {
+            assert!(MODEL_MAP_BACKEND_OPERATIONS
+                .iter()
+                .any(|spec| spec.operation == expected));
+        }
     }
 
     #[test]

@@ -53,6 +53,7 @@ pub struct GpuError {
 pub enum GpuErrorKind {
     BackendStatus(c_int),
     LengthOverflow,
+    InvalidRange,
     NullTensor,
 }
 
@@ -66,6 +67,12 @@ impl GpuError {
     pub const fn length_overflow() -> Self {
         Self {
             kind: GpuErrorKind::LengthOverflow,
+        }
+    }
+
+    pub const fn invalid_range() -> Self {
+        Self {
+            kind: GpuErrorKind::InvalidRange,
         }
     }
 
@@ -94,6 +101,7 @@ impl fmt::Display for GpuError {
                 write!(f, "DS4 GPU backend returned status {code}")
             }
             GpuErrorKind::LengthOverflow => write!(f, "length does not fit DS4 GPU ABI"),
+            GpuErrorKind::InvalidRange => write!(f, "range is outside model mapping"),
             GpuErrorKind::NullTensor => write!(f, "DS4 GPU backend returned null tensor"),
         }
     }

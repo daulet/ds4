@@ -3,7 +3,7 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2 Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b Rust One-Token Decode B300 Execution
 - Last validated source commit: M10.5c4c1 Rust CUDA backend linkage and B300
   ABI smoke in this commit; prior pushed source commit
   `d3607c3b145c4fddcbf4987d358819b5533e60df`
@@ -26,6 +26,28 @@
 
 ## Last Evidence
 
+- M10.5c4c2a adds safe Rust decode-backend wrappers for the model-map backend:
+  `set_model_map`, `set_model_fd`, `set_model_map_range`,
+  `cache_model_range`, and `cache_q8_f16_range`, with CUDA-only cache wrappers
+  gated to Linux. Rust now rejects invalid model ranges before FFI because the
+  CUDA backend accepts some invalid map ranges unless chunked-copy mode is
+  active.
+- M10.5c4c2a adds a B300-only `model_map_abi` smoke test covering fd, full map,
+  map range, CUDA model cache, optional q8/f16 cache hook, and invalid-range
+  failure paths against tiny deterministic model bytes.
+- M10.5c4c2a adds `ds4-parity/compare_decode_model_map_bridge.py`, which checks
+  sys ABI coverage, safe wrapper status bridges, Linux cfg containment, test
+  coverage, and the unified B300 rerun command. It is wired into the unified
+  parity report as `M10.5c4c2a Rust decode model-map bridge comparator`.
+- M10.5c4c2a validation passed `python3
+  ds4-parity/compare_decode_model_map_bridge.py --negative-test`, `python3 -m
+  py_compile ds4-parity/compare_decode_model_map_bridge.py
+  ds4-parity/run_parity_report.py`, B300 `CUDA_ARCH=native cargo test -p
+  ds4-gpu --features cuda-backend --test model_map_abi -- --nocapture`, local
+  `cargo test -p ds4-gpu model_map --lib`, local `cargo test -p ds4-gpu
+  --features cuda-backend --test model_map_abi -- --nocapture`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check`.
 - M10.5c4c1 adds a feature-gated `ds4-gpu` `cuda-backend` build path that links
   `ds4.c` and `ds4_cuda.cu` into the Rust GPU crate on Linux only when the
   feature is requested, while preserving the existing macOS backend link path
@@ -99,8 +121,9 @@
   dry-run scheduling, runtime tensor/weight bridge construction, B300 numeric
   execution, continuation-state validation, and optional directional-steering
   coverage. M10.5c4c1 is the completed B300 Rust CUDA backend linkage and ABI
-  smoke prerequisite for numeric one-token execution; the active next slice is
-  M10.5c4c2.
+  smoke prerequisite for numeric one-token execution. M10.5c4c2a is the
+  completed model-map backend bridge needed before real GGUF weight offsets are
+  passed to CUDA kernels; the active next slice is M10.5c4c2b.
 - M10.5c4b is the runtime-state bridge from M10.5c1/M10.5c2 weights and
   tensor plans. M10.5c4c was further split because the B300 pod had no default
   Rust toolchain and `ds4-gpu` only linked the C backend on macOS. M10.5c4c1

@@ -289,6 +289,20 @@ sources and CUDA libraries, that the backend ABI smoke test is enabled for
 B300 only under that feature, and that the unified report carries the exact
 B300 rerun command.
 
+Compare the M10.5c4c2a Rust decode model-map bridge before running the B300
+model-map backend smoke:
+
+```sh
+python3 ds4-parity/compare_decode_model_map_bridge.py
+python3 ds4-parity/compare_decode_model_map_bridge.py --negative-test
+```
+
+The comparator checks that the Rust decode backend exposes safe wrappers for
+model map, file descriptor, map-range, and CUDA cache-range backend calls,
+that CUDA-only cache wrappers stay Linux-gated, that the B300 test exercises
+fd/map/range/cache success and failure paths, and that the unified report
+carries the exact B300 rerun command.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

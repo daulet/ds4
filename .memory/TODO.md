@@ -3855,14 +3855,43 @@
 - Owner path: Rust GPU build/test wiring, B300 comparator,
   `.memory/status.md`.
 
-### M10.5c4c2: Rust One-Token Decode B300 Execution
+### M10.5c4c2a: Rust Decode Model-Map Backend Bridge
+
+- Status: completed
+- Goal: expose the model-map backend calls Rust decode execution needs before
+  passing real GGUF weight pointers to CUDA kernels.
+- Oracle: M10.2 `ModelMapBackend` operation inventory, M10.5a sys ABI
+  declarations, the C CUDA model-map/cache behavior, and the M10.5c4c1 B300
+  Rust CUDA backend smoke.
+- Fixture: tiny model bytes plus file descriptor in the backend ABI smoke, with
+  CUDA cache-range calls exercised on B300 under `--features cuda-backend`.
+- Comparator: static model-map bridge checker plus B300 `model_map_abi` Rust
+  test covering fd, full map, map range, cache range, q8/f16 cache hook, and
+  out-of-range failure paths.
+- Acceptance: Rust has safe status-returning wrappers for model map, model fd,
+  model map range, CUDA model cache range, and CUDA q8/f16 cache range; CUDA-only
+  cache wrappers remain Linux-gated; B300 executes the wrappers before the
+  scheduler starts using real weight offsets.
+- Drift policy: wrapper names and ABI calls are exact; cache residency behavior
+  follows the C backend, while the smoke fixture uses tiny deterministic bytes
+  instead of the full GGUF model.
+- Review gate: ask Claude to review model-map lifetime, cfg gating, and CUDA
+  cache wrapper containment.
+- Validation passed: model-map bridge comparator with negative test, B300 `cargo
+  test -p ds4-gpu --features cuda-backend --test model_map_abi`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+- Owner path: Rust decode backend model-map wrappers, B300 comparator,
+  `.memory/status.md`.
+
+### M10.5c4c2b: Rust One-Token Decode B300 Execution
 
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
   on B300 and capture Rust checkpoints for the M10.4 decode cases.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
-  M10.5c4c1 B300 Rust CUDA backend smoke.
+  M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -3887,7 +3916,7 @@
 - Goal: close one-token decode coverage for continuation-state and optional
   directional-steering cases after default B300 execution is passing.
 - Oracle: M10.4 continuation checkpoints, C directional-steering decode
-  branches, and M10.5c4c2 execution results.
+  branches, and M10.5c4c2b execution results.
 - Fixture: continuation-token decode after prefill, long indexed decode, and
   directional-steering enabled cases when support vectors are available.
 - Comparator: continuation Rust-vs-C tensor/logit/counter diffs plus optional
