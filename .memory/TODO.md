@@ -1772,7 +1772,7 @@
 
 ### M8.13b: Rust Session Sampling Runtime Boundary
 
-- Status: pending
+- Status: done
 - Goal: expose the session-backed Rust runtime boundary needed for seeded
   non-greedy one-shot sampling and future MTP speculation.
 - Source evidence needed: `ds4.h`, `ds4.c`, `rust/ds4-engine/src/lib.rs`, the
@@ -1789,14 +1789,22 @@
 - Drift policy: timing/progress/path normalization only.
 - Review gate: ask Claude to review session lifetime, RNG mutation, evaluation
   loop, and error propagation.
-- Validation needed: B300 runtime comparator with negative tests, targeted Rust
-  tests, `cargo test --workspace`, and `git diff --check`.
-- Owner path: Rust engine session boundary, session runtime comparator,
-  `ds4-parity/`, `.memory/status.md`.
+- Validation passed: B300 `cargo build -p ds4-engine --bin
+  ds4-session-runtime-rs` with `CUDA_ARCH=native`; B300
+  `python3 ds4-parity/compare_cli_session_runtime.py
+  ds4-parity/baselines/cli/m8.12a/current-c.json --candidate-binary
+  target/debug/ds4-session-runtime-rs --negative-test` (`CLI session runtime
+  comparator: PASS, 28 checks`; negative tests `PASS, 5 checks`); local
+  `cargo fmt --all -- --check`; local `cargo test -p ds4-engine`; local
+  `cargo build -p ds4-engine --bin ds4-session-runtime-rs`; local
+  `cargo test --workspace`; local `python3 -m py_compile` for M8.13a/M8.13b
+  comparators; and `git diff --check`.
+- Owner path: `rust/ds4-engine/`,
+  `ds4-parity/compare_cli_session_runtime.py`, `.memory/status.md`.
 
 ### M8.13c: Rust CLI One-Shot Core Transcript Surface
 
-- Status: pending after M8.13a and M8.13b
+- Status: pending
 - Goal: route the Rust CLI one-shot core surface through the M8.13a/M8.13b
   runtime boundaries.
 - Source evidence needed: committed M8.12a current-C transcript fixture, Rust

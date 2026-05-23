@@ -1,8 +1,9 @@
 use std::error::Error;
-use std::ffi::{c_char, c_float, c_int, c_void, CString, NulError};
+use std::ffi::{c_char, c_float, c_int, c_void, CStr, CString, NulError};
 use std::fmt;
 use std::ptr::NonNull;
 use std::slice;
+use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Backend {
@@ -160,6 +161,17 @@ pub struct ArgmaxOptions {
     pub think_mode: ThinkMode,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SamplingOptions {
+    pub n_predict: i32,
+    pub ctx_size: i32,
+    pub think_mode: ThinkMode,
+    pub temperature: f32,
+    pub top_p: f32,
+    pub min_p: f32,
+    pub seed: u64,
+}
+
 #[derive(Debug)]
 pub struct GenerationResult {
     pub exit_code: i32,
@@ -250,6 +262,100 @@ impl Engine {
             stdout: state.printer.into_bytes(),
         }
     }
+
+    pub fn generate_sampled_text(
+        &self,
+        prompt: &Tokens,
+        options: SamplingOptions,
+    ) -> GenerationResult {
+        let mut session = std::ptr::null_mut();
+        let rc = unsafe {
+            ds4_session_create(&mut session, self.raw.as_ptr(), options.ctx_size as c_int)
+        };
+        let Some(session) = NonNull::new(session) else {
+            eprintln!("ds4: sampled CLI generation requires a session backend");
+            return GenerationResult {
+                exit_code: if rc == 0 { 1 } else { rc },
+                stdout: Vec::new(),
+            };
+        };
+        let session = Session { raw: session };
+        let mut printer = TokenPrinter::new(options.think_mode);
+
+        let mut err = [0 as c_char; 160];
+        let prefill_start = Instant::now();
+        let sync_rc = unsafe {
+            ds4_session_sync(
+                session.raw.as_ptr(),
+                &prompt.raw,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if sync_rc != 0 {
+            eprintln!("ds4: prompt processing failed: {}", c_error(&err));
+            return GenerationResult {
+                exit_code: sync_rc,
+                stdout: printer.into_bytes(),
+            };
+        }
+        let prefill_elapsed = prefill_start.elapsed();
+
+        let mut max_tokens = options.n_predict;
+        let room = unsafe {
+            ds4_session_ctx(session.raw.as_ptr()) - ds4_session_pos(session.raw.as_ptr())
+        };
+        if room <= 1 {
+            max_tokens = 0;
+        } else if max_tokens > room - 1 {
+            max_tokens = room - 1;
+        }
+
+        let mut rng = options.seed;
+        let eos = unsafe { ds4_token_eos(self.raw.as_ptr()) };
+        let decode_start = Instant::now();
+        let mut generated = 0;
+        while generated < max_tokens {
+            let token = unsafe {
+                ds4_session_sample(
+                    session.raw.as_ptr(),
+                    options.temperature,
+                    0,
+                    options.top_p,
+                    options.min_p,
+                    &mut rng,
+                )
+            };
+            if token == eos {
+                break;
+            }
+            let eval_rc = unsafe {
+                ds4_session_eval(session.raw.as_ptr(), token, err.as_mut_ptr(), err.len())
+            };
+            if eval_rc != 0 {
+                eprintln!("ds4: decode failed: {}", c_error(&err));
+                return GenerationResult {
+                    exit_code: eval_rc,
+                    stdout: printer.into_bytes(),
+                };
+            }
+            unsafe {
+                append_token_text(self.raw.as_ptr(), &mut printer, token);
+            }
+            generated += 1;
+        }
+        let decode_elapsed = decode_start.elapsed();
+        printer.finish_generation();
+        eprintln!(
+            "ds4: prefill: {:.2} t/s, generation: {:.2} t/s",
+            rate(prompt.len(), prefill_elapsed),
+            rate(generated, decode_elapsed)
+        );
+        GenerationResult {
+            exit_code: 0,
+            stdout: printer.into_bytes(),
+        }
+    }
 }
 
 impl Drop for Engine {
@@ -332,13 +438,17 @@ unsafe extern "C" fn emit_generated_token(ud: *mut c_void, token: c_int) {
     let Some(state) = ud.cast::<EmitState>().as_mut() else {
         return;
     };
+    append_token_text(state.engine, &mut state.printer, token);
+}
+
+unsafe fn append_token_text(engine: *mut RawEngine, printer: &mut TokenPrinter, token: c_int) {
     let mut len = 0usize;
-    let text = ds4_token_text(state.engine, token, &mut len);
+    let text = ds4_token_text(engine, token, &mut len);
     if text.is_null() {
         return;
     }
     let bytes = slice::from_raw_parts(text.cast::<u8>(), len);
-    state.printer.write_token_text(bytes);
+    printer.write_token_text(bytes);
     free(text.cast());
 }
 
@@ -440,9 +550,40 @@ fn is_partial_prefix(bytes: &[u8], prefix: &[u8]) -> bool {
     bytes.len() < prefix.len() && prefix.starts_with(bytes)
 }
 
+fn c_error(buf: &[c_char]) -> String {
+    unsafe { CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned() }
+}
+
+fn rate(tokens: i32, elapsed: std::time::Duration) -> f64 {
+    let seconds = elapsed.as_secs_f64();
+    if seconds > 0.0 {
+        f64::from(tokens) / seconds
+    } else {
+        0.0
+    }
+}
+
 #[repr(C)]
 struct RawEngine {
     _private: [u8; 0],
+}
+
+#[repr(C)]
+struct RawSession {
+    _private: [u8; 0],
+}
+
+#[derive(Debug)]
+struct Session {
+    raw: NonNull<RawSession>,
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        unsafe {
+            ds4_session_free(self.raw.as_ptr());
+        }
+    }
 }
 
 #[repr(C)]
@@ -518,6 +659,35 @@ unsafe extern "C" {
         progress: Option<unsafe extern "C" fn(*mut c_void, *const c_char, c_int, c_int)>,
         progress_ud: *mut c_void,
     ) -> c_int;
+    fn ds4_token_eos(engine: *mut RawEngine) -> c_int;
+    fn ds4_session_create(
+        out: *mut *mut RawSession,
+        engine: *mut RawEngine,
+        ctx_size: c_int,
+    ) -> c_int;
+    fn ds4_session_free(session: *mut RawSession);
+    fn ds4_session_sync(
+        session: *mut RawSession,
+        prompt: *const RawTokens,
+        err: *mut c_char,
+        errlen: usize,
+    ) -> c_int;
+    fn ds4_session_sample(
+        session: *mut RawSession,
+        temperature: c_float,
+        top_k: c_int,
+        top_p: c_float,
+        min_p: c_float,
+        rng: *mut u64,
+    ) -> c_int;
+    fn ds4_session_eval(
+        session: *mut RawSession,
+        token: c_int,
+        err: *mut c_char,
+        errlen: usize,
+    ) -> c_int;
+    fn ds4_session_pos(session: *mut RawSession) -> c_int;
+    fn ds4_session_ctx(session: *mut RawSession) -> c_int;
     fn free(ptr: *mut c_void);
 }
 

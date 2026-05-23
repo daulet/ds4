@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.13b Rust Session Sampling Runtime Boundary
-- Last validated source commit: M8.13a Rust argmax one-shot runtime boundary in
-  this commit; prior pushed source commit
-  `f8b534bf36f8d9bd881ab669122c433bd6265b7e`
+- Active item: M8.13c Rust CLI One-Shot Core Transcript Surface
+- Last validated source commit: M8.13b Rust session sampling runtime boundary
+  in this commit; prior pushed source commit
+  `4a1be769d3b11482255c07aa59e03b572522ca87`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1179,3 +1179,30 @@
   ds4-engine --bin ds4-argmax-runtime-rs`, full `cargo test --workspace`,
   `python3 -m py_compile ds4-parity/compare_cli_argmax_runtime.py`, and
   `git diff --check`.
+- M8.13b adds `SamplingOptions` and a Rust session-backed generation path that
+  calls current-C `ds4_session_create`, `ds4_session_sync`,
+  `ds4_session_sample`, `ds4_session_eval`, `ds4_session_ctx`,
+  `ds4_session_pos`, and `ds4_token_eos`. It preserves Rust ownership of the
+  generated stdout buffer and frees the C session with `ds4_session_free`.
+- M8.13b adds `ds4-session-runtime-rs`, a narrow seeded non-greedy runtime
+  binary. It accepts the M8.12a seeded sampling argv surface, requires `--seed`,
+  and rejects `--temp 0` so greedy generation remains owned by M8.13a.
+- M8.13b adds `ds4-parity/compare_cli_session_runtime.py`, which runs
+  `target/debug/ds4-session-runtime-rs` against the M8.12a
+  `seeded_sampling_nothink` current-C case with seed `12345`; it does not cover
+  the M8.12a greedy cases already owned by M8.13a.
+- M8.13b B300 validation over `/workspace/ds4/ds4flash.gguf` passed after
+  overlaying the M8.13b files on the pushed M8.13a commit, building with
+  `CARGO_HOME=/tmp/ds4-cargo RUSTUP_HOME=/tmp/ds4-rustup
+  PATH=/tmp/ds4-cargo/bin:$PATH CUDA_ARCH=native cargo build -p ds4-engine
+  --bin ds4-session-runtime-rs`, and running
+  `python3 ds4-parity/compare_cli_session_runtime.py
+  ds4-parity/baselines/cli/m8.12a/current-c.json --candidate-binary
+  target/debug/ds4-session-runtime-rs --negative-test`.
+- M8.13b B300 comparator reported `CLI session runtime comparator: PASS, 28
+  checks` and `CLI session runtime negative tests: PASS, 5 checks`.
+- M8.13b local validation passed for `cargo fmt --all -- --check`, `cargo test
+  -p ds4-engine`, `cargo build -p ds4-engine --bin ds4-session-runtime-rs`,
+  full `cargo test --workspace`, `python3 -m py_compile
+  ds4-parity/compare_cli_session_runtime.py
+  ds4-parity/compare_cli_argmax_runtime.py`, and `git diff --check`.
