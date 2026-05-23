@@ -3,10 +3,9 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.12 Current-C CLI One-Shot Generation Oracle
-- Last validated source commit: M8.11 blocked state and M8.12 queue in this
-  commit; prior pushed source commit
-  `5a0ac15b08133f6aabb01c059af4773fd356f44f`
+- Active item: M8.12a Current-C CLI One-Shot Core Transcript Oracle
+- Last validated source commit: M8.12 split in this commit; prior pushed
+  source commit `963918425b2068b0d0e2eaae3f2a828dd75ba0ab`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1082,3 +1081,7 @@
 - M8.12 is the next runnable roadmap item because it captures current-C
   one-shot generation transcripts on the B300 CUDA model host and does not
   depend on the blocked imatrix output oracle.
+- M8.12 has been split in `RUST_PORT_ROADMAP.md` into M8.12a core prompt,
+  thinking-control, seeded-sampling, and context transcript capture, followed by
+  M8.12b advanced runtime-control coverage for MTP, directional steering,
+  quality, warm-weights, threads, and backend-option behavior.
