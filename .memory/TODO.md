@@ -1454,13 +1454,13 @@
 
 ### M8.9a: Rust Inspect Runtime Boundary Prerequisite
 
-- Status: pending
+- Status: done
 - Goal: introduce or expose a Rust-accessible engine-open and engine-summary
   boundary sufficient to load the M8.8 model/backend and emit the same summary
   surface without entering generation, REPL, perplexity, or imatrix paths.
-- Source evidence needed: C `ds4_engine_open`/`ds4_engine_summary`, committed
-  M8.8 inspect fixture, Rust FFI/build boundary, and Rust lifecycle ownership
-  evidence.
+- Source evidence used: C `ds4_engine_open`/`ds4_engine_summary`, committed
+  M8.8 inspect fixture, Rust FFI/build boundary, Rust `Engine` lifecycle
+  wrapper, and B300 CUDA runtime validation.
 - Oracle: current C `ds4_engine_open` and `ds4_engine_summary` on the M8.8
   inspect fixture.
 - Fixture: the same plain inspect and prompt/control inspect cases captured by
@@ -1473,8 +1473,15 @@
 - Drift policy: path, backend progress, and startup-timing normalization only.
 - Review gate: ask Claude to review FFI ownership, unsafe boundaries,
   lifecycle/cleanup behavior, and comparator coverage.
-- Validation needed: B300 runtime comparator with negative tests, targeted Rust
-  tests, `cargo test --workspace`, and `git diff --check`.
+- Validation passed: local `cargo fmt --all -- --check`, local `cargo test
+  --workspace`, local `python3 -m py_compile
+  ds4-parity/compare_cli_inspect_runtime.py`, B300 `cargo test -p ds4-engine`
+  using temporary `/tmp/ds4-cargo`/`/tmp/ds4-rustup`, B300 `cargo build -p
+  ds4-engine --bin ds4-inspect-runtime-rs`, and B300
+  `python3 ds4-parity/compare_cli_inspect_runtime.py
+  ds4-parity/baselines/cli/m8.8/current-c.json --candidate-binary
+  target/debug/ds4-inspect-runtime-rs --negative-test` (`CLI inspect runtime
+  comparator: PASS, 68 checks`; negative tests `PASS, 5 checks`).
 - Owner path: Rust inspect runtime boundary, CLI inspect comparator,
   `ds4-parity/`, `.memory/status.md`.
 

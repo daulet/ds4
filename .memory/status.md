@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.9a Rust Inspect Runtime Boundary Prerequisite
-- Last validated source commit: M8.9 inspect parity split/runtime blocker
-  documentation in this commit; prior pushed source commit
-  `03e004aa6a8e4d08659307516575a79e8d813055`
+- Active item: M8.9b Rust CLI Inspect Output Surface
+- Last validated source commit: M8.9a Rust inspect runtime boundary in this
+  commit; prior pushed source commit
+  `2784324addfe346169d3414ce86e8ab788a1a593`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1021,3 +1021,16 @@
 - M8.9 has been split in `RUST_PORT_ROADMAP.md` into an inspect runtime-boundary
   prerequisite and the actual CLI inspect output surface item. The original
   M8.9 is blocked until the runtime-boundary prerequisite exists.
+- M8.9a adds `rust/ds4-engine`, a Rust `Engine` wrapper over
+  `ds4_engine_open`/`ds4_engine_summary`/`ds4_engine_close`, the
+  `ds4-inspect-runtime-rs` runtime binary, and
+  `ds4-parity/compare_cli_inspect_runtime.py`.
+- M8.9a local validation passed for `cargo fmt --all -- --check`, `cargo test
+  --workspace`, `python3 -m py_compile
+  ds4-parity/compare_cli_inspect_runtime.py`, and `git diff --check`.
+- M8.9a B300 validation used a temporary Rust 1.95.0 toolchain under
+  `/tmp/ds4-cargo` and `/tmp/ds4-rustup`, built the CUDA-backed Rust binary,
+  and passed `python3 ds4-parity/compare_cli_inspect_runtime.py
+  ds4-parity/baselines/cli/m8.8/current-c.json --candidate-binary
+  target/debug/ds4-inspect-runtime-rs --negative-test` (`CLI inspect runtime
+  comparator: PASS, 68 checks`; negative tests `PASS, 5 checks`).

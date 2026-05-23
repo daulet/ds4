@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "rust/ds4-gguf",
+    "rust/ds4-engine",
     "rust/ds4-gpu",
     "rust/ds4-gpu-sys",
 ]
