@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    render_chat_prompt_text, render_live_tool_tail_text, ChatMessage, SamplingParams, ThinkMode,
-    ToolArgument, ToolCall,
+    render_chat_prompt_text, render_live_tool_tail_text, render_tool_result_text, ChatMessage,
+    SamplingParams, ThinkMode, ToolArgument, ToolCall,
 };
 
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
@@ -480,6 +480,9 @@ pub fn parse_anthropic_core_request(
     let mut model = DEFAULT_MODEL.to_string();
     let mut messages = None;
     let mut system = None;
+    let mut tool_schemas = None;
+    let mut tool_orders = Vec::new();
+    let mut tool_choice_none = false;
     let mut max_tokens = def_tokens;
     let mut sampling = SamplingParams::defaults();
     let mut stream = false;
@@ -488,13 +491,21 @@ pub fn parse_anthropic_core_request(
     let mut reasoning_effort = ThinkMode::High;
     let mut stops = Vec::new();
 
-    for (key, _, value) in fields {
+    for (key, raw, value) in fields {
         match key.as_str() {
             "messages" => {
-                messages = Some(parse_anthropic_messages(&value)?);
+                messages = Some(parse_anthropic_messages(&raw)?);
             }
             "system" => {
                 system = Some(parse_anthropic_system(&value)?);
+            }
+            "tools" => {
+                let parsed = parse_tools_value(&raw)?;
+                tool_schemas = Some(parsed.schemas);
+                tool_orders = parsed.orders;
+            }
+            "tool_choice" => {
+                parse_anthropic_tool_choice(&value, &mut tool_choice_none)?;
             }
             "model" => {
                 model = value
@@ -552,15 +563,24 @@ pub fn parse_anthropic_core_request(
         think_mode_from_enabled(thinking_enabled, reasoning_effort),
         ctx_size,
     );
-    let prompt_preserves_reasoning = chat_history_uses_tool_context(&messages, None);
-    let prompt_text = render_chat_prompt_text(&messages, None, think_mode);
+    let has_tools = tool_schemas
+        .as_deref()
+        .is_some_and(|schemas| !schemas.is_empty())
+        && !tool_choice_none;
+    let active_tool_schemas = if has_tools {
+        tool_schemas.as_deref()
+    } else {
+        None
+    };
+    let prompt_preserves_reasoning = chat_history_uses_tool_context(&messages, active_tool_schemas);
+    let prompt_text = render_chat_prompt_text(&messages, active_tool_schemas, think_mode);
 
     Ok(AnthropicRequest {
         model,
         messages,
-        has_tools: false,
-        tool_schemas: None,
-        tool_orders: Vec::new(),
+        has_tools,
+        tool_schemas,
+        tool_orders,
         max_tokens,
         sampling,
         stream,
@@ -1559,20 +1579,22 @@ fn parse_responses_content_array(value: &JsonValue) -> Result<String, ServerRequ
     }
 }
 
-fn parse_anthropic_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestError> {
-    let JsonValue::Array(values) = value else {
-        return Err(ServerRequestError::invalid_json());
-    };
+fn parse_anthropic_messages(raw: &str) -> Result<Vec<ChatMessage>, ServerRequestError> {
+    let raw_messages = JsonParser::new(raw)
+        .parse_root_array_values_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
 
-    let mut messages = Vec::with_capacity(values.len());
-    for value in values {
-        let JsonValue::Object(fields) = value else {
-            return Err(ServerRequestError::invalid_json());
-        };
+    let mut messages = Vec::with_capacity(raw_messages.len());
+    for raw_message in raw_messages {
+        let fields = JsonParser::new(&raw_message)
+            .parse_root_object_fields_raw()
+            .map_err(|_| ServerRequestError::invalid_json())?;
         let mut role = None;
         let mut content = None;
         let mut reasoning = String::new();
-        for (key, value) in fields {
+        let mut tool_calls = Vec::new();
+        let mut tool_call_ids = Vec::new();
+        for (key, raw, value) in fields {
             match key.as_str() {
                 "role" => {
                     role = Some(
@@ -1583,9 +1605,13 @@ fn parse_anthropic_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, Serve
                     );
                 }
                 "content" => {
-                    let parsed = parse_anthropic_content(value)?;
+                    let parsed = parse_anthropic_content(&raw, &value)?;
                     content = Some(parsed.content);
                     reasoning.push_str(&parsed.reasoning);
+                    tool_calls.extend(parsed.tool_calls);
+                    for id in parsed.tool_call_ids {
+                        push_unique_id(&mut tool_call_ids, id);
+                    }
                 }
                 _ => {}
             }
@@ -1595,6 +1621,10 @@ fn parse_anthropic_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, Serve
             content.unwrap_or_default(),
         );
         message.reasoning = reasoning;
+        message.tool_calls = tool_calls;
+        for id in tool_call_ids {
+            message.add_tool_call_id(id);
+        }
         messages.push(message);
     }
     Ok(messages)
@@ -1604,23 +1634,34 @@ fn parse_anthropic_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, Serve
 struct AnthropicContent {
     content: String,
     reasoning: String,
+    tool_calls: Vec<ToolCall>,
+    tool_call_ids: Vec<String>,
 }
 
-fn parse_anthropic_content(value: &JsonValue) -> Result<AnthropicContent, ServerRequestError> {
+fn parse_anthropic_content(
+    raw: &str,
+    value: &JsonValue,
+) -> Result<AnthropicContent, ServerRequestError> {
     match value {
         JsonValue::String(value) => Ok(AnthropicContent {
             content: value.clone(),
             reasoning: String::new(),
+            tool_calls: Vec::new(),
+            tool_call_ids: Vec::new(),
         }),
         JsonValue::Null => Ok(AnthropicContent::default()),
-        JsonValue::Array(values) => {
+        JsonValue::Array(_) => {
+            let raw_values = JsonParser::new(raw)
+                .parse_root_array_values_raw()
+                .map_err(|_| ServerRequestError::invalid_json())?;
             let mut parsed = AnthropicContent::default();
-            for value in values {
+            for raw_value in raw_values {
+                let value = JsonParser::new(&raw_value)
+                    .parse()
+                    .map_err(|_| ServerRequestError::invalid_json())?;
                 match value {
-                    JsonValue::String(value) => parsed.content.push_str(value),
-                    JsonValue::Object(fields) => {
-                        parse_anthropic_content_block(fields, &mut parsed)?
-                    }
+                    JsonValue::String(value) => parsed.content.push_str(&value),
+                    JsonValue::Object(_) => parse_anthropic_content_block(&raw_value, &mut parsed)?,
                     _ => {}
                 }
             }
@@ -1631,13 +1672,20 @@ fn parse_anthropic_content(value: &JsonValue) -> Result<AnthropicContent, Server
 }
 
 fn parse_anthropic_content_block(
-    fields: &[(String, JsonValue)],
+    raw: &str,
     out: &mut AnthropicContent,
 ) -> Result<(), ServerRequestError> {
+    let fields = JsonParser::new(raw)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
     let mut block_type = None;
     let mut text = None;
     let mut thinking = None;
-    for (key, value) in fields {
+    let mut id = None;
+    let mut name = None;
+    let mut input = None;
+    let mut tool_result = None;
+    for (key, raw, value) in fields {
         match key.as_str() {
             "type" => {
                 block_type = Some(
@@ -1648,23 +1696,79 @@ fn parse_anthropic_content_block(
                 );
             }
             "text" => {
-                text = Some(json_content(value)?);
+                text = Some(json_content(&value)?);
             }
             "thinking" => {
-                thinking = Some(json_content(value)?);
+                thinking = Some(json_content(&value)?);
+            }
+            "id" | "tool_use_id" => {
+                id = Some(
+                    value
+                        .as_str()
+                        .ok_or_else(ServerRequestError::invalid_json)?
+                        .to_string(),
+                );
+            }
+            "name" => {
+                name = Some(
+                    value
+                        .as_str()
+                        .ok_or_else(ServerRequestError::invalid_json)?
+                        .to_string(),
+                );
+            }
+            "input" => {
+                input = Some(raw);
+            }
+            "content" => {
+                tool_result = Some(json_content(&value)?);
             }
             _ => {}
         }
     }
-    if !matches!(
-        block_type.as_deref(),
-        Some("tool_use") | Some("tool_result")
-    ) {
-        if let Some(text) = text {
-            out.content.push_str(&text);
+    match block_type.as_deref() {
+        Some("tool_use") => {
+            out.tool_calls.push(response_tool_call(
+                name.unwrap_or_default(),
+                input.as_deref().unwrap_or("{}"),
+                id.as_deref(),
+            ));
         }
-        if let Some(thinking) = thinking {
-            out.reasoning.push_str(&thinking);
+        Some("tool_result") => {
+            if let Some(id) = id {
+                push_unique_id(&mut out.tool_call_ids, id);
+            }
+            out.content.push_str("<tool_result>");
+            out.content.push_str(&render_tool_result_text(
+                tool_result.as_deref().unwrap_or(""),
+            ));
+            out.content.push_str("</tool_result>");
+        }
+        _ => {
+            if let Some(text) = text {
+                out.content.push_str(&text);
+            }
+            if let Some(thinking) = thinking {
+                out.reasoning.push_str(&thinking);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn parse_anthropic_tool_choice(
+    value: &JsonValue,
+    tool_choice_none: &mut bool,
+) -> Result<(), ServerRequestError> {
+    let JsonValue::Object(fields) = value else {
+        return Ok(());
+    };
+    for (key, value) in fields {
+        if key == "type" {
+            *tool_choice_none = value
+                .as_str()
+                .ok_or_else(ServerRequestError::invalid_json)?
+                == "none";
         }
     }
     Ok(())
@@ -2654,6 +2758,107 @@ mod tests {
         let bad = parse_anthropic_core_request(r#"{"messages":{}}"#, 128, 32_768)
             .expect_err("bad messages");
         assert_eq!(bad.category(), ServerRequestErrorCategory::InvalidJson);
+    }
+
+    #[test]
+    fn anthropic_tool_schemas_and_choice_match_c_surface() {
+        let req = parse_anthropic_fixture(
+            r#"{
+                "messages":[{"role":"user","content":"use lookup"}],
+                "tools":[
+                    {"name":"lookup","description":"Lookup","input_schema":{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer"}}}},
+                    {"type":"function","function":{"name":"wrapped","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}
+                ],
+                "tool_choice":{"type":"auto"}
+            }"#,
+        );
+        assert!(req.has_tools);
+        assert!(req.prompt_preserves_reasoning);
+        let schemas = req.tool_schemas.as_deref().expect("schemas");
+        assert!(schemas.contains("\"name\":\"lookup\""));
+        assert!(schemas.contains("\"name\":\"wrapped\""));
+        assert_eq!(req.tool_orders.len(), 2);
+        assert_eq!(req.tool_orders[0].name, "lookup");
+        assert_eq!(req.tool_orders[0].properties, ["query", "limit"]);
+        assert_eq!(req.tool_orders[1].name, "wrapped");
+        assert_eq!(req.tool_orders[1].properties, ["path"]);
+        let tools = req.prompt_text.find("## Tools").expect("tools prompt");
+        let user = req.prompt_text.find("<｜User｜>use lookup").expect("user");
+        assert!(tools < user);
+
+        let none = parse_anthropic_fixture(
+            r#"{
+                "messages":[{"role":"user","content":"no prompt"}],
+                "tools":[{"name":"lookup","input_schema":{"type":"object","properties":{"query":{}}}}],
+                "tool_choice":{"type":"none"}
+            }"#,
+        );
+        assert!(!none.has_tools);
+        assert!(none
+            .tool_schemas
+            .as_deref()
+            .is_some_and(|schemas| { schemas.contains("\"name\":\"lookup\"") }));
+        assert!(!none.prompt_text.contains("## Tools"));
+        assert!(!none.prompt_preserves_reasoning);
+
+        let string_choice_is_skipped = parse_anthropic_fixture(
+            r#"{
+                "messages":[{"role":"user","content":"string choice"}],
+                "tools":[{"name":"lookup","input_schema":{"type":"object","properties":{"query":{}}}}],
+                "tool_choice":"none"
+            }"#,
+        );
+        assert!(string_choice_is_skipped.has_tools);
+        assert!(string_choice_is_skipped.prompt_text.contains("## Tools"));
+    }
+
+    #[test]
+    fn anthropic_tool_use_and_result_blocks_render_prompt_bytes() {
+        let req = parse_anthropic_fixture(
+            r#"{
+                "messages":[
+                    {"role":"user","content":"run"},
+                    {"content":[
+                        {"type":"thinking","thinking":"need tool"},
+                        {"type":"tool_use","id":"toolu_1","name":"Bash","input":{"description":"list","command":"ls -la","timeout":2.0}}
+                    ],"role":"assistant"},
+                    {"role":"user","content":[
+                        {"type":"tool_result","tool_use_id":"toolu_1","content":["result </tool_result> ",{"text":"& raw"}]}
+                    ]}
+                ]
+            }"#,
+        );
+        assert!(req.prompt_preserves_reasoning);
+        assert_eq!(req.messages.len(), 3);
+        let assistant = &req.messages[1];
+        assert_eq!(assistant.role, "assistant");
+        assert_eq!(assistant.reasoning, "need tool");
+        assert_eq!(assistant.content, "");
+        assert_eq!(assistant.tool_calls.len(), 1);
+        assert_eq!(assistant.tool_calls[0].id, "toolu_1");
+        assert_eq!(assistant.tool_calls[0].name, "Bash");
+        assert_eq!(
+            assistant.tool_calls[0].arguments,
+            [
+                ToolArgument::string("description", "list"),
+                ToolArgument::string("command", "ls -la"),
+                ToolArgument {
+                    name: "timeout".to_string(),
+                    value: "2.0".to_string(),
+                    is_string: false,
+                },
+            ]
+        );
+        assert_eq!(req.messages[2].role, "user");
+        assert_eq!(
+            req.messages[2].content,
+            "<tool_result>result &lt;/tool_result> & raw</tool_result>"
+        );
+        assert_eq!(req.messages[2].tool_call_ids, ["toolu_1"]);
+        assert_eq!(
+            req.prompt_text,
+            "<｜begin▁of▁sentence｜><｜User｜>run<｜Assistant｜><think>need tool</think>\n\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"Bash\">\n<｜DSML｜parameter name=\"description\" string=\"true\">list</｜DSML｜parameter>\n<｜DSML｜parameter name=\"command\" string=\"true\">ls -la</｜DSML｜parameter>\n<｜DSML｜parameter name=\"timeout\" string=\"false\">2.0</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls><｜end▁of▁sentence｜><｜User｜><tool_result>result &lt;/tool_result> & raw</tool_result><｜Assistant｜><think>"
+        );
     }
 
     #[test]

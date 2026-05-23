@@ -3,9 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c3b Anthropic Tool Schema And Tool History Parse Surface
-- Last validated source commit: M9.2c3a Anthropic core parser in this commit;
-  prior pushed source commit `98d51ed9ed1226e7e17b24e324d408edcb6e70a1`
+- Active item: M9.2c3c Anthropic Live Tool Result Validation Surface
+- Last validated source commit: M9.2c3b Anthropic tool parser in this commit;
+  prior pushed source commit `1a2f9eb6af35eafdb07f1b4225fa75e8433a0d2a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +25,23 @@
 
 ## Last Evidence
 
+- M9.2c3b extended Rust Anthropic request parsing for top-level `tools`,
+  `tool_choice.type`, active tool-schema prompting, assistant `tool_use`
+  blocks, user `tool_result` blocks, tool-use IDs, and DSML request-history
+  rendering.
+- M9.2c3b preserves raw nested `input` JSON for Anthropic `tool_use` blocks so
+  DSML parameter rendering keeps object-field order and numeric spelling such
+  as `2.0`, while still using stable fallback `arguments` text for non-object
+  input.
+- M9.2c3b validation covered direct Anthropic schemas, OpenAI-compatible
+  wrapped tools, `tool_choice.type` auto/none behavior, Anthropic string
+  `tool_choice` skip behavior, role-after-content `tool_use`, content-array
+  `tool_result`, call-id preservation, delimiter escaping, and exact prompt
+  bytes for visible tool history.
+- M9.2c3b validation passed for targeted
+  `cargo test -p ds4-gguf server_chat -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.2c3a added exported Rust `AnthropicRequest` and
   `parse_anthropic_core_request` for model-free Anthropic core request
   parsing.
