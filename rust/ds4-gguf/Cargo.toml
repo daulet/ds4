@@ -58,3 +58,7 @@ path = "src/bin/ds4-cli-parse-rs.rs"
 [[bin]]
 name = "ds4-cli-token-dump-rs"
 path = "src/bin/ds4-cli-token-dump-rs.rs"
+
+[[bin]]
+name = "ds4-server-rs"
+path = "src/bin/ds4-server-rs.rs"

@@ -2551,7 +2551,7 @@
 
 ### M9.3c2: No-Model Server Binary And Socket Replay
 
-- Status: active
+- Status: done
 - Goal: add a Rust `ds4-server-rs` binary that binds/listens, exposes server
   CLI startup flags needed by M9.3, wires M9.3c1 dispatch to accepted sockets,
   and shuts down deterministically in local replay tests.
@@ -2570,13 +2570,17 @@
   volatile timing fields if introduced.
 - Review gate: ask Claude to review socket lifetime, read limits, blocking
   behavior, CLI flag parsing, shutdown behavior, and comparator coverage.
-- Validation needed: local no-model HTTP comparator, targeted Rust server tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: local no-model HTTP comparator
+  `cargo test -p ds4-gguf --test no_model_server -- --nocapture`,
+  targeted Rust server tests
+  `cargo test -p ds4-gguf --bin ds4-server-rs -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  and `git diff --check`.
 - Owner path: Rust server binary/modules, `ds4-parity/`, `.memory/status.md`.
 
 ### M9.4: Non-Streaming Chat Completion Runtime
 
-- Status: pending
+- Status: active
 - Goal: implement model-backed Rust `/v1/chat/completions` non-streaming
   generation for the M0.4 non-streaming OpenAI cases.
 - Oracle: M0.4 `chat_basic`, `chat_thinking_disabled`, `chat_cache_seed`, and

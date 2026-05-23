@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.3c2 No-Model Server Binary And Socket Replay
-- Last validated source commit: M9.3c1 no-model generation error dispatcher
-  in this commit; prior pushed source commit
-  `369ff943f6bbf3b7ee7b6a7e67afa3c0ce6fd477`
+- Active item: M9.4 Non-Streaming Chat Completion Runtime
+- Last validated source commit: M9.3c2 no-model server binary and socket
+  replay in this commit; prior pushed source commit
+  `8bad7b24160e84e300f94a973a40d0d7c6b6a71f`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,21 @@
 
 ## Last Evidence
 
+- M9.3c2 added the `ds4-server-rs` binary with model-free `--host`, `--port`,
+  `--ctx`, `--tokens`, and `--cors` startup flags plus C-style localhost
+  binding behavior.
+- M9.3c2 wires accepted TCP sockets through the M9.3c1 no-model dispatcher,
+  reads until a complete request or stable parser failure, writes C-shaped
+  HTTP responses, and closes the client socket.
+- M9.3c2 added real process/socket replay coverage for OPTIONS, model list,
+  unknown route, malformed HTTP, missing messages, unsupported durable state,
+  unsupported tool choice, no-model context-limit response, and valid
+  generation rejection through 503.
+- M9.3c2 validation passed for local no-model HTTP comparator
+  `cargo test -p ds4-gguf --test no_model_server -- --nocapture`, targeted
+  binary tests `cargo test -p ds4-gguf --bin ds4-server-rs -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.3c1 added `rust/ds4-gguf/src/server_no_model.rs` as a socket-free
   dispatcher that combines M9.3a/M9.3b HTTP helpers with generation-route
   parse/error handling.
