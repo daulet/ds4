@@ -2509,25 +2509,66 @@
 
 ### M9.3c: No-Model Server Binary And Negative HTTP Replay
 
+- Status: split into M9.3c1 and M9.3c2 before implementation
+- Goal: preserve the original no-model server scope while separating
+  route/parser error mapping from socket/process replay.
+- Oracle: C `client_main`, current Rust M9.3a/M9.3b HTTP helpers, C
+  `listen_on`, `configure_client_socket`, and relevant server CLI flags.
+- Fixture: no source behavior change in this item.
+- Comparator: documentation-only diff review; no Rust implementation changes.
+- Acceptance: the split names one in-memory dispatch item and one socket replay
+  item, each with a distinct oracle, fixture, comparator, and validation gate.
+- Drift policy: no implementation or fixture drift allowed.
+- Review gate: ask Claude to review that the split preserves the original
+  M9.3c acceptance criteria without moving generation into either sub-item.
+- Validation needed: `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
+
+### M9.3c1: No-Model Generation Error Dispatcher
+
 - Status: active
-- Goal: add a Rust server binary that binds/listens, wires M9.3a/M9.3b helpers
-  to a socket loop, exposes server CLI startup flags needed by M9.3, and
-  rejects generation routes through the existing model-free parsers/error
-  helpers without running generation.
-- Oracle: C `listen_on`, `configure_client_socket`, `client_main` negative
-  paths for bad HTTP, bad JSON, unknown endpoint, missing messages/input/model,
-  and context-length errors, plus relevant server CLI flags.
+- Goal: add an in-memory no-model dispatcher that wires M9.3a/M9.3b helpers to
+  generation-route parse/error handling without opening sockets or running
+  generation.
+- Oracle: C `client_main` negative paths for bad HTTP, bad JSON, unknown
+  endpoint, missing messages/input/model/prompt, unsupported durable state,
+  unsupported tool choice, and context-length errors.
 - Fixture: local no-model HTTP replay cases for malformed HTTP, OPTIONS,
   model routes, bad routes, bad generation JSON, missing request fields,
-  unsupported durable state, and context-limit errors.
+  unsupported durable state, unsupported tool choice, and context-limit errors.
+- Comparator: in-process Rust tests comparing status lines, headers, JSON
+  bodies, CORS headers, and parser error text for each negative route.
+- Acceptance: Rust can answer model metadata/preflight and return C-shaped
+  negative responses for no-model generation requests without a live socket or
+  model load.
+- Drift policy: exact response bytes for covered negative paths.
+- Review gate: ask Claude to review route-to-parser error mapping, unsupported
+  generation handling, context-limit response body, and CORS propagation.
+- Validation needed: targeted Rust dispatcher tests, `cargo test --workspace`,
+  and `git diff --check`.
+- Owner path: Rust server HTTP route modules, `.memory/status.md`.
+
+### M9.3c2: No-Model Server Binary And Socket Replay
+
+- Status: pending
+- Goal: add a Rust `ds4-server-rs` binary that binds/listens, exposes server
+  CLI startup flags needed by M9.3, wires M9.3c1 dispatch to accepted sockets,
+  and shuts down deterministically in local replay tests.
+- Oracle: C `listen_on`, `configure_client_socket`, `parse_options`, startup
+  defaults for `--host`, `--port`, `--ctx`, `--tokens`, and `--cors`, plus the
+  M9.3c1 in-memory dispatcher.
+- Fixture: local socket replay cases for malformed HTTP, OPTIONS, model routes,
+  bad routes, bad generation JSON, missing request fields, unsupported durable
+  state, unsupported tool choice, and context-limit errors.
 - Comparator: local process/socket replay comparing status lines, headers, JSON
-  bodies, CORS headers, and deterministic shutdown behavior.
+  bodies, CORS headers, CLI flag effects, and deterministic process shutdown.
 - Acceptance: `ds4-server-rs` can start locally, answer model metadata, and
-  return C-shaped negative responses for no-model generation requests.
+  return C-shaped negative responses for no-model generation requests through a
+  real TCP socket.
 - Drift policy: exact response bytes except process IDs, port choices, and any
   volatile timing fields if introduced.
-- Review gate: ask Claude to review socket lifetime, blocking/read limits,
-  route-to-parser error mapping, shutdown behavior, and comparator coverage.
+- Review gate: ask Claude to review socket lifetime, read limits, blocking
+  behavior, CLI flag parsing, shutdown behavior, and comparator coverage.
 - Validation needed: local no-model HTTP comparator, targeted Rust server tests,
   `cargo test --workspace`, and `git diff --check`.
 - Owner path: Rust server binary/modules, `ds4-parity/`, `.memory/status.md`.

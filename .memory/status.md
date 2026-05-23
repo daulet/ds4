@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.3c No-Model Server Binary And Negative HTTP Replay
-- Last validated source commit: M9.3b model metadata route surface in this
-  commit; prior pushed source commit
-  `6ed77e87f015910e46c9d02c412ec4d5907baad5`
+- Active item: M9.3c1 No-Model Generation Error Dispatcher
+- Last validated source commit: M9.3c split documentation in this commit;
+  prior pushed source commit `78fd030e2988691c4967d60d3f9e63329a521f2a`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,16 @@
 
 ## Last Evidence
 
+- M9.3c was split before implementation because in-memory generation-route
+  parser/error dispatch and socket/process replay have distinct oracles,
+  fixture families, and validation gates.
+- M9.3c1 now owns the no-model dispatcher that combines M9.3a/M9.3b helpers
+  with generation-route parse/error mapping for bad HTTP, bad JSON, missing
+  messages/input/model/prompt, unsupported durable state/tool choice, and
+  context length errors without sockets or model loading.
+- M9.3c2 now owns the `ds4-server-rs` binary, CLI flag parsing, TCP bind/listen
+  loop, accepted-socket dispatch, local replay comparator, and deterministic
+  shutdown behavior.
 - M9.3b added a no-model HTTP route dispatch surface over the M9.3a in-memory
   parser/formatter helpers.
 - M9.3b covers C `client_main` behavior for `OPTIONS`, `GET /v1/models`,
