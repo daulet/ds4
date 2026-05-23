@@ -2878,30 +2878,121 @@ implementation so each commit has one oracle and comparator.
   `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
   review with no blockers.
 
-#### M9.8f: Runtime Cache/KV Replay Integration
+#### M9.8f1: Runtime Cache/KV Integration Split
 
-- Goal: wire Rust server runtime cache decisions, disk-KV restore/store,
-  continued-frontier accounting, tool-memory replay, and cache usage fields
-  through the request path.
-- Oracle: M0.4 cache continuation artifacts, M0.5 seed miss/restore and
-  continuation restore artifacts, KV headers, rendered text, cache decision
-  logs, and `compare_kv_replay.py`/`compare_server_kv.py`.
-- Fixture: M0.4 cache seed/continuation requests and M0.5 KV replay artifacts,
-  including responses, headers, traces, rendered text, and KV metadata.
-- Comparator: B300 replay comparing normalized responses, headers, trace cache
-  decisions, KV metadata, rendered text, disk/text cache source, cached token
-  counts, cache write tokens, and eviction/store decisions.
-- Acceptance: Rust server cache behavior matches M0.4/M0.5 current-C artifacts
-  end to end and preserves tool-memory replay semantics for future tool-result
-  requests.
+- Goal: split the broad runtime cache/KV request-path work into reviewable
+  stages with one oracle and comparator boundary per commit.
+- Oracle: M9.8f source map against `ds4_server.c` helpers for request-path
+  cache loading, session payload restore, continued store, tool-memory replay,
+  cache usage fields, and B300 replay closure.
+- Fixture: existing M0.4 cache seed/continuation fixtures, M0.5 KV replay
+  artifacts, current Rust runtime live-token cache tests, and M9.8b-M9.8e Rust
+  model-free helpers.
+- Comparator: review the resulting M9.8f2-M9.8f5 stages for independent
+  acceptance criteria and no remaining catch-all runtime cache item.
+- Acceptance: each runtime cache slice below is independently implementable,
+  reviewable, and measurable against current-C behavior before B300 closure.
+- Drift policy: this split changes only roadmap/status docs; behavior stays
+  unchanged.
+- Review gate: ask Claude to review the split for missing runtime cache
+  responsibilities.
+- Validation gate: `git diff --check` and non-interactive Claude review with
+  no blockers.
+
+#### M9.8f2: Runtime Cache Configuration And Trace Contract
+
+- Goal: add the Rust runtime server cache configuration/state and trace
+  contract needed for disk cache decisions without yet loading or writing KVC
+  payloads.
+- Oracle: C server CLI/config fields for KV cache enablement, directory,
+  budget, cross-quant policy, continued-store options, and trace cache-decision
+  fields.
+- Fixture: existing Rust `ds4-server-runtime-rs` CLI tests, M0.4 cache trace
+  sections, and M7.2/M7.7 cache-decision oracle rows.
+- Comparator: model-free tests comparing parsed config, default cache policy,
+  trace field names, cache-source strings, and usage accounting inputs.
+- Acceptance: runtime state can represent C-equivalent cache policy and emit
+  cache decision traces for none/memory-token/disk-text cases without changing
+  model execution.
+- Drift policy: CLI spelling, default values, trace keys, and cache-source
+  strings are exact; paths and timestamps remain normalized.
+- Review gate: ask Claude to review runtime surface compatibility and trace
+  contract stability.
+- Validation gate: targeted runtime cache-surface tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+#### M9.8f3: Runtime Disk-KV Lookup And Payload Restore
+
+- Goal: wire text-prefix KVC lookup, session payload restore, effective prompt
+  suffix tokenization, and tool-map trailer restore into the runtime request
+  path before generation.
+- Oracle: C `kv_cache_try_load_text`,
+  `ds4_kvstore_build_prompt_from_exact_prefix_and_text_suffix`,
+  `ds4_session_load_payload`, and
+  `kv_cache_restore_tool_memory_for_messages`.
+- Fixture: M0.5 seed restore/continuation KV artifacts, synthetic KVC files
+  with tool-map trailers, and request histories that require exact DSML replay.
+- Comparator: model-free disk lookup/load tests plus B300 smoke replay for one
+  cache hit, one miss, and one tool-memory restored prompt.
+- Acceptance: Rust can restore disk KV payloads selected by rendered text
+  prefix, tokenize only the visible suffix, and report disk cache/read stats
+  without losing exact DSML tool calls.
+- Drift policy: cache key bytes, loaded token counts, suffix prompt bytes,
+  tool replay stats, and load failure reasons are exact.
+- Review gate: ask Claude to review unsafe session-payload FFI and suffix
+  prompt construction.
+- Validation gate: targeted disk-restore tests, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, B300 restore smoke if local
+  model is unavailable, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and non-interactive Claude review with no blockers.
+
+#### M9.8f4: Runtime KV Store, Continued Frontier, And Eviction
+
+- Goal: write cold/continued/shutdown KVC checkpoints from the runtime server,
+  preserve continued-frontier suppression/restoration, write tool-map trailers,
+  and evict without deleting the just-written protected checkpoint.
+- Oracle: C `kv_cache_store_current`, `kv_cache_maybe_store_continued`,
+  `kv_cache_suppress_continued_store`, `kv_cache_store_live_prefix_text`, and
+  `ds4_kvstore_evict`.
+- Fixture: synthetic stores with budget edges, existing compatible files,
+  visible-transcript keys, and M0.5 KV header/rendered-text artifacts.
+- Comparator: file header/trailer byte checks, store/skip/evict trace checks,
+  and M7.2 policy comparator reuse for boundary decisions.
+- Acceptance: Rust writes KVC files with matching headers, rendered text keys,
+  payload sizes, tool-map trailers, continued-frontier updates, and eviction
+  outcomes.
+- Drift policy: reason codes, extension flags, rendered key bytes, store token
+  counts, trailer bytes, and protected eviction behavior are exact.
+- Review gate: ask Claude to review store failure rollback and eviction
+  protection.
+- Validation gate: targeted store/evict tests, `python3
+  ds4-parity/compare_kv_policy.py --negative-test`, `python3
+  ds4-parity/compare_kvc_file.py --negative-test`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+
+#### M9.8f5: Runtime Cache/KV Replay Comparator Closure
+
+- Goal: close M9.8 runtime cache behavior against M0.4/M0.5 current-C
+  artifacts and B300 model-backed replay.
+- Oracle: M0.4 cache seed/continuation responses and traces, M0.5 seed
+  miss/restore and continuation restore artifacts, KV headers, rendered text,
+  cache decision logs, and `compare_server_kv.py`.
+- Fixture: B300 `/workspace/ds4/ds4flash.gguf`, committed server request JSON,
+  response/header/trace artifacts, and normalized KV metadata.
+- Comparator: B300 replay comparing normalized responses, headers, generated
+  bytes, trace cache decisions, KV metadata, rendered text, disk/text cache
+  source, cached token counts, cache write tokens, and eviction/store decisions.
+- Acceptance: Rust server cache behavior matches current-C artifacts end to
+  end and M9.8 can hand off to the server parity report item.
 - Drift policy: normalize paths, timestamps, raw KV payload hashes, and random
   IDs only; cache source, token counts, rendered text, KV headers, and eviction
   outcomes are exact.
-- Review gate: ask Claude to review cache-key construction, live vs disk tool
-  memory, boundary trimming, KV budget checks, eviction protection, and request
-  accounting.
-- Validation gate: B300 KV/server comparator with negative tests,
-  `python3 ds4-parity/compare_kv_replay.py`, `python3
+- Review gate: ask Claude to review comparator coverage and B300 command
+  fidelity.
+- Validation gate: B300 KV/server comparator with negative tests, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, `python3
   ds4-parity/compare_server_kv.py`, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, and non-interactive Claude review with no
   blockers.

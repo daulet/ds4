@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8f Runtime Cache/KV Replay Integration
-- Last validated source commit: M9.8e KV tool-map trailer restore in this
-  commit; prior pushed source commit
-  `38aeab7c7b85fe7c062db17d860a1d24150aeb2a`
+- Active item: M9.8f2 Runtime Cache Configuration And Trace Contract
+- Last validated source commit: M9.8f1 runtime cache/KV integration split in
+  this commit; prior pushed source commit
+  `b35a8540acd3d0f7a02658c3db1713614f6b8220`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,17 @@
 
 ## Last Evidence
 
+- M9.8f1 split the broad runtime cache/KV request-path item into four
+  implementation stages plus a B300 comparator-closure stage:
+  M9.8f2 runtime cache configuration and trace contract, M9.8f3 disk-KV lookup
+  and payload restore, M9.8f4 KV store/continued frontier/eviction, and M9.8f5
+  end-to-end replay closure.
+- M9.8f1 source-mapped the remaining work to C helpers for
+  `kv_cache_try_load_text`, session payload restore, exact-prefix suffix prompt
+  construction, `kv_cache_store_current`, continued-store policy, tool-map
+  replay, and B300 artifact comparison.
+- M9.8f1 validation passed `git diff --check` and non-interactive Claude review
+  with no blockers.
 - M9.8e adds Rust restore plumbing for KVC tool-map trailers: it collects
   wanted tool-call ids from assistant calls and tool-result ids, decodes a KVC
   trailer only when `EXT_TOOL_MAP` is set, restores matching entries into
