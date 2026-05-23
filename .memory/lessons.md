@@ -112,3 +112,13 @@ available directly from the repo.
 - Permanent rule: do not try to refresh imatrix `.dat` output baselines on the
   B300 CUDA pod until current C supports CUDA imatrix collection. Use a
   Metal-capable host with the recorded model, or keep M8.10b/M8.11 blocked.
+
+## 2026-05-22: B300 Has Steering Fixture But No MTP GGUF
+
+- Symptom: M8.12b could execute directional steering but had to record MTP as a
+  missing-support-artifact blocker.
+- Root cause: the B300 workspace contains the tracked
+  `dir-steering/out/verbosity.f32` file, but no MTP GGUF under `/workspace/ds4`.
+- Permanent rule: runtime-control refreshes can use the committed verbosity
+  steering vector on B300, but MTP transcript coverage needs a support-model
+  provisioning step before it can become an executed oracle case.

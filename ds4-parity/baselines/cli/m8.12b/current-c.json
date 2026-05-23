@@ -1,0 +1,252 @@
+{
+  "schema": "ds4.cli_runtime_controls_oracle.v1",
+  "source": "current-c-cli-one-shot-runtime-controls",
+  "binary": "./ds4",
+  "model": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "size_bytes": 86720111488,
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig"
+  },
+  "support_artifacts": {
+    "directional_steering": {
+      "path": "dir-steering/out/verbosity.f32",
+      "size_bytes": 704512,
+      "sha256": "6414573b7d88822e16e6fe5972386ef2f1e51fc8502fe5849c4a611afad50cdd"
+    },
+    "mtp": {
+      "path": "/workspace/ds4/missing-mtp.gguf",
+      "available": false,
+      "blocker": "no MTP GGUF is present in the B300 workspace"
+    }
+  },
+  "cases": [
+    {
+      "id": "backend_name_cuda_quality_threads",
+      "argv": [
+        "--backend",
+        "cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--quality",
+        "-t",
+        "2",
+        "--nothink",
+        "-p",
+        "Answer with one short noun: glacier."
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": {
+        "base64": "Z2wK",
+        "bytes": 3,
+        "sha256": "a83c026dcdefdfd1ff76812bd42fc94f2034f9e05c37e04fbcdcda612f253599"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuOTE0cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MKZHM0OiB1c2luZyBHUFUgZ3JhcGggZ2VuZXJhdGlvbiB3aXRoIGxheWVyLW1ham9yIGdyYXBoIHByZWZpbGwKZHM0OiBncHUgcHJlZmlsbCBsYXllciAxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDExLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTUvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxNi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTgvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxOS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIwLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIzLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjQvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI2LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjcvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI5LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzAvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzMS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM1LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM4LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0MC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNDIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0My80Mw0KZHM0OiBwcmVmaWxsOiA0Mi4xMCB0L3MsIGdlbmVyYXRpb246IDMwMzAuMDkgdC9zCg==",
+        "bytes": 2011,
+        "sha256": "d3953a64616cde4e3aa0a896f407525b8d61ec92ed1c4c328658b1e9b6096643"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: using GPU graph generation with layer-major graph prefill\nds4: gpu prefill layer 1/43\rds4: gpu prefill layer 2/43\rds4: gpu prefill layer 3/43\rds4: gpu prefill layer 4/43\rds4: gpu prefill layer 5/43\rds4: gpu prefill layer 6/43\rds4: gpu prefill layer 7/43\rds4: gpu prefill layer 8/43\rds4: gpu prefill layer 9/43\rds4: gpu prefill layer 10/43\rds4: gpu prefill layer 11/43\rds4: gpu prefill layer 12/43\rds4: gpu prefill layer 13/43\rds4: gpu prefill layer 14/43\rds4: gpu prefill layer 15/43\rds4: gpu prefill layer 16/43\rds4: gpu prefill layer 17/43\rds4: gpu prefill layer 18/43\rds4: gpu prefill layer 19/43\rds4: gpu prefill layer 20/43\rds4: gpu prefill layer 21/43\rds4: gpu prefill layer 22/43\rds4: gpu prefill layer 23/43\rds4: gpu prefill layer 24/43\rds4: gpu prefill layer 25/43\rds4: gpu prefill layer 26/43\rds4: gpu prefill layer 27/43\rds4: gpu prefill layer 28/43\rds4: gpu prefill layer 29/43\rds4: gpu prefill layer 30/43\rds4: gpu prefill layer 31/43\rds4: gpu prefill layer 32/43\rds4: gpu prefill layer 33/43\rds4: gpu prefill layer 34/43\rds4: gpu prefill layer 35/43\rds4: gpu prefill layer 36/43\rds4: gpu prefill layer 37/43\rds4: gpu prefill layer 38/43\rds4: gpu prefill layer 39/43\rds4: gpu prefill layer 40/43\rds4: gpu prefill layer 41/43\rds4: gpu prefill layer 42/43\rds4: gpu prefill layer 43/43\r\nds4: prefill: <rate> t/s, generation: <rate> t/s\n",
+      "stderr_normalized_sha256": "e08a512dfdf1706e6fca6593a452e927298ad42370778e906e1262e881a03baa",
+      "stdout_empty": false,
+      "support_artifact": null,
+      "availability": "executed",
+      "stderr_anchors": [
+        "ds4: context buffers",
+        "backend=cuda",
+        "ds4: using GPU graph generation"
+      ],
+      "normalized_stderr_anchors": []
+    },
+    {
+      "id": "warm_weights",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--warm-weights",
+        "--nothink",
+        "-p",
+        "Answer with one short noun: glacier."
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": {
+        "base64": "Z2wK",
+        "bytes": 3,
+        "sha256": "a83c026dcdefdfd1ff76812bd42fc94f2034f9e05c37e04fbcdcda612f253599"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiB3YXJtaW5nIG1hcHBlZCB0ZW5zb3IgcGFnZXM6IDgwLjc2IEdpQgpkczQ6IHdhcm1lZCB0ZW5zb3IgcGFnZXMgaW4gMjcuNzkxcyAoY2hlY2tzdW09MjYwNzc5Nzc3MCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTMuODUzcwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MKZHM0OiB1c2luZyBHUFUgZ3JhcGggZ2VuZXJhdGlvbiB3aXRoIGxheWVyLW1ham9yIGdyYXBoIHByZWZpbGwKZHM0OiBncHUgcHJlZmlsbCBsYXllciAxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDExLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTUvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxNi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTgvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxOS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIwLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIzLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjQvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI2LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjcvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI5LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzAvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzMS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM1LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM4LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0MC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNDIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0My80Mw0KZHM0OiBwcmVmaWxsOiA0Ny42NiB0L3MsIGdlbmVyYXRpb246IDMxNTIuNTQgdC9zCg==",
+        "bytes": 2113,
+        "sha256": "a548b90ede6c9116cc640b887eaaaf44ed99a990c57e66a598fa3d3da9cfd496"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: warming mapped tensor pages: 80.76 GiB\nds4: warmed tensor pages in <seconds>s (checksum=2607797770)\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: using GPU graph generation with layer-major graph prefill\nds4: gpu prefill layer 1/43\rds4: gpu prefill layer 2/43\rds4: gpu prefill layer 3/43\rds4: gpu prefill layer 4/43\rds4: gpu prefill layer 5/43\rds4: gpu prefill layer 6/43\rds4: gpu prefill layer 7/43\rds4: gpu prefill layer 8/43\rds4: gpu prefill layer 9/43\rds4: gpu prefill layer 10/43\rds4: gpu prefill layer 11/43\rds4: gpu prefill layer 12/43\rds4: gpu prefill layer 13/43\rds4: gpu prefill layer 14/43\rds4: gpu prefill layer 15/43\rds4: gpu prefill layer 16/43\rds4: gpu prefill layer 17/43\rds4: gpu prefill layer 18/43\rds4: gpu prefill layer 19/43\rds4: gpu prefill layer 20/43\rds4: gpu prefill layer 21/43\rds4: gpu prefill layer 22/43\rds4: gpu prefill layer 23/43\rds4: gpu prefill layer 24/43\rds4: gpu prefill layer 25/43\rds4: gpu prefill layer 26/43\rds4: gpu prefill layer 27/43\rds4: gpu prefill layer 28/43\rds4: gpu prefill layer 29/43\rds4: gpu prefill layer 30/43\rds4: gpu prefill layer 31/43\rds4: gpu prefill layer 32/43\rds4: gpu prefill layer 33/43\rds4: gpu prefill layer 34/43\rds4: gpu prefill layer 35/43\rds4: gpu prefill layer 36/43\rds4: gpu prefill layer 37/43\rds4: gpu prefill layer 38/43\rds4: gpu prefill layer 39/43\rds4: gpu prefill layer 40/43\rds4: gpu prefill layer 41/43\rds4: gpu prefill layer 42/43\rds4: gpu prefill layer 43/43\r\nds4: prefill: <rate> t/s, generation: <rate> t/s\n",
+      "stderr_normalized_sha256": "491dfd672e6695e4eadd746fd4f6a401fbde9b55843b70d92b5321b8a9b9afe4",
+      "stdout_empty": false,
+      "support_artifact": null,
+      "availability": "executed",
+      "stderr_anchors": [
+        "ds4: warming mapped tensor pages: 80.76 GiB",
+        "checksum=",
+        "ds4: using GPU graph generation"
+      ],
+      "normalized_stderr_anchors": [
+        "ds4: warmed tensor pages in <seconds>s"
+      ]
+    },
+    {
+      "id": "directional_steering",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--dir-steering-file",
+        "dir-steering/out/verbosity.f32",
+        "--dir-steering-ffn",
+        "0.25",
+        "--dir-steering-attn",
+        "0",
+        "--nothink",
+        "-p",
+        "Answer with one short noun: glacier."
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": {
+        "base64": "Z2wK",
+        "bytes": 3,
+        "sha256": "a83c026dcdefdfd1ff76812bd42fc94f2034f9e05c37e04fbcdcda612f253599"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTMuNTI2cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MKZHM0OiB1c2luZyBHUFUgZ3JhcGggZ2VuZXJhdGlvbiB3aXRoIGxheWVyLW1ham9yIGdyYXBoIHByZWZpbGwKZHM0OiBkaXJlY3Rpb25hbCBzdGVlcmluZyBlbmFibGVkOiBkaXItc3RlZXJpbmcvb3V0L3ZlcmJvc2l0eS5mMzIgYXR0bj0wIGZmbj0wLjI1CmRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDUvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA2LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDgvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA5LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTAvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxMS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDEyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTMvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxNC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE1LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTYvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAxNy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDE4LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMTkvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyMC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDIxLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjIvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyMy80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI0LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjUvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyNi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDI3LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMjgvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAyOS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMwLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzEvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzMi80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDMzLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzQvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzNS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM2LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgMzcvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciAzOC80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDM5LzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNDAvNDMNZHM0OiBncHUgcHJlZmlsbCBsYXllciA0MS80Mw1kczQ6IGdwdSBwcmVmaWxsIGxheWVyIDQyLzQzDWRzNDogZ3B1IHByZWZpbGwgbGF5ZXIgNDMvNDMNCmRzNDogcHJlZmlsbDogNDUuMTIgdC9zLCBnZW5lcmF0aW9uOiAyNTc4LjY2IHQvcwo=",
+        "bytes": 2093,
+        "sha256": "c0346e372a3104d473370997a1085845ec8798bcce55fc7a1dcbf81bf33fa24d"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)\nds4: CUDA host registration skipped: operation not supported\nds4: CUDA loading model tensors into device cache\nds4: CUDA loading model tensors 16.02 GiB cached\nds4: CUDA loading model tensors 32.06 GiB cached\nds4: CUDA loading model tensors 48.02 GiB cached\nds4: CUDA loading model tensors 64.06 GiB cached\nds4: CUDA loading model tensors 80.04 GiB cached\nds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in <seconds>s\nds4: cuda backend initialized for graph diagnostics\nds4: using GPU graph generation with layer-major graph prefill\nds4: directional steering enabled: dir-steering/out/verbosity.f32 attn=0 ffn=0.25\nds4: gpu prefill layer 1/43\rds4: gpu prefill layer 2/43\rds4: gpu prefill layer 3/43\rds4: gpu prefill layer 4/43\rds4: gpu prefill layer 5/43\rds4: gpu prefill layer 6/43\rds4: gpu prefill layer 7/43\rds4: gpu prefill layer 8/43\rds4: gpu prefill layer 9/43\rds4: gpu prefill layer 10/43\rds4: gpu prefill layer 11/43\rds4: gpu prefill layer 12/43\rds4: gpu prefill layer 13/43\rds4: gpu prefill layer 14/43\rds4: gpu prefill layer 15/43\rds4: gpu prefill layer 16/43\rds4: gpu prefill layer 17/43\rds4: gpu prefill layer 18/43\rds4: gpu prefill layer 19/43\rds4: gpu prefill layer 20/43\rds4: gpu prefill layer 21/43\rds4: gpu prefill layer 22/43\rds4: gpu prefill layer 23/43\rds4: gpu prefill layer 24/43\rds4: gpu prefill layer 25/43\rds4: gpu prefill layer 26/43\rds4: gpu prefill layer 27/43\rds4: gpu prefill layer 28/43\rds4: gpu prefill layer 29/43\rds4: gpu prefill layer 30/43\rds4: gpu prefill layer 31/43\rds4: gpu prefill layer 32/43\rds4: gpu prefill layer 33/43\rds4: gpu prefill layer 34/43\rds4: gpu prefill layer 35/43\rds4: gpu prefill layer 36/43\rds4: gpu prefill layer 37/43\rds4: gpu prefill layer 38/43\rds4: gpu prefill layer 39/43\rds4: gpu prefill layer 40/43\rds4: gpu prefill layer 41/43\rds4: gpu prefill layer 42/43\rds4: gpu prefill layer 43/43\r\nds4: prefill: <rate> t/s, generation: <rate> t/s\n",
+      "stderr_normalized_sha256": "b419405d7ef12d403b094d0a91e0b5c4abae4cd549ad6dad072cd4cb0e450c6a",
+      "stdout_empty": false,
+      "support_artifact": "dir-steering/out/verbosity.f32",
+      "availability": "executed",
+      "stderr_anchors": [
+        "ds4: directional steering enabled: dir-steering/out/verbosity.f32 attn=0 ffn=0.25",
+        "ds4: using GPU graph generation"
+      ],
+      "normalized_stderr_anchors": []
+    },
+    {
+      "id": "backend_metal_error",
+      "argv": [
+        "--backend",
+        "metal",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--ctx",
+        "128",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink",
+        "-p",
+        "Answer with one short noun: glacier."
+      ],
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPW1ldGFsLCBwcmVmaWxsX2NodW5rPTEyOCwgcmF3X2t2X3Jvd3M9MjU2LCBjb21wcmVzc2VkX2t2X3Jvd3M9MzQpCmRzNDogTWV0YWwgYmFja2VuZCByZXF1ZXN0ZWQgYnV0IHRoaXMgYnVpbGQgaXMgbGlua2VkIHdpdGggQ1VEQSwgbm90IE1ldGFsCg==",
+        "bytes": 190,
+        "sha256": "aedf91769f7709000932c73e6327769d18092368870ac70e140bae2ec7a7e5a2"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=metal, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: Metal backend requested but this build is linked with CUDA, not Metal\n",
+      "stderr_normalized_sha256": "aedf91769f7709000932c73e6327769d18092368870ac70e140bae2ec7a7e5a2",
+      "stdout_empty": true,
+      "support_artifact": null,
+      "availability": "blocked",
+      "stderr_anchors": [
+        "backend=metal",
+        "ds4: Metal backend requested but this build is linked with CUDA, not Metal"
+      ],
+      "normalized_stderr_anchors": []
+    },
+    {
+      "id": "mtp_missing_model",
+      "argv": [
+        "--cuda",
+        "-m",
+        "/workspace/ds4/ds4flash.gguf",
+        "--mtp",
+        "/workspace/ds4/missing-mtp.gguf",
+        "--mtp-draft",
+        "2",
+        "--mtp-margin",
+        "3",
+        "--ctx",
+        "128",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink",
+        "-p",
+        "Answer with one short noun: glacier."
+      ],
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgMjMuMzkgTWlCIChjdHg9MTI4LCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MTI4LCByYXdfa3Zfcm93cz0yNTYsIGNvbXByZXNzZWRfa3Zfcm93cz0zNCkKZHM0OiBjYW5ub3Qgb3BlbiBtb2RlbCAnL3dvcmtzcGFjZS9kczQvbWlzc2luZy1tdHAuZ2d1Zic6IE5vIHN1Y2ggZmlsZSBvciBkaXJlY3RvcnkK",
+        "bytes": 198,
+        "sha256": "826268e476a14b68cf733c113b9a8517c9c3209988de7dbb3bbd98e7f64f444a"
+      },
+      "stderr_normalized": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: cannot open model '/workspace/ds4/missing-mtp.gguf': No such file or directory\n",
+      "stderr_normalized_sha256": "826268e476a14b68cf733c113b9a8517c9c3209988de7dbb3bbd98e7f64f444a",
+      "stdout_empty": true,
+      "support_artifact": "/workspace/ds4/missing-mtp.gguf",
+      "availability": "blocked_missing_mtp_model",
+      "stderr_anchors": [
+        "backend=cuda",
+        "ds4: cannot open model '/workspace/ds4/missing-mtp.gguf': No such file or directory"
+      ],
+      "normalized_stderr_anchors": []
+    }
+  ],
+  "normalization": {
+    "stderr": "startup seconds, warm-weight seconds, and throughput rates are normalized; runtime-control categories are exact",
+    "stdout": "generated bytes and hashes are exact for executed transcript cases"
+  }
+}

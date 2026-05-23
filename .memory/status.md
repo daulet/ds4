@@ -3,10 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.12b Current-C CLI One-Shot Runtime-Control Oracle
-- Last validated source commit: M8.12a current-C CLI one-shot core transcript
+- Active item: M8.13 Rust CLI One-Shot Generation Parity
+- Last validated source commit: M8.12b current-C CLI one-shot runtime-control
   oracle in this commit; prior pushed source commit
-  `91694038a798e3f8f5630b1d9839852f30d5cf90`
+  `dad2b7d95cb0ad8fcdce6044dac860ae9bf68a44`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1112,4 +1112,26 @@
   ds4-parity/baselines/cli/m8.12a/current-c.json --manifest
   ds4-parity/baselines/cli/m8.12a/manifest.json --negative-test` with oracle
   `PASS, 156 checks`, manifest `PASS, 17 checks`, and negative tests `PASS, 5
+  checks`.
+- M8.12b adds `ds4-parity/check_cli_runtime_controls_dump.py` and the
+  current-C runtime-control transcript artifact at
+  `ds4-parity/baselines/cli/m8.12b/current-c.json`.
+- M8.12b committed current-C artifact size is 22,815 bytes with SHA256
+  `b9e5aca6f745ce846d1daceed820f5c6e3aa06d80f87674b24017df285fe221e`.
+- M8.12b captures five B300 CLI runtime-control cases:
+  `--backend cuda --quality -t 2`, `--warm-weights`, directional steering via
+  `dir-steering/out/verbosity.f32`, blocked `--backend metal` on the CUDA
+  build, and blocked `--mtp /workspace/ds4/missing-mtp.gguf`.
+- M8.12b records the directional steering support artifact
+  `dir-steering/out/verbosity.f32` as 704,512 bytes with SHA256
+  `6414573b7d88822e16e6fe5972386ef2f1e51fc8502fe5849c4a611afad50cdd`,
+  and records that no MTP GGUF is present in the B300 workspace.
+- M8.12b B300 validation passed after refreshing `/workspace/ds4` to
+  `dad2b7d95cb0ad8fcdce6044dac860ae9bf68a44`, copying the uncommitted
+  checker, rebuilding `ds4`, running the capture/checker command, and copying
+  `current-c.json` and `manifest.json` back. Local revalidation passed
+  `python3 ds4-parity/check_cli_runtime_controls_dump.py
+  ds4-parity/baselines/cli/m8.12b/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.12b/manifest.json --negative-test` with oracle
+  `PASS, 158 checks`, manifest `PASS, 16 checks`, and negative tests `PASS, 5
   checks`.

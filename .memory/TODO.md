@@ -1678,7 +1678,7 @@
 
 ### M8.12b: Current-C CLI One-Shot Runtime-Control Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture current-C one-shot generation behavior for advanced runtime
   controls after the core transcript oracle is stable.
 - Source evidence needed: B300 support-artifact availability for MTP and
@@ -1701,10 +1701,43 @@
   categories are exact.
 - Review gate: ask Claude to review advanced-option coverage and blocker
   evidence.
-- Validation needed: B300 capture or exact blocked recapture command, local
-  transcript checker with negative tests, and `git diff --check`.
+- Validation passed: B300 capture on `ds4-rust-port-b300` after `make ds4
+  CUDA_ARCH=native`, `python3 ds4-parity/check_cli_runtime_controls_dump.py
+  ds4-parity/baselines/cli/m8.12b/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.12b/manifest.json --negative-test` (`CLI
+  runtime-controls oracle: PASS, 158 checks`; manifest `PASS, 16 checks`;
+  negative tests `PASS, 5 checks`), local revalidation with the same PASS
+  counts, `python3 -m py_compile
+  ds4-parity/check_cli_runtime_controls_dump.py`, `python3 -m json.tool` for
+  both M8.12b JSON files, and `git diff --check`.
 - Owner path: CLI one-shot oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/cli/`, `.memory/status.md`.
+
+### M8.13: Rust CLI One-Shot Generation Parity
+
+- Status: pending
+- Goal: implement Rust CLI one-shot generation against the M8.12a/M8.12b
+  transcript oracles.
+- Source evidence needed: committed M8.12a/M8.12b current-C transcript
+  fixtures, Rust CLI parse/dispatch code, and Rust runtime-generation boundary
+  availability.
+- Oracle: committed M8.12a/M8.12b current-C transcript fixtures.
+- Fixture: same one-shot prompt, prompt-file, thinking-control, sampling,
+  context, and runtime-control cases as M8.12a/M8.12b.
+- Comparator: C/Rust transcript comparator for normalized stderr, stdout bytes,
+  token sequence when available, exit status, and machine-readable fixture
+  metadata.
+- Acceptance: Rust one-shot mode matches current C for all committed transcript
+  cases and uses the same prompt/render/sampling/runtime surfaces already
+  covered by M5 through M7.
+- Drift policy: only documented progress/timing/path normalization.
+- Review gate: ask Claude to review CLI orchestration boundaries and whether
+  any runtime differences are hidden by normalization.
+- Validation needed: comparator with negative tests, targeted Rust CLI tests,
+  B300 comparison run when model-backed, `cargo test --workspace`, and
+  `git diff --check`.
+- Owner path: Rust CLI one-shot generation path, CLI transcript comparator,
+  `ds4-parity/`, `.memory/status.md`.
 
 ## Later Items
 
