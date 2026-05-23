@@ -3704,7 +3704,7 @@
 
 ### M10.5c2: Rust Decode Graph Tensor State
 
-- Status: active
+- Status: done
 - Goal: add Rust graph tensor state allocation/zero-fill scaffolding for
   one-token decode, without issuing decode kernels yet.
 - Oracle: M10.2 graph tensor owner inventory and M10.4 checkpoint note that
@@ -3719,7 +3719,7 @@
   requirements are exact; kernel values remain out of scope.
 - Review gate: ask Claude to review tensor ownership, lifetimes, and zero-fill
   obligations.
-- Validation needed: targeted Rust tests, tensor-state comparator with negative
+- Validation passed: targeted Rust tests, tensor-state comparator with negative
   test, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
   diff --check`, and non-interactive Claude review with no blockers.
 - Owner path: Rust graph tensor state modules, `ds4-parity/`,
@@ -3727,7 +3727,7 @@
 
 ### M10.5c3: Rust Decode Backend Facade
 
-- Status: pending
+- Status: active
 - Goal: add safe Rust facade methods for the subset of M10.5a backend
   primitives used by default fused one-token decode, without owning the full
   decode schedule yet.

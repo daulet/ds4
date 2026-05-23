@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c2 Rust Decode Graph Tensor State
-- Last validated source commit: M10.5c1 Rust structured decode weight table in
-  this commit; prior pushed source commit
-  `2926174ddb382ed92f65c47605344e1cd91196f1`
+- Active item: M10.5c3 Rust Decode Backend Facade
+- Last validated source commit: M10.5c2 Rust decode graph tensor state in this
+  commit; prior pushed source commit
+  `07a6c5e876b0f25915b1cf837e36f84f9ce11665`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,33 @@
 
 ## Last Evidence
 
+- M10.5c2 adds the no-execute decode graph tensor state plan in
+  `rust/ds4-gpu/src/graph_state.rs`. It covers the decode-scope owner groups
+  from M10.2: `GraphDecodeState`, `GraphPersistentKvState`,
+  `GraphLayerWorkState`, and `GraphOptionalControlState`, while explicitly
+  excluding speculative, MTP, and prefill owner groups for later work.
+- M10.5c2 records C allocation-shape details needed before kernel execution:
+  `hc_pre`/`hc_post`/`hc_comb` are views into `hc_split`, `ffn_out` is lazy
+  optional, directional steering is an external input for this slice, raw and
+  compressed persistent caches carry full-capacity zero-fill obligations for
+  future checkpoint hashes, and compressor state tensors carry zero or
+  negative-infinity initialization obligations.
+- M10.5c2 adds `ds4-graph-state-plan`, a JSON dump for the graph-state plan,
+  plus `ds4-parity/compare_graph_state_plan.py`. The comparator checks the
+  `ctx32768_mtp_off` case against the M10.2 owner oracle, verifies excluded
+  owners, summary counts, view geometry, lazy/external storage, selected
+  raw/ratio-4/ratio-128 cache byte sizes, and fails closed on summary, field,
+  and view mutations. It is wired into the unified parity report as
+  `M10.5c2 Rust graph state comparator`.
+- M10.5c2 validation passed `cargo test -p ds4-gpu graph_state --lib`,
+  `python3 ds4-parity/compare_graph_state_plan.py --negative-test`,
+  `python3 -m py_compile ds4-parity/compare_graph_state_plan.py
+  ds4-parity/run_parity_report.py`, `cargo run -p ds4-gpu --bin
+  ds4-graph-state-plan --quiet -- --case ctx32768_mtp_off | python3 -m
+  json.tool`, `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+  with `17 passed, 10 skipped, 0 failed`, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, and NUL scan over touched files.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.5c1 adds structured Rust DS4 decode weight bindings in
   `rust/ds4-gguf/src/lib.rs`: `Ds4Weights` for base model weights and
   `Ds4LayerWeights` for every C `ds4_layer_weights` field. Required fields are

@@ -10,6 +10,7 @@ pub use ds4_gpu_sys as sys;
 
 pub mod decode_plan;
 pub mod graph_plan;
+pub mod graph_state;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(transparent)]

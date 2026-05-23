@@ -217,6 +217,21 @@ checks base/layer field order plus dense, ratio-4, ratio-128, and hash-layer
 presence rules. Its negative test mutates a layer, a field, and a presence bit
 in memory.
 
+Compare the Rust M10.5c2 decode graph-state plan against the M10.2 tensor owner
+inventory:
+
+```sh
+python3 ds4-parity/compare_graph_state_plan.py
+python3 ds4-parity/compare_graph_state_plan.py --negative-test
+```
+
+The comparator runs `ds4-graph-state-plan`, checks decode owner fields against
+the M10.2 oracle, and pins the no-kernel allocation plan: `hc_*` views,
+lazy `ffn_out`, directional steering as external input, full-capacity
+persistent cache zero-fill obligations, and selected raw/ratio-4/ratio-128
+cache byte sizes. Its negative test mutates summary, field, and view data in
+memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
