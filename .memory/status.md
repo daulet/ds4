@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c1 Responses Core Input And Reasoning Parse Surface
-- Last validated source commit: M9.2c protocol request parse split in this
-  commit; prior pushed source commit
-  `d9600cda1d32944ca9cb64ad575e2fa2b8c37546`
+- Active item: M9.2c2 Responses Tool Output And Live-Tail Parse Surface
+- Last validated source commit: M9.2c1 Responses core parser in this commit;
+  prior pushed source commit `0269be970eb4d6ce9909636b878e67c0736f0bd4`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,19 @@
 
 ## Last Evidence
 
+- M9.2c1 added the exported Rust `ResponsesRequest` and
+  `parse_responses_core_request` surface for model-free Responses API core
+  request parsing.
+- M9.2c1 covers bare string and array `input`, `instructions` system prepend,
+  scalar generation controls, `reasoning.effort`, reasoning summary opt-in,
+  model-alias thinking fallbacks, prompt rendering, top-level tool prompt
+  participation, durable-state rejection for `previous_response_id` and
+  `conversation`, unsupported `tool_choice` categories, and strict text-content
+  shape checks.
+- M9.2c1 validation passed for targeted
+  `cargo test -p ds4-gguf server_chat -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.2c was split before implementation because Responses core input/reasoning,
   Responses tool-output/live-tail validation, and Anthropic content/tool-result
   parsing have distinct oracle surfaces, fixtures, validation categories, and

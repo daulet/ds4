@@ -2181,7 +2181,7 @@
 
 ### M9.2c1: Responses Core Input And Reasoning Parse Surface
 
-- Status: active
+- Status: done
 - Goal: port model-free Responses API core request parsing for `input`,
   `instructions`, scalar generation controls, reasoning effort/summary flags,
   durable-state rejection, and prompt rendering, excluding tool-output
@@ -2205,13 +2205,14 @@
   comparison for durable-state and unsupported tool-choice error strings.
 - Review gate: ask Claude to review Responses core field coverage, reasoning
   controls, instructions ordering, durable-state rejection, and prompt bytes.
-- Validation needed: targeted Rust Responses core parser tests, `cargo test
-  --workspace`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.2c2: Responses Tool Output And Live-Tail Parse Surface
 
-- Status: pending
+- Status: active
 - Goal: port model-free Responses tool-output/function-call input handling,
   tool-search output schema loading, namespace tool schema restoration, and
   live-tail validation categories, building on M9.2c1.

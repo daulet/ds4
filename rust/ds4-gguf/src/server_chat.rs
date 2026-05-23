@@ -25,6 +25,22 @@ pub struct OpenAiChatRequest {
     pub prompt_preserves_reasoning: bool,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResponsesRequest {
+    pub model: String,
+    pub messages: Vec<ChatMessage>,
+    pub has_tools: bool,
+    pub tool_schemas: Option<String>,
+    pub tool_orders: Vec<ToolSchemaOrder>,
+    pub max_tokens: i32,
+    pub sampling: SamplingParams,
+    pub stream: bool,
+    pub reasoning_summary_emit: bool,
+    pub think_mode: ThinkMode,
+    pub prompt_text: String,
+    pub prompt_preserves_reasoning: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolSchemaOrder {
     pub name: String,
@@ -35,26 +51,50 @@ pub struct ToolSchemaOrder {
 pub enum ServerRequestErrorCategory {
     InvalidJson,
     MissingMessages,
+    MissingInput,
+    UnsupportedDurableState,
+    UnsupportedToolChoice,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerRequestError {
     category: ServerRequestErrorCategory,
-    message: &'static str,
+    message: String,
 }
 
 impl ServerRequestError {
     fn invalid_json() -> Self {
         Self {
             category: ServerRequestErrorCategory::InvalidJson,
-            message: "invalid JSON request",
+            message: "invalid JSON request".to_string(),
         }
     }
 
     fn missing_messages() -> Self {
         Self {
             category: ServerRequestErrorCategory::MissingMessages,
-            message: "missing messages",
+            message: "missing messages".to_string(),
+        }
+    }
+
+    fn missing_input() -> Self {
+        Self {
+            category: ServerRequestErrorCategory::MissingInput,
+            message: "missing input".to_string(),
+        }
+    }
+
+    fn unsupported_durable_state(key: &str) -> Self {
+        Self {
+            category: ServerRequestErrorCategory::UnsupportedDurableState,
+            message: format!("{key} is not supported; replay full input instead"),
+        }
+    }
+
+    fn unsupported_tool_choice(message: impl Into<String>) -> Self {
+        Self {
+            category: ServerRequestErrorCategory::UnsupportedToolChoice,
+            message: message.into(),
         }
     }
 
@@ -62,14 +102,14 @@ impl ServerRequestError {
         self.category
     }
 
-    pub fn message(&self) -> &'static str {
-        self.message
+    pub fn message(&self) -> &str {
+        &self.message
     }
 }
 
 impl fmt::Display for ServerRequestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.message)
+        f.write_str(&self.message)
     }
 }
 
@@ -206,6 +246,147 @@ pub fn parse_openai_chat_request(
         stream_include_usage,
         think_mode,
         stops,
+        prompt_text,
+        prompt_preserves_reasoning,
+    })
+}
+
+pub fn parse_responses_core_request(
+    body: &str,
+    def_tokens: i32,
+    ctx_size: i32,
+) -> Result<ResponsesRequest, ServerRequestError> {
+    let fields = JsonParser::new(body)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+
+    let mut model = DEFAULT_MODEL.to_string();
+    let mut messages = None;
+    let mut instructions = None;
+    let mut tool_schemas = None;
+    let mut tool_orders = Vec::new();
+    let mut tool_choice_none = false;
+    let mut max_tokens = def_tokens;
+    let mut sampling = SamplingParams::defaults();
+    let mut stream = false;
+    let mut got_thinking = false;
+    let mut thinking_enabled = true;
+    let mut reasoning_effort = ThinkMode::High;
+    let mut reasoning_summary_emit = false;
+
+    for (key, raw, value) in fields {
+        match key.as_str() {
+            "input" => {
+                messages = Some(parse_responses_core_input(&value)?);
+            }
+            "instructions" => {
+                instructions = Some(match value {
+                    JsonValue::Null => String::new(),
+                    JsonValue::String(value) => value,
+                    _ => return Err(ServerRequestError::invalid_json()),
+                });
+            }
+            "tools" => {
+                let parsed = parse_tools_value(&raw)?;
+                tool_schemas = Some(parsed.schemas);
+                tool_orders = parsed.orders;
+            }
+            "tool_choice" => match value {
+                JsonValue::String(choice) => {
+                    if choice == "none" {
+                        tool_choice_none = true;
+                    } else if choice != "auto" {
+                        return Err(ServerRequestError::unsupported_tool_choice(format!(
+                            "tool_choice={choice} not supported"
+                        )));
+                    }
+                }
+                JsonValue::Object(_) => {
+                    return Err(ServerRequestError::unsupported_tool_choice(
+                        "forced tool_choice not supported",
+                    ));
+                }
+                _ => {}
+            },
+            "model" => {
+                model = value
+                    .as_str()
+                    .ok_or_else(ServerRequestError::invalid_json)?
+                    .to_string();
+            }
+            "max_output_tokens" | "max_tokens" => {
+                max_tokens = json_int(&value).ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "temperature" => {
+                sampling.temperature =
+                    json_number(&value).ok_or_else(ServerRequestError::invalid_json)? as f32;
+            }
+            "top_p" => {
+                sampling.top_p =
+                    json_number(&value).ok_or_else(ServerRequestError::invalid_json)? as f32;
+            }
+            "stream" => {
+                stream = value
+                    .as_bool()
+                    .ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "reasoning" => {
+                if let Some(effort) =
+                    parse_responses_reasoning(&value, &mut reasoning_summary_emit)?
+                {
+                    reasoning_effort = effort;
+                    got_thinking = true;
+                    if reasoning_effort == ThinkMode::None {
+                        thinking_enabled = false;
+                    }
+                }
+            }
+            "previous_response_id" | "conversation" => {
+                if !matches!(value, JsonValue::Null) {
+                    return Err(ServerRequestError::unsupported_durable_state(&key));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut messages = messages.ok_or_else(ServerRequestError::missing_input)?;
+    if let Some(instructions) = instructions.filter(|instructions| !instructions.is_empty()) {
+        messages.insert(0, ChatMessage::new("system", instructions));
+    }
+    if !got_thinking && model_alias_disables_thinking(&model) {
+        thinking_enabled = false;
+    }
+    if !got_thinking && model_alias_enables_thinking(&model) {
+        thinking_enabled = true;
+    }
+    let has_tools = tool_schemas
+        .as_deref()
+        .is_some_and(|schemas| !schemas.is_empty())
+        && !tool_choice_none;
+    let active_tool_schemas = if has_tools {
+        tool_schemas.as_deref()
+    } else {
+        None
+    };
+    let think_mode = think_mode_for_context(
+        think_mode_from_enabled(thinking_enabled, reasoning_effort),
+        ctx_size,
+    );
+    let prompt_preserves_reasoning = chat_history_uses_tool_context(&messages, active_tool_schemas);
+    let prompt_text = render_chat_prompt_text(&messages, active_tool_schemas, think_mode);
+
+    Ok(ResponsesRequest {
+        model,
+        messages,
+        has_tools,
+        tool_schemas,
+        tool_orders,
+        max_tokens,
+        sampling,
+        stream,
+        reasoning_summary_emit,
+        think_mode,
         prompt_text,
         prompt_preserves_reasoning,
     })
@@ -486,6 +667,207 @@ fn tool_arguments_from_json(json: &str) -> Option<Vec<ToolArgument>> {
         }
     }
     Some(args)
+}
+
+fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestError> {
+    if let JsonValue::String(value) = value {
+        return Ok(vec![ChatMessage::new("user", value.clone())]);
+    }
+    let JsonValue::Array(items) = value else {
+        return Err(ServerRequestError::invalid_json());
+    };
+
+    let mut messages = Vec::new();
+    let mut pending_reasoning = String::new();
+    for item in items {
+        let JsonValue::Object(fields) = item else {
+            return Err(ServerRequestError::invalid_json());
+        };
+        let mut item_type = None;
+        let mut role = None;
+        let mut content = None;
+        let mut summary = None;
+        let mut status = None;
+        for (key, value) in fields {
+            match key.as_str() {
+                "type" => {
+                    item_type = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                "role" => {
+                    role = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                "content" => {
+                    content = Some(parse_responses_content_array(value)?);
+                }
+                "summary" => {
+                    summary = Some(parse_responses_content_array(value)?);
+                }
+                "status" => {
+                    status = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                _ => {}
+            }
+        }
+        if status
+            .as_deref()
+            .is_some_and(|status| !status.is_empty() && status != "completed")
+        {
+            return Err(ServerRequestError::invalid_json());
+        }
+        let item_type = item_type.as_deref().unwrap_or("message");
+        let consumes_reasoning =
+            item_type == "message" && role.as_deref().is_some_and(|role| role == "assistant");
+        let is_bookkeeping = item_type == "compaction" || item_type == "context_compaction";
+        if !consumes_reasoning && !is_bookkeeping && !pending_reasoning.is_empty() {
+            let mut msg = ChatMessage::new("assistant", "");
+            msg.reasoning = std::mem::take(&mut pending_reasoning);
+            messages.push(msg);
+        }
+        match item_type {
+            "message" => {
+                let mut msg = ChatMessage::new(
+                    role.unwrap_or_else(|| "user".to_string()),
+                    content.unwrap_or_default(),
+                );
+                if msg.role == "assistant" && !pending_reasoning.is_empty() {
+                    msg.reasoning = std::mem::take(&mut pending_reasoning);
+                }
+                messages.push(msg);
+            }
+            "reasoning" => {
+                if let Some(summary) = summary.filter(|summary| !summary.is_empty()) {
+                    if !pending_reasoning.is_empty() {
+                        pending_reasoning.push('\n');
+                    }
+                    pending_reasoning.push_str(&summary);
+                }
+                if let Some(content) = content.filter(|content| !content.is_empty()) {
+                    if !pending_reasoning.is_empty() {
+                        pending_reasoning.push('\n');
+                    }
+                    pending_reasoning.push_str(&content);
+                }
+            }
+            "compaction" | "context_compaction" => {}
+            _ => return Err(ServerRequestError::invalid_json()),
+        }
+    }
+    if !pending_reasoning.is_empty() {
+        let mut msg = ChatMessage::new("assistant", "");
+        msg.reasoning = pending_reasoning;
+        messages.push(msg);
+    }
+    Ok(messages)
+}
+
+fn parse_responses_content_array(value: &JsonValue) -> Result<String, ServerRequestError> {
+    match value {
+        JsonValue::String(value) => Ok(value.clone()),
+        JsonValue::Null => Ok(String::new()),
+        JsonValue::Array(items) => {
+            let mut out = String::new();
+            for item in items {
+                match item {
+                    JsonValue::String(value) => out.push_str(value),
+                    JsonValue::Object(fields) => {
+                        let mut block_type = None;
+                        let mut text = None;
+                        for (key, value) in fields {
+                            match key.as_str() {
+                                "type" => {
+                                    block_type = Some(
+                                        value
+                                            .as_str()
+                                            .ok_or_else(ServerRequestError::invalid_json)?
+                                            .to_string(),
+                                    );
+                                }
+                                "text" => {
+                                    text = Some(match value {
+                                        JsonValue::Null => String::new(),
+                                        JsonValue::String(value) => value.clone(),
+                                        _ => return Err(ServerRequestError::invalid_json()),
+                                    });
+                                }
+                                _ => {}
+                            }
+                        }
+                        let is_text_block = block_type.as_deref().is_some_and(|block_type| {
+                            matches!(
+                                block_type,
+                                "input_text"
+                                    | "output_text"
+                                    | "text"
+                                    | "summary_text"
+                                    | "reasoning_text"
+                            )
+                        });
+                        if !is_text_block || text.is_none() {
+                            return Err(ServerRequestError::invalid_json());
+                        }
+                        out.push_str(&text.unwrap_or_default());
+                    }
+                    _ => return Err(ServerRequestError::invalid_json()),
+                }
+            }
+            Ok(out)
+        }
+        _ => Err(ServerRequestError::invalid_json()),
+    }
+}
+
+fn parse_responses_reasoning(
+    value: &JsonValue,
+    summary_opted_in: &mut bool,
+) -> Result<Option<ThinkMode>, ServerRequestError> {
+    if matches!(value, JsonValue::Null) {
+        return Ok(None);
+    }
+    let JsonValue::Object(fields) = value else {
+        return Ok(None);
+    };
+    let mut effort = None;
+    for (key, value) in fields {
+        match key.as_str() {
+            "effort" => {
+                if !matches!(value, JsonValue::Null) {
+                    let name = value
+                        .as_str()
+                        .ok_or_else(ServerRequestError::invalid_json)?;
+                    effort = Some(
+                        parse_reasoning_effort_name(name)
+                            .ok_or_else(ServerRequestError::invalid_json)?,
+                    );
+                }
+            }
+            "summary" => {
+                if let JsonValue::String(mode) = value {
+                    if matches!(mode.as_str(), "auto" | "concise" | "detailed") {
+                        *summary_opted_in = true;
+                    }
+                } else if !matches!(value, JsonValue::Null) {
+                    continue;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(effort)
 }
 
 fn json_content(value: &JsonValue) -> Result<String, ServerRequestError> {
@@ -1070,6 +1452,10 @@ mod tests {
         parse_openai_chat_request(body, 128, 32_768).expect("fixture parses")
     }
 
+    fn parse_responses_fixture(body: &str) -> ResponsesRequest {
+        parse_responses_core_request(body, 128, 32_768).expect("fixture parses")
+    }
+
     fn rendered_prompt_from_trace(request: usize) -> &'static str {
         let marker = format!("===== request {request} ");
         let start = M04_SERVER_TRACE.find(&marker).expect("request marker");
@@ -1223,6 +1609,94 @@ mod tests {
     }
 
     #[test]
+    fn responses_string_input_instructions_and_controls_match_c_core_surface() {
+        let req = parse_responses_fixture(
+            r#"{
+                "model":"deepseek-chat",
+                "instructions":"sys",
+                "input":"hello",
+                "max_output_tokens":7,
+                "temperature":0.25,
+                "top_p":0.75,
+                "stream":true
+            }"#,
+        );
+        assert_eq!(req.model, "deepseek-chat");
+        assert_eq!(
+            req.messages,
+            [
+                ChatMessage::new("system", "sys"),
+                ChatMessage::new("user", "hello"),
+            ]
+        );
+        assert_eq!(req.max_tokens, 7);
+        assert_eq!(req.sampling.temperature, 0.25);
+        assert_eq!(req.sampling.top_p, 0.75);
+        assert!(req.stream);
+        assert_eq!(req.think_mode, ThinkMode::None);
+        assert!(!req.reasoning_summary_emit);
+        assert_eq!(
+            req.prompt_text,
+            "<｜begin▁of▁sentence｜>sys<｜User｜>hello<｜Assistant｜></think>"
+        );
+    }
+
+    #[test]
+    fn responses_reasoning_items_merge_into_next_assistant_message() {
+        let req = parse_responses_core_request(
+            r#"{
+                "input":[
+                    {"type":"message","role":"user","content":[{"type":"input_text","text":"Q"}]},
+                    {"type":"reasoning","summary":[{"type":"summary_text","text":"brief"}],"content":[{"type":"reasoning_text","text":"deep"}]},
+                    {"type":"message","role":"assistant","content":[{"type":"output_text","text":"A"}]}
+                ],
+                "reasoning":{"effort":"max","summary":"concise"}
+            }"#,
+            128,
+            393_216,
+        )
+        .expect("reasoning parses");
+
+        let mut assistant = ChatMessage::new("assistant", "A");
+        assistant.reasoning = "brief\ndeep".to_string();
+        assert_eq!(req.messages, [ChatMessage::new("user", "Q"), assistant]);
+        assert_eq!(req.think_mode, ThinkMode::Max);
+        assert!(req.reasoning_summary_emit);
+        assert!(req.prompt_text.starts_with(&format!(
+            "<｜begin▁of▁sentence｜>{THINK_MAX_PREFIX}<｜User｜>Q<｜Assistant｜>"
+        )));
+        assert!(req
+            .prompt_text
+            .ends_with("<think>brief\ndeep</think>A<｜end▁of▁sentence｜>"));
+    }
+
+    #[test]
+    fn responses_top_level_tools_render_before_instructions() {
+        let req = parse_responses_fixture(
+            r#"{
+                "instructions":"sys",
+                "input":[{"type":"message","role":"user","content":"use it"}],
+                "tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer"}}}}}],
+                "tool_choice":"auto"
+            }"#,
+        );
+        assert!(req.has_tools);
+        assert!(req.prompt_preserves_reasoning);
+        assert_eq!(req.tool_orders.len(), 1);
+        assert_eq!(req.tool_orders[0].name, "lookup");
+        assert_eq!(req.tool_orders[0].properties, ["query", "limit"]);
+        let tools = req.prompt_text.find("## Tools").expect("tools prompt");
+        let system = req.prompt_text.find("sys").expect("instructions");
+        let user = req.prompt_text.find("<｜User｜>use it").expect("user");
+        assert!(tools < system);
+        assert!(system < user);
+        assert!(req
+            .tool_schemas
+            .as_deref()
+            .is_some_and(|schemas| schemas.contains("\"name\":\"lookup\"")));
+    }
+
+    #[test]
     fn tool_choice_none_parses_schemas_but_disables_tool_prompt() {
         let req = parse_fixture(
             r#"{
@@ -1325,6 +1799,95 @@ mod tests {
             ServerRequestErrorCategory::MissingMessages
         );
         assert_eq!(missing.message(), "missing messages");
+
+        let missing = parse_responses_core_request(r#"{"model":"deepseek-chat"}"#, 128, 32_768)
+            .expect_err("missing input");
+        assert_eq!(missing.category(), ServerRequestErrorCategory::MissingInput);
+        assert_eq!(missing.message(), "missing input");
+    }
+
+    #[test]
+    fn responses_rejects_durable_state_and_unsupported_tool_choice() {
+        let previous = parse_responses_core_request(
+            r#"{"input":"hi","previous_response_id":"resp_1"}"#,
+            128,
+            32_768,
+        )
+        .expect_err("previous response rejected");
+        assert_eq!(
+            previous.category(),
+            ServerRequestErrorCategory::UnsupportedDurableState
+        );
+        assert_eq!(
+            previous.message(),
+            "previous_response_id is not supported; replay full input instead"
+        );
+
+        let conversation =
+            parse_responses_core_request(r#"{"input":"hi","conversation":{}}"#, 128, 32_768)
+                .expect_err("conversation rejected");
+        assert_eq!(
+            conversation.category(),
+            ServerRequestErrorCategory::UnsupportedDurableState
+        );
+        assert_eq!(
+            conversation.message(),
+            "conversation is not supported; replay full input instead"
+        );
+
+        let required =
+            parse_responses_core_request(r#"{"input":"hi","tool_choice":"required"}"#, 128, 32_768)
+                .expect_err("required tool choice rejected");
+        assert_eq!(
+            required.category(),
+            ServerRequestErrorCategory::UnsupportedToolChoice
+        );
+        assert_eq!(required.message(), "tool_choice=required not supported");
+
+        let forced = parse_responses_core_request(
+            r#"{"input":"hi","tool_choice":{"type":"function"}}"#,
+            128,
+            32_768,
+        )
+        .expect_err("forced tool choice rejected");
+        assert_eq!(
+            forced.category(),
+            ServerRequestErrorCategory::UnsupportedToolChoice
+        );
+        assert_eq!(forced.message(), "forced tool_choice not supported");
+    }
+
+    #[test]
+    fn responses_rejects_incomplete_or_non_text_core_input_items() {
+        let in_progress = parse_responses_core_request(
+            r#"{"input":[{"type":"message","role":"user","status":"in_progress","content":"hi"}]}"#,
+            128,
+            32_768,
+        )
+        .expect_err("in-progress message rejected");
+        assert_eq!(
+            in_progress.category(),
+            ServerRequestErrorCategory::InvalidJson
+        );
+
+        let unknown = parse_responses_core_request(
+            r#"{"input":[{"type":"image_generation_call","status":"completed"}]}"#,
+            128,
+            32_768,
+        )
+        .expect_err("c2 input item rejected in c1");
+        assert_eq!(unknown.category(), ServerRequestErrorCategory::InvalidJson);
+
+        let bad_content = parse_responses_core_request(
+            r#"{"input":[{"type":"message","role":"user","content":[{"type":"input_text"}]}]}"#,
+            128,
+            32_768,
+        )
+        .expect_err("content object without text rejected");
+        assert_eq!(
+            bad_content.category(),
+            ServerRequestErrorCategory::InvalidJson
+        );
     }
 
     #[test]
