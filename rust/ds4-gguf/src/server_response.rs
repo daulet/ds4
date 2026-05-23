@@ -1,3 +1,4 @@
+use crate::dsml::{normalize_json_object_or_empty, DsmlJsonCall};
 use crate::server_http::{append_cors_headers, format_http_response, json_escape_string};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +47,20 @@ pub struct OpenAiChatStream<'a> {
 }
 
 pub fn format_openai_chat_completion_json(response: &OpenAiChatCompletion<'_>) -> String {
+    format_openai_chat_completion_body_json(response, &[])
+}
+
+pub fn format_openai_chat_tool_completion_json(
+    response: &OpenAiChatCompletion<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    format_openai_chat_completion_body_json(response, tool_calls)
+}
+
+fn format_openai_chat_completion_body_json(
+    response: &OpenAiChatCompletion<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
     let mut out = String::new();
     out.push_str("{\"id\":");
     out.push_str(&json_escape_string(response.id));
@@ -62,6 +77,10 @@ pub fn format_openai_chat_completion_json(response: &OpenAiChatCompletion<'_>) -
         out.push_str(",\"reasoning_content\":");
         out.push_str(&json_escape_string(reasoning));
     }
+    if !tool_calls.is_empty() {
+        out.push_str(",\"tool_calls\":");
+        append_openai_tool_calls_json(&mut out, response.id, tool_calls);
+    }
     out.push_str("},\"finish_reason\":");
     out.push_str(&json_escape_string(response.finish_reason));
     out.push_str("}],\"usage\":");
@@ -75,6 +94,15 @@ pub fn format_openai_chat_completion_http(
     response: &OpenAiChatCompletion<'_>,
 ) -> String {
     let body = format_openai_chat_completion_json(response);
+    format_http_response(enable_cors, 200, Some("application/json"), &body)
+}
+
+pub fn format_openai_chat_tool_completion_http(
+    enable_cors: bool,
+    response: &OpenAiChatCompletion<'_>,
+    tool_calls: &[DsmlJsonCall],
+) -> String {
+    let body = format_openai_chat_tool_completion_json(response, tool_calls);
     format_http_response(enable_cors, 200, Some("application/json"), &body)
 }
 
@@ -176,6 +204,28 @@ fn append_openai_usage_json(out: &mut String, usage: OpenAiUsage) {
     out.push_str("}}");
 }
 
+fn append_openai_tool_calls_json(out: &mut String, id_prefix: &str, tool_calls: &[DsmlJsonCall]) {
+    out.push('[');
+    for (index, call) in tool_calls.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let default_id = format!("{id_prefix}_tool_{index}");
+        out.push_str("{\"id\":");
+        out.push_str(&json_escape_string(
+            call.id.as_deref().unwrap_or(&default_id),
+        ));
+        out.push_str(",\"type\":\"function\",\"function\":{\"name\":");
+        out.push_str(&json_escape_string(&call.name));
+        out.push_str(",\"arguments\":");
+        out.push_str(&json_escape_string(&normalize_json_object_or_empty(
+            &call.arguments,
+        )));
+        out.push_str("}}");
+    }
+    out.push(']');
+}
+
 fn clamp_usage_tokens(value: i32, max: i32) -> i32 {
     if value < 0 {
         0
@@ -208,6 +258,12 @@ mod tests {
         include_str!("../../../ds4-parity/baselines/server-traces/m0.4/responses/chat_stream.sse");
     const CHAT_STREAM_HEADERS: &str = include_str!(
         "../../../ds4-parity/baselines/server-traces/m0.4/headers/chat_stream.headers.txt"
+    );
+    const CHAT_TOOL_CALL: &str = include_str!(
+        "../../../ds4-parity/baselines/server-traces/m0.4/responses/chat_tool_call.json"
+    );
+    const CHAT_TOOL_CALL_HEADERS: &str = include_str!(
+        "../../../ds4-parity/baselines/server-traces/m0.4/headers/chat_tool_call.headers.txt"
     );
 
     #[test]
@@ -283,6 +339,93 @@ mod tests {
         let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
         assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_BASIC_HEADERS);
         assert_eq!(body, CHAT_BASIC);
+    }
+
+    #[test]
+    fn formats_m04_tool_call_response_body() {
+        let calls = [DsmlJsonCall {
+            id: Some("call_74afa558e9694448bc8aef7aae54150d".to_string()),
+            name: "list_files".to_string(),
+            arguments: "{\"path\": \".\"}".to_string(),
+        }];
+        assert_eq!(
+            format_openai_chat_tool_completion_json(
+                &OpenAiChatCompletion {
+                    id: "chatcmpl-3",
+                    created: 1_779_416_175,
+                    model: "deepseek-v4-flash",
+                    content: "",
+                    reasoning_content: None,
+                    finish_reason: "tool_calls",
+                    usage: OpenAiUsage::new(394, 42, 0, 394),
+                },
+                &calls
+            ),
+            CHAT_TOOL_CALL
+        );
+    }
+
+    #[test]
+    fn formats_m04_tool_call_http_headers() {
+        let calls = [DsmlJsonCall {
+            id: Some("call_74afa558e9694448bc8aef7aae54150d".to_string()),
+            name: "list_files".to_string(),
+            arguments: "{\"path\":\".\"}".to_string(),
+        }];
+        let response = format_openai_chat_tool_completion_http(
+            false,
+            &OpenAiChatCompletion {
+                id: "chatcmpl-3",
+                created: 1_779_416_175,
+                model: "deepseek-v4-flash",
+                content: "",
+                reasoning_content: None,
+                finish_reason: "tool_calls",
+                usage: OpenAiUsage::new(394, 42, 0, 394),
+            },
+            &calls,
+        );
+        let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
+        assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_TOOL_CALL_HEADERS);
+        assert_eq!(body, CHAT_TOOL_CALL);
+    }
+
+    #[test]
+    fn tool_call_response_generates_ids_and_normalizes_arguments() {
+        let calls = [
+            DsmlJsonCall {
+                id: None,
+                name: "search \"docs\"".to_string(),
+                arguments: "{\"query\":\"line\\nquote\",\"limit\": 2}".to_string(),
+            },
+            DsmlJsonCall {
+                id: Some("call_exact".to_string()),
+                name: "bad_args".to_string(),
+                arguments: "not json".to_string(),
+            },
+        ];
+        let json = format_openai_chat_tool_completion_json(
+            &OpenAiChatCompletion {
+                id: "chatcmpl-tool",
+                created: 7,
+                model: "model \"x\"",
+                content: "before",
+                reasoning_content: Some("why"),
+                finish_reason: "tool_calls",
+                usage: OpenAiUsage::new(5, 2, 0, 5),
+            },
+            &calls,
+        );
+        let generated = json.find("\"id\":\"chatcmpl-tool_tool_0\"").unwrap();
+        let explicit = json.find("\"id\":\"call_exact\"").unwrap();
+        assert!(generated < explicit);
+        assert!(json.contains("\"name\":\"search \\\"docs\\\"\""));
+        assert!(json
+            .contains("\"arguments\":\"{\\\"query\\\":\\\"line\\\\nquote\\\",\\\"limit\\\":2}\""));
+        assert!(json.contains("\"function\":{\"name\":\"bad_args\",\"arguments\":\"{}\"}"));
+        assert!(
+            json.contains("\"content\":\"before\",\"reasoning_content\":\"why\",\"tool_calls\"")
+        );
     }
 
     #[test]

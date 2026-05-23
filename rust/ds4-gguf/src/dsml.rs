@@ -136,6 +136,27 @@ pub fn render_tool_result_text(text: &str) -> String {
     out
 }
 
+pub(crate) fn normalize_json_object_or_empty(json: &str) -> String {
+    let Some(args) = parse_json_arguments(json) else {
+        return "{}".to_string();
+    };
+    let mut out = String::from("{");
+    for (index, arg) in args.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str(&json_escape(&arg.name));
+        out.push(':');
+        if arg.is_string {
+            out.push_str(&json_escape(&arg.value));
+        } else {
+            out.push_str(&arg.value);
+        }
+    }
+    out.push('}');
+    out
+}
+
 pub fn parse_generated_message(
     text: &str,
     require_thinking_closed: bool,
@@ -872,5 +893,16 @@ mod tests {
             parsed.calls[0].arguments,
             "{\"edits\": [{\"old\":\"x\",\"new\":\"y\"}]}"
         );
+    }
+
+    #[test]
+    fn normalizes_tool_argument_object_for_openai_response() {
+        assert_eq!(
+            normalize_json_object_or_empty(
+                "{\"path\": \".\", \"items\": [{\"old\": \"x\", \"new\": \"y\"}], \"ok\": true}"
+            ),
+            "{\"path\":\".\",\"items\":[{\"old\":\"x\",\"new\":\"y\"}],\"ok\":true}"
+        );
+        assert_eq!(normalize_json_object_or_empty("not json"), "{}");
     }
 }

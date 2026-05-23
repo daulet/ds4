@@ -2845,7 +2845,7 @@
 
 ### M9.6a: OpenAI Tool-Call Response Formatter
 
-- Status: active
+- Status: done
 - Goal: add a pure formatter for final OpenAI chat responses whose assistant
   message contains parsed `tool_calls`, including optional reasoning content
   and usage details.
@@ -2867,15 +2867,17 @@
   are the only normalized values.
 - Review gate: ask Claude to review response JSON field order, call-ID
   injection, escaping, and separation from runtime DSML parsing.
-- Validation needed: targeted response formatter tests, DSML parser tests,
+- Validation passed: targeted response formatter tests
+  `cargo test -p ds4-gguf server_response -- --nocapture`, DSML parser tests
+  `cargo test -p ds4-gguf dsml -- --nocapture`, full
   `cargo test --workspace`, `cargo fmt --all -- --check`, and
-  `git diff --check`.
+  `git diff --check`; Claude review returned no blockers.
 - Owner path: `rust/ds4-gguf/src/server_response.rs`,
   `rust/ds4-gguf/src/dsml.rs`, `.memory/status.md`.
 
 ### M9.6b: Model-Backed Tool-Call Replay
 
-- Status: pending
+- Status: active
 - Goal: route supported non-streaming OpenAI tool requests through the Rust
   server runtime, parse generated DSML with the existing generated-message
   parser, and emit the M9.6a tool-call response shape.

@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6a OpenAI Tool-Call Response Formatter
-- Last validated source commit: M9.6 docs-only tool-call split in this commit;
-  prior pushed source commit `88969a19ea7b97e8b63db349295f57b2bc937fbd`
+- Active item: M9.6b Model-Backed Tool-Call Replay
+- Last validated source commit: M9.6a OpenAI tool-call response formatter in
+  this commit; prior pushed source commit
+  `5b02e5e7452a1109cdb3e735e08da35c5d769bf1`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,26 @@
 
 ## Last Evidence
 
+- M9.6a added pure OpenAI chat tool-call response formatting in
+  `ds4_gguf::server_response`, reusing the existing chat completion response
+  struct while adding explicit tool-call JSON/HTTP helpers.
+- M9.6a normalizes parser-produced tool-call argument objects through the DSML
+  JSON argument parser before escaping them as OpenAI `function.arguments`
+  strings, matching C's `append_json_object_string` behavior and falling back
+  to `{}` for invalid argument JSON.
+- M9.6a tests compare the exact M0.4 `chat_tool_call` JSON body and HTTP
+  headers, generated call IDs (`{chat_id}_tool_{index}`), explicit call IDs,
+  multiple-call ordering, escaped names, normalized argument strings, and
+  invalid-argument fallback without touching model execution or runtime
+  routing.
+- M9.6a local validation passed for targeted
+  `cargo test -p ds4-gguf server_response -- --nocapture`, targeted
+  `cargo test -p ds4-gguf dsml -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.6a Claude review returned no blockers after checking response field
+  order, argument normalization/escaping, call-ID fallback semantics,
+  usage/cache preservation, and the absence of runtime/model routing changes.
 - M9.6 was split before implementation because the remaining server tool-call
   work spans independent oracle surfaces: pure final-response JSON formatting,
   model-backed non-streaming replay, streaming tool-call deltas, and
