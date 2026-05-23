@@ -3158,30 +3158,166 @@
 - Owner path: `rust/ds4-gguf/src/server_response.rs`,
   `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`, `.memory/status.md`.
 
-### M9.8: Server Cache, KV Restore, And Tool Memory
+### M9.8a: Server Cache/KV/Tool-Memory Work Item Split
+
+- Status: done
+- Goal: split the broad server cache, KV restore, continued-frontier, eviction,
+  and tool-memory work into implementation stages with separate oracles.
+- Oracle: M9.8 source map against `ds4_server.c` helpers around
+  `tool_memory_attach_to_messages`, live continuation state, KV policy helpers,
+  KV tool-map trailer restore, and request-path cache accounting.
+- Fixture: roadmap/TODO state only.
+- Comparator: review the resulting M9.8b-M9.8f stages for one tangible
+  behavior boundary, explicit oracle, comparator, acceptance, drift policy, and
+  validation gate per stage.
+- Acceptance: M9.8 has no catch-all implementation item; each remaining slice
+  can be reviewed, validated, committed, and pushed independently.
+- Drift policy: docs/state-only; no runtime behavior changes.
+- Review gate: ask Claude to confirm the split preserves coverage and does not
+  hide model-backed validation under model-free stages.
+- Validation passed: `git diff --check`, docs inspection, and non-interactive
+  Claude review with no blockers.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
+
+### M9.8b: Tool-Memory Replay Core
 
 - Status: active
-- Goal: port server cache decisions, disk-KV restore, continued-frontier logic,
-  eviction policy, and tool-memory replay.
-- Oracle: M0.4 cache continuation, M0.5 KV replay artifacts, KV/cache unit
-  tests, tool-memory replay tests, and `compare_server_kv.py`.
-- Fixture: M0.4 cache seed/continuation artifacts, M0.5 seed miss/restore and
+- Goal: port exact sampled DSML tool-call memory replay for OpenAI/Responses
+  and Anthropic histories before prompt rendering.
+- Oracle: C tests `test_tool_memory_replays_sampled_dsml`,
+  `test_anthropic_tool_memory_replays_sampled_dsml`, and
+  `test_tool_memory_max_ids_prunes_oldest`, plus
+  `tool_memory_attach_to_messages`.
+- Fixture: generated/canonical tool-call histories whose JSON argument order
+  differs from sampled DSML, duplicate DSML blocks shared by multiple ids, and
+  max-entry pruning vectors.
+- Comparator: model-free Rust tests comparing replay stats, raw DSML prompt
+  bytes, call-id lookup behavior, canonical fallback, and pruning order.
+- Acceptance: Rust prompt rendering can replay exact sampled DSML by call id
+  when memory is available and falls back to canonical rendering only when ids
+  are missing or span distinct sampled DSML blocks.
+- Drift policy: sampled DSML bytes and parameter order are exact; random tool
+  ids are injected; memory size accounting only needs to preserve pruning
+  outcomes.
+- Review gate: ask Claude to review raw-vs-canonical DSML selection and missing
+  id stats.
+- Validation needed: targeted tool-memory tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+- Owner path: Rust server chat/prompt/tool-memory modules and
+  `.memory/status.md`.
+
+### M9.8c: Live Continuation And Visible-Prefix State
+
+- Status: pending
+- Goal: port server live continuation matching for Responses, Anthropic, and
+  hidden-reasoning visible-prefix replay.
+- Oracle: C tests `test_anthropic_live_tail_renders_tool_results_only`,
+  `test_responses_live_tail_renders_tool_outputs_only`, and source helpers
+  `responses_live_continuation_prompt`, `anthropic_live_continuation_prompt`,
+  `responses_live_visible_prefix_prompt`, and
+  `thinking_live_visible_prefix_prompt`.
+- Fixture: tool-result-only follow-up requests, visible replay that omits
+  hidden reasoning, and mismatched live token/call-id cases.
+- Comparator: model-free Rust tests comparing live suffix text, required live
+  state flags, visible-prefix prompt construction, call-id matching, and
+  mismatch fallbacks.
+- Acceptance: Rust request parsing and runtime state can distinguish direct live
+  protocol continuation from replay/prefix matching and can produce C-shaped
+  continuation prompts.
+- Drift policy: rendered suffix/prefix bytes and call-id matching are exact;
+  live token frontiers are injected in tests.
+- Review gate: ask Claude to review direct-continuation versus prefix-replay
+  separation.
+- Validation needed: targeted live-continuation tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+- Owner path: Rust server chat/runtime state modules and `.memory/status.md`.
+
+### M9.8d: Disk-KV Policy Completion
+
+- Status: pending
+- Goal: complete Rust disk-KV policy parity for store boundaries, continued
+  checkpoints, file-size budgeting, lookup, and eviction.
+- Oracle: C tests for `kv_cache_store_len`, `kv_cache_chat_anchor_pos`,
+  `kv_cache_continued_store_target`, cold-store suppression/restoration,
+  `kv_cache_file_size_fits`, `kv_cache_find_text_prefix`, and eviction scoring,
+  plus `ds4-parity/check_kv_policy_dump.py`.
+- Fixture: M7.2 KV policy oracle, M0.5 KV header rows, synthetic text-prefix
+  entries, protected SHA sets, and budget-edge cases.
+- Comparator: Rust model-free tests and/or parity script output comparing
+  reason codes, key kinds, trimmed boundaries, continued targets, fit decisions,
+  longest text-prefix selection, protected entries, and eviction score order.
+- Acceptance: Rust KV policy decisions match current C without requiring CUDA
+  or model execution.
+- Drift policy: reason codes, ext flags, token counts, and eviction order are
+  exact; timestamps and paths are normalized.
+- Review gate: ask Claude to review boundary trimming, budget math, and
+  eviction protection.
+- Validation needed: targeted KV policy tests,
+  `python3 ds4-parity/check_kv_policy_dump.py --negative-test`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+- Owner path: `rust/ds4-gguf/src/kv_policy.rs`, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M9.8e: KV Tool-Map Trailer Restore
+
+- Status: pending
+- Goal: port KV tool-map trailer serialization/decoding and restore exact DSML
+  tool memory before prompt rendering.
+- Oracle: C test `test_kv_tool_map_restores_before_prompt_render`,
+  `kv_tool_map_write`, `kv_tool_map_load_from_pos`, and
+  `kv_cache_restore_tool_memory_for_messages`.
+- Fixture: KVC files with `KV_EXT_TOOL_MAP`, wanted call-id filters, malformed
+  tool-map trailers, and assistant histories that would otherwise render
+  canonical JSON argument order.
+- Comparator: Rust tests comparing decoded trailer entries, count/length error
+  behavior, wanted-id filtering, memory source stats, and prompt bytes after
+  restore.
+- Acceptance: Rust restores tool memory from disk before prompt rendering so
+  cached histories preserve sampled DSML bytes across process restarts.
+- Drift policy: trailer binary layout, id limits, DSML length limits, and prompt
+  bytes are exact; unreadable or malformed trailers stop at C-equivalent partial
+  restore points.
+- Review gate: ask Claude to review binary bounds checks and restore-before-
+  render ordering.
+- Validation needed: targeted KV tool-map tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+- Owner path: `rust/ds4-gguf/src/kv_policy.rs`, Rust tool-memory module,
+  `.memory/status.md`.
+
+### M9.8f: Runtime Cache/KV Replay Integration
+
+- Status: pending
+- Goal: wire Rust server runtime cache decisions, disk-KV restore/store,
+  continued-frontier accounting, tool-memory replay, and cache usage fields
+  through the request path.
+- Oracle: M0.4 cache continuation artifacts, M0.5 seed miss/restore and
   continuation restore artifacts, KV headers, rendered text, cache decision
-  logs, and tool-memory unit vectors.
+  logs, and `compare_kv_replay.py`/`compare_server_kv.py`.
+- Fixture: M0.4 cache seed/continuation requests and M0.5 KV replay artifacts,
+  including responses, headers, traces, rendered text, and KV metadata.
 - Comparator: B300 replay comparing normalized responses, headers, trace cache
   decisions, KV metadata, rendered text, disk/text cache source, cached token
-  counts, and eviction decisions.
+  counts, cache write tokens, and eviction/store decisions.
 - Acceptance: Rust server cache behavior matches M0.4/M0.5 current-C artifacts
-  and preserves tool-memory replay semantics for future tool-result requests.
-- Drift policy: normalize paths, timestamps, raw KV hashes, and random IDs only;
-  cache source, token counts, rendered text, KV headers, and eviction outcomes
-  are exact.
+  end to end and preserves tool-memory replay semantics for future tool-result
+  requests.
+- Drift policy: normalize paths, timestamps, raw KV payload hashes, and random
+  IDs only; cache source, token counts, rendered text, KV headers, and eviction
+  outcomes are exact.
 - Review gate: ask Claude to review cache-key construction, live vs disk tool
-  memory, boundary trimming, KV budget checks, and eviction protection.
-- Validation needed: B300 KV/server comparator with negative tests, `python3
-  ds4-parity/compare_server_kv.py`, `cargo test --workspace`, and `git
-  diff --check`.
-- Owner path: Rust server cache/KV modules, `ds4-parity/`,
+  memory, boundary trimming, KV budget checks, eviction protection, and request
+  accounting.
+- Validation needed: B300 KV/server comparator with negative tests,
+  `python3 ds4-parity/compare_kv_replay.py`, `python3
+  ds4-parity/compare_server_kv.py`, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, and non-interactive Claude review with no
+  blockers.
+- Owner path: Rust server runtime/cache/KV modules, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.9: Server Parity Report Integration

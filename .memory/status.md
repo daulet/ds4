@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8 Server Cache, KV Restore, And Tool Memory
-- Last validated source commit: M9.7b Responses/Anthropic streaming event
-  builders in this commit; prior pushed source commit
-  `c98a40f12f38a303e89d370a47c920d660441c8d`
+- Active item: M9.8b Tool-Memory Replay Core
+- Last validated source commit: M9.8a server cache/KV/tool-memory work item
+  split in this commit; prior pushed source commit
+  `b73f2db41809587f2f1cee2ba9c8f83af907a087`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,16 @@
 
 ## Last Evidence
 
+- M9.8a splits the broad server cache, KV restore, continued-frontier, eviction,
+  and tool-memory item into separately reviewable stages: tool-memory replay
+  core (M9.8b), live continuation/visible-prefix state (M9.8c), disk-KV policy
+  completion (M9.8d), KV tool-map trailer restore (M9.8e), and runtime
+  cache/KV replay integration with B300 validation (M9.8f).
+- M9.8a is docs/state-only and keeps model-backed B300 replay validation in the
+  runtime integration slice instead of hiding it under model-free policy or
+  formatter work.
+- M9.8a validation passed `git diff --check`, docs inspection, and
+  non-interactive Claude review with no blockers.
 - M9.7b adds exported model-free SSE formatters and HTTP wrappers for
   Responses and Anthropic protocol streams:
   `format_responses_stream_sse`, `format_responses_stream_http`,
