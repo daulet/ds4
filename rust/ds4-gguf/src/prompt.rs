@@ -199,6 +199,59 @@ pub fn render_chat_prompt_text(
     out
 }
 
+pub fn render_live_tool_tail_text(
+    messages: &[ChatMessage],
+    start: usize,
+    think_mode: ThinkMode,
+) -> String {
+    let think = think_mode.enabled();
+    let mut out = String::from("<｜end▁of▁sentence｜>");
+
+    let mut pending_assistant = false;
+    let mut pending_tool_result = false;
+    for message in messages.iter().skip(start) {
+        if role_is_system(&message.role) {
+            continue;
+        } else if message.role == "user" {
+            out.push_str("<｜User｜>");
+            out.push_str(&message.content);
+            pending_assistant = true;
+            pending_tool_result = false;
+        } else if message.role == "tool" || message.role == "function" {
+            if !pending_tool_result {
+                out.push_str("<｜User｜>");
+            }
+            out.push_str("<tool_result>");
+            out.push_str(&render_tool_result_text(&message.content));
+            out.push_str("</tool_result>");
+            pending_assistant = true;
+            pending_tool_result = true;
+        } else if message.role == "assistant" {
+            if pending_assistant {
+                out.push_str("<｜Assistant｜>");
+                if think {
+                    out.push_str("<think>");
+                    out.push_str(&message.reasoning);
+                    out.push_str("</think>");
+                } else {
+                    out.push_str("</think>");
+                }
+            }
+            out.push_str(&message.content);
+            out.push_str(&render_message_tool_calls(message));
+            out.push_str("<｜end▁of▁sentence｜>");
+            pending_assistant = false;
+            pending_tool_result = false;
+        }
+    }
+
+    if pending_assistant {
+        out.push_str("<｜Assistant｜>");
+        out.push_str(if think { "<think>" } else { "</think>" });
+    }
+    out
+}
+
 pub fn apply_cli_ops(tokenizer: &Ds4Tokenizer, ops: &[CliOp]) -> Vec<u32> {
     let mut tokens = Vec::new();
     for op in ops {

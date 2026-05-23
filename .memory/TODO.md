@@ -2296,7 +2296,7 @@
 
 ### M9.2c2c: Responses Live Tail Validation Surface
 
-- Status: active
+- Status: done
 - Goal: port model-free Responses live continuation validation outputs:
   missing call-id errors, `requires_live_tool_state`,
   `requires_live_reasoning`, live call-id collection, and visible live suffix
@@ -2319,13 +2319,14 @@
   call-id ordering/deduplication, and live-tail bytes.
 - Review gate: ask Claude to review missing-state rejection, live-state flag
   assignment, reasoning replay requirements, and live-tail construction.
-- Validation needed: targeted Rust Responses live-tail tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.2c3: Anthropic Message And Tool Result Parse Surface
 
-- Status: pending
+- Status: active
 - Goal: port model-free Anthropic request parsing for system/content blocks,
   tools, tool choice, stop sequences, thinking controls, tool-use/tool-result
   messages, and live-tail validation.

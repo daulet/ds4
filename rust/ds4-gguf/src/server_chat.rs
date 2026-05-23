@@ -1,7 +1,8 @@
 use std::fmt;
 
 use crate::{
-    render_chat_prompt_text, ChatMessage, SamplingParams, ThinkMode, ToolArgument, ToolCall,
+    render_chat_prompt_text, render_live_tool_tail_text, ChatMessage, SamplingParams, ThinkMode,
+    ToolArgument, ToolCall,
 };
 
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
@@ -39,6 +40,29 @@ pub struct ResponsesRequest {
     pub think_mode: ThinkMode,
     pub prompt_text: String,
     pub prompt_preserves_reasoning: bool,
+    pub responses_requires_live_tool_state: bool,
+    pub responses_requires_live_reasoning: bool,
+    pub responses_live_call_ids: Vec<String>,
+    pub responses_live_suffix_text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ResponsesLiveState {
+    pub call_ids: Vec<String>,
+}
+
+impl ResponsesLiveState {
+    pub fn with_call_ids(call_ids: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let mut state = Self::default();
+        for call_id in call_ids {
+            push_unique_id(&mut state.call_ids, call_id.into());
+        }
+        state
+    }
+
+    fn has_call_id(&self, call_id: &str) -> bool {
+        self.call_ids.iter().any(|id| id == call_id)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +81,7 @@ pub enum ServerRequestErrorCategory {
     MissingInput,
     UnsupportedDurableState,
     UnsupportedToolChoice,
+    MissingResponsesContinuationState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +123,15 @@ impl ServerRequestError {
         Self {
             category: ServerRequestErrorCategory::UnsupportedToolChoice,
             message: message.into(),
+        }
+    }
+
+    fn missing_responses_continuation_state(call_id: &str) -> Self {
+        Self {
+            category: ServerRequestErrorCategory::MissingResponsesContinuationState,
+            message: format!(
+                "Responses continuation state is not available for call_id {call_id}; retry by replaying the full input history"
+            ),
         }
     }
 
@@ -259,6 +293,20 @@ pub fn parse_responses_core_request(
     def_tokens: i32,
     ctx_size: i32,
 ) -> Result<ResponsesRequest, ServerRequestError> {
+    parse_responses_core_request_with_live_state(
+        body,
+        def_tokens,
+        ctx_size,
+        &ResponsesLiveState::default(),
+    )
+}
+
+pub fn parse_responses_core_request_with_live_state(
+    body: &str,
+    def_tokens: i32,
+    ctx_size: i32,
+    live_state: &ResponsesLiveState,
+) -> Result<ResponsesRequest, ServerRequestError> {
     let fields = JsonParser::new(body)
         .parse_root_object_fields_raw()
         .map_err(|_| ServerRequestError::invalid_json())?;
@@ -379,6 +427,8 @@ pub fn parse_responses_core_request(
         think_mode_from_enabled(thinking_enabled, reasoning_effort),
         ctx_size,
     );
+    let live_validation = validate_responses_tool_outputs(&messages, think_mode, live_state)?;
+    let live_continuation = prepare_responses_live_continuation(&messages, think_mode);
     let prompt_preserves_reasoning = chat_history_uses_tool_context(&messages, active_tool_schemas);
     let prompt_text = render_chat_prompt_text(&messages, active_tool_schemas, think_mode);
 
@@ -395,7 +445,129 @@ pub fn parse_responses_core_request(
         think_mode,
         prompt_text,
         prompt_preserves_reasoning,
+        responses_requires_live_tool_state: live_validation.requires_live_tool_state,
+        responses_requires_live_reasoning: live_validation.requires_live_reasoning,
+        responses_live_call_ids: live_continuation.call_ids,
+        responses_live_suffix_text: live_continuation.suffix_text,
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct ResponsesLiveValidation {
+    requires_live_tool_state: bool,
+    requires_live_reasoning: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct ResponsesLiveContinuation {
+    call_ids: Vec<String>,
+    suffix_text: Option<String>,
+}
+
+fn validate_responses_tool_outputs(
+    messages: &[ChatMessage],
+    think_mode: ThinkMode,
+    live_state: &ResponsesLiveState,
+) -> Result<ResponsesLiveValidation, ServerRequestError> {
+    let mut validation = ResponsesLiveValidation::default();
+    let needs_reasoning = think_mode.enabled();
+    for (idx, message) in messages.iter().enumerate() {
+        if message.role != "tool" && message.role != "function" {
+            continue;
+        }
+        let ids = collect_tool_result_call_ids(message);
+        for id in ids {
+            let live_known = live_state.has_call_id(&id);
+            let prior = find_prior_assistant_call_message(messages, idx, &id);
+            if !live_known && prior.is_none() {
+                return Err(ServerRequestError::missing_responses_continuation_state(
+                    &id,
+                ));
+            }
+            let Some(prior) = prior else {
+                validation.requires_live_tool_state = true;
+                continue;
+            };
+            if needs_reasoning && prior.reasoning.is_empty() {
+                validation.requires_live_reasoning = true;
+            }
+        }
+    }
+    Ok(validation)
+}
+
+fn prepare_responses_live_continuation(
+    messages: &[ChatMessage],
+    think_mode: ThinkMode,
+) -> ResponsesLiveContinuation {
+    if messages.is_empty() {
+        return ResponsesLiveContinuation::default();
+    }
+
+    let mut tail_start = messages.len();
+    while tail_start > 0 {
+        let message = &messages[tail_start - 1];
+        if message.role != "tool" && message.role != "function" {
+            break;
+        }
+        tail_start -= 1;
+    }
+    if tail_start == messages.len() {
+        return ResponsesLiveContinuation::default();
+    }
+
+    let mut call_ids = Vec::new();
+    if tail_start > 0 {
+        let assistant = &messages[tail_start - 1];
+        if assistant.role != "assistant" || assistant.tool_calls.is_empty() {
+            return ResponsesLiveContinuation::default();
+        }
+        for call in &assistant.tool_calls {
+            push_unique_id(&mut call_ids, call.id.clone());
+        }
+    } else {
+        for message in &messages[tail_start..] {
+            for id in collect_tool_result_call_ids(message) {
+                push_unique_id(&mut call_ids, id);
+            }
+        }
+    }
+    if call_ids.is_empty() {
+        return ResponsesLiveContinuation::default();
+    }
+
+    ResponsesLiveContinuation {
+        call_ids,
+        suffix_text: Some(render_live_tool_tail_text(messages, tail_start, think_mode)),
+    }
+}
+
+fn collect_tool_result_call_ids(message: &ChatMessage) -> Vec<String> {
+    let mut ids = Vec::new();
+    for id in &message.tool_call_ids {
+        push_unique_id(&mut ids, id.clone());
+    }
+    ids
+}
+
+fn find_prior_assistant_call_message<'a>(
+    messages: &'a [ChatMessage],
+    before: usize,
+    id: &str,
+) -> Option<&'a ChatMessage> {
+    if id.is_empty() {
+        return None;
+    }
+    messages[..before].iter().rev().find(|message| {
+        message.role == "assistant" && message.tool_calls.iter().any(|call| call.id == id)
+    })
+}
+
+fn push_unique_id(ids: &mut Vec<String>, id: String) {
+    if id.is_empty() || ids.iter().any(|existing| existing == &id) {
+        return;
+    }
+    ids.push(id);
 }
 
 pub fn think_mode_for_context(mode: ThinkMode, ctx_size: i32) -> ThinkMode {
@@ -2228,6 +2400,8 @@ mod tests {
                 "input":[
                     {"type":"message","role":"user","content":"run"},
                     {"type":"function_call","call_id":"call_lookup","name":"lookup","arguments":{"query":"ds4"}},
+                    {"type":"local_shell_call","id":"call_shell","action":{"cmd":"pwd"}},
+                    {"type":"tool_search_call","call_id":"call_search","arguments":{"query":"tools"}},
                     {"type":"function_call_output","call_id":"call_lookup","output":[{"type":"output_text","text":"result </tool_result> & raw"}]},
                     {"type":"local_shell_call_output","id":"call_shell","result":{"ok":true}},
                     {"type":"tool_search_output","call_id":"call_search","tools":[{"type":"namespace","name":"mcp__demo__","tools":[]}]}
@@ -2345,6 +2519,86 @@ mod tests {
         )
         .expect_err("malformed dynamic tool list rejected");
         assert_eq!(bad.category(), ServerRequestErrorCategory::InvalidJson);
+    }
+
+    #[test]
+    fn responses_tool_output_only_requires_live_state_or_prior_call() {
+        let missing = parse_responses_core_request(
+            r#"{"input":[{"type":"function_call_output","call_id":"call_missing","output":"out"}]}"#,
+            128,
+            32_768,
+        )
+        .expect_err("missing live continuation state rejected");
+        assert_eq!(
+            missing.category(),
+            ServerRequestErrorCategory::MissingResponsesContinuationState
+        );
+        assert_eq!(
+            missing.message(),
+            "Responses continuation state is not available for call_id call_missing; retry by replaying the full input history"
+        );
+
+        let live_state = ResponsesLiveState::with_call_ids(["call_missing"]);
+        let req = parse_responses_core_request_with_live_state(
+            r#"{"input":[{"type":"function_call_output","call_id":"call_missing","output":"out </tool_result>"}]}"#,
+            128,
+            32_768,
+            &live_state,
+        )
+        .expect("live-known tool output parses");
+        assert!(req.responses_requires_live_tool_state);
+        assert!(!req.responses_requires_live_reasoning);
+        assert_eq!(req.responses_live_call_ids, ["call_missing"]);
+        let suffix = req.responses_live_suffix_text.as_deref().expect("suffix");
+        assert!(suffix.starts_with("<｜end▁of▁sentence｜><｜User｜><tool_result>"));
+        assert!(suffix.contains("out &lt;/tool_result></tool_result>"));
+        assert!(suffix.ends_with("<｜Assistant｜><think>"));
+    }
+
+    #[test]
+    fn responses_stateless_tool_replay_marks_missing_reasoning_only_in_thinking_mode() {
+        let req = parse_responses_fixture(
+            r#"{
+                "input":[
+                    {"type":"function_call","call_id":"call_replay","name":"lookup","arguments":{"query":"ds4"}},
+                    {"type":"function_call_output","call_id":"call_replay","output":"ok"}
+                ]
+            }"#,
+        );
+        assert!(!req.responses_requires_live_tool_state);
+        assert!(req.responses_requires_live_reasoning);
+        assert_eq!(req.responses_live_call_ids, ["call_replay"]);
+        let suffix = req.responses_live_suffix_text.as_deref().expect("suffix");
+        assert!(suffix.contains("<tool_result>ok</tool_result>"));
+        assert!(!suffix.contains("lookup"));
+
+        let replayed_reasoning = parse_responses_fixture(
+            r#"{
+                "input":[
+                    {"type":"reasoning","content":[{"type":"reasoning_text","text":"hidden"}]},
+                    {"type":"function_call","call_id":"call_replay","name":"lookup","arguments":{"query":"ds4"}},
+                    {"type":"function_call_output","call_id":"call_replay","output":"ok"}
+                ]
+            }"#,
+        );
+        assert!(!replayed_reasoning.responses_requires_live_tool_state);
+        assert!(!replayed_reasoning.responses_requires_live_reasoning);
+
+        let no_thinking = parse_responses_fixture(
+            r#"{
+                "model":"deepseek-chat",
+                "input":[
+                    {"type":"function_call","call_id":"call_replay","name":"lookup","arguments":{"query":"ds4"}},
+                    {"type":"function_call_output","call_id":"call_replay","output":"ok"}
+                ]
+            }"#,
+        );
+        assert_eq!(no_thinking.think_mode, ThinkMode::None);
+        assert!(!no_thinking.responses_requires_live_reasoning);
+        assert!(no_thinking
+            .responses_live_suffix_text
+            .as_deref()
+            .is_some_and(|suffix| suffix.ends_with("<｜Assistant｜></think>")));
     }
 
     #[test]

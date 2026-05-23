@@ -27,7 +27,8 @@ pub use dsml::{
     DsmlParseError, DsmlRenderCall, ParsedGeneratedMessage, ResponseParse,
 };
 pub use prompt::{
-    apply_cli_ops, render_chat_prompt_text, ChatMessage, CliOp, ThinkMode, ToolArgument, ToolCall,
+    apply_cli_ops, render_chat_prompt_text, render_live_tool_tail_text, ChatMessage, CliOp,
+    ThinkMode, ToolArgument, ToolCall,
 };
 pub use sampling::{
     sample_argmax, sample_rng_f32, sample_rng_next, sample_top_p_min_p, token_logprob,
@@ -35,8 +36,9 @@ pub use sampling::{
 };
 pub use server_chat::{
     openai_context_length_error_body, parse_openai_chat_request, parse_responses_core_request,
-    request_exceeds_context, think_mode_for_context, OpenAiChatRequest, ResponsesRequest,
-    ServerRequestError, ServerRequestErrorCategory, ToolSchemaOrder,
+    parse_responses_core_request_with_live_state, request_exceeds_context, think_mode_for_context,
+    OpenAiChatRequest, ResponsesLiveState, ResponsesRequest, ServerRequestError,
+    ServerRequestErrorCategory, ToolSchemaOrder,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

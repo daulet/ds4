@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c2c Responses Live Tail Validation Surface
-- Last validated source commit: M9.2c2b Responses dynamic tool schema parser in
-  this commit; prior pushed source commit
-  `91d5f1c543357218d9a2699a9b1c3b6261f6449a`
+- Active item: M9.2c3 Anthropic Message And Tool Result Parse Surface
+- Last validated source commit: M9.2c2c Responses live continuation validation
+  parser in this commit; prior pushed source commit
+  `b5ec9e507a6023d67b18111b4a4c802511728359`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,25 @@
 
 ## Last Evidence
 
+- M9.2c2c added a Rust `ResponsesLiveState` stub plus request metadata for
+  `responses_requires_live_tool_state`, `responses_requires_live_reasoning`,
+  `responses_live_call_ids`, and `responses_live_suffix_text`.
+- M9.2c2c added model-free validation matching C
+  `responses_validate_tool_outputs`: tool-output-only requests without live or
+  replayed prior call IDs now return the same stable error string, live-known
+  tool-output-only requests set `requires_live_tool_state`, and stateless
+  thinking-mode replays without prior reasoning set `requires_live_reasoning`.
+- M9.2c2c added a Rust live-tool-tail renderer matching C
+  `render_live_tool_tail`, including the leading EOS, tool-result delimiter
+  escaping, and next assistant prefix for thinking and non-thinking modes.
+- M9.2c2c validation covered missing live state, live-known tool-output-only
+  continuations, replayed prior tool calls with and without reasoning,
+  non-thinking replay, call-id collection, and suffix text excluding prior tool
+  call DSML.
+- M9.2c2c validation passed for targeted
+  `cargo test -p ds4-gguf server_chat -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.2c2b extended `ToolSchemaOrder` with namespace, wire-name, and hosted
   `tool_search` metadata needed by Responses schema parsing.
 - M9.2c2b extended Rust `parse_tools_value` to match C handling for top-level
