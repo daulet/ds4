@@ -1865,7 +1865,7 @@
 
 ### M8.14: Current-C Interactive CLI Transcript Oracle
 
-- Status: pending
+- Status: done
 - Goal: capture scripted current-C interactive CLI behavior.
 - Source evidence needed: current `./ds4` REPL implementation, PTY behavior for
   `linenoise`, prompts, Ctrl+C, and command output, and B300 model-backed CLI
@@ -1885,10 +1885,46 @@
   be normalized; prompt markers, command responses, and exit categories are
   exact.
 - Review gate: ask Claude to review PTY determinism and command coverage.
-- Validation needed: local or B300 PTY capture, checker with negative tests, and
-  `git diff --check`.
+- Validation passed: B300 `make ds4 CUDA_ARCH=native`; B300
+  `python3 ds4-parity/check_cli_interactive_dump.py
+  --write-baseline ds4-parity/baselines/cli/m8.14/current-c.json
+  --write-manifest ds4-parity/baselines/cli/m8.14/manifest.json --binary
+  ./ds4`; B300 and local
+  `python3 ds4-parity/check_cli_interactive_dump.py
+  ds4-parity/baselines/cli/m8.14/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.14/manifest.json --negative-test` (`CLI
+  interactive oracle: PASS, 89 checks`; manifest `PASS, 15 checks`; negative
+  tests `PASS, 6 checks`); local `python3 -m json.tool` for both M8.14 JSON
+  files; local `python3 -m py_compile ds4-parity/check_cli_interactive_dump.py`;
+  and `git diff --check`.
 - Owner path: CLI interactive oracle artifacts, `ds4-parity/`,
   `ds4-parity/baselines/cli/`, `.memory/status.md`.
+
+### M8.15: Rust Interactive CLI Transcript Parity
+
+- Status: pending
+- Goal: implement Rust interactive CLI behavior for the M8.14 transcript
+  surface.
+- Source evidence needed: committed M8.14 current-C PTY transcript fixture, Rust
+  CLI parser/runtime boundaries, and current C REPL state handling in
+  `ds4_cli.c`.
+- Oracle: committed M8.14 current-C PTY transcript fixture.
+- Fixture: same command-only, model-backed, `/read`, thinking-mode, context, and
+  Ctrl+C-at-prompt transcript cases as M8.14.
+- Comparator: C/Rust PTY transcript comparator for prompt markers, command
+  responses, normalized timing/progress, exit status, transcript hashes, and
+  interruption behavior.
+- Acceptance: Rust REPL command handling, prompt display, file-read behavior,
+  thinking-mode switching, context reset, and interruption behavior match the C
+  CLI within documented normalization.
+- Drift policy: terminal escape normalization only where the comparator records
+  it.
+- Review gate: ask Claude to review interactive state handling and transcript
+  normalization.
+- Validation needed: PTY comparator with negative tests, targeted Rust CLI
+  tests, B300 comparison run, `cargo test --workspace`, and `git diff --check`.
+- Owner path: Rust CLI interactive path, PTY comparator, `ds4-parity/`,
+  `.memory/status.md`.
 
 ## Later Items
 

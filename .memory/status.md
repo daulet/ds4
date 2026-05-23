@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.14 Current-C Interactive CLI Transcript Oracle
-- Last validated source commit: M8.13d Rust CLI one-shot runtime-control
-  surface in this commit; prior pushed source commit
-  `92d43ab1bb5226ffa62d8e5a69cc0cd5017f0c67`
+- Active item: M8.15 Rust Interactive CLI Transcript Parity
+- Last validated source commit: M8.14 current-C interactive CLI transcript
+  oracle in this commit; prior pushed source commit
+  `a023d98eb0f3bec92c1de6a3fd1df01e2749cf26`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1269,3 +1269,33 @@
   ds4-parity/compare_cli_one_shot_runtime.py
   ds4-parity/compare_cli_argmax_runtime.py
   ds4-parity/compare_cli_session_runtime.py`, and `git diff --check`.
+- M8.14 adds `ds4-parity/check_cli_interactive_dump.py`, a current-C PTY
+  capture/checker for interactive CLI transcripts. It sets an explicit PTY
+  window size so `linenoise` does not block on cursor-position probing and sends
+  carriage returns to match terminal Enter behavior.
+- M8.14 adds fixture
+  `ds4-parity/baselines/cli-fixtures/m8.14/read_prompt.txt` with SHA256
+  `418e80cf0af232690c1cdb12b0ca015953f0f14d24c2c8ba40052464387b49b3`.
+- M8.14 captures two current-C B300 PTY cases in
+  `ds4-parity/baselines/cli/m8.14/current-c.json`: `command_suite` and
+  `ctrl_c_at_prompt`. The command suite covers empty input, `/help`, `/think`,
+  `/think-max`, `/nothink`, `/ctx 128`, `/read`, an unknown command, one direct
+  model-backed prompt, and `/quit`; the Ctrl+C case covers deterministic
+  Ctrl+C behavior at the prompt.
+- M8.14 committed current-C artifact size is 34,582 bytes with SHA256
+  `223939b68a2791d79b2b7bac207e1e2a89db71f3073d0e4ab885a34e08c65a9f`.
+  The manifest size is 2,472 bytes with SHA256
+  `d63181e48f0c381308401692c60672a3d6bf1dfe5e142036df728ee100cd40f4`.
+- M8.14 B300 validation passed after copying the checker and fixture to
+  `/workspace/ds4`, rebuilding `ds4` with `make ds4 CUDA_ARCH=native`, running
+  the PTY capture/checker, and copying `current-c.json` and `manifest.json`
+  back from the pod.
+- M8.14 B300 and local revalidation passed
+  `python3 ds4-parity/check_cli_interactive_dump.py
+  ds4-parity/baselines/cli/m8.14/current-c.json --manifest
+  ds4-parity/baselines/cli/m8.14/manifest.json --negative-test` with oracle
+  `PASS, 89 checks`, manifest `PASS, 15 checks`, and negative tests `PASS, 6
+  checks`.
+- M8.14 local validation also passed `python3 -m json.tool` for both M8.14 JSON
+  files, `python3 -m py_compile ds4-parity/check_cli_interactive_dump.py`, and
+  `git diff --check`.
