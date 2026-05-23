@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2 Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b2b2b2b2b2b Rust One-Token Decode B300 Execution
 - Last validated source commit before the current stage:
-  local M10.5c4c2b2b2b2b2b1 output-head execution work, based on
-  `07e6a2df98353c28cff64271c033ad91737d6987`.
+  `6dc8ffd15b65e8271adb9249f9bb35d05fbb0f9f` (M10.5c4c2b2b2b2b2b1 Rust
+  layer-0 output-head execution).
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,46 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2a adds `ds4-two-layer-output-head-oracle-dump` and
+  `ds4_dump_two_layer_output_head_oracle_json`, which emit
+  `ds4.two_layer_output_head_oracle.v1` for token `0`, position `0`, layers
+  `0` and `1` through the production current-C decode-layer encoder, the
+  production `cur_hc`/`after_ffn_hc` swap after each layer, and the production
+  output-head encoder.
+- M10.5c4c2b2b2b2b2b2a adds `ds4-decode-two-layer-output-head`, which maps the
+  real GGUF on B300, binds DS4 weights, launches dense layer 0, swaps the HC
+  buffers, launches dense layer 1 with its own raw cache, swaps again, runs the
+  output-head path from the layer-1 HC through the safe Rust facade in one
+  command batch, synchronizes, and reads back both layer HC boundaries plus
+  output-head tensors and logits.
+- The B300 paired two-dense-layer output-head validator passed 446 pinned checks
+  with full-buffer FNV digests `after_layer0_hc=3d49316c93ce351f`,
+  `after_layer1_hc=f764d7067de5c945`, `output_pre=ebc1b8ccc088d27a`,
+  `output_weights=e20bda6aca5453b2`, `output_embd=b5d1377b7c179886`,
+  `output_norm=2ce848a4cc2363db`, and `logits=14dbbac3cd6ed7a8`. Pinned
+  output-head weights are `token_embd=(77928033088,1059061760,1,f16)`,
+  `output_hc_fn=(86157337440,131072,1,f16)`,
+  `output_hc_scale=(86157468512,4,0,f32)`,
+  `output_hc_base=(86157337408,16,0,f32)`,
+  `output_norm=(86720095104,16384,0,f32)`, and
+  `output=(86157468544,562626560,8,q8_0)`.
+- M10.5c4c2b2b2b2b2b2a validation passed `python3
+  ds4-parity/compare_decode_two_layer_output_head.py --negative-test`,
+  `python3 ds4-parity/compare_decode_two_layer_output_head.py`, `python3 -m
+  py_compile ds4-parity/compare_decode_two_layer_output_head.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-two-layer-output-head-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-two-layer-output-head`, B300 current-C oracle plus Rust candidate
+  paired validation, pinned B300 artifact rerun, and B300 c2b2b2b2b2b1
+  layer-0 output-head rerun with 399 checks, local `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 32 passed, 22
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and a touched-file NUL scan across 11 files.
+- M10.5c4c2b2b2b2b2b2 splits the remaining one-token scheduler item into a
+  two-dense-layer output-head execution bridge and the next compressed/all-layer
+  scheduler slice M10.5c4c2b2b2b2b2b2b. The split keeps the next commit
+  comparable at the production `cur_hc`/`after_ffn_hc` buffer-swap boundary
+  before layer-2 compressed-cache mutation is introduced.
 - M10.5c4c2b2b2b2b2b1 adds `ds4-layer0-output-head-oracle-dump` and
   `ds4_dump_layer0_output_head_oracle_json`, which emit
   `ds4.layer0_output_head_oracle.v1` for token `0`, layer `0`, position `0`

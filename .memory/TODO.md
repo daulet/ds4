@@ -4234,10 +4234,61 @@
 
 ### M10.5c4c2b2b2b2b2b2: Rust One-Token Decode B300 Execution
 
+- Status: split
+- Split into M10.5c4c2b2b2b2b2b2a and M10.5c4c2b2b2b2b2b2b so the
+  dense layer-loop buffer swap is compared before compressed layer-2 cache
+  mutation and all-layer scheduling are introduced.
+
+### M10.5c4c2b2b2b2b2b2a: Rust Two Dense-Layer Output Head B300 Execution
+
+- Status: done
+- Goal: execute two dense decode layers followed by the output-head path on
+  B300 after the single-layer FFN output and output-head kernels are
+  independently compared.
+- Oracle: the current-C GPU path for token `0`, position `0`, layers `0` and
+  `1` through the production decode-layer encoder with the production
+  `cur_hc`/`after_ffn_hc` swap after each layer, followed by the production
+  output-head encoder.
+- Fixture: B300 `ds4flash.gguf`, token `0`, position `0`, dense layers `0` and
+  `1`, `after_layer0_hc`, `after_layer1_hc`, output-head tensors
+  `output_pre`, `output_weights`, `output_embd`, `output_norm`, and `logits`.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests, current-C SHA256 evidence, selected f32 samples
+  within `1e-6`, pinned output-head weight metadata, and exact layer/raw-cache
+  operation counters.
+- Acceptance: Rust launches layer `0`, swaps the HC buffers, launches layer `1`
+  from the swapped current HC, runs output-head from the layer-1 HC through the
+  safe facade in one command batch, synchronizes, and matches the current-C GPU
+  oracle on B300.
+- Drift policy: token, position, layer count, raw cache rows, output tensor byte
+  sizes, and FNV digests are exact; selected f32 sample text may vary by JSON
+  formatting but numeric values must stay within `1e-6`.
+- Review gate: ask Claude to review dense layer-loop ordering, buffer swap
+  semantics, layer-specific raw-cache use, output-head input selection, and
+  comparator failure modes.
+- Validation needed: two-dense-layer output-head comparator with negative test,
+  B300 current-C oracle plus Rust candidate paired validation, `make
+  ds4-two-layer-output-head-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-two-layer-output-head`, c2b2b2b2b2b1 layer-0 output-head rerun,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+- Owner path: current-C two-layer output-head oracle helper, Rust two-layer
+  output-head JSON, paired comparator, `.memory/status.md`.
+- Evidence: B300 two-dense-layer output-head paired validation passed 446
+  pinned checks with `after_layer0_hc=3d49316c93ce351f`,
+  `after_layer1_hc=f764d7067de5c945`, `output_pre=ebc1b8ccc088d27a`,
+  `output_weights=e20bda6aca5453b2`, `output_embd=b5d1377b7c179886`,
+  `output_norm=2ce848a4cc2363db`, and `logits=14dbbac3cd6ed7a8`;
+  predecessor c2b2b2b2b2b1 layer-0 output-head B300 rerun passed 399 checks;
+  local unified report passed 32/22/0, workspace tests passed, fmt/diff checks
+  passed, and the touched-file NUL scan passed across 11 files.
+
+### M10.5c4c2b2b2b2b2b2b: Rust One-Token Decode B300 Execution
+
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
-  on B300 after layer-0 FFN output and the output-head kernels are
-  independently compared.
+  on B300 after two dense decode layers, layer-0 FFN output, and output-head
+  kernels are independently compared.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
@@ -4247,7 +4298,8 @@
   M10.5c4c2b2b2b2a layer-0 QKV/RoPE comparator, and
   M10.5c4c2b2b2b2b1 layer-0 attention-output comparator, and
   M10.5c4c2b2b2b2b2a layer-0 FFN-output comparator, and
-  M10.5c4c2b2b2b2b2b1 layer-0 output-head comparator.
+  M10.5c4c2b2b2b2b2b1 layer-0 output-head comparator, and
+  M10.5c4c2b2b2b2b2b2a two-dense-layer output-head comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -4264,7 +4316,8 @@
   c2b2a state allocation rerun, c2b2b1 first-kernel rerun, c2b2b2a current-C
   oracle rerun, c2b2b2b1 layer-0 HC-pre rerun, c2b2b2b2a layer-0 QKV/RoPE
   rerun, c2b2b2b2b1 layer-0 attention-output rerun, c2b2b2b2b2a layer-0
-  FFN-output rerun, c2b2b2b2b2b1 layer-0 output-head rerun, `cargo test
+  FFN-output rerun, c2b2b2b2b2b1 layer-0 output-head rerun,
+  c2b2b2b2b2b2a two-dense-layer output-head rerun, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,
