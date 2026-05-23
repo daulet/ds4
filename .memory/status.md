@@ -3,7 +3,7 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.5 Streaming Chat Completion SSE Surface
+- Active item: M9.5a OpenAI Chat SSE Formatter And Header Builder
 - Last validated source commit: M9.4d memory-token cache seed and continuation
   replay in this commit; prior pushed source commit
   `65012c263ec6d055b5e67e6ae4be45fb59c6b9bd`
@@ -26,6 +26,13 @@
 
 ## Last Evidence
 
+- M9.5 was split before implementation because pure SSE byte formatting and
+  model-backed per-token streaming replay have distinct oracles, comparators,
+  and validation gates.
+- M9.5a now owns OpenAI chat SSE headers, role/content/final/usage chunks, and
+  `[DONE]` formatting with injected IDs/timestamps and fixed deltas.
+- M9.5b now owns model-backed streaming routing, token chunk capture, B300
+  `chat_stream` replay, and trace validation through the M9.5a formatter.
 - M9.4d added a reusable `ServerSession` path for model-backed server
   generation so `/v1/chat/completions` requests in one Rust server process can
   reuse the live token prefix from prior completions.
