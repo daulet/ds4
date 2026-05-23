@@ -35,10 +35,11 @@ pub use sampling::{
     top_logprobs, SamplingParams, SamplingTrace, TokenScore,
 };
 pub use server_chat::{
-    openai_context_length_error_body, parse_openai_chat_request, parse_responses_core_request,
-    parse_responses_core_request_with_live_state, request_exceeds_context, think_mode_for_context,
-    OpenAiChatRequest, ResponsesLiveState, ResponsesRequest, ServerRequestError,
-    ServerRequestErrorCategory, ToolSchemaOrder,
+    openai_context_length_error_body, parse_anthropic_core_request, parse_openai_chat_request,
+    parse_responses_core_request, parse_responses_core_request_with_live_state,
+    request_exceeds_context, think_mode_for_context, AnthropicRequest, OpenAiChatRequest,
+    ResponsesLiveState, ResponsesRequest, ServerRequestError, ServerRequestErrorCategory,
+    ToolSchemaOrder,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

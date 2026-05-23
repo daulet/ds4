@@ -2347,7 +2347,7 @@
 
 ### M9.2c3a: Anthropic Core Message And Control Parse Surface
 
-- Status: active
+- Status: done
 - Goal: port model-free Anthropic core request parsing for `messages`,
   `system`, string/text content blocks, private system filtering, scalar
   generation controls, stop sequences, stream flag, `thinking`,
@@ -2371,13 +2371,14 @@
   comparison for missing/invalid request errors.
 - Review gate: ask Claude to review system block filtering, text-content
   parsing, stop/thinking controls, effort precedence, and prompt bytes.
-- Validation needed: targeted Rust Anthropic core parser tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.2c3b: Anthropic Tool Schema And Tool History Parse Surface
 
-- Status: pending
+- Status: active
 - Goal: port model-free Anthropic tool schemas, `tool_choice.type`,
   assistant `tool_use` content blocks, user `tool_result` blocks, tool-use IDs,
   tool result prompt rendering, and DSML request-history rendering.

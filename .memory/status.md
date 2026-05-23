@@ -3,9 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c3a Anthropic Core Message And Control Parse Surface
-- Last validated source commit: M9.2c3 Anthropic parser split in this commit;
-  prior pushed source commit `6c51443c07af95a4b7c3e438ea8dcdb2aa7baea2`
+- Active item: M9.2c3b Anthropic Tool Schema And Tool History Parse Surface
+- Last validated source commit: M9.2c3a Anthropic core parser in this commit;
+  prior pushed source commit `98d51ed9ed1226e7e17b24e324d408edcb6e70a1`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +25,22 @@
 
 ## Last Evidence
 
+- M9.2c3a added exported Rust `AnthropicRequest` and
+  `parse_anthropic_core_request` for model-free Anthropic core request
+  parsing.
+- M9.2c3a covers `messages`, `system` string/array/object parsing, private
+  `x-anthropic-*` system filtering, text and thinking content blocks, scalar
+  generation controls, stop sequences, stream flag, `thinking`,
+  `output_config.effort`, bare `reasoning_effort`, model alias fallbacks, and
+  prompt rendering without tools.
+- M9.2c3a validation covered missing messages, invalid messages,
+  system-private filtering and newline joining, content arrays, thinking block
+  rendering, effort precedence, disabled thinking, invalid effort rejection,
+  and prompt bytes.
+- M9.2c3a validation passed for targeted
+  `cargo test -p ds4-gguf server_chat -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.2c3 was split before implementation because Anthropic core
   message/system/control parsing, tool schema/tool history parsing, and live
   tool-result continuation validation have distinct C branches, fixture

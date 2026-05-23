@@ -46,6 +46,22 @@ pub struct ResponsesRequest {
     pub responses_live_suffix_text: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnthropicRequest {
+    pub model: String,
+    pub messages: Vec<ChatMessage>,
+    pub has_tools: bool,
+    pub tool_schemas: Option<String>,
+    pub tool_orders: Vec<ToolSchemaOrder>,
+    pub max_tokens: i32,
+    pub sampling: SamplingParams,
+    pub stream: bool,
+    pub think_mode: ThinkMode,
+    pub stops: Vec<String>,
+    pub prompt_text: String,
+    pub prompt_preserves_reasoning: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResponsesLiveState {
     pub call_ids: Vec<String>,
@@ -449,6 +465,109 @@ pub fn parse_responses_core_request_with_live_state(
         responses_requires_live_reasoning: live_validation.requires_live_reasoning,
         responses_live_call_ids: live_continuation.call_ids,
         responses_live_suffix_text: live_continuation.suffix_text,
+    })
+}
+
+pub fn parse_anthropic_core_request(
+    body: &str,
+    def_tokens: i32,
+    ctx_size: i32,
+) -> Result<AnthropicRequest, ServerRequestError> {
+    let fields = JsonParser::new(body)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+
+    let mut model = DEFAULT_MODEL.to_string();
+    let mut messages = None;
+    let mut system = None;
+    let mut max_tokens = def_tokens;
+    let mut sampling = SamplingParams::defaults();
+    let mut stream = false;
+    let mut got_thinking = false;
+    let mut thinking_enabled = true;
+    let mut reasoning_effort = ThinkMode::High;
+    let mut stops = Vec::new();
+
+    for (key, _, value) in fields {
+        match key.as_str() {
+            "messages" => {
+                messages = Some(parse_anthropic_messages(&value)?);
+            }
+            "system" => {
+                system = Some(parse_anthropic_system(&value)?);
+            }
+            "model" => {
+                model = value
+                    .as_str()
+                    .ok_or_else(ServerRequestError::invalid_json)?
+                    .to_string();
+            }
+            "max_tokens" => {
+                max_tokens = json_int(&value).ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "temperature" => {
+                sampling.temperature =
+                    json_number(&value).ok_or_else(ServerRequestError::invalid_json)? as f32;
+            }
+            "top_p" => {
+                sampling.top_p =
+                    json_number(&value).ok_or_else(ServerRequestError::invalid_json)? as f32;
+            }
+            "top_k" => {
+                sampling.top_k = json_int(&value).ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "stream" => {
+                stream = value
+                    .as_bool()
+                    .ok_or_else(ServerRequestError::invalid_json)?;
+            }
+            "stop_sequences" => {
+                stops = parse_stop(&value)?;
+            }
+            "thinking" => {
+                parse_thinking_control(&value, &mut thinking_enabled)?;
+                got_thinking = true;
+            }
+            "output_config" => {
+                parse_output_config_effort(&value, &mut reasoning_effort)?;
+            }
+            "reasoning_effort" => {
+                parse_reasoning_effort_value(&value, &mut reasoning_effort)?;
+            }
+            _ => {}
+        }
+    }
+
+    let mut messages = messages.ok_or_else(ServerRequestError::missing_messages)?;
+    if let Some(system) = system.filter(|system| !system.is_empty()) {
+        messages.push(ChatMessage::new("system", system));
+    }
+    if !got_thinking && model_alias_disables_thinking(&model) {
+        thinking_enabled = false;
+    }
+    if !got_thinking && model_alias_enables_thinking(&model) {
+        thinking_enabled = true;
+    }
+    let think_mode = think_mode_for_context(
+        think_mode_from_enabled(thinking_enabled, reasoning_effort),
+        ctx_size,
+    );
+    let prompt_preserves_reasoning = chat_history_uses_tool_context(&messages, None);
+    let prompt_text = render_chat_prompt_text(&messages, None, think_mode);
+
+    Ok(AnthropicRequest {
+        model,
+        messages,
+        has_tools: false,
+        tool_schemas: None,
+        tool_orders: Vec::new(),
+        max_tokens,
+        sampling,
+        stream,
+        think_mode,
+        stops,
+        prompt_text,
+        prompt_preserves_reasoning,
     })
 }
 
@@ -1440,6 +1559,181 @@ fn parse_responses_content_array(value: &JsonValue) -> Result<String, ServerRequ
     }
 }
 
+fn parse_anthropic_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestError> {
+    let JsonValue::Array(values) = value else {
+        return Err(ServerRequestError::invalid_json());
+    };
+
+    let mut messages = Vec::with_capacity(values.len());
+    for value in values {
+        let JsonValue::Object(fields) = value else {
+            return Err(ServerRequestError::invalid_json());
+        };
+        let mut role = None;
+        let mut content = None;
+        let mut reasoning = String::new();
+        for (key, value) in fields {
+            match key.as_str() {
+                "role" => {
+                    role = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                "content" => {
+                    let parsed = parse_anthropic_content(value)?;
+                    content = Some(parsed.content);
+                    reasoning.push_str(&parsed.reasoning);
+                }
+                _ => {}
+            }
+        }
+        let mut message = ChatMessage::new(
+            role.unwrap_or_else(|| "user".to_string()),
+            content.unwrap_or_default(),
+        );
+        message.reasoning = reasoning;
+        messages.push(message);
+    }
+    Ok(messages)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct AnthropicContent {
+    content: String,
+    reasoning: String,
+}
+
+fn parse_anthropic_content(value: &JsonValue) -> Result<AnthropicContent, ServerRequestError> {
+    match value {
+        JsonValue::String(value) => Ok(AnthropicContent {
+            content: value.clone(),
+            reasoning: String::new(),
+        }),
+        JsonValue::Null => Ok(AnthropicContent::default()),
+        JsonValue::Array(values) => {
+            let mut parsed = AnthropicContent::default();
+            for value in values {
+                match value {
+                    JsonValue::String(value) => parsed.content.push_str(value),
+                    JsonValue::Object(fields) => {
+                        parse_anthropic_content_block(fields, &mut parsed)?
+                    }
+                    _ => {}
+                }
+            }
+            Ok(parsed)
+        }
+        _ => Ok(AnthropicContent::default()),
+    }
+}
+
+fn parse_anthropic_content_block(
+    fields: &[(String, JsonValue)],
+    out: &mut AnthropicContent,
+) -> Result<(), ServerRequestError> {
+    let mut block_type = None;
+    let mut text = None;
+    let mut thinking = None;
+    for (key, value) in fields {
+        match key.as_str() {
+            "type" => {
+                block_type = Some(
+                    value
+                        .as_str()
+                        .ok_or_else(ServerRequestError::invalid_json)?
+                        .to_string(),
+                );
+            }
+            "text" => {
+                text = Some(json_content(value)?);
+            }
+            "thinking" => {
+                thinking = Some(json_content(value)?);
+            }
+            _ => {}
+        }
+    }
+    if !matches!(
+        block_type.as_deref(),
+        Some("tool_use") | Some("tool_result")
+    ) {
+        if let Some(text) = text {
+            out.content.push_str(&text);
+        }
+        if let Some(thinking) = thinking {
+            out.reasoning.push_str(&thinking);
+        }
+    }
+    Ok(())
+}
+
+fn parse_anthropic_system(value: &JsonValue) -> Result<String, ServerRequestError> {
+    let mut out = String::new();
+    match value {
+        JsonValue::String(value) => append_anthropic_system_part(&mut out, value),
+        JsonValue::Null => {}
+        JsonValue::Array(values) => {
+            for value in values {
+                match value {
+                    JsonValue::String(value) => append_anthropic_system_part(&mut out, value),
+                    JsonValue::Object(fields) => parse_anthropic_system_object(fields, &mut out)?,
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(out)
+}
+
+fn parse_anthropic_system_object(
+    fields: &[(String, JsonValue)],
+    out: &mut String,
+) -> Result<(), ServerRequestError> {
+    for (key, value) in fields {
+        if key == "text" {
+            append_anthropic_system_part(
+                out,
+                value
+                    .as_str()
+                    .ok_or_else(ServerRequestError::invalid_json)?,
+            );
+        }
+    }
+    Ok(())
+}
+
+fn append_anthropic_system_part(out: &mut String, value: &str) {
+    if value.is_empty() || value.starts_with("x-anthropic-") {
+        return;
+    }
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(value);
+}
+
+fn parse_output_config_effort(
+    value: &JsonValue,
+    effort: &mut ThinkMode,
+) -> Result<(), ServerRequestError> {
+    if matches!(value, JsonValue::Null) {
+        return Ok(());
+    }
+    let JsonValue::Object(fields) = value else {
+        return Ok(());
+    };
+    for (key, value) in fields {
+        if key == "effort" {
+            parse_reasoning_effort_value(value, effort)?;
+        }
+    }
+    Ok(())
+}
+
 fn parse_responses_reasoning(
     value: &JsonValue,
     summary_opted_in: &mut bool,
@@ -2065,6 +2359,10 @@ mod tests {
         parse_responses_core_request(body, 128, 32_768).expect("fixture parses")
     }
 
+    fn parse_anthropic_fixture(body: &str) -> AnthropicRequest {
+        parse_anthropic_core_request(body, 128, 32_768).expect("fixture parses")
+    }
+
     fn rendered_prompt_from_trace(request: usize) -> &'static str {
         let marker = format!("===== request {request} ");
         let start = M04_SERVER_TRACE.find(&marker).expect("request marker");
@@ -2248,6 +2546,114 @@ mod tests {
             req.prompt_text,
             "<｜begin▁of▁sentence｜>sys<｜User｜>hello<｜Assistant｜></think>"
         );
+    }
+
+    #[test]
+    fn anthropic_core_system_messages_and_controls_match_c_surface() {
+        let req = parse_anthropic_fixture(
+            r#"{
+                "model":"deepseek-chat",
+                "system":["sys",{"type":"text","text":"rules"},"x-anthropic-private",{"text":"tail"}],
+                "messages":[{"role":"user","content":"hello"}],
+                "max_tokens":7,
+                "temperature":0.25,
+                "top_p":0.75,
+                "top_k":42,
+                "stream":true,
+                "stop_sequences":["END","",{"ignored":true},"STOP"]
+            }"#,
+        );
+        assert_eq!(req.model, "deepseek-chat");
+        assert_eq!(req.max_tokens, 7);
+        assert_eq!(req.sampling.temperature, 0.25);
+        assert_eq!(req.sampling.top_p, 0.75);
+        assert_eq!(req.sampling.top_k, 42);
+        assert!(req.stream);
+        assert_eq!(req.stops, ["END", "STOP"]);
+        assert_eq!(req.think_mode, ThinkMode::None);
+        assert_eq!(req.messages[0], ChatMessage::new("user", "hello"));
+        assert_eq!(
+            req.messages[1],
+            ChatMessage::new("system", "sys\nrules\ntail")
+        );
+        assert_eq!(
+            req.prompt_text,
+            "<｜begin▁of▁sentence｜>sys\nrules\ntail<｜User｜>hello<｜Assistant｜></think>"
+        );
+    }
+
+    #[test]
+    fn anthropic_core_text_arrays_and_thinking_blocks_render_prompt_bytes() {
+        let req = parse_anthropic_fixture(
+            r#"{
+                "messages":[
+                    {"role":"user","content":[{"type":"text","text":"Q"},"?"]},
+                    {"role":"assistant","content":[{"type":"thinking","thinking":"hidden"},{"type":"text","text":"A"}]}
+                ]
+            }"#,
+        );
+        assert_eq!(req.messages[0], ChatMessage::new("user", "Q?"));
+        assert_eq!(req.messages[1].role, "assistant");
+        assert_eq!(req.messages[1].content, "A");
+        assert_eq!(req.messages[1].reasoning, "hidden");
+        assert_eq!(req.think_mode, ThinkMode::High);
+        assert_eq!(
+            req.prompt_text,
+            "<｜begin▁of▁sentence｜><｜User｜>Q?<｜Assistant｜><think>hidden</think>A<｜end▁of▁sentence｜>"
+        );
+    }
+
+    #[test]
+    fn anthropic_core_effort_and_thinking_controls_match_c_mapping() {
+        let max = parse_anthropic_core_request(
+            r#"{"messages":[{"content":"hi"}],"output_config":{"effort":"max"}}"#,
+            128,
+            393_216,
+        )
+        .expect("max parses");
+        assert_eq!(max.think_mode, ThinkMode::Max);
+        assert!(max
+            .prompt_text
+            .starts_with(&format!("<｜begin▁of▁sentence｜>{THINK_MAX_PREFIX}")));
+
+        let none = parse_anthropic_core_request(
+            r#"{"messages":[{"content":"hi"}],"output_config":{"effort":"max"},"reasoning_effort":"none"}"#,
+            128,
+            393_216,
+        )
+        .expect("none parses");
+        assert_eq!(none.think_mode, ThinkMode::None);
+
+        let disabled = parse_anthropic_core_request(
+            r#"{"messages":[{"content":"hi"}],"thinking":{"type":"disabled"},"output_config":{"effort":"max"}}"#,
+            128,
+            393_216,
+        )
+        .expect("disabled parses");
+        assert_eq!(disabled.think_mode, ThinkMode::None);
+
+        let bad = parse_anthropic_core_request(
+            r#"{"messages":[{"content":"hi"}],"output_config":{"effort":"banana"}}"#,
+            128,
+            32_768,
+        )
+        .expect_err("bad effort rejected");
+        assert_eq!(bad.category(), ServerRequestErrorCategory::InvalidJson);
+    }
+
+    #[test]
+    fn anthropic_core_errors_use_stable_categories() {
+        let missing = parse_anthropic_core_request(r#"{"model":"deepseek-chat"}"#, 128, 32_768)
+            .expect_err("missing messages");
+        assert_eq!(
+            missing.category(),
+            ServerRequestErrorCategory::MissingMessages
+        );
+        assert_eq!(missing.message(), "missing messages");
+
+        let bad = parse_anthropic_core_request(r#"{"messages":{}}"#, 128, 32_768)
+            .expect_err("bad messages");
+        assert_eq!(bad.category(), ServerRequestErrorCategory::InvalidJson);
     }
 
     #[test]
