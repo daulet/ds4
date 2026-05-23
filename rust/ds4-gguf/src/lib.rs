@@ -39,13 +39,15 @@ pub use sampling::{
     top_logprobs, SamplingParams, SamplingTrace, TokenScore,
 };
 pub use server_chat::{
-    anthropic_context_length_error_body, openai_context_length_error_body,
-    openai_context_length_error_body_for_param, parse_anthropic_core_request,
-    parse_anthropic_core_request_with_live_state, parse_completion_core_request,
-    parse_openai_chat_request, parse_responses_core_request,
-    parse_responses_core_request_with_live_state, request_exceeds_context, think_mode_for_context,
-    AnthropicLiveState, AnthropicRequest, CompletionRequest, OpenAiChatRequest, ResponsesLiveState,
-    ResponsesRequest, ServerRequestError, ServerRequestErrorCategory, ToolSchemaOrder,
+    anthropic_context_length_error_body, anthropic_live_tool_output_plan,
+    openai_context_length_error_body, openai_context_length_error_body_for_param,
+    parse_anthropic_core_request, parse_anthropic_core_request_with_live_state,
+    parse_completion_core_request, parse_openai_chat_request, parse_responses_core_request,
+    parse_responses_core_request_with_live_state, request_exceeds_context,
+    responses_live_tool_output_plan, responses_live_visible_prefix_plan, think_mode_for_context,
+    thinking_live_visible_prefix_plan, AnthropicLiveState, AnthropicRequest, CompletionRequest,
+    LiveCacheSource, LiveContinuationPlan, OpenAiChatRequest, ResponsesLiveState, ResponsesRequest,
+    ServerRequestError, ServerRequestErrorCategory, ToolSchemaOrder, VisibleLiveState,
 };
 pub use server_http::{
     format_http_error, format_http_response, format_model_metadata_json, parse_http_request,

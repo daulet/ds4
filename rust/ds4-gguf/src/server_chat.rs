@@ -82,6 +82,8 @@ pub struct CompletionRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResponsesLiveState {
     pub call_ids: Vec<String>,
+    pub live_tokens: Option<i32>,
+    pub visible_text: Option<String>,
 }
 
 impl ResponsesLiveState {
@@ -93,6 +95,50 @@ impl ResponsesLiveState {
         state
     }
 
+    pub fn remember(
+        live_tokens: i32,
+        visible_text: impl Into<String>,
+        call_ids: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        let visible_text = visible_text.into();
+        if visible_text.is_empty() {
+            return Self::default();
+        }
+        let mut state = Self {
+            call_ids: Vec::new(),
+            live_tokens: Some(live_tokens),
+            visible_text: Some(visible_text),
+        };
+        for call_id in call_ids {
+            push_unique_id(&mut state.call_ids, call_id.into());
+        }
+        state
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn matches_request(&self, request_call_ids: &[String], live_tokens: i32) -> bool {
+        self.live_tokens == Some(live_tokens)
+            && call_id_sets_match(&self.call_ids, request_call_ids)
+    }
+
+    pub fn visible_prefix_suffix<'a>(
+        &self,
+        prompt_text: &'a str,
+        live_tokens: i32,
+    ) -> Option<&'a str> {
+        if self.live_tokens != Some(live_tokens) {
+            return None;
+        }
+        let visible_text = self.visible_text.as_deref()?;
+        if visible_text.len() >= prompt_text.len() || !prompt_text.starts_with(visible_text) {
+            return None;
+        }
+        Some(&prompt_text[visible_text.len()..])
+    }
+
     fn has_call_id(&self, call_id: &str) -> bool {
         self.call_ids.iter().any(|id| id == call_id)
     }
@@ -101,6 +147,7 @@ impl ResponsesLiveState {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AnthropicLiveState {
     pub call_ids: Vec<String>,
+    pub live_tokens: Option<i32>,
 }
 
 impl AnthropicLiveState {
@@ -112,9 +159,101 @@ impl AnthropicLiveState {
         state
     }
 
+    pub fn remember(
+        live_tokens: i32,
+        call_ids: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        let mut state = Self {
+            call_ids: Vec::new(),
+            live_tokens: Some(live_tokens),
+        };
+        for call_id in call_ids {
+            push_unique_id(&mut state.call_ids, call_id.into());
+        }
+        if state.call_ids.is_empty() {
+            Self::default()
+        } else {
+            state
+        }
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn matches_request(&self, request_call_ids: &[String], live_tokens: i32) -> bool {
+        self.live_tokens == Some(live_tokens)
+            && call_id_sets_match(&self.call_ids, request_call_ids)
+    }
+
     fn has_call_id(&self, call_id: &str) -> bool {
         self.call_ids.iter().any(|id| id == call_id)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct VisibleLiveState {
+    pub live_tokens: Option<i32>,
+    pub visible_text: Option<String>,
+}
+
+impl VisibleLiveState {
+    pub fn remember(live_tokens: i32, visible_text: impl Into<String>) -> Self {
+        let visible_text = visible_text.into();
+        if visible_text.is_empty() {
+            return Self::default();
+        }
+        Self {
+            live_tokens: Some(live_tokens),
+            visible_text: Some(visible_text),
+        }
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn visible_prefix_suffix<'a>(
+        &self,
+        prompt_text: &'a str,
+        live_tokens: i32,
+    ) -> Option<&'a str> {
+        if self.live_tokens != Some(live_tokens) {
+            return None;
+        }
+        let visible_text = self.visible_text.as_deref()?;
+        if visible_text.len() >= prompt_text.len() || !prompt_text.starts_with(visible_text) {
+            return None;
+        }
+        Some(&prompt_text[visible_text.len()..])
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveCacheSource {
+    ResponsesVisible,
+    ResponsesToolOutput,
+    AnthropicToolOutput,
+    ThinkingVisible,
+}
+
+impl LiveCacheSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ResponsesVisible => "responses-visible",
+            Self::ResponsesToolOutput => "responses-tool-output",
+            Self::AnthropicToolOutput => "anthropic-tool-output",
+            Self::ThinkingVisible => "thinking-visible",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiveContinuationPlan<'a> {
+    pub cache_source: LiveCacheSource,
+    pub cached_tokens: i32,
+    pub suffix_text: &'a str,
+    pub matched_ids: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -963,6 +1102,91 @@ fn prepare_anthropic_live_continuation(
 
 fn role_is_system_message(message: &ChatMessage) -> bool {
     message.role == "system" || message.role == "developer"
+}
+
+pub fn responses_live_visible_prefix_plan<'a>(
+    state: &ResponsesLiveState,
+    prompt_text: &'a str,
+    live_tokens: i32,
+    request_call_ids: &[String],
+) -> Option<LiveContinuationPlan<'a>> {
+    let suffix_text = state.visible_prefix_suffix(prompt_text, live_tokens)?;
+    let matched_ids = if state.matches_request(request_call_ids, live_tokens) {
+        request_call_ids.len()
+    } else {
+        0
+    };
+    Some(LiveContinuationPlan {
+        cache_source: LiveCacheSource::ResponsesVisible,
+        cached_tokens: live_tokens,
+        suffix_text,
+        matched_ids,
+    })
+}
+
+pub fn responses_live_tool_output_plan<'a>(
+    state: &ResponsesLiveState,
+    request_call_ids: &[String],
+    suffix_text: Option<&'a str>,
+    live_tokens: i32,
+) -> Option<LiveContinuationPlan<'a>> {
+    if request_call_ids.is_empty() || !state.matches_request(request_call_ids, live_tokens) {
+        return None;
+    }
+    let suffix_text = suffix_text?;
+    Some(LiveContinuationPlan {
+        cache_source: LiveCacheSource::ResponsesToolOutput,
+        cached_tokens: live_tokens,
+        suffix_text,
+        matched_ids: request_call_ids.len(),
+    })
+}
+
+pub fn anthropic_live_tool_output_plan<'a>(
+    state: &AnthropicLiveState,
+    request_call_ids: &[String],
+    suffix_text: Option<&'a str>,
+    live_tokens: i32,
+) -> Option<LiveContinuationPlan<'a>> {
+    if request_call_ids.is_empty() || !state.matches_request(request_call_ids, live_tokens) {
+        return None;
+    }
+    let suffix_text = suffix_text?;
+    Some(LiveContinuationPlan {
+        cache_source: LiveCacheSource::AnthropicToolOutput,
+        cached_tokens: live_tokens,
+        suffix_text,
+        matched_ids: request_call_ids.len(),
+    })
+}
+
+pub fn thinking_live_visible_prefix_plan<'a>(
+    state: &VisibleLiveState,
+    prompt_text: &'a str,
+    live_tokens: i32,
+    request_is_chat: bool,
+    request_is_responses: bool,
+) -> Option<LiveContinuationPlan<'a>> {
+    if !request_is_chat || request_is_responses {
+        return None;
+    }
+    let suffix_text = state.visible_prefix_suffix(prompt_text, live_tokens)?;
+    Some(LiveContinuationPlan {
+        cache_source: LiveCacheSource::ThinkingVisible,
+        cached_tokens: live_tokens,
+        suffix_text,
+        matched_ids: 0,
+    })
+}
+
+fn call_id_sets_match(live_ids: &[String], request_ids: &[String]) -> bool {
+    !request_ids.is_empty()
+        && live_ids.len() == request_ids.len()
+        && request_ids.iter().enumerate().all(|(idx, id)| {
+            !id.is_empty()
+                && !request_ids[..idx].iter().any(|existing| existing == id)
+                && live_ids.iter().any(|live_id| live_id == id)
+        })
 }
 
 fn push_unique_id(ids: &mut Vec<String>, id: String) {
@@ -3531,6 +3755,147 @@ mod tests {
         assert!(suffix.starts_with("<｜end▁of▁sentence｜><｜User｜><tool_result>"));
         assert!(suffix.contains("out &lt;/tool_result></tool_result>"));
         assert!(suffix.ends_with("<｜Assistant｜><think>"));
+    }
+
+    #[test]
+    fn live_tool_state_matches_same_id_set_at_same_frontier() {
+        let responses =
+            ResponsesLiveState::remember(80, "visible transcript", ["call_a", "call_b"]);
+        let request_ids = vec!["call_b".to_string(), "call_a".to_string()];
+        assert!(responses.matches_request(&request_ids, 80));
+        assert!(!responses.matches_request(&request_ids, 79));
+        assert!(!responses.matches_request(&["call_a".to_string()], 80));
+        assert!(!responses.matches_request(&["call_a".to_string(), "call_a".to_string()], 80));
+        assert!(!responses.matches_request(&[], 80));
+
+        let anthropic = AnthropicLiveState::remember(81, ["toolu_a", "toolu_b"]);
+        let request_ids = vec!["toolu_b".to_string(), "toolu_a".to_string()];
+        assert!(anthropic.matches_request(&request_ids, 81));
+        assert!(!anthropic.matches_request(&request_ids, 80));
+    }
+
+    #[test]
+    fn responses_visible_prefix_plan_requires_strict_extension_and_frontier() {
+        let visible = "<｜begin▁of▁sentence｜><｜User｜>run<｜Assistant｜><think>hidden</think>done<｜end▁of▁sentence｜>";
+        let prompt = format!("{visible}<｜User｜>continue<｜Assistant｜><think>");
+        let request_ids = vec!["call_live".to_string()];
+        let state = ResponsesLiveState::remember(64, visible, ["call_live"]);
+
+        let plan =
+            responses_live_visible_prefix_plan(&state, &prompt, 64, &request_ids).expect("match");
+        assert_eq!(plan.cache_source, LiveCacheSource::ResponsesVisible);
+        assert_eq!(plan.cache_source.as_str(), "responses-visible");
+        assert_eq!(plan.cached_tokens, 64);
+        assert_eq!(plan.matched_ids, 1);
+        assert_eq!(plan.suffix_text, "<｜User｜>continue<｜Assistant｜><think>");
+
+        assert!(responses_live_visible_prefix_plan(&state, visible, 64, &request_ids).is_none());
+        assert!(responses_live_visible_prefix_plan(&state, &prompt, 63, &request_ids).is_none());
+        assert!(
+            responses_live_visible_prefix_plan(&state, "edited visible", 64, &request_ids)
+                .is_none()
+        );
+
+        let unmatched_ids = vec!["call_other".to_string()];
+        let plan = responses_live_visible_prefix_plan(&state, &prompt, 64, &unmatched_ids)
+            .expect("visible prefix still matches without id log match");
+        assert_eq!(plan.matched_ids, 0);
+    }
+
+    #[test]
+    fn responses_tool_output_plan_uses_parsed_suffix_and_live_frontier() {
+        let body = r#"{"input":[{"type":"function_call_output","call_id":"call_missing","output":"out"}]}"#;
+        let parse_state = ResponsesLiveState::with_call_ids(["call_missing"]);
+        let req = parse_responses_core_request_with_live_state(body, 128, 32_768, &parse_state)
+            .expect("live-known tool output parses");
+        let live_state = ResponsesLiveState::remember(90, "visible", ["call_missing"]);
+
+        let plan = responses_live_tool_output_plan(
+            &live_state,
+            &req.responses_live_call_ids,
+            req.responses_live_suffix_text.as_deref(),
+            90,
+        )
+        .expect("direct continuation");
+        assert_eq!(plan.cache_source, LiveCacheSource::ResponsesToolOutput);
+        assert_eq!(plan.cache_source.as_str(), "responses-tool-output");
+        assert_eq!(plan.cached_tokens, 90);
+        assert_eq!(plan.matched_ids, 1);
+        assert_eq!(
+            plan.suffix_text,
+            "<｜end▁of▁sentence｜><｜User｜><tool_result>out</tool_result><｜Assistant｜><think>"
+        );
+        assert!(responses_live_tool_output_plan(
+            &live_state,
+            &req.responses_live_call_ids,
+            req.responses_live_suffix_text.as_deref(),
+            91,
+        )
+        .is_none());
+        assert!(responses_live_tool_output_plan(
+            &live_state,
+            &[],
+            req.responses_live_suffix_text.as_deref(),
+            90
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn anthropic_tool_output_plan_uses_parsed_suffix_and_live_frontier() {
+        let body = r#"{
+            "messages":[{"role":"user","content":[
+                {"type":"tool_result","tool_use_id":"toolu_missing","content":"out"}
+            ]}]
+        }"#;
+        let parse_state = AnthropicLiveState::with_call_ids(["toolu_missing"]);
+        let req = parse_anthropic_core_request_with_live_state(body, 128, 32_768, &parse_state)
+            .expect("live-known tool result parses");
+        let live_state = AnthropicLiveState::remember(91, ["toolu_missing"]);
+
+        let plan = anthropic_live_tool_output_plan(
+            &live_state,
+            &req.anthropic_live_call_ids,
+            req.anthropic_live_suffix_text.as_deref(),
+            91,
+        )
+        .expect("direct continuation");
+        assert_eq!(plan.cache_source, LiveCacheSource::AnthropicToolOutput);
+        assert_eq!(plan.cache_source.as_str(), "anthropic-tool-output");
+        assert_eq!(plan.cached_tokens, 91);
+        assert_eq!(plan.matched_ids, 1);
+        assert_eq!(
+            plan.suffix_text,
+            "<｜end▁of▁sentence｜><｜User｜><tool_result>out</tool_result><｜Assistant｜><think>"
+        );
+        assert!(anthropic_live_tool_output_plan(
+            &live_state,
+            &req.anthropic_live_call_ids,
+            req.anthropic_live_suffix_text.as_deref(),
+            90,
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn thinking_visible_prefix_plan_rejects_responses_and_non_chat_requests() {
+        let visible =
+            "<｜begin▁of▁sentence｜><｜User｜>q<｜Assistant｜><think>hidden</think>a<｜end▁of▁sentence｜>";
+        let prompt = format!("{visible}<｜User｜>next<｜Assistant｜><think>");
+        let state = VisibleLiveState::remember(92, visible);
+
+        let plan = thinking_live_visible_prefix_plan(&state, &prompt, 92, true, false)
+            .expect("thinking visible continuation");
+        assert_eq!(plan.cache_source, LiveCacheSource::ThinkingVisible);
+        assert_eq!(plan.cache_source.as_str(), "thinking-visible");
+        assert_eq!(plan.cached_tokens, 92);
+        assert_eq!(plan.matched_ids, 0);
+        assert_eq!(plan.suffix_text, "<｜User｜>next<｜Assistant｜><think>");
+
+        assert!(thinking_live_visible_prefix_plan(&state, &prompt, 92, true, true).is_none());
+        assert!(thinking_live_visible_prefix_plan(&state, &prompt, 92, false, false).is_none());
+        assert!(thinking_live_visible_prefix_plan(&state, visible, 92, true, false).is_none());
+        assert!(thinking_live_visible_prefix_plan(&state, &prompt, 91, true, false).is_none());
     }
 
     #[test]

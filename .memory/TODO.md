@@ -3214,7 +3214,7 @@
 
 ### M9.8c: Live Continuation And Visible-Prefix State
 
-- Status: active
+- Status: done
 - Goal: port server live continuation matching for Responses, Anthropic, and
   hidden-reasoning visible-prefix replay.
 - Oracle: C tests `test_anthropic_live_tail_renders_tool_results_only`,
@@ -3234,14 +3234,18 @@
   live token frontiers are injected in tests.
 - Review gate: ask Claude to review direct-continuation versus prefix-replay
   separation.
-- Validation needed: targeted live-continuation tests, `cargo test --workspace`,
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, NUL scan over touched Rust files, and non-interactive
+  Claude review with no blockers.
+- Validation gate: targeted live-continuation tests, `cargo test --workspace`,
   `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
   review with no blockers.
 - Owner path: Rust server chat/runtime state modules and `.memory/status.md`.
 
 ### M9.8d: Disk-KV Policy Completion
 
-- Status: pending
+- Status: active
 - Goal: complete Rust disk-KV policy parity for store boundaries, continued
   checkpoints, file-size budgeting, lookup, and eviction.
 - Oracle: C tests for `kv_cache_store_len`, `kv_cache_chat_anchor_pos`,

@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8c Live Continuation And Visible-Prefix State
-- Last validated source commit: M9.8b tool-memory replay core in this commit;
-  prior pushed source commit `975e87c0bc861f080368218c4613083bc48207e3`
+- Active item: M9.8d Disk-KV Policy Completion
+- Last validated source commit: M9.8c live continuation and visible-prefix
+  state in this commit; prior pushed source commit
+  `302c4e95a96c23b327f1298d5b2af3f2b7fb5a10`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,23 @@
 
 ## Last Evidence
 
+- M9.8c extends Rust live continuation state with live-token frontiers,
+  Responses visible transcript keys, Anthropic call-id frontiers, and
+  tool-less thinking visible transcript keys.
+- M9.8c adds model-free continuation planners for C cache sources
+  `responses-visible`, `responses-tool-output`, `anthropic-tool-output`, and
+  `thinking-visible`. Direct tool-output plans require exact call-id set and
+  live frontier matches; visible-prefix plans require a strict byte-prefix
+  extension before returning the suffix that must be tokenized after the live
+  sampled prefix.
+- M9.8c tests cover same-id-set matching independent of order, frontier
+  mismatch rejection, Responses visible replay with and without matched IDs,
+  parsed Responses/Anthropic tool-output suffix planning, and thinking-visible
+  rejection for non-chat or Responses requests.
+- M9.8c validation passed targeted `cargo test -p ds4-gguf server_chat --
+  --nocapture`, full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, NUL scan over touched Rust files, and non-interactive
+  Claude review with no blockers.
 - M9.8b adds a Rust `ToolMemory` core that stores exact sampled DSML blocks by
   tool-call id, tracks RAM versus disk source for replay stats, upgrades disk
   entries to RAM on matching sampled replay, and prunes least-recently-used ids
