@@ -4649,7 +4649,7 @@
 
 ### M10.5c4c2b2b2b2b2b2b2b2b2b: Rust Full One-Token Output Head And Logits B300 Execution
 
-- Status: active
+- Status: done
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
   on B300 after the layer-4 post-ratio128 ratio-4 FFN-output boundary, the
   layer-3 ratio-128 FFN-output boundary, the layer-2 FFN-output boundary, the
@@ -4686,25 +4686,30 @@
   boundaries are exact; f32 tensor values follow M10.4 tolerances.
 - Review gate: ask Claude to review decode ordering, cache mutation, and
   unsafe backend-call containment.
-- Validation needed: targeted decode comparator on B300, c2b1 preflight rerun,
-  c2b2a state allocation rerun, c2b2b1 first-kernel rerun, c2b2b2a current-C
-  oracle rerun, c2b2b2b1 layer-0 HC-pre rerun, c2b2b2b2a layer-0 QKV/RoPE
-  rerun, c2b2b2b2b1 layer-0 attention-output rerun, c2b2b2b2b2a layer-0
-  FFN-output rerun, c2b2b2b2b2b1 layer-0 output-head rerun,
-  c2b2b2b2b2b2a two-dense-layer output-head rerun,
-  c2b2b2b2b2b2b1 layer-2 compressor-state rerun,
-  c2b2b2b2b2b2b2a layer-2 attention-output rerun,
-  c2b2b2b2b2b2b2b1 layer-2 FFN-output rerun,
-  c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output rerun,
-  c2b2b2b2b2b2b2b2b1 layer-4 post-ratio128 ratio-4 FFN-output rerun, `cargo
-  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
-  non-interactive Claude review with no blockers.
+- Validation passed: full output-head comparator with negative test, B300
+  current-C oracle plus Rust candidate paired validation, c2b2b2b2b2b2a
+  two-layer output-head B300 predecessor rerun, c2b2b2b2b2b2b2b2b2a
+  all-layer final-HC B300 predecessor rerun, `make
+  ds4-full-output-head-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-full-output-head`, local unified report with B300 rerun command
+  coverage, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, touched-file NUL scan, and non-interactive Claude review with
+  `NO BLOCKERS`.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
+- Evidence: B300 full output-head paired validation passed 440 pinned checks
+  with `after_layer42_hc=cbd17b425564f63f`,
+  `output_pre=91ea6aeb7a0a0d9f`,
+  `output_weights=323062ce53dc6f9c`,
+  `output_embd=8788c46e4f0a1f30`,
+  `output_norm=185c73c1de55a942`, and
+  `logits=432eef0524ced3ad`; predecessor two-layer output-head B300 rerun
+  passed 446 checks; predecessor all-layer final-HC B300 rerun passed 730
+  checks; local `run_parity_report.py --skip-local-oracles` passed 39/29/0.
 
 ### M10.5c4d: Decode Continuation And Optional Steering Closure
 
-- Status: pending
+- Status: active
 - Goal: close one-token decode coverage for continuation-state and optional
   directional-steering cases after default B300 execution is passing.
 - Oracle: M10.4 continuation checkpoints, C directional-steering decode

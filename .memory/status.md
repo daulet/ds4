@@ -3,8 +3,8 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2b2b2b2b Rust Full One-Token Output Head And Logits B300 Execution
-- Last validated source before the active item: M10.5c4c2b2b2b2b2b2b2b2b2a
+- Active item: M10.5c4d Decode Continuation And Optional Steering Closure
+- Last validated source before the active item: M10.5c4c2b2b2b2b2b2b2b2b2b
   validation is recorded below in this status update.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
@@ -25,6 +25,46 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2b2b2b2b adds
+  `ds4-full-output-head-oracle-dump` and
+  `ds4_dump_full_output_head_oracle_json`, which emit
+  `ds4.full_output_head_oracle.v1` for token `0`, position `0`, all 43
+  production current-C decode layers, HC swaps after every layer, final
+  layer-42 HC, output-head HC pre/weights/embedding/norm tensors, and final
+  vocab logits.
+- M10.5c4c2b2b2b2b2b2b2b2b2b adds
+  `ds4-decode-full-output-head`, which reuses the all-layer Rust safe-facade
+  scheduler, runs output-head `rms_norm_plain`, `matmul_f16`,
+  `output_hc_weights`, `hc_weighted_sum`, `rms_norm_weight`, and
+  `matmul_q8_0`, and emits pinned tensor digests for the final HC and logits.
+- The B300 paired full output-head validator passed 440 pinned checks with
+  `decoded_layers=43`, `dense_layers=2`, `ratio4_layers=21`,
+  `ratio128_layers=20`, `raw_cap=2304`, `raw_window=128`,
+  `layer5_n_comp=0`, `layer42_n_comp=0`, and `layer42_n_index_comp=0`.
+  Full-buffer FNV digests are
+  `after_layer42_hc=cbd17b425564f63f`,
+  `output_pre=91ea6aeb7a0a0d9f`,
+  `output_weights=323062ce53dc6f9c`,
+  `output_embd=8788c46e4f0a1f30`,
+  `output_norm=185c73c1de55a942`, and
+  `logits=432eef0524ced3ad`.
+- M10.5c4c2b2b2b2b2b2b2b2b2b validation passed `python3
+  ds4-parity/compare_decode_full_output_head.py --negative-test`, static
+  comparator validation, paired local artifact validation with 440 checks,
+  local `arch -arm64 make ds4-full-output-head-oracle-dump`, local
+  `cargo check -p ds4-gpu --bin ds4-decode-full-output-head`, B300 current-C
+  oracle plus Rust CUDA candidate validation with 440 checks, B300
+  c2b2b2b2b2b2a two-layer output-head predecessor rerun with 446 checks, B300
+  c2b2b2b2b2b2b2b2b2a all-layer final-HC predecessor rerun with 730 checks,
+  `python3 -m py_compile ds4-parity/compare_decode_full_output_head.py
+  ds4-parity/run_parity_report.py`, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, touched-file NUL scan,
+  non-interactive Claude review with `NO BLOCKERS`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 39 passed, 29
+  skipped, and 0 failed, and artifact SHA256
+  `oracle=0377c0a6a45e8b7ee1d52d2b78e850cda41f8d4180a7ccec18d282ede5484d3b`
+  and
+  `rust=31fb1985b493ac60e9491fde9280f3e027b882f056991efc67995d8bbd40b988`.
 - M10.5c4c2b2b2b2b2b2b2b2b2a adds
   `ds4-all-layer-final-hc-oracle-dump` and
   `ds4_dump_all_layer_final_hc_oracle_json`, which emit

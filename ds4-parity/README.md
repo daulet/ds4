@@ -623,6 +623,28 @@ python3 ds4-parity/compare_decode_all_layer_final_hc.py \
   --candidate /tmp/ds4-c2b2b2b2b2b2b2b2b2a-all-layer-final-hc-rust.json
 ```
 
+Compare the M10.5c4c2b2b2b2b2b2b2b2b2b Rust full output-head/logits body
+after all 43 decode layers:
+
+```sh
+python3 ds4-parity/compare_decode_full_output_head.py
+python3 ds4-parity/compare_decode_full_output_head.py --negative-test
+```
+
+The comparator checks that `ds4-full-output-head-oracle-dump` emits the
+current-C GPU tensor path through all 43 production decode-layer encoder calls,
+the production HC buffer swap after each layer, final layer-42 HC readback, and
+the output-head sequence `rms_norm_plain`, `matmul_f16`,
+`output_hc_weights`, `hc_weighted_sum`, `rms_norm_weight`, and vocab
+`matmul_q8_0`. On B300, validate the current-C oracle and Rust readback
+together:
+
+```sh
+python3 ds4-parity/compare_decode_full_output_head.py \
+  --oracle /tmp/ds4-c2b2b2b2b2b2b2b2b2b-full-output-head-oracle.json \
+  --candidate /tmp/ds4-c2b2b2b2b2b2b2b2b2b-full-output-head-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

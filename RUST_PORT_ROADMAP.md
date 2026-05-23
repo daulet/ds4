@@ -4075,6 +4075,16 @@ kernels:
   c2b2b2b2b2b2b2b2b1 layer-4 post-ratio128 ratio-4 FFN-output rerun, `cargo
   test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Validation evidence: full output-head comparator with negative test, B300
+  current-C oracle plus Rust candidate paired validation, c2b2b2b2b2b2a
+  two-layer output-head B300 predecessor rerun, c2b2b2b2b2b2b2b2b2a
+  all-layer final-HC B300 predecessor rerun, `make
+  ds4-full-output-head-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-full-output-head`, local unified parity report with B300 rerun
+  command coverage, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, touched-file NUL scan, non-interactive Claude review
+  with `NO BLOCKERS`, and 440 pinned B300 checks with logits digest
+  `logits=432eef0524ced3ad`.
 
 ##### M10.5c4d: Decode Continuation And Optional Steering Closure
 
