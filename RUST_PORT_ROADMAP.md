@@ -3917,11 +3917,73 @@ kernels:
 
 ##### M10.5c4c2b2b2b2b2b2b2b2b: Rust Remaining One-Token Decode B300 Execution
 
+- Split into M10.5c4c2b2b2b2b2b2b2b2b1 and
+  M10.5c4c2b2b2b2b2b2b2b2b2 so the first post-ratio128 ratio-4/indexer
+  layer is compared before the remaining repeated layers, output head, and
+  final logits are introduced.
+
+##### M10.5c4c2b2b2b2b2b2b2b2b1: Rust Layer-4 Post-Ratio128 Ratio-4 FFN Output B300 Execution
+
+- Goal: execute dense layers `0` and `1`, ratio-4 layer `2`, ratio-128 layer
+  `3`, then execute layer `4` as the first ratio-4/indexer layer after a
+  ratio-128 predecessor through the full FFN tail and final layer-4 HC
+  expansion on B300. This isolates the ratio128-to-ratio4 transition before
+  the remaining repeated layers and final logits.
+- Oracle: the current-C GPU path for token `0`, position `0`, layers `0`
+  through `3` via production decode-layer execution plus HC swaps, followed by
+  production layer `4` ratio-4 decode without the final HC swap. The oracle
+  reads `after_layer3_hc`, layer-4 raw cache row, attention compressor state,
+  indexer compressor state, attention output tensors, FFN HC-pre/norm/router,
+  routed/shared expert tensors, and final `layer4_after_ffn_hc`.
+- Fixture: B300 `ds4flash.gguf`, token `0`, position `0`, dense layers `0`
+  and `1`, ratio-4 layer `2`, ratio-128 layer `3`, ratio-4 layer `4`,
+  `raw_row=0`, `n_raw=1`, `raw_start=0`, `n_comp=0`, no selected compressed
+  rows, `emit_compressed_row=false`, and `layer_n_comp[4]=0`.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests for `after_layer3_hc`, layer-4 attention/indexer
+  compressor state, layer-4 attention/FFN tensors, router outputs,
+  routed/shared expert tensors, and `layer4_after_ffn_hc`, plus pinned
+  layer-4 attention/FFN weight metadata and exact raw/compressed/indexer
+  counter fields.
+- Acceptance: Rust launches the validated dense layer `0`/`1`, layer-2
+  FFN-output, and layer-3 FFN-output prefix, swaps the layer-3 HC output into
+  `cur_hc`, then runs layer `4` ratio-4 `matmul_f16_pair`,
+  attention/indexer `compressor_update`, raw-only `attention_decode_heads`,
+  attention output HC expansion, `hc_split_weighted_sum_norm`,
+  `router_select`, `routed_moe_one`, `shared_gate_up_swiglu_q8_0`, and
+  `shared_down_hc_expand_q8_0` through the safe facade, matching the
+  current-C GPU oracle on B300.
+- Drift policy: layer id, compression ratio, `n_raw`, `raw_start`, `n_comp`,
+  `layer_n_index_comp`, tensor byte sizes, selected expert ids, and FNV
+  digests are exact; selected f32 samples may differ only by JSON formatting
+  and must stay within `1e-6` relative or absolute tolerance.
+- Review gate: ask Claude to review the layer-3-to-layer-4 HC swap, ratio-4
+  counter selection, attention/indexer compressor state sizing, router
+  hash/bias options, routed expert byte-strides, shared expert dimensions, and
+  HC expansion input selection.
+- Validation gate: layer-4 FFN-output comparator with negative test, B300
+  current-C oracle plus Rust candidate paired validation,
+  `make ds4-layer4-ffn-output-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-layer4-ffn-output`, c2b2b2b2b2b2b2b2a layer-3 ratio-128
+  FFN-output rerun, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and non-interactive Claude review with no blockers.
+- Evidence: the B300 paired layer-4 post-ratio128 ratio-4/indexer
+  FFN-output validator passed 1,383 pinned checks after recording
+  `after_layer3_hc=734775286457caef`,
+  `layer4_attn_state_kv=154dccb1209e67d0`,
+  `layer4_index_state_kv=87580106eb9c5c3d`,
+  `layer4_router_selected=ec6043f1523b2257`, and
+  `layer4_after_ffn_hc=b19322ec84d84935`; the predecessor layer-3
+  ratio-128 FFN-output B300 rerun still passed 1,261 checks.
+
+##### M10.5c4c2b2b2b2b2b2b2b2b2: Rust Remaining Layer Loop And Logits B300 Execution
+
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
-  on B300 after the layer-3 ratio-128 FFN-output boundary, the layer-2
-  FFN-output boundary, the layer-2 raw-only attention-output boundary, the
-  first ratio-4 compressor/indexer state mutation, two dense decode layers,
-  layer-0 FFN output, and output-head kernels are independently compared.
+  on B300 after the layer-4 post-ratio128 ratio-4 FFN-output boundary, the
+  layer-3 ratio-128 FFN-output boundary, the layer-2 FFN-output boundary, the
+  layer-2 raw-only attention-output boundary, the first ratio-4
+  compressor/indexer state mutation, two dense decode layers, layer-0 FFN
+  output, and output-head kernels are independently compared.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
@@ -3935,8 +3997,10 @@ kernels:
   M10.5c4c2b2b2b2b2b2a two-dense-layer output-head comparator,
   M10.5c4c2b2b2b2b2b2b1 layer-2 ratio-4 compressor-state comparator, and
   M10.5c4c2b2b2b2b2b2b2a layer-2 attention-output comparator, and
-  M10.5c4c2b2b2b2b2b2b2b1 layer-2 FFN-output comparator, and
-  M10.5c4c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output comparator.
+  M10.5c4c2b2b2b2b2b2b2b1 layer-2 FFN-output comparator,
+  M10.5c4c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output comparator, and
+  M10.5c4c2b2b2b2b2b2b2b2b1 layer-4 post-ratio128 ratio-4 FFN-output
+  comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -3958,8 +4022,9 @@ kernels:
   c2b2b2b2b2b2b1 layer-2 compressor-state rerun,
   c2b2b2b2b2b2b2a layer-2 attention-output rerun,
   c2b2b2b2b2b2b2b1 layer-2 FFN-output rerun,
-  c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output rerun, `cargo test
-  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output rerun,
+  c2b2b2b2b2b2b2b2b1 layer-4 post-ratio128 ratio-4 FFN-output rerun, `cargo
+  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 
 ##### M10.5c4d: Decode Continuation And Optional Steering Closure

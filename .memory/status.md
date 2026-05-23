@@ -3,12 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2b2b2b Rust Remaining One-Token Decode B300 Execution
-- Last validated source before the active item: M10.5c4c2b2b2b2b2b2b2b2a
-  validation is recorded below in this status update. Last committed
-  predecessor:
-  `379751149ea6da4c3a605be9839512885fb015b1` (M10.5c4c2b2b2b2b2b2b2b1 Rust
-  layer-2 FFN-output execution).
+- Active item: M10.5c4c2b2b2b2b2b2b2b2b2 Rust Remaining Layer Loop And Logits B300 Execution
+- Last validated source before the active item: M10.5c4c2b2b2b2b2b2b2b2b1
+  validation is recorded below in this status update.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -28,11 +25,76 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2b2b2b1 adds
+  `ds4-layer4-ffn-output-oracle-dump` and
+  `ds4_dump_layer4_ffn_output_oracle_json`, which emit
+  `ds4.layer4_ffn_output_oracle.v1` for token `0`, position `0`, dense
+  layers `0` and `1` through production current-C decode-layer execution and
+  HC swaps, layer `2` through production ratio-4 decode plus HC swap, layer
+  `3` through production ratio-128 decode plus HC swap, then layer `4`
+  through the first post-ratio128 ratio-4/indexer layer without the final HC
+  swap.
+- M10.5c4c2b2b2b2b2b2b2b2b1 adds
+  `ds4-decode-layer4-ffn-output`, which maps the real GGUF on B300, runs the
+  validated dense layer `0`/`1`, layer-2 FFN-output, and layer-3
+  FFN-output prefix, swaps the layer-3 HC output into `cur_hc`, then runs
+  layer `4` ratio-4 attention and indexer `matmul_f16_pair`,
+  `compressor_update`, raw-only `attention_decode_heads`, attention output HC
+  expansion, router selection, routed MoE, shared expert, and final FFN HC
+  expansion through the safe Rust facade.
+- The B300 paired layer-4 post-ratio128 ratio-4/indexer FFN-output validator
+  passed 1,383 pinned checks with `compression_ratio=4`,
+  `compressor_coefficient=2`, `layer_comp_cap=8194`,
+  `attn_state_dim=8192`, `index_state_dim=2048`, router bias enabled, and
+  router hash disabled. Full-buffer FNV digests are
+  `after_layer3_hc=734775286457caef`,
+  `layer4_raw_cache_row=773d10a59842c20a`,
+  `layer4_attn_state_kv=154dccb1209e67d0`,
+  `layer4_attn_state_score=c244ef562e602ca4`,
+  `layer4_index_state_kv=87580106eb9c5c3d`,
+  `layer4_index_state_score=959468ecfe1ed8b7`,
+  `layer4_heads=1d3d9836714526a6`,
+  `layer4_attn_low=bfec0203a220e7dd`,
+  `layer4_attn_out=51b41d3c5b2a78e6`,
+  `layer4_after_attn_hc=9d92af0dabbe42af`,
+  `layer4_ffn_cur=bd6bb8a0b394edbb`,
+  `layer4_ffn_norm=2dc5bde361206e1a`,
+  `layer4_router_logits=ca0e6d89162fe6eb`,
+  `layer4_router_probs=9e9f6f56421fbcd3`,
+  `layer4_router_selected=ec6043f1523b2257`,
+  `layer4_router_weights=7f9ddb23390151b2`,
+  `layer4_routed_mid=27995a19a136f82a`,
+  `layer4_routed_out=1bc6d01dc8139185`,
+  `layer4_shared_mid=6df189c1c09015f0`,
+  `layer4_shared_out=abefadb626b0180b`, and
+  `layer4_after_ffn_hc=b19322ec84d84935`.
+- M10.5c4c2b2b2b2b2b2b2b2b1 validation passed `python3
+  ds4-parity/compare_decode_layer4_ffn_output.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer4_ffn_output.py`, paired local artifact
+  validation with 1,383 checks, local `arch -arm64 make
+  ds4-layer4-ffn-output-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer4-ffn-output`, B300 current-C oracle plus Rust CUDA
+  candidate validation with 1,209 checks before pinning, B300 c2b2b2b2b2b2b2b2a
+  layer-3 ratio-128 FFN-output rerun with 1,261 checks, `python3 -m
+  py_compile ds4-parity/compare_decode_layer4_ffn_output.py
+  ds4-parity/run_parity_report.py`, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 37 passed, 27 skipped, and 0 failed, `git diff
+  --check`, touched-file NUL scan, non-interactive Claude review with
+  `NO BLOCKERS`, and artifact SHA256
+  `oracle=71ca50531844a0b062aa2f44773c8247fd38a3ebfe92877c9ed0bf8269c2f7eb`
+  and
+  `rust=fe75f0554993151a5dfff569d8517b6b70acb4a42a7c710a661d4180ac2cdd28`.
 - M10.5c4c2b2b2b2b2b2b2b2 splits the remaining one-token scheduler item into
   a layer-3 ratio-128 FFN-output execution bridge and the next full
   all-layer/output-head/logits slice M10.5c4c2b2b2b2b2b2b2b2b. The split keeps
   the next commit comparable at the first ratio-128 compressed layer boundary
   before the repeated remaining layers and final logits are introduced.
+- M10.5c4c2b2b2b2b2b2b2b2b splits the remaining one-token scheduler item into
+  a layer-4 post-ratio128 ratio-4/indexer FFN-output execution bridge and the
+  next remaining layer-loop/logits slice M10.5c4c2b2b2b2b2b2b2b2b2. The split
+  keeps the current commit comparable at the first ratio128-to-ratio4
+  transition before repeated layer-loop and output-head/logits closure.
 - M10.5c4c2b2b2b2b2b2b2b2a adds
   `ds4-layer3-ffn-output-oracle-dump` and
   `ds4_dump_layer3_ffn_output_oracle_json`, which emit
