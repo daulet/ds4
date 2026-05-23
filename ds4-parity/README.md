@@ -242,6 +242,35 @@ not committed; the JSON records hashes, header prefixes, selected tokens, top-20
 logprob ordering, score deltas, model/backend identity, fixture hashes, and the
 exact B300 refresh commands.
 
+## Server Runtime Quality
+
+Run the Rust server-runtime tool-call quality hook on a B300 model snapshot:
+
+```sh
+python3 ds4-parity/run_tool_call_quality.py \
+  --server-bin target/debug/ds4-server-runtime-rs \
+  --model /workspace/ds4/ds4flash.gguf \
+  --backend cuda \
+  --out-dir /tmp/ds4-m96d-tool-call-quality \
+  --ready-timeout 360
+```
+
+The runner mirrors the C `./ds4_test --tool-call-quality` surface at the HTTP
+runtime boundary. It launches fast and `--quality` server-runtime cases, sends a
+compact OpenAI tool-call request with `temperature=0`, `seed=123`,
+`max_tokens=256`, and `stream=false`; `top_k=0`, `top_p=1.0`, and `min_p=0.05`
+come from the shared C/Rust OpenAI defaults. The classifier requires a
+`list_files` tool call with arguments `{"path":"."}` and finish reason
+`tool_calls`. It writes per-case request, response, headers, trace, stdout, and
+stderr files plus `summary.json`/`summary.txt` so raw outputs are retained for
+failures and drift investigation.
+
+Run the model-free classifier checks locally:
+
+```sh
+python3 ds4-parity/run_tool_call_quality.py --self-test
+```
+
 ## CLI Surface Parity
 
 Validate the M8.2 current-C no-model CLI parse/error oracle:

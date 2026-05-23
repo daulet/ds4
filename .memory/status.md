@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6d Tool-Call Quality Parity Hook
-- Last validated source commit: M9.6c3 model-backed streaming tool-call
-  replay in this commit; prior pushed source commit
-  `81f64cb9200896f268c2a47cefe50e5a137bf79b`
+- Active item: M9.7 Responses And Anthropic Protocol Surface
+- Last validated source commit: M9.6d tool-call quality parity hook in this
+  commit; prior pushed source commit
+  `45f8350db38f144d6d03fd40e823883f71b21add`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,49 @@
 
 ## Last Evidence
 
+- M9.6d added `ds4-parity/run_tool_call_quality.py`, a documented Rust
+  server-runtime equivalent runner for the C `./ds4_test --tool-call-quality`
+  surface.
+- M9.6d runner launches separate fast and exact/`--quality`
+  `ds4-server-runtime-rs` cases with distinct ports, model path, backend,
+  context size, trace path, and command list recorded in `summary.json`.
+- M9.6d runner sends a compact OpenAI tool-call request with `temperature=0`,
+  `seed=123`, `max_tokens=256`, and `stream=false`; `summary.json` records the
+  shared C/Rust OpenAI defaults `top_k=0`, `top_p=1.0`, and `min_p=0.05`.
+- M9.6d classifier reports structural categories for HTTP errors, malformed
+  JSON, missing choice/message/tool/function payloads, wrong tool name, invalid
+  or wrong arguments, wrong finish reason, and `ok`, and self-tests exercise
+  every category plus the wire request seed control.
+- M9.6d preserves per-case request, response, headers, trace, stdout, and
+  stderr files under the output directory, and writes `summary.json` plus
+  `summary.txt` for pass/fail category comparison.
+- M9.6d local checks passed for `python3 -m py_compile
+  ds4-parity/run_tool_call_quality.py`, `python3
+  ds4-parity/run_tool_call_quality.py --self-test`, `ruff format --check
+  ds4-parity/run_tool_call_quality.py`, full `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- M9.6d B300 run used pod `ds4-rust-port-b300` in `hou2-prod1`, snapshot
+  `/workspace/ds4-m96d`, and model `/workspace/ds4/ds4flash.gguf`; the command
+  was `python3 ds4-parity/run_tool_call_quality.py --server-bin
+  target/debug/ds4-server-runtime-rs --model /workspace/ds4/ds4flash.gguf
+  --backend cuda --out-dir /tmp/ds4-m96d-tool-call-quality --ready-timeout
+  360`.
+- M9.6d B300 `summary.json` reported fast and exact cases both passed with
+  category `ok`, HTTP 200, tool `list_files`, arguments `{"path":"."}`, and
+  finish `tool_calls`; artifacts remain under
+  `/tmp/ds4-m96d-tool-call-quality/fast` and
+  `/tmp/ds4-m96d-tool-call-quality/exact`.
+- M9.6d B300 fast and exact traces both recorded `stream: 0`, `tools: 1`,
+  `max_tokens: 256`, `temperature: 0.000`, `top_k: 0`, `top_p: 1.000`,
+  `min_p: 0.050`, `seed: 123`, `generated_tokens: 42`, DSML start/end,
+  finish `tool_calls`, and parsed tool call `list_files` with arguments
+  `{"path": "."}`.
+- M9.6d B300 runtime processes were stopped after each run; `pgrep -af
+  ds4-server-runtime-rs` found no leftover runtime process beyond the check
+  shell.
+- M9.6d Claude review initially caught incomplete classifier self-test
+  coverage; after adding all missing category cases and rerunning local and
+  B300 checks, the final Claude review returned no blockers.
 - M9.6c3 routes supported streaming OpenAI tool chat requests through the Rust
   server runtime instead of rejecting them, while keeping non-tool streaming on
   the existing `OpenAiChatStream` path and preserving thinking/stop-list

@@ -3038,7 +3038,7 @@
 
 ### M9.6d: Tool-Call Quality Parity Hook
 
-- Status: active
+- Status: complete
 - Goal: connect the Rust server/runtime tool-call path to the existing
   tool-call quality regression surface after non-streaming and streaming
   behavior is in place.
@@ -3059,14 +3059,24 @@
 - Review gate: ask Claude to review quality-run wiring, artifact preservation,
   and whether the comparator can distinguish runtime regressions from model
   nondeterminism.
-- Validation needed: B300 quality run or documented blocker with exact command,
-  targeted tool-call tests, `cargo test --workspace`, and `git diff --check`.
+- Checks passed: added `ds4-parity/run_tool_call_quality.py` as the documented
+  Rust-runtime equivalent runner for `./ds4_test --tool-call-quality`; B300
+  run on `hou2-prod1` pod `ds4-rust-port-b300` with snapshot
+  `/workspace/ds4-m96d` and model `/workspace/ds4/ds4flash.gguf` passed both
+  fast and exact/`--quality` cases with category `ok`, HTTP 200, tool
+  `list_files`, arguments `{"path":"."}`, and finish `tool_calls`; artifacts
+  are under `/tmp/ds4-m96d-tool-call-quality`. Local checks passed for
+  `python3 -m py_compile ds4-parity/run_tool_call_quality.py`,
+  `python3 ds4-parity/run_tool_call_quality.py --self-test`,
+  `ruff format --check ds4-parity/run_tool_call_quality.py`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
 - Owner path: `tests/`, Rust server runtime path, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.7: Responses And Anthropic Protocol Surface
 
-- Status: pending
+- Status: active
 - Goal: port Responses and Anthropic request/response/stream protocol surfaces
   that share the server request and tool-memory core.
 - Oracle: C Responses/Anthropic parsers, live-tail/tool-output validation
