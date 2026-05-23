@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8f5 Runtime Cache/KV Replay Comparator Closure
-- Last validated source commit: M9.8f4 runtime KV store, continued frontier,
-  and eviction in this commit; prior pushed source commit
-  `393ba9db9fe6f367624bbf1c0c8fe057b4b8578c`
+- Active item: M9.9 Server Parity Report Integration
+- Last validated source commit: M9.8f5 runtime cache/KV replay comparator
+  closure in this commit; prior pushed source commit
+  `b3078f6c0b3389073050dd450cda6ec7325c146b`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,35 @@
 
 ## Last Evidence
 
+- M9.8f5 closes the M9.8 runtime cache/KV path against the committed M0.5
+  current-C artifacts with an exact three-lifetime Rust runtime replay on B300.
+  Evidence is recorded in
+  `ds4-parity/baselines/kv/m9.8f5/runtime-rust-b300-summary.json`.
+- M9.8f5 B300 replay used the Rust runtime binary at commit
+  `b3078f6c0b3389073050dd450cda6ec7325c146b`, pod
+  `ds4-rust-port-b300`, model
+  `/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf`,
+  and the M0.5 flags: `--ctx 32768`, `--tokens 16`, disk budget `512 MiB`,
+  min tokens `512`, cold max `30000`, and continued interval `0`.
+- M9.8f5 replay matched the M0.5 current-C cache behavior: `seed_miss`
+  produced content `I notice`, `cached_tokens=0`, `cache_write_tokens=550`,
+  and `cache_source=none`; `seed_restore` restored
+  `0ab2314538b11686a11e296b7f697651fbd17e60.kv` with
+  `cached_tokens=550`, `cache_write_tokens=0`, and
+  `cache_source=disk-text`; `continuation_restore` restored
+  `a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv` with
+  `cached_tokens=552`, `cache_write_tokens=9`, `cache_source=disk-text`, and
+  generated `kv continued`.
+- M9.8f5 replay matched the M0.5 KVC header rows exactly for file names,
+  reasons, token counts, hit counts, context length, payload bytes, rendered
+  text bytes, and file sizes for `0ab231...` cold, `a0cac...` shutdown, and
+  `4f149...` shutdown checkpoints.
+- M9.8f5 local validation passed `python3 ds4-parity/compare_server_kv.py`,
+  `python3 ds4-parity/compare_server_kv.py --negative-test`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, JSON validation for the
+  M9.8f5 replay summary, full `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, NUL scan over touched files, and
+  non-interactive Claude review with `NO BLOCKERS`.
 - M9.8f4 adds the runtime store side of disk KV: Rust exposes C
   `ds4_kvstore_store_live_prefix`, `ds4_kvstore_maybe_store_continued`,
   continued-frontier note/suppress/restore helpers, C chat-anchor/store-length

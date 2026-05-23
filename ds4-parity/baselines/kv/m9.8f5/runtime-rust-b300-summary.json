@@ -1,0 +1,97 @@
+{
+  "schema": "ds4.runtime_kv_replay_summary.v1",
+  "milestone": "M9.8f5",
+  "source": "rust-runtime-b300-replay",
+  "rust_commit": "b3078f6c0b3389073050dd450cda6ec7325c146b",
+  "b300": {
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "model": "gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf"
+  },
+  "server_flags": {
+    "ctx": 32768,
+    "tokens": 16,
+    "kv_disk_space_mb": 512,
+    "kv_cache_min_tokens": 512,
+    "kv_cache_cold_max_tokens": 30000,
+    "kv_cache_continued_interval_tokens": 0
+  },
+  "cases": [
+    {
+      "name": "seed_miss",
+      "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_seed.json",
+      "finish": "length",
+      "content": "I notice",
+      "prompt_tokens": 550,
+      "cached_tokens": 0,
+      "cache_write_tokens": 550,
+      "cache_source": "none",
+      "disk_cached_tokens": 0
+    },
+    {
+      "name": "seed_restore",
+      "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_seed.json",
+      "finish": "length",
+      "content": "I notice",
+      "prompt_tokens": 550,
+      "cached_tokens": 550,
+      "cache_write_tokens": 0,
+      "cache_source": "disk-text",
+      "disk_cached_tokens": 550,
+      "disk_cache_file": "0ab2314538b11686a11e296b7f697651fbd17e60.kv"
+    },
+    {
+      "name": "continuation_restore",
+      "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_continuation.json",
+      "finish": "stop",
+      "content": "kv continued",
+      "prompt_tokens": 561,
+      "cached_tokens": 552,
+      "cache_write_tokens": 9,
+      "cache_source": "disk-text",
+      "disk_cached_tokens": 552,
+      "disk_cache_file": "a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv"
+    }
+  ],
+  "kv_headers": [
+    {
+      "file": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+      "reason": 1,
+      "reason_name": "cold",
+      "tokens": 550,
+      "hits": 1,
+      "ctx": 32768,
+      "payload_bytes": 31526948,
+      "rendered_text_bytes": 2520,
+      "size_bytes": 31529520
+    },
+    {
+      "file": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.kv",
+      "reason": 4,
+      "reason_name": "shutdown",
+      "tokens": 563,
+      "hits": 0,
+      "ctx": 32768,
+      "payload_bytes": 31688280,
+      "rendered_text_bytes": 2632,
+      "size_bytes": 31690964
+    },
+    {
+      "file": "a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv",
+      "reason": 4,
+      "reason_name": "shutdown",
+      "tokens": 552,
+      "hits": 1,
+      "ctx": 32768,
+      "payload_bytes": 31580716,
+      "rendered_text_bytes": 2528,
+      "size_bytes": 31583296
+    }
+  ],
+  "acceptance": [
+    "seed miss, seed restore, and continuation restore match M0.5 current-C content and cache accounting",
+    "KVC file names, reason codes, token counts, hits, context length, payload bytes, rendered text bytes, and file sizes match the M0.5 current-C header rows",
+    "trace cache_source and disk_cached_tokens match the M0.5 replay contract"
+  ]
+}

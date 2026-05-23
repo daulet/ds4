@@ -3438,7 +3438,7 @@
 
 ### M9.8f5: Runtime Cache/KV Replay Comparator Closure
 
-- Status: active
+- Status: done
 - Goal: close M9.8 runtime cache behavior against M0.4/M0.5 current-C
   artifacts and B300 model-backed replay.
 - Oracle: M0.4 cache seed/continuation responses and traces, M0.5 seed
@@ -3461,12 +3461,22 @@
   ds4-parity/compare_server_kv.py`, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, and non-interactive Claude review with no
   blockers.
+- Validation passed: exact M0.5 three-lifetime Rust runtime replay on
+  `ds4-rust-port-b300` matched current-C seed miss, seed restore,
+  continuation restore, trace cache decisions, and KVC header rows; evidence is
+  recorded in `ds4-parity/baselines/kv/m9.8f5/runtime-rust-b300-summary.json`.
+  Also passed `python3 ds4-parity/compare_server_kv.py`, `python3
+  ds4-parity/compare_server_kv.py --negative-test`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, JSON
+  validation, NUL scan over touched files, and non-interactive Claude review
+  with no blockers.
 - Owner path: Rust server runtime/cache/KV modules, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.9: Server Parity Report Integration
 
-- Status: pending
+- Status: active
 - Goal: add a Milestone 9 server parity report and wire it into the unified
   parity report.
 - Oracle: M9.2 through M9.8 comparators, M0.4/M0.5 refresh commands, and
