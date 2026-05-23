@@ -2186,6 +2186,7 @@ Acceptance:
 
 #### M9.3: Rust HTTP Skeleton And Model Metadata Endpoints
 
+- Status: split into M9.3a, M9.3b, and M9.3c before implementation.
 - Goal: add a Rust server binary with HTTP framing, request routing, CORS
   behavior, `/v1/models`, and no-generation error paths.
 - Oracle: current `ds4-server` socket behavior, `models.json` from M0.4,
@@ -2205,6 +2206,73 @@ Acceptance:
 - Validation gate: local HTTP comparator with negative tests,
   `cargo test --workspace`, `python3 ds4-parity/run_parity_report.py`, and
   `git diff --check`.
+
+#### M9.3a: HTTP Framing And CORS Response Surface
+
+- Goal: port the byte-level HTTP request parser and response formatting helpers
+  without adding a listener or model-backed request execution.
+- Oracle: C `read_http_request`, `header_end`, `content_length`,
+  `http_response`, `http_error`, `append_cors_headers`, and the CORS HTTP unit
+  tests.
+- Fixture: Rust unit vectors for request-line parsing, query stripping,
+  content-length body extraction, malformed/incomplete requests, 200/204/400
+  response bytes, CORS enabled/disabled headers, and JSON error body shape.
+- Comparator: exact byte comparison for status line, header order,
+  `Content-Length`, optional `Content-Type`, CORS headers, connection close,
+  and response body.
+- Acceptance: Rust can parse complete in-memory HTTP requests and format C-like
+  HTTP responses/errors deterministically without opening sockets.
+- Drift policy: exact bytes for supported helper output; unsupported malformed
+  request cases compare by stable reject/accept category.
+- Review gate: ask Claude to review header parsing bounds, content-length
+  handling, query stripping, CORS header parity, and response byte order.
+- Validation gate: targeted Rust HTTP helper tests, `cargo test --workspace`,
+  and `git diff --check`.
+
+#### M9.3b: Model Metadata And Route Dispatch Surface
+
+- Goal: port no-model route dispatch for OPTIONS, `/v1/models`,
+  `/v1/models/deepseek-v4-flash`, and unknown endpoints on top of the M9.3a
+  HTTP helpers.
+- Oracle: C `client_main` route branches for OPTIONS and model GET routes,
+  `send_models`, `send_model`, `append_model_json_values`, and unknown endpoint
+  `http_error` behavior.
+- Fixture: M0.4 `models.json` plus synthetic HTTP requests for OPTIONS,
+  CORS on/off, model list, single model, query-string variants, bad routes, and
+  wrong methods.
+- Comparator: route-handler tests comparing response status, headers, body
+  bytes, CORS behavior, and deterministic model metadata for configured
+  context/default-token values.
+- Acceptance: Rust route handling can answer model metadata and preflight
+  requests and reject unknown routes without a live socket or model load.
+- Drift policy: exact for model JSON fields and route response bytes.
+- Review gate: ask Claude to review route precedence, model metadata constants,
+  CORS propagation, and unknown endpoint behavior.
+- Validation gate: targeted Rust route tests, `cargo test --workspace`, and
+  `git diff --check`.
+
+#### M9.3c: No-Model Server Binary And Negative HTTP Replay
+
+- Goal: add a Rust server binary that binds/listens, wires M9.3a/M9.3b helpers
+  to a socket loop, exposes server CLI startup flags needed by M9.3, and
+  rejects generation routes through the existing model-free parsers/error
+  helpers without running generation.
+- Oracle: C `listen_on`, `configure_client_socket`, `client_main` negative
+  paths for bad HTTP, bad JSON, unknown endpoint, missing messages/input/model,
+  and context-length errors, plus relevant server CLI flags.
+- Fixture: local no-model HTTP replay cases for malformed HTTP, OPTIONS,
+  model routes, bad routes, bad generation JSON, missing request fields,
+  unsupported durable state, and context-limit errors.
+- Comparator: local process/socket replay comparing status lines, headers, JSON
+  bodies, CORS headers, and deterministic shutdown behavior.
+- Acceptance: `ds4-server-rs` can start locally, answer model metadata, and
+  return C-shaped negative responses for no-model generation requests.
+- Drift policy: exact response bytes except process IDs, port choices, and any
+  volatile timing fields if introduced.
+- Review gate: ask Claude to review socket lifetime, blocking/read limits,
+  route-to-parser error mapping, shutdown behavior, and comparator coverage.
+- Validation gate: local no-model HTTP comparator, targeted Rust server tests,
+  `cargo test --workspace`, and `git diff --check`.
 
 #### M9.4: Non-Streaming Chat Completion Runtime
 

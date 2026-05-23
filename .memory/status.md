@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.3 Rust HTTP Skeleton And Model Metadata Endpoints
-- Last validated source commit: M9.2c3c Anthropic live validation in this
-  commit; prior pushed source commit
-  `5813c77a747f80fe86e622812a752e5b658fb9d0`
+- Active item: M9.3a HTTP Framing And CORS Response Surface
+- Last validated source commit: M9.3 HTTP skeleton split in this commit;
+  prior pushed source commit `a032667cf9a5ea2b8f14658691794c1b8abbb1aa`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,17 @@
 
 ## Last Evidence
 
+- M9.3 was split before implementation because byte-level HTTP
+  framing/CORS, no-model route/model metadata dispatch, and socket/process
+  replay have distinct C oracles, fixture families, and validation gates.
+- M9.3a now owns in-memory HTTP request parsing, response/error byte
+  formatting, CORS header parity, query stripping, content-length handling, and
+  malformed request categories without opening sockets.
+- M9.3b now owns OPTIONS and model metadata route dispatch on top of M9.3a,
+  including `/v1/models`, `/v1/models/deepseek-v4-flash`, unknown endpoint
+  behavior, and deterministic model JSON.
+- M9.3c now owns the local `ds4-server-rs` no-model binary, socket loop,
+  startup flags, no-generation negative replay, and local HTTP comparator.
 - M9.2c3c added exported Rust `AnthropicLiveState` plus
   `parse_anthropic_core_request_with_live_state` so parser tests can exercise
   live-known Anthropic tool-result continuations without touching server KV or
