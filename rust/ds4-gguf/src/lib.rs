@@ -9,6 +9,7 @@ pub mod dsml;
 pub mod kv_policy;
 pub mod prompt;
 pub mod sampling;
+pub mod server_chat;
 pub mod session_payload;
 mod tokenizer;
 
@@ -31,6 +32,10 @@ pub use prompt::{
 pub use sampling::{
     sample_argmax, sample_rng_f32, sample_rng_next, sample_top_p_min_p, token_logprob,
     top_logprobs, SamplingParams, SamplingTrace, TokenScore,
+};
+pub use server_chat::{
+    openai_context_length_error_body, parse_openai_chat_request, request_exceeds_context,
+    think_mode_for_context, OpenAiChatRequest, ServerRequestError, ServerRequestErrorCategory,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

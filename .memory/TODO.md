@@ -2101,7 +2101,7 @@
 
 ### M9.2a: OpenAI Chat Request Core Parse And Render
 
-- Status: pending
+- Status: done
 - Goal: port the model-free OpenAI `/v1/chat/completions` core request parser
   and prompt renderer, excluding tool-call payloads and alternate protocols.
 - Oracle: C `parse_chat_request`, `render_chat_prompt_text`, request default
@@ -2119,14 +2119,14 @@
   comparison for path/limit-bearing error text.
 - Review gate: ask Claude to review OpenAI field coverage, default values,
   stream option handling, thinking mode mapping, and context-limit errors.
-- Validation needed: targeted Rust parser/render tests, `cargo test
-  --workspace`, `python3 ds4-parity/run_cli_parity_report.py`, and `git
-  diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat`, full
+  `cargo test --workspace`, `python3 ds4-parity/run_cli_parity_report.py`,
+  `git diff --check`, staged diff check, and Claude review PASS.
 - Owner path: Rust server parser modules, `ds4-parity/`, `.memory/status.md`.
 
 ### M9.2b: OpenAI Tool Schema And DSML Prompt Render Surface
 
-- Status: pending
+- Status: active
 - Goal: port model-free OpenAI tool schema parsing and DSML prompt rendering
   without implementing model-backed tool-call generation.
 - Oracle: C `parse_tools_value`, `openai_function_schema_from_tool`,

@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2a OpenAI Chat Request Core Parse And Render
-- Last validated source commit: M9.2 server request parse/render split in this
-  commit; prior pushed source commit
-  `912d46ac4b178ae0f1c74ffd558d8f00ac03e8eb`
+- Active item: M9.2b OpenAI Tool Schema And DSML Prompt Render Surface
+- Last validated source commit: M9.2a OpenAI chat request core parse/render in
+  this commit; prior pushed source commit
+  `525414f7f6232bf5196a06db6b045b9bca568759`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,21 @@
 
 ## Last Evidence
 
+- M9.2a added a dependency-free Rust OpenAI chat request parser in
+  `rust/ds4-gguf/src/server_chat.rs`, exported through `ds4-gguf`, for
+  model-free `/v1/chat/completions` core fields.
+- M9.2a parser coverage includes the M0.4 non-tool OpenAI fixtures
+  `chat_basic`, `chat_stream`, `chat_thinking_disabled`, `chat_cache_seed`,
+  and `chat_cache_continuation`, matching rendered prompt bytes, stream flags,
+  sampling defaults/options, seeds, max-token fields, thinking mode, stop lists,
+  error categories, and OpenAI context-length error body shape.
+- M9.2a Claude review returned PASS on the material parser parity checks after
+  reviewing defaults, duplicate-field order, stream options, thinking/reasoning
+  mapping, stop lists, context-length helper shape, prompt bytes, and fixture
+  coverage.
+- M9.2a intentionally excludes tool schema/tool-call payload handling and
+  alternate protocols; M9.2b owns OpenAI tool schema plus DSML prompt rendering,
+  while M9.2c owns Responses and Anthropic request inputs.
 - `git status --short` was clean before M0.1 edits.
 - `AGENT.md`, `CONTRIBUTING.md`, and `RUST_PORT_ROADMAP.md` were read before
   creating the protocol.
