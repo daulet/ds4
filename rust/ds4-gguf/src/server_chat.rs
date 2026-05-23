@@ -277,7 +277,7 @@ pub fn parse_responses_core_request(
     for (key, raw, value) in fields {
         match key.as_str() {
             "input" => {
-                messages = Some(parse_responses_core_input(&value)?);
+                messages = Some(parse_responses_core_input(&raw)?);
             }
             "instructions" => {
                 instructions = Some(match value {
@@ -669,26 +669,42 @@ fn tool_arguments_from_json(json: &str) -> Option<Vec<ToolArgument>> {
     Some(args)
 }
 
-fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestError> {
+fn parse_responses_core_input(raw: &str) -> Result<Vec<ChatMessage>, ServerRequestError> {
+    let value = JsonParser::new(raw)
+        .parse()
+        .map_err(|_| ServerRequestError::invalid_json())?;
     if let JsonValue::String(value) = value {
         return Ok(vec![ChatMessage::new("user", value.clone())]);
     }
-    let JsonValue::Array(items) = value else {
+    if !matches!(value, JsonValue::Array(_)) {
         return Err(ServerRequestError::invalid_json());
     };
+    let items = JsonParser::new(raw)
+        .parse_root_array_values_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
 
     let mut messages = Vec::new();
     let mut pending_reasoning = String::new();
     for item in items {
-        let JsonValue::Object(fields) = item else {
-            return Err(ServerRequestError::invalid_json());
-        };
+        let fields = JsonParser::new(&item)
+            .parse_root_object_fields_raw()
+            .map_err(|_| ServerRequestError::invalid_json())?;
         let mut item_type = None;
         let mut role = None;
         let mut content = None;
+        let mut name = None;
+        let mut namespace = None;
+        let mut call_id = None;
+        let mut item_id = None;
+        let mut arguments = None;
+        let mut output = None;
+        let mut input = None;
         let mut summary = None;
+        let mut action = None;
+        let mut result = None;
+        let mut tools_json = None;
         let mut status = None;
-        for (key, value) in fields {
+        for (key, raw, value) in fields {
             match key.as_str() {
                 "type" => {
                     item_type = Some(
@@ -707,10 +723,57 @@ fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, Ser
                     );
                 }
                 "content" => {
-                    content = Some(parse_responses_content_array(value)?);
+                    content = Some(parse_responses_content_array(&value)?);
+                }
+                "name" => {
+                    name = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                "namespace" => {
+                    namespace = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                "call_id" => {
+                    call_id = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                "id" => {
+                    item_id = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
+                "arguments" => {
+                    arguments = Some(json_string_or_raw(&raw, &value));
+                }
+                "output" => {
+                    output = Some(parse_responses_output_value(&raw, &value)?);
+                }
+                "input" => {
+                    input = Some(json_string_or_raw(&raw, &value));
                 }
                 "summary" => {
-                    summary = Some(parse_responses_content_array(value)?);
+                    summary = Some(parse_responses_content_array(&value)?);
+                }
+                "action" => {
+                    action = Some(raw);
+                }
+                "result" => {
+                    result = Some(json_string_or_raw(&raw, &value));
                 }
                 "status" => {
                     status = Some(
@@ -719,6 +782,9 @@ fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, Ser
                             .ok_or_else(ServerRequestError::invalid_json)?
                             .to_string(),
                     );
+                }
+                "tools" => {
+                    tools_json = Some(raw);
                 }
                 _ => {}
             }
@@ -730,8 +796,7 @@ fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, Ser
             return Err(ServerRequestError::invalid_json());
         }
         let item_type = item_type.as_deref().unwrap_or("message");
-        let consumes_reasoning =
-            item_type == "message" && role.as_deref().is_some_and(|role| role == "assistant");
+        let consumes_reasoning = responses_item_consumes_reasoning(item_type, role.as_deref());
         let is_bookkeeping = item_type == "compaction" || item_type == "context_compaction";
         if !consumes_reasoning && !is_bookkeeping && !pending_reasoning.is_empty() {
             let mut msg = ChatMessage::new("assistant", "");
@@ -749,6 +814,25 @@ fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, Ser
                 }
                 messages.push(msg);
             }
+            "function_call" | "custom_tool_call" => {
+                let args = arguments.as_deref().or(input.as_deref()).unwrap_or("{}");
+                let mut tool_name = name.unwrap_or_default();
+                if item_type != "custom_tool_call" && !tool_name.is_empty() {
+                    if let Some(namespace) = namespace.filter(|namespace| !namespace.is_empty()) {
+                        tool_name = format!("{namespace}{tool_name}");
+                    }
+                }
+                let call =
+                    response_tool_call(tool_name, args, call_id.as_deref().or(item_id.as_deref()));
+                push_responses_assistant_tool_call(&mut messages, call, &mut pending_reasoning);
+            }
+            "function_call_output" | "custom_tool_call_output" => {
+                let mut msg = ChatMessage::new("tool", output.unwrap_or_default());
+                if let Some(id) = call_id.or(item_id) {
+                    msg.add_tool_call_id(id);
+                }
+                messages.push(msg);
+            }
             "reasoning" => {
                 if let Some(summary) = summary.filter(|summary| !summary.is_empty()) {
                     if !pending_reasoning.is_empty() {
@@ -763,6 +847,36 @@ fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, Ser
                     pending_reasoning.push_str(&content);
                 }
             }
+            "local_shell_call"
+            | "web_search_call"
+            | "tool_search_call"
+            | "image_generation_call" => {
+                let tool_name = match item_type {
+                    "tool_search_call" => "tool_search",
+                    "local_shell_call" => "local_shell",
+                    _ => item_type,
+                };
+                let args = action
+                    .as_deref()
+                    .or(arguments.as_deref())
+                    .or(input.as_deref())
+                    .unwrap_or("{}");
+                let call =
+                    response_tool_call(tool_name, args, call_id.as_deref().or(item_id.as_deref()));
+                push_responses_assistant_tool_call(&mut messages, call, &mut pending_reasoning);
+            }
+            "local_shell_call_output"
+            | "web_search_call_output"
+            | "tool_search_output"
+            | "tool_search_call_output"
+            | "image_generation_call_output" => {
+                let body = output.or(result).or(tools_json).unwrap_or_default();
+                let mut msg = ChatMessage::new("tool", body);
+                if let Some(id) = call_id.or(item_id) {
+                    msg.add_tool_call_id(id);
+                }
+                messages.push(msg);
+            }
             "compaction" | "context_compaction" => {}
             _ => return Err(ServerRequestError::invalid_json()),
         }
@@ -773,6 +887,69 @@ fn parse_responses_core_input(value: &JsonValue) -> Result<Vec<ChatMessage>, Ser
         messages.push(msg);
     }
     Ok(messages)
+}
+
+fn responses_item_consumes_reasoning(item_type: &str, role: Option<&str>) -> bool {
+    (item_type == "message" && role.is_some_and(|role| role == "assistant"))
+        || matches!(
+            item_type,
+            "function_call"
+                | "custom_tool_call"
+                | "local_shell_call"
+                | "web_search_call"
+                | "tool_search_call"
+                | "image_generation_call"
+        )
+}
+
+fn response_tool_call(name: impl Into<String>, args: &str, id: Option<&str>) -> ToolCall {
+    ToolCall::new(
+        name,
+        tool_arguments_from_json(args)
+            .unwrap_or_else(|| vec![ToolArgument::string("arguments", args)]),
+    )
+    .with_id(id.unwrap_or_default())
+}
+
+fn push_responses_assistant_tool_call(
+    messages: &mut Vec<ChatMessage>,
+    call: ToolCall,
+    pending_reasoning: &mut String,
+) {
+    if let Some(last) = messages
+        .last_mut()
+        .filter(|message| message.role == "assistant")
+    {
+        if !pending_reasoning.is_empty() && last.reasoning.is_empty() {
+            last.reasoning = std::mem::take(pending_reasoning);
+        }
+        last.tool_calls.push(call);
+    } else {
+        let mut msg = ChatMessage::new("assistant", "");
+        if !pending_reasoning.is_empty() {
+            msg.reasoning = std::mem::take(pending_reasoning);
+        }
+        msg.tool_calls.push(call);
+        messages.push(msg);
+    }
+}
+
+fn json_string_or_raw(raw: &str, value: &JsonValue) -> String {
+    match value {
+        JsonValue::String(value) => value.clone(),
+        _ => raw.to_string(),
+    }
+}
+
+fn parse_responses_output_value(
+    raw: &str,
+    value: &JsonValue,
+) -> Result<String, ServerRequestError> {
+    match value {
+        JsonValue::Array(_) => parse_responses_content_array(value),
+        JsonValue::String(value) => Ok(value.clone()),
+        _ => Ok(raw.to_string()),
+    }
 }
 
 fn parse_responses_content_array(value: &JsonValue) -> Result<String, ServerRequestError> {
@@ -1697,6 +1874,124 @@ mod tests {
     }
 
     #[test]
+    fn responses_function_call_items_merge_with_assistant_and_render_dsml() {
+        let req = parse_responses_fixture(
+            r#"{
+                "input":[
+                    {"type":"message","role":"user","content":"run lookup"},
+                    {"type":"reasoning","content":[{"type":"reasoning_text","text":"need lookup"}]},
+                    {"type":"message","role":"assistant","content":"checking"},
+                    {"type":"function_call","call_id":"call_lookup","name":"lookup","arguments":{"query":"ds4","limit":2,"ratio":1.0}}
+                ]
+            }"#,
+        );
+        assert_eq!(req.messages.len(), 2);
+        let assistant = &req.messages[1];
+        assert_eq!(assistant.role, "assistant");
+        assert_eq!(assistant.content, "checking");
+        assert_eq!(assistant.reasoning, "need lookup");
+        assert_eq!(assistant.tool_calls.len(), 1);
+        assert_eq!(assistant.tool_calls[0].id, "call_lookup");
+        assert_eq!(assistant.tool_calls[0].name, "lookup");
+        assert_eq!(
+            assistant.tool_calls[0].arguments,
+            [
+                ToolArgument::string("query", "ds4"),
+                ToolArgument {
+                    name: "limit".to_string(),
+                    value: "2".to_string(),
+                    is_string: false,
+                },
+                ToolArgument {
+                    name: "ratio".to_string(),
+                    value: "1.0".to_string(),
+                    is_string: false,
+                },
+            ]
+        );
+        assert!(req
+            .prompt_text
+            .contains("<think>need lookup</think>checking\n\n<｜DSML｜tool_calls>"));
+        assert!(req.prompt_text.contains("<｜DSML｜invoke name=\"lookup\">"));
+        assert!(req.prompt_text.contains(
+            "<｜DSML｜parameter name=\"ratio\" string=\"false\">1.0</｜DSML｜parameter>"
+        ));
+    }
+
+    #[test]
+    fn responses_custom_and_hosted_tool_calls_keep_ids_names_and_arguments() {
+        let req = parse_responses_fixture(
+            r#"{
+                "input":[
+                    {"type":"reasoning","summary":"tool plan"},
+                    {"type":"custom_tool_call","call_id":"call_custom","name":"bash","input":"ls -la"},
+                    {"type":"local_shell_call","id":"call_shell","action":{"cmd":"pwd","timeout":1.0}},
+                    {"type":"web_search_call","call_id":"call_web","arguments":{"query":"ds4"}}
+                ]
+            }"#,
+        );
+        assert_eq!(req.messages.len(), 1);
+        let assistant = &req.messages[0];
+        assert_eq!(assistant.reasoning, "tool plan");
+        assert_eq!(assistant.tool_calls.len(), 3);
+        assert_eq!(assistant.tool_calls[0].id, "call_custom");
+        assert_eq!(assistant.tool_calls[0].name, "bash");
+        assert_eq!(
+            assistant.tool_calls[0].arguments,
+            [ToolArgument::string("arguments", "ls -la")]
+        );
+        assert_eq!(assistant.tool_calls[1].id, "call_shell");
+        assert_eq!(assistant.tool_calls[1].name, "local_shell");
+        assert_eq!(
+            assistant.tool_calls[1].arguments,
+            [
+                ToolArgument::string("cmd", "pwd"),
+                ToolArgument {
+                    name: "timeout".to_string(),
+                    value: "1.0".to_string(),
+                    is_string: false,
+                },
+            ]
+        );
+        assert_eq!(assistant.tool_calls[2].id, "call_web");
+        assert_eq!(assistant.tool_calls[2].name, "web_search_call");
+        assert_eq!(
+            assistant.tool_calls[2].arguments,
+            [ToolArgument::string("query", "ds4")]
+        );
+    }
+
+    #[test]
+    fn responses_tool_outputs_preserve_call_ids_and_render_prompt_tail() {
+        let req = parse_responses_fixture(
+            r#"{
+                "input":[
+                    {"type":"message","role":"user","content":"run"},
+                    {"type":"function_call","call_id":"call_lookup","name":"lookup","arguments":{"query":"ds4"}},
+                    {"type":"function_call_output","call_id":"call_lookup","output":[{"type":"output_text","text":"result </tool_result> & raw"}]},
+                    {"type":"local_shell_call_output","id":"call_shell","result":{"ok":true}},
+                    {"type":"tool_search_output","call_id":"call_search","tools":[{"type":"namespace","name":"mcp__demo__","tools":[]}]}
+                ]
+            }"#,
+        );
+        assert_eq!(req.messages.len(), 5);
+        assert_eq!(req.messages[2].role, "tool");
+        assert_eq!(req.messages[2].content, "result </tool_result> & raw");
+        assert_eq!(req.messages[2].tool_call_ids, ["call_lookup"]);
+        assert_eq!(req.messages[3].content, "{\"ok\":true}");
+        assert_eq!(req.messages[3].tool_call_ids, ["call_shell"]);
+        assert!(req.messages[4].content.contains("\"type\":\"namespace\""));
+        assert_eq!(req.messages[4].tool_call_ids, ["call_search"]);
+        assert!(req
+            .prompt_text
+            .contains("<tool_result>result &lt;/tool_result> & raw</tool_result>"));
+        assert!(req
+            .prompt_text
+            .contains("<tool_result>{\"ok\":true}</tool_result>"));
+        assert!(req.prompt_text.ends_with("<｜Assistant｜><think>"));
+    }
+
+    #[test]
     fn tool_choice_none_parses_schemas_but_disables_tool_prompt() {
         let req = parse_fixture(
             r#"{
@@ -1871,11 +2166,11 @@ mod tests {
         );
 
         let unknown = parse_responses_core_request(
-            r#"{"input":[{"type":"image_generation_call","status":"completed"}]}"#,
+            r#"{"input":[{"type":"unknown_call","status":"completed"}]}"#,
             128,
             32_768,
         )
-        .expect_err("c2 input item rejected in c1");
+        .expect_err("unknown input item rejected");
         assert_eq!(unknown.category(), ServerRequestErrorCategory::InvalidJson);
 
         let bad_content = parse_responses_core_request(

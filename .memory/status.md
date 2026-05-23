@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2c2a Responses Function Call And Tool Output Input Surface
-- Last validated source commit: M9.2c2 Responses tool-output/live-tail split in
+- Active item: M9.2c2b Responses Tool Search And Namespace Schema Loading
+- Last validated source commit: M9.2c2a Responses function/tool input parser in
   this commit; prior pushed source commit
-  `cdead32e30f715c68a0e424538e13805992326f2`
+  `0f063ac8ac610c2434acc903221615f208780611`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,22 @@
 
 ## Last Evidence
 
+- M9.2c2a extended the Rust prompt data model with stable tool-call IDs on
+  assistant calls and tool result messages without changing existing prompt
+  rendering for non-tool histories.
+- M9.2c2a extended Responses `input` parsing to preserve raw item fields where
+  C preserves raw JSON, parse `function_call`, `custom_tool_call`,
+  `local_shell_call`, `web_search_call`, `tool_search_call`,
+  `image_generation_call`, function/custom outputs, and hosted tool outputs
+  into `ChatMessage`/`ToolCall` history.
+- M9.2c2a validation covered assistant text plus split tool-call merging,
+  reasoning attachment, DSML argument ordering and numeric spelling,
+  custom-tool free-text fallback, hosted tool names/actions, output/result/tool
+  body selection, tool-result delimiter escaping, and call-id preservation.
+- M9.2c2a validation passed for targeted
+  `cargo test -p ds4-gguf server_chat -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.2c2 was split before implementation because Responses tool-call input
   parsing, dynamic tool schema loading, and live continuation validation have
   distinct C branches, fixture families, and validation comparators.

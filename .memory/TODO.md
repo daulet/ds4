@@ -2233,7 +2233,7 @@
 
 ### M9.2c2a: Responses Function Call And Tool Output Input Surface
 
-- Status: active
+- Status: done
 - Goal: port model-free Responses input items that become chat tool-call
   history or tool-result history: `function_call`, `custom_tool_call`,
   hosted-tool calls, `function_call_output`, custom/hosted tool outputs, call
@@ -2259,13 +2259,14 @@
 - Review gate: ask Claude to review function/custom/hosted call parsing,
   merge-with-previous-assistant behavior, call-id preservation, and prompt
   rendering.
-- Validation needed: targeted Rust Responses function/tool input tests,
-  `cargo test --workspace`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - Owner path: Rust server protocol parser modules, `.memory/status.md`.
 
 ### M9.2c2b: Responses Tool Search And Namespace Schema Loading
 
-- Status: pending
+- Status: active
 - Goal: port Responses dynamic tool schema parsing: top-level `tool_search`,
   namespace tool groups, tool-search-output `tools` loading, combined
   top-level plus loaded schemas, and namespace/wire-name metadata.

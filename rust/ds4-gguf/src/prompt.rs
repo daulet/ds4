@@ -33,6 +33,7 @@ pub struct ChatMessage {
     pub content: String,
     pub reasoning: String,
     pub tool_calls: Vec<ToolCall>,
+    pub tool_call_ids: Vec<String>,
     pub raw_tool_calls_dsml: Option<String>,
 }
 
@@ -43,6 +44,7 @@ impl ChatMessage {
             content: content.into(),
             reasoning: String::new(),
             tool_calls: Vec::new(),
+            tool_call_ids: Vec::new(),
             raw_tool_calls_dsml: None,
         }
     }
@@ -56,10 +58,19 @@ impl ChatMessage {
         self.raw_tool_calls_dsml = Some(raw_dsml.into());
         self
     }
+
+    pub fn add_tool_call_id(&mut self, id: impl Into<String>) {
+        let id = id.into();
+        if id.is_empty() || self.tool_call_ids.iter().any(|existing| existing == &id) {
+            return;
+        }
+        self.tool_call_ids.push(id);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolCall {
+    pub id: String,
     pub name: String,
     pub arguments: Vec<ToolArgument>,
 }
@@ -67,9 +78,15 @@ pub struct ToolCall {
 impl ToolCall {
     pub fn new(name: impl Into<String>, arguments: Vec<ToolArgument>) -> Self {
         Self {
+            id: String::new(),
             name: name.into(),
             arguments,
         }
+    }
+
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
     }
 }
 
