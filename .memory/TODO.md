@@ -2638,7 +2638,7 @@
 
 ### M9.4b: OpenAI Non-Streaming Response And Usage Builder
 
-- Status: active
+- Status: done
 - Goal: add pure Rust helpers for non-streaming OpenAI chat-completion response
   JSON, HTTP headers, usage accounting, finish reasons, and trace-ready
   request metadata without running the model.
@@ -2661,7 +2661,8 @@
 - Review gate: ask Claude to review JSON shape, usage accounting,
   cache-detail clamping, header parity, and separation from runtime/cache
   policy.
-- Validation needed: targeted response-builder tests,
+- Validation passed: targeted response-builder tests
+  `cargo test -p ds4-gguf server_response -- --nocapture`, full
   `cargo test --workspace`, `cargo fmt --all -- --check`, and
   `git diff --check`.
 - Owner path: Rust server formatting modules, `ds4-parity/`,
@@ -2669,7 +2670,7 @@
 
 ### M9.4c: No-Cache Non-Streaming Chat Generation Replay
 
-- Status: pending
+- Status: active
 - Goal: route model-backed non-streaming `/v1/chat/completions` requests
   through the Rust engine for the no-cache M0.4 cases, returning the M9.4b
   response surface for `chat_basic` and `chat_thinking_disabled`.

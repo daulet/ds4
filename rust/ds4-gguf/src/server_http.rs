@@ -241,7 +241,7 @@ Access-Control-Allow-Headers: *\r\n",
     );
 }
 
-fn json_escape_string(value: &str) -> String {
+pub(crate) fn json_escape_string(value: &str) -> String {
     let mut out = String::from("\"");
     for ch in value.chars() {
         match ch {

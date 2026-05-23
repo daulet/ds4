@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.4b OpenAI Non-Streaming Response And Usage Builder
-- Last validated source commit: M9.4a model-backed server runtime boundary in
-  this commit; prior pushed source commit
-  `4347583c6ece8b7e189b639edcc5cc74e3820ce5`
+- Active item: M9.4c No-Cache Non-Streaming Chat Generation Replay
+- Last validated source commit: M9.4b OpenAI non-streaming response and usage
+  builder in this commit; prior pushed source commit
+  `035b156a20fbe0eaeb971cfe7cdb4317e125ebec`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,21 @@
 
 ## Last Evidence
 
+- M9.4b added `rust/ds4-gguf/src/server_response.rs` with pure formatting
+  helpers for OpenAI non-streaming chat-completion JSON, HTTP response
+  wrapping, usage details, finish reasons, optional reasoning content, and
+  C-compatible cache read/write clamping.
+- M9.4b response-builder tests compare exact M0.4 `chat_basic`,
+  `chat_thinking_disabled`, `chat_cache_seed`, and `chat_cache_continuation`
+  JSON bodies using injected IDs/timestamps and explicit usage/cache counts.
+- M9.4b header tests compare the `chat_basic` `Content-Length`,
+  `Content-Type`, and `Connection: close` header surface through the existing
+  C-shaped HTTP formatter; escaping tests cover visible content and optional
+  reasoning content.
+- M9.4b validation passed for targeted
+  `cargo test -p ds4-gguf server_response -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.4a added `ds4-server-runtime-rs` under `rust/ds4-engine` so the
   model-backed server boundary lives in the runtime crate and depends on
   `ds4-gguf` helpers without creating a dependency cycle.

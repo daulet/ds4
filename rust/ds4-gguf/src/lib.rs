@@ -12,6 +12,7 @@ pub mod sampling;
 pub mod server_chat;
 pub mod server_http;
 pub mod server_no_model;
+pub mod server_response;
 pub mod session_payload;
 mod tokenizer;
 
@@ -55,6 +56,10 @@ pub use server_no_model::{
     route_no_model_server_http_with_prompt_tokens, route_no_model_server_request,
     route_no_model_server_request_with_generation_message,
     route_no_model_server_request_with_prompt_tokens,
+};
+pub use server_response::{
+    format_openai_chat_completion_http, format_openai_chat_completion_json, OpenAiChatCompletion,
+    OpenAiUsage,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 
