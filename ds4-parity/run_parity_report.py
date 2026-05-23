@@ -6,7 +6,8 @@ The report has two jobs:
 * run local no-model C checks that are available in this workspace;
 * run the committed artifact comparators from M1.2 through M1.5, M4.6, M5.7,
   M6.7, M7.9, M9.9, M10.2, M10.3, M10.4, M10.5a, M10.5b, M10.5c1, M10.5c2,
-  M10.5c3, M10.5c4a, M10.5c4b, M10.5c4c1, and M10.5c4c2a.
+  M10.5c3, M10.5c4a, M10.5c4b, M10.5c4c1, M10.5c4c2a, and
+  M10.5c4c2b1.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -216,6 +217,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.5c4c2b1 Rust decode execution preflight comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_decode_execution_preflight.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -354,6 +363,16 @@ def b300_skip_items() -> list[ReportItem]:
                 "feature-gated CUDA backend linkage"
             ),
             rerun_command=b300_rust_model_map_smoke_command(),
+        ),
+        ReportItem(
+            name="M10.5c4c2b1 B300 Rust decode execution preflight rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Rust decode execution preflight requires the B300 pod, the "
+                "real q2-imatrix GGUF, and feature-gated CUDA backend linkage"
+            ),
+            rerun_command=b300_rust_decode_preflight_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -503,6 +522,32 @@ def b300_rust_model_map_smoke_command() -> str:
     smoke = b300_exec(
         "CUDA_ARCH=native cargo test -p ds4-gpu --features cuda-backend "
         "--test model_map_abi -- --nocapture"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_rust_decode_preflight_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    smoke = b300_exec(
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-decode-exec-preflight --quiet -- "
+        f"--model {B300_MODEL} "
+        "--model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668 "
+        "> /tmp/ds4-c2b1-preflight.json && "
+        "python3 ds4-parity/compare_decode_execution_preflight.py "
+        "--candidate /tmp/ds4-c2b1-preflight.json"
     )
     return f"{source_refresh} && {smoke}"
 

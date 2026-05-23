@@ -303,6 +303,24 @@ that CUDA-only cache wrappers stay Linux-gated, that the B300 test exercises
 fd/map/range/cache success and failure paths, and that the unified report
 carries the exact B300 rerun command.
 
+Compare the M10.5c4c2b1 Rust decode execution preflight before running the
+B300 model-backed preflight binary:
+
+```sh
+python3 ds4-parity/compare_decode_execution_preflight.py
+python3 ds4-parity/compare_decode_execution_preflight.py --negative-test
+```
+
+The comparator checks that the Rust preflight can mmap the real GGUF, parse the
+header without copying tensor data, bind DS4 weights, hand the tensor-data range
+to the backend, allocate representative M10.4 checkpoint tensors, and exercise
+bounded model/Q8 cache hooks. On B300, validate the emitted JSON too:
+
+```sh
+python3 ds4-parity/compare_decode_execution_preflight.py \
+  --candidate /tmp/ds4-c2b1-preflight.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

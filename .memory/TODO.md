@@ -3884,14 +3884,48 @@
 - Owner path: Rust decode backend model-map wrappers, B300 comparator,
   `.memory/status.md`.
 
-### M10.5c4c2b: Rust One-Token Decode B300 Execution
+### M10.5c4c2b1: Rust Decode Execution Preflight
+
+- Status: completed
+- Goal: prove the real-model Rust decode execution inputs are usable on B300
+  before launching the full one-token scheduler.
+- Oracle: M10.4 short decode checkpoint targets, the M10.5c4b runtime-state
+  bridge, the M10.5c4c2a model-map bridge, and C startup behavior that maps
+  only the GGUF tensor-data range before decode.
+- Fixture: `/workspace/ds4/ds4flash.gguf` on B300 plus representative dense,
+  ratio-4, and ratio-128 layers `[0, 2, 3]`, including the layer-2 compressed
+  cache tensors used by the M10.4 short-decode oracle.
+- Comparator: static contract plus optional B300 JSON validator that checks
+  mmap-backed GGUF header parsing, DS4 weight binding, fd/map-range handoff,
+  bounded representative model/Q8 cache hooks, representative tensor
+  allocation, and checkpoint-target coverage.
+- Acceptance: Rust emits `ds4.decode_execution_preflight.v1` from B300 after
+  mapping the real GGUF tensor-data range, binding 43 layers, allocating the
+  representative checkpoint tensors, and validating at least one model cache
+  range plus one Q8/F16 cache hook.
+- Drift policy: model path may vary only by rerun command; model SHA, model
+  size, tensor-data offset semantics, selected checkpoint names, selected
+  layers, and cache hook presence are exact.
+- Review gate: ask Claude to review mmap lifetime, bounded cache selection,
+  and backend cleanup ordering.
+- Validation passed: preflight comparator with negative test, B300 preflight
+  binary plus candidate JSON validation, `cargo test -p ds4-gpu
+  decode_execution --lib`, `cargo check -p ds4-gpu --bin
+  ds4-decode-exec-preflight`, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and non-interactive Claude review with no
+  blockers.
+- Owner path: Rust decode execution preflight module/bin, B300 comparator,
+  `.memory/status.md`.
+
+### M10.5c4c2b2: Rust One-Token Decode B300 Execution
 
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
   on B300 and capture Rust checkpoints for the M10.4 decode cases.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
-  M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge.
+  M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge and
+  M10.5c4c2b1 execution preflight.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -3904,7 +3938,8 @@
   boundaries are exact; f32 tensor values follow M10.4 tolerances.
 - Review gate: ask Claude to review decode ordering, cache mutation, and
   unsafe backend-call containment.
-- Validation needed: targeted decode comparator on B300, `cargo test
+- Validation needed: targeted decode comparator on B300, c2b1 preflight rerun,
+  `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,

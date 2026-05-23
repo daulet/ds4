@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b Rust One-Token Decode B300 Execution
-- Last validated source commit: M10.5c4c1 Rust CUDA backend linkage and B300
-  ABI smoke in this commit; prior pushed source commit
-  `d3607c3b145c4fddcbf4987d358819b5533e60df`
+- Active item: M10.5c4c2b2 Rust One-Token Decode B300 Execution
+- Last validated source commit: M10.5c4c2a Rust decode model-map bridge in
+  commit `6a7e46067d36d7ddbc76f63a920e04d88471d960`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,37 @@
 
 ## Last Evidence
 
+- M10.5c4c2b1 splits the original B300 one-token execution item into a
+  model-backed preflight and the remaining numeric decode slice. The next
+  active slice is M10.5c4c2b2, which must launch the actual one-token facade
+  schedule and compare M10.4 tensors/logits.
+- M10.5c4c2b1 adds `rust/ds4-gpu/src/decode_execution.rs` and
+  `ds4-decode-exec-preflight`, which mmap the real GGUF on B300, parse the
+  GGUF header without copying tensor data, bind DS4 weights, set the model fd
+  and tensor-data map range, allocate representative M10.4 checkpoint tensors,
+  and exercise bounded model-range plus Q8/F16 cache hooks.
+- The B300 preflight emitted `ds4.decode_execution_preflight.v1` and the
+  candidate validator passed 69 checks. Evidence: model size
+  86,720,111,488 bytes, tensor count 1,328, tensor-data offset 5,333,824,
+  bound layers 43, selected layers `[0, 2, 3]`, representative tensors
+  `cur_hc`, `logits`, `layer_raw_cache`, `layer_attn_comp_cache`, and
+  `layer_index_comp_cache`, and cache hooks over 22 model ranges plus one
+  Q8/F16 range.
+- M10.5c4c2b1 adds `ds4-parity/compare_decode_execution_preflight.py`, which
+  checks the static contract and optionally validates the B300 JSON candidate.
+  It is wired into the unified parity report as `M10.5c4c2b1 Rust decode
+  execution preflight comparator` with an exact B300 rerun command.
+- M10.5c4c2b1 validation passed `cargo test -p ds4-gpu decode_execution
+  --lib`, `cargo check -p ds4-gpu --bin ds4-decode-exec-preflight`, `python3
+  ds4-parity/compare_decode_execution_preflight.py --negative-test`, `python3
+  -m py_compile ds4-parity/compare_decode_execution_preflight.py
+  ds4-parity/run_parity_report.py`, B300 `CUDA_ARCH=native cargo run -p
+  ds4-gpu --features cuda-backend --bin ds4-decode-exec-preflight --quiet --
+  --model /workspace/ds4/ds4flash.gguf --model-sha256
+  efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`
+  followed by candidate validation, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles`, `cargo test --workspace`, `cargo fmt --all --
+  --check`, and `git diff --check`.
 - M10.5c4c2a adds safe Rust decode-backend wrappers for the model-map backend:
   `set_model_map`, `set_model_fd`, `set_model_map_range`,
   `cache_model_range`, and `cache_q8_f16_range`, with CUDA-only cache wrappers

@@ -17,6 +17,7 @@ version = "0.0.0"
 name = "ds4-gpu"
 version = "0.0.0"
 dependencies = [
+ "ds4-gguf",
  "ds4-gpu-sys",
 ]
 

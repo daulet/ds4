@@ -5,6 +5,7 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
+ds4-gguf = { path = "../ds4-gguf" }
 ds4-gpu-sys = { path = "../ds4-gpu-sys" }
 
 [features]
