@@ -3402,7 +3402,7 @@
 
 ### M9.8f4: Runtime KV Store, Continued Frontier, And Eviction
 
-- Status: active
+- Status: done
 - Goal: write cold/continued/shutdown KVC checkpoints from the runtime server,
   preserve continued-frontier suppression/restoration, write tool-map trailers,
   and evict without deleting the just-written protected checkpoint.
@@ -3425,11 +3425,20 @@
   ds4-parity/compare_kvc_file.py --negative-test`, `cargo test --workspace`,
   `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
   review with no blockers.
+- Validation passed: targeted `cargo test -p ds4-engine --bin
+  ds4-server-runtime-rs -- --nocapture`, targeted `cargo test -p ds4-gguf
+  tool_memory::tests:: -- --nocapture`, `python3
+  ds4-parity/compare_kv_policy.py --negative-test`, `python3
+  ds4-parity/compare_kvc_file.py --negative-test`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, B300 smoke
+  on `ds4-rust-port-b300` proving cold KVC write, graceful shutdown KVC write,
+  fresh-process disk-text restore, and protected eviction under a 64 MiB
+  budget, and non-interactive Claude review with no blockers.
 - Owner path: runtime server cache path, Rust KVC helpers, `.memory/status.md`.
 
 ### M9.8f5: Runtime Cache/KV Replay Comparator Closure
 
-- Status: pending
+- Status: active
 - Goal: close M9.8 runtime cache behavior against M0.4/M0.5 current-C
   artifacts and B300 model-backed replay.
 - Oracle: M0.4 cache seed/continuation responses and traces, M0.5 seed

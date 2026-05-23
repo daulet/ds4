@@ -171,6 +171,14 @@ impl Tokens {
             ds4_tokens_push(&mut self.raw, token as c_int);
         }
     }
+
+    fn prefix(&self, len: i32) -> Self {
+        let mut raw = RawTokens::default();
+        unsafe {
+            ds4_kvstore_tokens_copy_prefix(&mut raw, &self.raw, len as c_int);
+        }
+        Self { raw }
+    }
 }
 
 impl Drop for Tokens {
@@ -243,6 +251,16 @@ pub struct KvDiskCacheLoad {
     pub consumed: bool,
     pub path: Option<String>,
     pub effective_prompt: Tokens,
+}
+
+pub type KvDiskCacheTrailerSizeFn =
+    unsafe extern "C" fn(*mut c_void, *const c_char, *mut u64) -> bool;
+pub type KvDiskCacheTrailerWriteFn =
+    unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_char, *mut u64) -> bool;
+
+#[derive(Clone, Copy)]
+pub struct KvDiskCacheTrailerHooks {
+    raw: RawKvTrailerHooks,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -900,19 +918,10 @@ impl ServerSession<'_> {
                 0
             };
         let cache_write_tokens = (prompt.len() - cache_read_tokens).max(0);
-        let mut err = [0 as c_char; 160];
-        let sync_rc = unsafe {
-            ds4_session_sync(
-                self.session.raw.as_ptr(),
-                &prompt.raw,
-                err.as_mut_ptr(),
-                err.len(),
-            )
-        };
-        if sync_rc != 0 {
-            eprintln!("ds4: prompt processing failed: {}", c_error(&err));
+        if let Err(err) = self.sync_prompt(prompt) {
+            eprintln!("ds4: prompt processing failed: {err}");
             return ServerGenerationResult {
-                exit_code: sync_rc,
+                exit_code: 1,
                 text: Vec::new(),
                 token_texts: Vec::new(),
                 prompt_tokens: prompt.len(),
@@ -925,6 +934,39 @@ impl ServerSession<'_> {
             };
         }
 
+        self.generate_synced(
+            prompt.len(),
+            cache_read_tokens,
+            cache_write_tokens,
+            live_tokens_before,
+            live_prompt_common,
+            options,
+            |_, _| {},
+        )
+    }
+
+    pub fn sync_prompt(&mut self, prompt: &Tokens) -> Result<(), EngineError> {
+        self.sync_tokens(prompt)
+    }
+
+    pub fn sync_prompt_prefix(&mut self, prompt: &Tokens, len: i32) -> Result<(), EngineError> {
+        let prefix = prompt.prefix(len);
+        self.sync_tokens(&prefix)
+    }
+
+    pub fn generate_synced<F>(
+        &mut self,
+        prompt_tokens: i32,
+        cache_read_tokens: i32,
+        cache_write_tokens: i32,
+        live_tokens_before: i32,
+        live_prompt_common: i32,
+        options: ServerGenerationOptions,
+        mut before_sample: F,
+    ) -> ServerGenerationResult
+    where
+        F: FnMut(&mut Self, &[u8]),
+    {
         let room = self.session.ctx() - self.session.pos();
         let max_tokens = options.n_predict.max(0).min(room.max(0));
         let mut rng = options.seed;
@@ -933,7 +975,9 @@ impl ServerSession<'_> {
         let mut token_texts = Vec::new();
         let mut completion_tokens = 0;
         let mut finish_reason = "length";
+        let mut err = [0 as c_char; 160];
         while completion_tokens < max_tokens && self.session.pos() < self.session.ctx() {
+            before_sample(self, &text);
             let token = unsafe {
                 ds4_session_sample(
                     self.session.raw.as_ptr(),
@@ -962,7 +1006,7 @@ impl ServerSession<'_> {
                     exit_code: eval_rc,
                     text,
                     token_texts,
-                    prompt_tokens: prompt.len(),
+                    prompt_tokens,
                     cache_read_tokens,
                     cache_write_tokens,
                     live_tokens_before,
@@ -981,13 +1025,123 @@ impl ServerSession<'_> {
             exit_code: 0,
             text,
             token_texts,
-            prompt_tokens: prompt.len(),
+            prompt_tokens,
             cache_read_tokens,
             cache_write_tokens,
             live_tokens_before,
             live_prompt_common,
             completion_tokens,
             finish_reason,
+        }
+    }
+
+    fn sync_tokens(&mut self, prompt: &Tokens) -> Result<(), EngineError> {
+        let mut err = [0 as c_char; 160];
+        let sync_rc = unsafe {
+            ds4_session_sync(
+                self.session.raw.as_ptr(),
+                &prompt.raw,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if sync_rc != 0 {
+            Err(EngineError::message(c_error(&err)))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn store_live_prefix(
+        &mut self,
+        cache: &mut KvDiskCache,
+        tokens: &Tokens,
+        store_len: i32,
+        reason: &str,
+        hooks: Option<&KvDiskCacheTrailerHooks>,
+    ) -> Result<bool, EngineError> {
+        let reason = CString::new(reason)?;
+        let mut err = [0 as c_char; 160];
+        let stored = unsafe {
+            ds4_kvstore_store_live_prefix(
+                &mut cache.raw,
+                self.engine.raw.as_ptr(),
+                self.session.raw.as_ptr(),
+                &tokens.raw,
+                store_len as c_int,
+                reason.as_ptr(),
+                raw_hooks_ptr(hooks),
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        store_result(stored, &err)
+    }
+
+    pub fn store_current(
+        &mut self,
+        cache: &mut KvDiskCache,
+        reason: &str,
+        hooks: Option<&KvDiskCacheTrailerHooks>,
+    ) -> Result<bool, EngineError> {
+        let tokens = unsafe { ds4_session_tokens(self.session.raw.as_ptr()) };
+        if tokens.is_null() {
+            return Ok(false);
+        }
+        let reason = CString::new(reason)?;
+        let mut err = [0 as c_char; 160];
+        let stored = unsafe {
+            ds4_kvstore_store_live_prefix(
+                &mut cache.raw,
+                self.engine.raw.as_ptr(),
+                self.session.raw.as_ptr(),
+                tokens,
+                (*tokens).len,
+                reason.as_ptr(),
+                raw_hooks_ptr(hooks),
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        store_result(stored, &err)
+    }
+
+    pub fn maybe_store_continued(
+        &mut self,
+        cache: &mut KvDiskCache,
+        hooks: Option<&KvDiskCacheTrailerHooks>,
+    ) -> Result<bool, EngineError> {
+        let mut err = [0 as c_char; 160];
+        let stored = unsafe {
+            ds4_kvstore_maybe_store_continued(
+                &mut cache.raw,
+                self.engine.raw.as_ptr(),
+                self.session.raw.as_ptr(),
+                raw_hooks_ptr(hooks),
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        store_result(stored, &err)
+    }
+}
+
+impl KvDiskCacheTrailerHooks {
+    pub fn new(
+        ud: *mut c_void,
+        ext_flag: u8,
+        serialized_size: Option<KvDiskCacheTrailerSizeFn>,
+        write: Option<KvDiskCacheTrailerWriteFn>,
+    ) -> Self {
+        Self {
+            raw: RawKvTrailerHooks {
+                ud,
+                ext_flag,
+                serialized_size,
+                write,
+                load: None,
+                load_wanted: std::ptr::null(),
+            },
         }
     }
 }
@@ -1016,6 +1170,61 @@ impl KvDiskCache {
             )
         };
         Ok(opened.then_some(Self { raw }))
+    }
+
+    pub fn reset_continued_frontier(&mut self) {
+        self.raw.continued_last_store_tokens = 0;
+    }
+
+    pub fn continued_last_store_tokens(&self) -> i32 {
+        self.raw.continued_last_store_tokens
+    }
+
+    pub fn store_len(&self, tokens: i32) -> i32 {
+        unsafe { ds4_kvstore_store_len(&self.raw, tokens as c_int) }
+    }
+
+    pub fn chat_anchor_pos(&self, engine: &Engine, prompt: &Tokens) -> i32 {
+        unsafe {
+            ds4_kvstore_chat_anchor_pos(
+                &self.raw,
+                &prompt.raw,
+                ds4_token_user(engine.raw.as_ptr()),
+                ds4_token_assistant(engine.raw.as_ptr()),
+            )
+        }
+    }
+
+    pub fn note_store(&mut self, tokens: i32) {
+        unsafe {
+            ds4_kvstore_note_store(&mut self.raw, tokens as c_int);
+        }
+    }
+
+    pub fn suppress_continued_store(&mut self, tokens: i32) -> i32 {
+        unsafe { ds4_kvstore_suppress_continued_store(&mut self.raw, tokens as c_int) }
+    }
+
+    pub fn restore_suppressed_continued(&mut self, old_tokens: i32, suppressed_tokens: i32) {
+        unsafe {
+            ds4_kvstore_restore_suppressed_continued(
+                &mut self.raw,
+                old_tokens as c_int,
+                suppressed_tokens as c_int,
+            );
+        }
+    }
+}
+
+fn raw_hooks_ptr(hooks: Option<&KvDiskCacheTrailerHooks>) -> *const RawKvTrailerHooks {
+    hooks.map_or(std::ptr::null(), |hooks| &hooks.raw)
+}
+
+fn store_result(stored: bool, err: &[c_char]) -> Result<bool, EngineError> {
+    if stored || err.first().copied().unwrap_or_default() == 0 {
+        Ok(stored)
+    } else {
+        Err(EngineError::message(c_error(err)))
     }
 }
 
@@ -1428,6 +1637,7 @@ impl Default for RawKvStore {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct RawKvTrailerHooks {
     ud: *mut c_void,
     ext_flag: u8,
@@ -1505,6 +1715,8 @@ unsafe extern "C" {
         think_mode: c_int,
     );
     fn ds4_token_text(engine: *mut RawEngine, token: c_int, len: *mut usize) -> *mut c_char;
+    fn ds4_token_user(engine: *mut RawEngine) -> c_int;
+    fn ds4_token_assistant(engine: *mut RawEngine) -> c_int;
     fn ds4_engine_generate_argmax(
         engine: *mut RawEngine,
         prompt: *const RawTokens,
@@ -1548,6 +1760,7 @@ unsafe extern "C" {
         err: *mut c_char,
         errlen: usize,
     ) -> c_int;
+    fn ds4_session_tokens(session: *mut RawSession) -> *const RawTokens;
     fn ds4_session_common_prefix(session: *mut RawSession, prompt: *const RawTokens) -> c_int;
     fn ds4_session_pos(session: *mut RawSession) -> c_int;
     fn ds4_session_ctx(session: *mut RawSession) -> c_int;
@@ -1562,6 +1775,40 @@ unsafe extern "C" {
         log_ud: *mut c_void,
     ) -> bool;
     fn ds4_kvstore_close(cache: *mut RawKvStore);
+    fn ds4_kvstore_tokens_copy_prefix(dst: *mut RawTokens, src: *const RawTokens, n: c_int);
+    fn ds4_kvstore_store_len(cache: *const RawKvStore, tokens: c_int) -> c_int;
+    fn ds4_kvstore_chat_anchor_pos(
+        cache: *const RawKvStore,
+        prompt: *const RawTokens,
+        user_token_id: c_int,
+        assistant_token_id: c_int,
+    ) -> c_int;
+    fn ds4_kvstore_note_store(cache: *mut RawKvStore, tokens: c_int);
+    fn ds4_kvstore_suppress_continued_store(cache: *mut RawKvStore, tokens: c_int) -> c_int;
+    fn ds4_kvstore_restore_suppressed_continued(
+        cache: *mut RawKvStore,
+        old_tokens: c_int,
+        suppressed_tokens: c_int,
+    );
+    fn ds4_kvstore_store_live_prefix(
+        cache: *mut RawKvStore,
+        engine: *mut RawEngine,
+        session: *mut RawSession,
+        tokens: *const RawTokens,
+        store_len: c_int,
+        reason: *const c_char,
+        hooks: *const RawKvTrailerHooks,
+        err: *mut c_char,
+        err_len: usize,
+    ) -> bool;
+    fn ds4_kvstore_maybe_store_continued(
+        cache: *mut RawKvStore,
+        engine: *mut RawEngine,
+        session: *mut RawSession,
+        hooks: *const RawKvTrailerHooks,
+        err: *mut c_char,
+        err_len: usize,
+    ) -> bool;
     fn ds4_kvstore_try_load_text(
         cache: *mut RawKvStore,
         engine: *mut RawEngine,

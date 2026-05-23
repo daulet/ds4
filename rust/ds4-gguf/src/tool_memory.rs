@@ -221,6 +221,20 @@ impl ToolMemory {
         stats
     }
 
+    pub fn tool_map_entries(&self) -> Vec<ToolMapEntry> {
+        let mut entries = Vec::with_capacity(self.entries);
+        for id in self.recent.iter().rev() {
+            let Some(entry) = self.by_id.get(id) else {
+                continue;
+            };
+            entries.push(ToolMapEntry {
+                id: id.clone(),
+                dsml: entry.dsml.as_bytes().to_vec(),
+            });
+        }
+        entries
+    }
+
     fn lookup(&mut self, id: &str) -> Option<(String, ToolMemorySource)> {
         let entry = self.by_id.get(id)?;
         let dsml = entry.dsml.clone();
@@ -352,6 +366,23 @@ mod tests {
         let description = prompt.find("name=\"description\"").expect("description");
         assert!(command < timeout);
         assert!(timeout < description);
+    }
+
+    #[test]
+    fn tool_map_entries_feed_writer_in_c_block_order() {
+        let dsml = "\n\n<tool_calls>\n</tool_calls>";
+        let mut memory = ToolMemory::new();
+        memory.remember_ids(["call_a", "call_b"], dsml, ToolMemorySource::Ram);
+        let entries = memory.tool_map_entries();
+        assert_eq!(entries[0].id, "call_a");
+        assert_eq!(entries[1].id, "call_b");
+
+        let trailer = write_tool_map_trailer(dsml.as_bytes(), &entries, false)
+            .expect("write tool map trailer");
+        let decoded =
+            read_tool_map_trailer(&trailer, TOOL_MAP_DEFAULT_MAX_ENTRIES).expect("valid trailer");
+        assert_eq!(decoded.entries[0].id, "call_b");
+        assert_eq!(decoded.entries[1].id, "call_a");
     }
 
     #[test]

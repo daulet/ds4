@@ -1,8 +1,12 @@
 use ds4_engine::{
     context_memory_estimate, Backend, Engine, EngineOptions, KvDiskCache, KvDiskCacheLoad,
-    KvDiskCacheOptions, ServerCacheProbe, ServerGenerationOptions, ServerSession, ThinkMode,
+    KvDiskCacheOptions, KvDiskCacheTrailerHooks, ServerCacheProbe, ServerGenerationOptions,
+    ServerSession, ThinkMode,
 };
-use ds4_gguf::kv_policy::{KvOptions, KvPolicyConfig, DEFAULT_MB as KV_DEFAULT_MB};
+use ds4_gguf::kv_policy::{
+    write_tool_map_trailer, KvOptions, KvPolicyConfig, ToolMapEntry, DEFAULT_MB as KV_DEFAULT_MB,
+    EXT_TOOL_MAP,
+};
 use ds4_gguf::{
     format_http_error, format_http_response, format_openai_chat_completion_http,
     format_openai_chat_stream_http, format_openai_chat_tool_completion_http,
@@ -13,18 +17,33 @@ use ds4_gguf::{
     DsmlJsonCall, HttpRequest, HttpRequestParseError, NoModelRouteConfig, OpenAiChatCompletion,
     OpenAiChatRequest, OpenAiChatStream, OpenAiChatToolStream, OpenAiToolCallStreamEvent,
     OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator, OpenAiUsage, ToolMemory,
-    ToolReplayStats, TOOL_MEMORY_DEFAULT_MAX_IDS, TOOL_MEMORY_MAX_BYTES,
+    ToolMemorySource, ToolReplayStats, TOOL_MEMORY_DEFAULT_MAX_IDS, TOOL_MEMORY_MAX_BYTES,
 };
 use std::env;
+use std::ffi::{c_char, c_int, c_void, CStr};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Shutdown, SocketAddrV4, TcpListener, TcpStream};
 use std::process;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 const MODEL_BACKED_GENERATION_MESSAGE: &str = "model-backed chat generation is not implemented yet";
+const SIGINT: c_int = 2;
+const SIGTERM: c_int = 15;
+
+static STOP_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+unsafe extern "C" {
+    fn fwrite(ptr: *const c_void, size: usize, nmemb: usize, stream: *mut c_void) -> usize;
+    fn signal(
+        signum: c_int,
+        handler: Option<unsafe extern "C" fn(c_int)>,
+    ) -> Option<unsafe extern "C" fn(c_int)>;
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct ServerConfig {
@@ -161,6 +180,8 @@ fn main() {
 }
 
 fn run() -> Result<i32, Box<dyn std::error::Error>> {
+    STOP_REQUESTED.store(false, Ordering::SeqCst);
+    install_stop_signal_handlers();
     let config = match parse_args(env::args().skip(1)) {
         Ok(Some(config)) => config,
         Ok(None) => return Ok(0),
@@ -179,6 +200,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     Ok(0)
 }
 
+fn install_stop_signal_handlers() {
+    unsafe {
+        signal(SIGINT, Some(handle_stop_signal));
+        signal(SIGTERM, Some(handle_stop_signal));
+    }
+}
+
+unsafe extern "C" fn handle_stop_signal(_signal: c_int) {
+    STOP_REQUESTED.store(true, Ordering::SeqCst);
+}
+
 fn serve<'a>(
     config: ServerConfig,
     engine: &'a Engine,
@@ -187,6 +219,7 @@ fn serve<'a>(
     let host = bind_host(&config.host)?;
     let addr = SocketAddrV4::new(host, config.port);
     let listener = TcpListener::bind(addr)?;
+    listener.set_nonblocking(true)?;
     let actual_addr = listener.local_addr()?;
     eprintln!("ds4-server-runtime-rs: listening on http://{actual_addr}");
 
@@ -199,13 +232,17 @@ fn serve<'a>(
         session,
         cache: RuntimeCacheState::new(config.cache.clone()),
     };
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
+    while !STOP_REQUESTED.load(Ordering::SeqCst) {
+        match listener.accept() {
+            Ok((mut stream, _addr)) => {
                 if let Err(err) = handle_client(&mut stream, &config, engine, &mut state) {
                     eprintln!("ds4-server-runtime-rs: client error: {err}");
                 }
             }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
             Err(err) => {
                 eprintln!("ds4-server-runtime-rs: accept failed: {err}");
             }
@@ -219,6 +256,12 @@ struct RuntimeState<'a> {
     trace: Option<File>,
     session: ServerSession<'a>,
     cache: RuntimeCacheState,
+}
+
+impl Drop for RuntimeState<'_> {
+    fn drop(&mut self) {
+        self.cache.store_current(&mut self.session, "shutdown");
+    }
 }
 
 #[derive(Debug)]
@@ -271,6 +314,186 @@ impl RuntimeCacheState {
         }
     }
 
+    fn reset_continued_frontier(&mut self) {
+        if let Some(cache) = self.disk.as_mut() {
+            cache.reset_continued_frontier();
+        }
+    }
+
+    fn store_current(&mut self, session: &mut ServerSession<'_>, reason: &str) -> bool {
+        let RuntimeCacheState {
+            config,
+            disk,
+            tool_memory,
+        } = self;
+        let Some(cache) = disk.as_mut() else {
+            return false;
+        };
+        let mut ctx = ToolMapTrailerContext {
+            tool_memory,
+            disabled: config.disable_exact_dsml_tool_replay,
+        };
+        let hooks = tool_map_trailer_hooks(&mut ctx);
+        match session.store_current(cache, reason, Some(&hooks)) {
+            Ok(stored) => stored,
+            Err(err) => {
+                eprintln!("ds4-server-runtime-rs: failed to store disk KV cache ({reason}): {err}");
+                false
+            }
+        }
+    }
+
+    fn sync_prompt_with_stores(
+        &mut self,
+        session: &mut ServerSession<'_>,
+        engine: &Engine,
+        prompt: &ds4_engine::Tokens,
+        cached_tokens: i32,
+    ) -> Result<(), String> {
+        let cold_store_len = self.cold_store_len(engine, prompt, cached_tokens);
+        let mut suppressed_continued_last = -1;
+        if cold_store_len >= self.config.policy.min_tokens {
+            if let Some(cache) = self.disk.as_mut() {
+                suppressed_continued_last = cache.suppress_continued_store(cold_store_len);
+            }
+        }
+
+        if cold_store_len >= self.config.policy.min_tokens && cold_store_len < prompt.len() {
+            if let Err(err) = session.sync_prompt_prefix(prompt, cold_store_len) {
+                self.restore_suppressed_continued(suppressed_continued_last, cold_store_len);
+                return Err(err.to_string());
+            }
+            if self.store_live_prefix(session, prompt, cold_store_len, "cold") {
+                self.note_store(cold_store_len);
+                suppressed_continued_last = -1;
+            } else {
+                self.restore_suppressed_continued(suppressed_continued_last, cold_store_len);
+                suppressed_continued_last = -1;
+            }
+        }
+
+        if let Err(err) = session.sync_prompt(prompt) {
+            self.restore_suppressed_continued(suppressed_continued_last, cold_store_len);
+            return Err(err.to_string());
+        }
+        self.maybe_store_continued(session);
+
+        if cold_store_len == prompt.len() {
+            if self.store_live_prefix(session, prompt, cold_store_len, "cold") {
+                self.note_store(cold_store_len);
+            } else {
+                self.restore_suppressed_continued(suppressed_continued_last, cold_store_len);
+            }
+        }
+        Ok(())
+    }
+
+    fn maybe_store_continued(&mut self, session: &mut ServerSession<'_>) -> bool {
+        let RuntimeCacheState {
+            config,
+            disk,
+            tool_memory,
+        } = self;
+        let Some(cache) = disk.as_mut() else {
+            return false;
+        };
+        let mut ctx = ToolMapTrailerContext {
+            tool_memory,
+            disabled: config.disable_exact_dsml_tool_replay,
+        };
+        let hooks = tool_map_trailer_hooks(&mut ctx);
+        match session.maybe_store_continued(cache, Some(&hooks)) {
+            Ok(stored) => stored,
+            Err(err) => {
+                eprintln!("ds4-server-runtime-rs: failed to store continued disk KV cache: {err}");
+                false
+            }
+        }
+    }
+
+    fn remember_generated_tool_calls(&mut self, parsed: &ParsedChatGeneration) {
+        if self.config.disable_exact_dsml_tool_replay {
+            return;
+        }
+        let Some(raw_dsml) = parsed.raw_dsml.as_deref().filter(|raw| !raw.is_empty()) else {
+            return;
+        };
+        let ids: Vec<&str> = parsed
+            .calls
+            .iter()
+            .filter_map(|call| call.id.as_deref())
+            .filter(|id| !id.is_empty())
+            .collect();
+        self.tool_memory
+            .remember_ids(ids, raw_dsml, ToolMemorySource::Ram);
+    }
+
+    fn cold_store_len(
+        &self,
+        engine: &Engine,
+        prompt: &ds4_engine::Tokens,
+        cached_tokens: i32,
+    ) -> i32 {
+        let Some(cache) = self.disk.as_ref() else {
+            return 0;
+        };
+        let policy = self.config.policy;
+        if cached_tokens != 0
+            || prompt.len() < policy.min_tokens
+            || policy.cold_max_tokens <= 0
+            || prompt.len() > policy.cold_max_tokens
+        {
+            return 0;
+        }
+        let anchor = cache.chat_anchor_pos(engine, prompt);
+        if anchor >= policy.min_tokens {
+            anchor
+        } else {
+            cache.store_len(prompt.len())
+        }
+    }
+
+    fn store_live_prefix(
+        &mut self,
+        session: &mut ServerSession<'_>,
+        prompt: &ds4_engine::Tokens,
+        store_len: i32,
+        reason: &str,
+    ) -> bool {
+        let RuntimeCacheState {
+            config,
+            disk,
+            tool_memory,
+        } = self;
+        let Some(cache) = disk.as_mut() else {
+            return false;
+        };
+        let mut ctx = ToolMapTrailerContext {
+            tool_memory,
+            disabled: config.disable_exact_dsml_tool_replay,
+        };
+        let hooks = tool_map_trailer_hooks(&mut ctx);
+        match session.store_live_prefix(cache, prompt, store_len, reason, Some(&hooks)) {
+            Ok(stored) => stored,
+            Err(err) => {
+                eprintln!("ds4-server-runtime-rs: failed to store disk KV cache ({reason}): {err}");
+                false
+            }
+        }
+    }
+
+    fn note_store(&mut self, tokens: i32) {
+        if let Some(cache) = self.disk.as_mut() {
+            cache.note_store(tokens);
+        }
+    }
+
+    fn restore_suppressed_continued(&mut self, old_tokens: i32, suppressed_tokens: i32) {
+        if let Some(cache) = self.disk.as_mut() {
+            cache.restore_suppressed_continued(old_tokens, suppressed_tokens);
+        }
+    }
+
     fn trace_decision(
         &self,
         prompt_tokens: i32,
@@ -320,6 +543,88 @@ impl RuntimeCacheState {
     }
 }
 
+struct ToolMapTrailerContext<'a> {
+    tool_memory: &'a ToolMemory,
+    disabled: bool,
+}
+
+impl ToolMapTrailerContext<'_> {
+    fn trailer_for_text(&self, text: *const c_char) -> Option<Vec<u8>> {
+        if text.is_null() {
+            return Some(Vec::new());
+        }
+        let text = unsafe { CStr::from_ptr(text).to_bytes() };
+        let entries: Vec<ToolMapEntry> = self.tool_memory.tool_map_entries();
+        write_tool_map_trailer(text, &entries, self.disabled)
+    }
+}
+
+fn tool_map_trailer_hooks(ctx: &mut ToolMapTrailerContext<'_>) -> KvDiskCacheTrailerHooks {
+    KvDiskCacheTrailerHooks::new(
+        (ctx as *mut ToolMapTrailerContext<'_>).cast(),
+        EXT_TOOL_MAP,
+        Some(tool_map_trailer_serialized_size),
+        Some(tool_map_trailer_write),
+    )
+}
+
+unsafe extern "C" fn tool_map_trailer_serialized_size(
+    ud: *mut c_void,
+    text: *const c_char,
+    bytes_out: *mut u64,
+) -> bool {
+    if !bytes_out.is_null() {
+        *bytes_out = 0;
+    }
+    let Some(ctx) = (ud as *mut ToolMapTrailerContext<'_>).as_ref() else {
+        return true;
+    };
+    let Some(trailer) = ctx.trailer_for_text(text) else {
+        return false;
+    };
+    let Ok(len) = u64::try_from(trailer.len()) else {
+        return false;
+    };
+    if !bytes_out.is_null() {
+        *bytes_out = len;
+    }
+    true
+}
+
+unsafe extern "C" fn tool_map_trailer_write(
+    ud: *mut c_void,
+    fp: *mut c_void,
+    text: *const c_char,
+    written_bytes: *mut u64,
+) -> bool {
+    if !written_bytes.is_null() {
+        *written_bytes = 0;
+    }
+    let Some(ctx) = (ud as *mut ToolMapTrailerContext<'_>).as_ref() else {
+        return true;
+    };
+    let Some(trailer) = ctx.trailer_for_text(text) else {
+        return false;
+    };
+    if trailer.is_empty() {
+        return true;
+    }
+    if fp.is_null() {
+        return false;
+    }
+    let wrote = fwrite(trailer.as_ptr().cast(), 1, trailer.len(), fp);
+    if wrote != trailer.len() {
+        return false;
+    }
+    let Ok(len) = u64::try_from(trailer.len()) else {
+        return false;
+    };
+    if !written_bytes.is_null() {
+        *written_bytes = len;
+    }
+    true
+}
+
 fn is_kv_cache_file_name(name: &str) -> bool {
     let Some(sha) = name.strip_suffix(".kv") else {
         return false;
@@ -338,11 +643,8 @@ fn memory_cached_tokens(cache_probe: ServerCacheProbe, prompt_tokens: i32) -> i3
     }
 }
 
-fn should_try_disk_text_cache(cache_probe: ServerCacheProbe, memory_cached_tokens: i32) -> bool {
-    // The C server persists a store-worthy live checkpoint before replacing it
-    // with a disk snapshot. Until Rust has that store path, only restore disk
-    // payloads into an empty session.
-    memory_cached_tokens == 0 && cache_probe.live_tokens_before <= 0
+fn should_try_disk_text_cache(memory_cached_tokens: i32) -> bool {
+    memory_cached_tokens == 0
 }
 
 fn handle_client(
@@ -415,7 +717,13 @@ fn route_chat_completions(
 
     let prompt_cache_probe = state.session.cache_probe(&prompt);
     let memory_cached_tokens = memory_cached_tokens(prompt_cache_probe, prompt.len());
-    let disk_load = if should_try_disk_text_cache(prompt_cache_probe, memory_cached_tokens) {
+    if memory_cached_tokens == 0 {
+        state.cache.reset_continued_frontier();
+        if prompt_cache_probe.live_tokens_before >= config.cache.policy.min_tokens {
+            state.cache.store_current(&mut state.session, "evict");
+        }
+    }
+    let disk_load = if should_try_disk_text_cache(memory_cached_tokens) {
         state
             .cache
             .try_load_disk_text(&mut state.session, &parsed.prompt_text)
@@ -426,18 +734,48 @@ fn route_chat_completions(
         .as_ref()
         .map(|load| &load.effective_prompt)
         .unwrap_or(&prompt);
-    let generated = state.session.generate(
+    let cached_tokens = disk_load
+        .as_ref()
+        .map_or(memory_cached_tokens, |load| load.tokens.max(0));
+    let generation_cache_probe = state.session.cache_probe(prompt_for_generation);
+    if let Err(err) = state.cache.sync_prompt_with_stores(
+        &mut state.session,
+        engine,
         prompt_for_generation,
-        ServerGenerationOptions {
-            n_predict: parsed.max_tokens,
-            ctx_size: config.context_length,
-            temperature: parsed.sampling.temperature,
-            top_k: parsed.sampling.top_k,
-            top_p: parsed.sampling.top_p,
-            min_p: parsed.sampling.min_p,
-            seed: parsed.seed,
-        },
-    );
+        cached_tokens,
+    ) {
+        eprintln!("ds4-server-runtime-rs: prompt processing failed: {err}");
+        return format_http_error(config.enable_cors, 500, "generation failed");
+    }
+    let generation_options = ServerGenerationOptions {
+        n_predict: parsed.max_tokens,
+        ctx_size: config.context_length,
+        temperature: parsed.sampling.temperature,
+        top_k: parsed.sampling.top_k,
+        top_p: parsed.sampling.top_p,
+        min_p: parsed.sampling.min_p,
+        seed: parsed.seed,
+    };
+    let cache_write_tokens = (prompt_for_generation.len() - cached_tokens).max(0);
+    let generated = {
+        let has_tools = parsed.has_tools;
+        let cache = &mut state.cache;
+        let session = &mut state.session;
+        session.generate_synced(
+            prompt_for_generation.len(),
+            cached_tokens,
+            cache_write_tokens,
+            generation_cache_probe.live_tokens_before,
+            generation_cache_probe.live_prompt_common,
+            generation_options,
+            |session, generated_text| {
+                if has_tools && generated_saw_dsml_tool_start(generated_text) {
+                    return;
+                }
+                cache.maybe_store_continued(session);
+            },
+        )
+    };
     if generated.exit_code != 0 || generated.finish_reason == "error" {
         return format_http_error(config.enable_cors, 500, "generation failed");
     }
@@ -446,6 +784,9 @@ fn route_chat_completions(
     let id = format!("chatcmpl-{}", state.sequence);
     let parsed_generation =
         parse_chat_generation(&parsed, &generated, &generated_text, state.sequence);
+    state
+        .cache
+        .remember_generated_tool_calls(&parsed_generation);
     let cache_decision = state.cache.trace_decision(
         prompt.len(),
         prompt_cache_probe,
@@ -556,6 +897,7 @@ struct ParsedChatGeneration {
     content: String,
     reasoning: Option<String>,
     calls: Vec<DsmlJsonCall>,
+    raw_dsml: Option<String>,
     finish_reason: String,
     saw_tool_start: bool,
     saw_tool_end: bool,
@@ -586,6 +928,7 @@ fn parse_chat_generation(
         content: message.content,
         reasoning: message.reasoning,
         calls: message.calls,
+        raw_dsml: message.raw_dsml,
         finish_reason,
         saw_tool_start,
         saw_tool_end,
@@ -607,10 +950,22 @@ fn saw_dsml_tool_start(text: &str) -> bool {
         || text.contains("<tool_calls>")
 }
 
+fn generated_saw_dsml_tool_start(text: &[u8]) -> bool {
+    contains_bytes(text, "<｜DSML｜tool_calls>".as_bytes())
+        || contains_bytes(text, "<DSML｜tool_calls>".as_bytes())
+        || contains_bytes(text, b"<tool_calls>")
+}
+
 fn saw_dsml_tool_end(text: &str) -> bool {
     text.contains("</｜DSML｜tool_calls>")
         || text.contains("</DSML｜tool_calls>")
         || text.contains("</tool_calls>")
+}
+
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
 }
 
 fn stream_delta_strings(generated: &ds4_engine::ServerGenerationResult) -> Result<Vec<String>, ()> {
@@ -1566,25 +1921,9 @@ mod tests {
     }
 
     #[test]
-    fn disk_text_cache_restore_only_replaces_empty_sessions() {
-        let empty = ServerCacheProbe {
-            live_tokens_before: 0,
-            live_prompt_common: 0,
-        };
-        assert!(should_try_disk_text_cache(empty, 0));
-        assert!(!should_try_disk_text_cache(empty, 4));
-
-        let live_miss = ServerCacheProbe {
-            live_tokens_before: 512,
-            live_prompt_common: 12,
-        };
-        assert!(!should_try_disk_text_cache(live_miss, 0));
-
-        let live_hit = ServerCacheProbe {
-            live_tokens_before: 512,
-            live_prompt_common: 512,
-        };
-        assert!(!should_try_disk_text_cache(live_hit, 512));
+    fn disk_text_cache_restore_runs_on_cache_miss_after_store_stage() {
+        assert!(should_try_disk_text_cache(0));
+        assert!(!should_try_disk_text_cache(4));
     }
 
     #[test]
@@ -1994,6 +2333,10 @@ mod tests {
         );
         assert_eq!(parsed_generation.calls[0].name, "list_files");
         assert_eq!(parsed_generation.calls[0].arguments, "{\"path\": \".\"}");
+        assert_eq!(
+            parsed_generation.raw_dsml.as_deref(),
+            Some(GENERATED_TOOL_CALL)
+        );
 
         let mut trace = Vec::new();
         write_chat_trace(
@@ -2017,5 +2360,42 @@ mod tests {
         assert!(trace.contains("id: call_00000000000000030000000000000000\n"));
         assert!(trace.contains("name: list_files\n"));
         assert!(trace.contains("arguments:\n{\"path\": \".\"}\n"));
+    }
+
+    #[test]
+    fn runtime_remembers_generated_tool_ids_for_kv_trailers() {
+        let parsed = parse_chat(CHAT_TOOL_CALL);
+        let generated = ds4_engine::ServerGenerationResult {
+            exit_code: 0,
+            text: GENERATED_TOOL_CALL.as_bytes().to_vec(),
+            token_texts: Vec::new(),
+            prompt_tokens: 394,
+            cache_read_tokens: 0,
+            cache_write_tokens: 394,
+            live_tokens_before: 0,
+            live_prompt_common: 0,
+            completion_tokens: 42,
+            finish_reason: "stop",
+        };
+        let parsed_generation = parse_chat_generation(&parsed, &generated, GENERATED_TOOL_CALL, 3);
+        let mut cache = RuntimeCacheState::new(RuntimeCacheConfig::default());
+        cache.remember_generated_tool_calls(&parsed_generation);
+
+        let entries = cache.tool_memory.tool_map_entries();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, "call_00000000000000030000000000000000");
+        assert_eq!(entries[0].dsml, GENERATED_TOOL_CALL.as_bytes());
+        let trailer =
+            write_tool_map_trailer(GENERATED_TOOL_CALL.as_bytes(), &entries, false).unwrap();
+        assert!(!trailer.is_empty());
+    }
+
+    #[test]
+    fn generated_tool_start_scan_handles_utf8_markers() {
+        assert!(generated_saw_dsml_tool_start(
+            GENERATED_TOOL_CALL.as_bytes()
+        ));
+        assert!(generated_saw_dsml_tool_start(b"abc<tool_calls>"));
+        assert!(!generated_saw_dsml_tool_start(b"abc</tool_calls>"));
     }
 }

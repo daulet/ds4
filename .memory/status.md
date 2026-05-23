@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8f4 Runtime KV Store, Continued Frontier, And Eviction
-- Last validated source commit: M9.8f3 runtime disk-KV lookup and payload
-  restore in this commit; prior pushed source commit
-  `7f998f366fe270d8db4b7d7fcaac12d55c5ff1b7`
+- Active item: M9.8f5 Runtime Cache/KV Replay Comparator Closure
+- Last validated source commit: M9.8f4 runtime KV store, continued frontier,
+  and eviction in this commit; prior pushed source commit
+  `393ba9db9fe6f367624bbf1c0c8fe057b4b8578c`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,41 @@
 
 ## Last Evidence
 
+- M9.8f4 adds the runtime store side of disk KV: Rust exposes C
+  `ds4_kvstore_store_live_prefix`, `ds4_kvstore_maybe_store_continued`,
+  continued-frontier note/suppress/restore helpers, C chat-anchor/store-length
+  helpers, and explicit prompt-sync/decode split points through `ds4-engine`.
+- M9.8f4 wires the Rust OpenAI Chat runtime to match C's request path:
+  live cache misses persist the current checkpoint before disk replacement,
+  cold prompts sync/store either the stable chat anchor or full prompt,
+  continued checkpoints are attempted after prefill and during decode until a
+  tool-call DSML block begins, and SIGINT/SIGTERM now drive a graceful server
+  return so shutdown checkpoints are written.
+- M9.8f4 writes tool-map trailers for stored KVC files by preserving sampled raw
+  DSML from generated tool calls, mapping assigned OpenAI tool-call ids into
+  `ToolMemory`, and feeding `write_tool_map_trailer` through C trailer hooks
+  with server-compatible block ordering.
+- M9.8f4 B300 smoke used temp kubeconfig
+  `/tmp/ds4-hou2-prod1.kubeconfig`, pod `ds4-rust-port-b300`, model
+  `/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf`,
+  and temp artifacts under `/tmp/ds4-m98f4-smoke` plus
+  `/tmp/ds4-m98f4-evict`. The first request wrote a cold KVC
+  `1a9fd13c3ac5bebd1f3203ca09207324c526659b.kv` with reason `1`, 923 tokens,
+  quant `2`, 36,651,000 payload bytes, and 3,030 rendered text bytes; graceful
+  shutdown wrote a reason `4` KVC with 924 tokens; a fresh server restored the
+  cold KVC with `cache_source: disk-text` and `disk_cached_tokens: 923`.
+- M9.8f4 protected-eviction B300 smoke used a 64 MiB budget and left exactly
+  one just-written shutdown KVC after termination:
+  `0793c50a7cf4d0586e220083df58efd9e89b6184.kv`, reason `4`, 1,103 tokens,
+  39,111,880 payload bytes, proving eviction did not delete the protected
+  checkpoint.
+- M9.8f4 validation passed targeted `cargo test -p ds4-engine --bin
+  ds4-server-runtime-rs -- --nocapture`, targeted `cargo test -p ds4-gguf
+  tool_memory::tests:: -- --nocapture`, `python3
+  ds4-parity/compare_kv_policy.py --negative-test`, `python3
+  ds4-parity/compare_kvc_file.py --negative-test`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and the B300
+  smokes above. Non-interactive Claude review returned `NO BLOCKERS`.
 - M9.8f3 links `ds4_kvstore.c` into `ds4-engine` and adds Rust FFI for
   `ds4_kvstore_open`, `ds4_kvstore_try_load_text`, and
   `ds4_kvstore_load_result_free`, preserving the C `ds4_kvstore`,
