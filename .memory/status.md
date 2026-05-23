@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2b Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b2b2b2b2b2b2 Rust One-Token Decode B300 Execution
 - Last validated source commit before the current stage:
-  `6dc8ffd15b65e8271adb9249f9bb35d05fbb0f9f` (M10.5c4c2b2b2b2b2b1 Rust
-  layer-0 output-head execution).
+  `780afaada4958f10828c5507215030b3231c2003` (M10.5c4c2b2b2b2b2b2a Rust
+  two-dense-layer output-head execution).
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,48 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2b1 adds
+  `ds4-layer2-compressor-state-oracle-dump` and
+  `ds4_dump_layer2_compressor_state_oracle_json`, which emit
+  `ds4.layer2_compressor_state_oracle.v1` for token `0`, position `0`, dense
+  layers `0` and `1` through the production current-C decode-layer encoder and
+  HC swaps, then layer `2` through raw KV store plus ratio-4 attention/indexer
+  compressor-state mutation.
+- M10.5c4c2b2b2b2b2b2b1 adds
+  `ds4-decode-layer2-compressor-state`, which maps the real GGUF on B300,
+  binds DS4 weights, launches the validated dense layer `0`/`1` prefix, swaps
+  HC buffers after each dense layer, then executes layer `2` Q/KV/RoPE, raw KV
+  store, attention `matmul_f16_pair`, attention `compressor_update`, indexer
+  `matmul_f16_pair`, and indexer `compressor_update` through the safe Rust
+  facade.
+- The B300 paired layer-2 compressor-state validator passed 589 pinned checks
+  with full-buffer FNV digests `after_layer1_hc=f764d7067de5c945`,
+  `layer2_raw_cache_row=51f0a2971a59c6da`,
+  `layer2_attn_state_kv=57544afc0dfa6bcf`,
+  `layer2_attn_state_score=38d2d40c6f170ab6`,
+  `layer2_index_state_kv=2a44d6b140b6ef0b`, and
+  `layer2_index_state_score=b8da053681327aec`. Pinned layer-2 compressor
+  weights include `layer2_attn_compressor_kv=(79283669056,8388608,1,f16)`,
+  `layer2_attn_compressor_gate=(79275280448,8388608,1,f16)`,
+  `layer2_indexer_compressor_kv=(79294157376,2097152,1,f16)`, and
+  `layer2_indexer_compressor_gate=(79292060224,2097152,1,f16)`.
+- M10.5c4c2b2b2b2b2b2b1 validation passed `python3
+  ds4-parity/compare_decode_layer2_compressor_state.py --negative-test`,
+  `python3 ds4-parity/compare_decode_layer2_compressor_state.py`, `python3 -m
+  py_compile ds4-parity/compare_decode_layer2_compressor_state.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer2-compressor-state-oracle-dump`, local `cargo check -p ds4-gpu
+  --bin ds4-decode-layer2-compressor-state`, B300 current-C oracle plus Rust
+  candidate paired validation, pinned B300 artifact rerun, B300 c2b2b2b2b2b2a
+  two-layer output-head rerun with 446 checks, local `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 33 passed, 23
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, and a touched-file NUL scan.
+- M10.5c4c2b2b2b2b2b2b splits the remaining one-token scheduler item into a
+  first ratio-4 compressor/indexer state mutation bridge and the next
+  compressed-attention/all-layer scheduler slice M10.5c4c2b2b2b2b2b2b2. The
+  split keeps the next commit comparable at the first layer-2 persistent cache
+  mutation boundary before compressed attention and final logits are introduced.
 - M10.5c4c2b2b2b2b2b2a adds `ds4-two-layer-output-head-oracle-dump` and
   `ds4_dump_two_layer_output_head_oracle_json`, which emit
   `ds4.two_layer_output_head_oracle.v1` for token `0`, position `0`, layers
