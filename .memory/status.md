@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b Rust One-Token Decode B300 Execution
-- Last validated source commit before the current stage: M10.5c4c2b2b2a Rust
-  first-kernel current-C oracle comparator in the commit produced by this
-  stage.
+- Active item: M10.5c4c2b2b2b2 Rust One-Token Decode B300 Execution
+- Last validated source commit before the current stage: M10.5c4c2b2b2b1 Rust
+  layer-0 attention HC-pre comparator in the commit produced by this stage.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,32 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b1 splits the remaining one-token scheduler item into a
+  layer-0 attention HC-pre execution bridge and the next active full
+  scheduler slice M10.5c4c2b2b2b2.
+- M10.5c4c2b2b2b1 adds `ds4-layer0-attn-hc-pre-oracle-dump` and
+  `ds4_dump_layer0_attn_hc_pre_oracle_json`, which emit
+  `ds4.layer0_attn_hc_pre_oracle.v1` for token `0`, layer `0`, using the
+  current-C model loader, config validation, weight binding, model fd/map
+  bridge, and GPU tensor ABI calls for embedding, HC RMS norm, F16 matmul, and
+  fused HC split/weighted-sum/attention-norm.
+- M10.5c4c2b2b2b1 adds `ds4-decode-layer0-attn-hc-pre`, which maps the real
+  GGUF on B300, binds DS4 weights, launches `embed_token_hc`,
+  `rms_norm_plain`, `matmul_f16`, and `hc_split_weighted_sum_norm` through the
+  safe Rust facade in one command batch, synchronizes, and reads back `cur_hc`,
+  `flat_hc`, `hc_mix`, `hc_split`, `attn_cur`, and `attn_norm`.
+- The B300 paired validator passed 346 checks with exact FNV digests:
+  `cur_hc=f76512db41f80c4d`, `flat_hc=5abe5cafeb9fd15d`,
+  `hc_mix=ea50bbe93ae96ca4`, `hc_split=d0f0c7dc02340820`,
+  `attn_cur=110f29cd4090669f`, and `attn_norm=24e0d5fc736b2ace`.
+- M10.5c4c2b2b2b1 validation passed `python3
+  ds4-parity/compare_decode_layer0_attn_hc_pre.py --negative-test`, local
+  `arch -arm64 make ds4-layer0-attn-hc-pre-oracle-dump`, local `cargo check
+  -p ds4-gpu --bin ds4-decode-layer0-attn-hc-pre`, B300 current-C oracle plus
+  Rust candidate paired validation, B300 c2b1 first-kernel rerun, B300
+  c2b2b2a first-kernel current-C oracle rerun, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check`.
 - M10.5c4c2b2b2a splits the remaining one-token scheduler item before adding
   more Rust decode calls because M10.5c4c2b2b1 compared Rust first-kernel
   readback only against static pinned values. The new slice must compare the

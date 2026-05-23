@@ -107,9 +107,9 @@ def validate_static(report: Report, texts: dict[str, str]) -> None:
 
     report.check("M10.5c4c2b2b1 Rust first decode kernel" in texts["readme"], "README entry missing")
     report.check("M10.5c4c2b2b1: Rust First Decode Kernel Execution" in texts["roadmap"], "roadmap first-kernel split missing")
-    report.check("M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution" in texts["roadmap"], "roadmap decode remainder missing")
+    report.check("M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution" in texts["roadmap"], "roadmap decode remainder missing")
     report.check("M10.5c4c2b2b1: Rust First Decode Kernel Execution" in texts["todo"], "TODO first-kernel split missing")
-    report.check("M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution" in texts["todo"], "TODO decode remainder missing")
+    report.check("M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution" in texts["todo"], "TODO decode remainder missing")
 
 
 def validate_candidate(report: Report, obj: dict[str, Any]) -> None:

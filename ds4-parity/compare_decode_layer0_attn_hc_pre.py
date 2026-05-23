@@ -1,0 +1,531 @@
+#!/usr/bin/env python3
+"""Compare Rust layer-0 attention HC-pre readback against the current-C oracle."""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+import math
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Iterable
+
+
+ROOT = Path(__file__).resolve().parents[1]
+FILES = {
+    "c_helper": ROOT / "ds4_layer0_attn_hc_pre_oracle_dump.c",
+    "ds4_c": ROOT / "ds4.c",
+    "ds4_h": ROOT / "ds4.h",
+    "makefile": ROOT / "Makefile",
+    "rust_bin": ROOT / "rust/ds4-gpu/src/bin/ds4-decode-layer0-attn-hc-pre.rs",
+    "graph_plan": ROOT / "rust/ds4-gpu/src/graph_plan.rs",
+    "report": ROOT / "ds4-parity/run_parity_report.py",
+    "readme": ROOT / "ds4-parity/README.md",
+    "roadmap": ROOT / "RUST_PORT_ROADMAP.md",
+    "todo": ROOT / ".memory/TODO.md",
+}
+
+ORACLE_SCHEMA = "ds4.layer0_attn_hc_pre_oracle.v1"
+CANDIDATE_SCHEMA = "ds4.decode_layer0_attn_hc_pre.v1"
+CASE = "token0_layer0_attn_hc_pre"
+MODEL_SIZE = 86720111488
+TENSOR_DATA_OFFSET = 5333824
+OUTPUT_ELEMENTS = {
+    "cur_hc": 16384,
+    "flat_hc": 16384,
+    "hc_mix": 24,
+    "hc_split": 24,
+    "attn_cur": 4096,
+    "attn_norm": 4096,
+}
+WEIGHT_ROLES = {
+    "token_embd": "base.token_embd",
+    "hc_attn_fn": "base.layer.0.hc_attn_fn",
+    "hc_attn_scale": "base.layer.0.hc_attn_scale",
+    "hc_attn_base": "base.layer.0.hc_attn_base",
+    "attn_norm": "base.layer.0.attn_norm",
+}
+EXPECTED_FNV1A64 = {
+    "cur_hc": "f76512db41f80c4d",
+    "flat_hc": "5abe5cafeb9fd15d",
+    "hc_mix": "ea50bbe93ae96ca4",
+    "hc_split": "d0f0c7dc02340820",
+    "attn_cur": "110f29cd4090669f",
+    "attn_norm": "24e0d5fc736b2ace",
+}
+EXPECTED_WEIGHTS = {
+    "token_embd": (77928033088, 1059061760, 1, "f16"),
+    "hc_attn_fn": (79129609376, 786432, 1, "f16"),
+    "hc_attn_scale": (79130395808, 12, 0, "f32"),
+    "hc_attn_base": (79129609280, 96, 0, "f32"),
+    "attn_norm": (79100740672, 16384, 0, "f32"),
+}
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass
+class Report:
+    checks: int = 0
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def check(self, condition: bool, message: str) -> None:
+        self.checks += 1
+        if not condition:
+            self.errors.append(message)
+
+
+def main(argv: Iterable[str]) -> int:
+    args = parse_args(argv)
+    texts = {name: path.read_text() for name, path in FILES.items()}
+    if args.negative_test:
+        return run_negative_tests(texts)
+
+    report = Report()
+    validate_static(report, texts)
+    if args.oracle is not None or args.candidate is not None:
+        if args.oracle is None or args.candidate is None:
+            raise SystemExit("--oracle and --candidate must be provided together")
+        validate_pair(report, load_json(args.oracle), load_json(args.candidate))
+
+    if report.ok:
+        print(f"Rust layer-0 attention HC-pre current-C oracle comparator: {report.checks} checks")
+    else:
+        print_errors(report.errors)
+    return 0 if report.ok else 1
+
+
+def parse_args(argv: Iterable[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--oracle", type=Path, help="JSON from ds4-layer0-attn-hc-pre-oracle-dump")
+    parser.add_argument("--candidate", type=Path, help="JSON from ds4-decode-layer0-attn-hc-pre")
+    parser.add_argument("--negative-test", action="store_true")
+    return parser.parse_args(list(argv))
+
+
+def validate_static(report: Report, texts: dict[str, str]) -> None:
+    c_helper = texts["c_helper"]
+    for needle, message in (
+        ("ds4_dump_layer0_attn_hc_pre_oracle_json", "C helper does not call exported oracle dump"),
+        ("--token", "C helper token flag missing"),
+        ("--model", "C helper model flag missing"),
+        ("--output", "C helper output flag missing"),
+    ):
+        report.check(needle in c_helper, message)
+
+    ds4_c = texts["ds4_c"]
+    for needle, message in (
+        ("ds4_dump_layer0_attn_hc_pre_oracle_json", "C oracle dump implementation missing"),
+        ("model_open(&model", "C oracle does not use current model loader"),
+        ("config_validate_model(&model)", "C oracle does not validate model config"),
+        ("weights_bind(&weights, &model)", "C oracle does not bind current C weights"),
+        ("ds4_gpu_set_model_fd(model.fd)", "C oracle does not bridge the model fd"),
+        ("ds4_gpu_set_model_map_range(model.map", "C oracle does not bridge the model map range"),
+        ("ds4_gpu_embed_token_hc_tensor(cur_hc_tensor", "C oracle does not use current GPU embedding helper"),
+        ("ds4_gpu_rms_norm_plain_tensor(flat_hc_tensor", "C oracle does not compute flat_hc through GPU RMS norm"),
+        ("ds4_gpu_matmul_f16_tensor(hc_mix_tensor", "C oracle does not use current GPU hc_attn_fn matmul"),
+        ("ds4_gpu_hc_split_weighted_sum_norm_tensor(attn_cur_tensor", "C oracle does not use fused GPU HC-pre kernel"),
+        ("ds4_gpu_tensor_read(attn_norm_tensor", "C oracle does not read back attention norm"),
+        ("ds4_sha256_hex(values", "C oracle output sha256 missing"),
+        ("ds4_fnv1a64_bytes(values", "C oracle output FNV digest missing"),
+        (ORACLE_SCHEMA, "C oracle schema missing"),
+    ):
+        report.check(needle in ds4_c, message)
+
+    report.check(
+        "int ds4_dump_layer0_attn_hc_pre_oracle_json" in texts["ds4_h"],
+        "header declaration for layer-0 HC-pre oracle missing",
+    )
+
+    makefile = texts["makefile"]
+    report.check("ds4-layer0-attn-hc-pre-oracle-dump:" in makefile, "Makefile helper target missing")
+    report.check(
+        "ds4_layer0_attn_hc_pre_oracle_dump_cpu.o" in makefile,
+        "CPU helper object missing",
+    )
+
+    rust_bin = texts["rust_bin"]
+    for needle, message in (
+        (CANDIDATE_SCHEMA, "Rust candidate schema missing"),
+        (CASE, "Rust candidate case missing"),
+        ("parse_gguf_allowing_missing_tensor_data", "GGUF prefix parser missing"),
+        ("bind_ds4_weights", "DS4 weight binding missing"),
+        ("set_model_fd", "model fd bridge missing"),
+        ("set_model_map_range", "model map range bridge missing"),
+        ("DecodeBackend::new", "decode backend facade missing"),
+        ("CommandBatch::begin", "command batch begin missing"),
+        (".embed_token_hc(", "embed_token_hc facade call missing"),
+        (".rms_norm_plain(", "rms_norm_plain facade call missing"),
+        (".matmul_f16(", "matmul_f16 facade call missing"),
+        (".hc_split_weighted_sum_norm(", "hc_split_weighted_sum_norm facade call missing"),
+        ("read_tensor_output(\"attn_norm\"", "attn_norm readback missing"),
+        ("fnv1a64(&data)", "Rust full-buffer FNV digest missing"),
+        ("synchronize", "backend synchronization missing"),
+        ("BackendGuard", "cleanup guard missing"),
+    ):
+        report.check(needle in rust_bin, message)
+
+    report.check("pub const RMS_EPS" in texts["graph_plan"], "RMS_EPS graph constant missing")
+    report.check("pub const HC_EPS" in texts["graph_plan"], "HC_EPS graph constant missing")
+
+    report_text = texts["report"]
+    report.check(
+        "M10.5c4c2b2b2b1 Rust layer-0 attention HC-pre comparator" in report_text,
+        "unified report comparator missing",
+    )
+    report.check(
+        "M10.5c4c2b2b2b1 B300 layer-0 attention HC-pre oracle rerun" in report_text,
+        "unified report B300 skip missing",
+    )
+    report.check(
+        "ds4-layer0-attn-hc-pre-oracle-dump" in report_text
+        and "compare_decode_layer0_attn_hc_pre.py" in report_text,
+        "B300 oracle rerun command missing helper/comparator",
+    )
+
+    report.check("M10.5c4c2b2b2b1 Rust layer-0 attention HC-pre" in texts["readme"], "README entry missing")
+    report.check(
+        "M10.5c4c2b2b2b1: Rust Layer-0 Attention HC-Pre B300 Execution" in texts["roadmap"],
+        "roadmap split missing",
+    )
+    report.check(
+        "M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution" in texts["roadmap"],
+        "roadmap remainder split missing",
+    )
+    report.check(
+        "M10.5c4c2b2b2b1: Rust Layer-0 Attention HC-Pre B300 Execution" in texts["todo"],
+        "TODO split missing",
+    )
+    report.check(
+        "M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution" in texts["todo"],
+        "TODO remainder split missing",
+    )
+
+
+def validate_pair(report: Report, oracle: dict[str, Any], candidate: dict[str, Any]) -> None:
+    validate_common(report, oracle, "oracle", ORACLE_SCHEMA)
+    validate_common(report, candidate, "candidate", CANDIDATE_SCHEMA)
+    report.check(oracle.get("source") == "current-c", "oracle source drift")
+
+    validate_weights_pair(report, oracle.get("weights"), candidate.get("weights"))
+    validate_outputs_pair(report, oracle.get("outputs"), candidate.get("outputs"))
+
+
+def validate_common(report: Report, obj: dict[str, Any], label: str, schema: str) -> None:
+    report.check(obj.get("schema") == schema, f"{label} schema drift")
+    report.check(obj.get("case") == CASE, f"{label} case drift")
+
+    model = obj.get("model")
+    report.check(isinstance(model, dict), f"{label} model missing")
+    if isinstance(model, dict):
+        report.check(model.get("mapped_size") == MODEL_SIZE, f"{label} model size drift")
+        report.check(model.get("tensor_count") == 1328, f"{label} tensor count drift")
+        report.check(model.get("tensor_data_offset") == TENSOR_DATA_OFFSET, f"{label} tensor-data offset drift")
+        report.check(model.get("bound_layers") == 43, f"{label} bound layer count drift")
+
+    operation = obj.get("operation")
+    report.check(isinstance(operation, dict), f"{label} operation missing")
+    if isinstance(operation, dict):
+        report.check(operation.get("token") == 0, f"{label} token drift")
+        report.check(operation.get("layer") == 0, f"{label} layer drift")
+        report.check(operation.get("n_vocab") == 129280, f"{label} vocab drift")
+        report.check(operation.get("n_embd") == 4096, f"{label} n_embd drift")
+        report.check(operation.get("n_hc") == 4, f"{label} n_hc drift")
+        report.check(operation.get("n_hc_sinkhorn_iter") == 20, f"{label} sinkhorn iteration drift")
+        report.check(operation.get("hc_dim") == 16384, f"{label} hc_dim drift")
+        report.check(operation.get("hc_mix_dim") == 24, f"{label} hc_mix_dim drift")
+        report.check(abs(float(operation.get("hc_eps", 0.0)) - 1e-6) <= 1e-12, f"{label} hc_eps drift")
+        report.check(abs(float(operation.get("rms_eps", 0.0)) - 1e-6) <= 1e-12, f"{label} rms_eps drift")
+
+    outputs = obj.get("outputs")
+    report.check(isinstance(outputs, dict), f"{label} outputs missing")
+    if isinstance(outputs, dict):
+        report.check(set(outputs) == set(OUTPUT_ELEMENTS), f"{label} output tensor set drift")
+        for field, elements in OUTPUT_ELEMENTS.items():
+            validate_output(report, outputs.get(field), label, field, elements)
+
+
+def validate_output(report: Report, output: Any, label: str, field: str, elements: int) -> None:
+    report.check(isinstance(output, dict), f"{label} {field} output missing")
+    if not isinstance(output, dict):
+        return
+    report.check(output.get("field") == field, f"{label} {field} field drift")
+    report.check(output.get("elements") == elements, f"{label} {field} element drift")
+    report.check(output.get("bytes") == elements * 4, f"{label} {field} byte drift")
+    report.check(isinstance(output.get("nonzero_elements"), int), f"{label} {field} nonzero count missing")
+    report.check(isinstance(output.get("fnv1a64"), str), f"{label} {field} FNV digest missing")
+    if label == "oracle":
+        report.check(is_sha256(output.get("sha256")), f"oracle {field} sha256 invalid")
+    expected = EXPECTED_FNV1A64.get(field)
+    if expected is not None:
+        report.check(output.get("fnv1a64") == expected, f"{label} {field} FNV digest drift")
+    validate_samples(report, output.get("samples"), label, field, elements)
+
+
+def validate_weights_pair(report: Report, oracle_weights: Any, candidate_weights: Any) -> None:
+    report.check(isinstance(oracle_weights, dict), "oracle weights missing")
+    report.check(isinstance(candidate_weights, dict), "candidate weights missing")
+    if not isinstance(oracle_weights, dict) or not isinstance(candidate_weights, dict):
+        return
+    report.check(set(oracle_weights) == set(WEIGHT_ROLES), "oracle weight set drift")
+    report.check(set(candidate_weights) == set(WEIGHT_ROLES), "candidate weight set drift")
+    for key, role in WEIGHT_ROLES.items():
+        oracle = oracle_weights.get(key)
+        candidate = candidate_weights.get(key)
+        report.check(isinstance(oracle, dict), f"oracle {key} weight missing")
+        report.check(isinstance(candidate, dict), f"candidate {key} weight missing")
+        if not isinstance(oracle, dict) or not isinstance(candidate, dict):
+            continue
+        report.check(oracle.get("role") == role, f"oracle {key} role drift")
+        report.check(candidate.get("role") == role, f"candidate {key} role drift")
+        for field in ("abs_offset", "bytes", "type", "type_name"):
+            report.check(oracle.get(field) == candidate.get(field), f"{key} weight {field} mismatch")
+        expected = EXPECTED_WEIGHTS.get(key)
+        if expected is not None:
+            offset, size, type_id, type_name = expected
+            report.check(oracle.get("abs_offset") == offset, f"oracle {key} offset drift")
+            report.check(oracle.get("bytes") == size, f"oracle {key} byte-size drift")
+            report.check(oracle.get("type") == type_id, f"oracle {key} type drift")
+            report.check(oracle.get("type_name") == type_name, f"oracle {key} type-name drift")
+
+
+def validate_outputs_pair(report: Report, oracle_outputs: Any, candidate_outputs: Any) -> None:
+    report.check(isinstance(oracle_outputs, dict), "oracle outputs missing")
+    report.check(isinstance(candidate_outputs, dict), "candidate outputs missing")
+    if not isinstance(oracle_outputs, dict) or not isinstance(candidate_outputs, dict):
+        return
+    for field in OUTPUT_ELEMENTS:
+        oracle = oracle_outputs.get(field)
+        candidate = candidate_outputs.get(field)
+        if not isinstance(oracle, dict) or not isinstance(candidate, dict):
+            continue
+        report.check(
+            oracle.get("fnv1a64") == candidate.get("fnv1a64"),
+            f"candidate {field} FNV digest does not match current-C oracle",
+        )
+        report.check(
+            oracle.get("nonzero_elements") == candidate.get("nonzero_elements"),
+            f"candidate {field} nonzero count does not match current-C oracle",
+        )
+        report.check(
+            samples_match(oracle.get("samples"), candidate.get("samples")),
+            f"candidate {field} samples do not match current-C oracle",
+        )
+
+
+def validate_samples(report: Report, samples: Any, label: str, field: str, elements: int) -> None:
+    report.check(isinstance(samples, list), f"{label} {field} samples missing")
+    if not isinstance(samples, list):
+        return
+    by_index = sample_map(samples)
+    expected_indices = set(sample_indices(elements))
+    report.check(expected_indices <= set(by_index), f"{label} {field} sample set incomplete")
+    for index in expected_indices:
+        value = by_index.get(index)
+        report.check(isinstance(value, (int, float)) and math.isfinite(value), f"{label} {field} sample {index} is not finite")
+
+
+def sample_indices(elements: int) -> list[int]:
+    raw = [0, 1, elements // 2, elements - 2 if elements > 1 else 0, elements - 1]
+    out: list[int] = []
+    for index in raw:
+        if 0 <= index < elements and index not in out:
+            out.append(index)
+    return out
+
+
+def sample_map(samples: Any) -> dict[int, float]:
+    if not isinstance(samples, list):
+        return {}
+    out: dict[int, float] = {}
+    for entry in samples:
+        if isinstance(entry, dict) and isinstance(entry.get("index"), int):
+            value = entry.get("value")
+            if isinstance(value, (int, float)):
+                out[entry["index"]] = float(value)
+    return out
+
+
+def samples_match(left: Any, right: Any) -> bool:
+    left_map = sample_map(left)
+    right_map = sample_map(right)
+    if set(left_map) != set(right_map):
+        return False
+    for index, left_value in left_map.items():
+        right_value = right_map[index]
+        if abs(float(left_value) - float(right_value)) > 1e-6:
+            return False
+    return True
+
+
+def is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and SHA256.fullmatch(value) is not None
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    try:
+        obj = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"failed to read JSON {path}: {exc}") from exc
+    if not isinstance(obj, dict):
+        raise SystemExit(f"{path}: expected JSON object")
+    return obj
+
+
+def run_negative_tests(texts: dict[str, str]) -> int:
+    static_mutations = [
+        ("remove schema", "rust_bin", CANDIDATE_SCHEMA, "ds4.decode_layer0_attn_hc_pre.removed"),
+        ("remove C matvec", "ds4_c", "ds4_gpu_matmul_f16_tensor(hc_mix_tensor", "ds4_gpu_matmul_f16_removed(hc_mix_tensor"),
+        (
+            "remove C fused split/norm",
+            "ds4_c",
+            "ds4_gpu_hc_split_weighted_sum_norm_tensor(attn_cur_tensor",
+            "ds4_gpu_hc_split_weighted_sum_norm_removed(attn_cur_tensor",
+        ),
+        ("remove Rust matmul", "rust_bin", ".matmul_f16(", ".matmul_f16_removed("),
+        (
+            "remove fused Rust call",
+            "rust_bin",
+            ".hc_split_weighted_sum_norm(",
+            ".hc_split_weighted_sum_norm_removed(",
+        ),
+        (
+            "remove B300 candidate check",
+            "report",
+            "compare_decode_layer0_attn_hc_pre.py",
+            "compare_decode_layer0_attn_hc_pre_removed.py",
+        ),
+        (
+            "remove roadmap split",
+            "roadmap",
+            "M10.5c4c2b2b2b1: Rust Layer-0 Attention HC-Pre B300 Execution",
+            "M10.5c4c2b2b2b1 removed",
+        ),
+    ]
+    failures: list[str] = []
+    for label, key, needle, replacement in static_mutations:
+        mutated = copy.deepcopy(texts)
+        if needle not in mutated[key]:
+            failures.append(f"{label}: mutation needle not found")
+            continue
+        mutated[key] = mutated[key].replace(needle, replacement)
+        report = Report()
+        validate_static(report, mutated)
+        if report.ok:
+            failures.append(f"{label}: validation unexpectedly passed")
+
+    pair_mutations = [
+        ("candidate digest", mutate_candidate_digest),
+        ("candidate sample value", mutate_candidate_sample),
+        ("candidate tensor size", mutate_candidate_tensor_size),
+        ("candidate weight offset", mutate_candidate_weight_offset),
+    ]
+    for label, mutate in pair_mutations:
+        report = Report()
+        oracle, candidate = valid_pair()
+        mutate(candidate)
+        validate_pair(report, oracle, candidate)
+        if report.ok:
+            failures.append(f"{label}: paired validation unexpectedly passed")
+
+    if failures:
+        print_errors(failures)
+        return 1
+    print(f"negative tests passed: {len(static_mutations) + len(pair_mutations)} mutations rejected")
+    return 0
+
+
+def valid_pair() -> tuple[dict[str, Any], dict[str, Any]]:
+    oracle = valid_common(ORACLE_SCHEMA)
+    oracle["source"] = "current-c"
+    candidate = valid_common(CANDIDATE_SCHEMA)
+    weights = {
+        key: {
+            "role": role,
+            "abs_offset": EXPECTED_WEIGHTS[key][0],
+            "bytes": EXPECTED_WEIGHTS[key][1],
+            "type": EXPECTED_WEIGHTS[key][2],
+            "type_name": EXPECTED_WEIGHTS[key][3],
+        }
+        for key, role in WEIGHT_ROLES.items()
+    }
+    oracle["weights"] = copy.deepcopy(weights)
+    candidate["weights"] = copy.deepcopy(weights)
+    oracle["outputs"] = valid_outputs(include_sha=True)
+    candidate["outputs"] = valid_outputs(include_sha=False)
+    return oracle, candidate
+
+
+def valid_common(schema: str) -> dict[str, Any]:
+    return {
+        "schema": schema,
+        "case": CASE,
+        "model": {
+            "mapped_size": MODEL_SIZE,
+            "tensor_count": 1328,
+            "tensor_data_offset": TENSOR_DATA_OFFSET,
+            "bound_layers": 43,
+        },
+        "operation": {
+            "token": 0,
+            "layer": 0,
+            "n_vocab": 129280,
+            "n_embd": 4096,
+            "n_hc": 4,
+            "n_hc_sinkhorn_iter": 20,
+            "hc_dim": 16384,
+            "hc_mix_dim": 24,
+            "hc_eps": 1e-6,
+            "rms_eps": 1e-6,
+        },
+    }
+
+
+def valid_outputs(include_sha: bool) -> dict[str, Any]:
+    outputs: dict[str, Any] = {}
+    for idx, (field, elements) in enumerate(OUTPUT_ELEMENTS.items()):
+        digest = EXPECTED_FNV1A64.get(field, f"{idx + 1:016x}")
+        output = {
+            "field": field,
+            "bytes": elements * 4,
+            "elements": elements,
+            "nonzero_elements": elements,
+            "fnv1a64": digest,
+            "samples": [{"index": sample, "value": float(idx + sample) / 10.0} for sample in sample_indices(elements)],
+        }
+        if include_sha:
+            output["sha256"] = f"{idx:064x}"
+        outputs[field] = output
+    return outputs
+
+
+def mutate_candidate_digest(candidate: dict[str, Any]) -> None:
+    candidate["outputs"]["attn_norm"]["fnv1a64"] = "0000000000000000"
+
+
+def mutate_candidate_sample(candidate: dict[str, Any]) -> None:
+    candidate["outputs"]["hc_split"]["samples"][0]["value"] += 0.01
+
+
+def mutate_candidate_tensor_size(candidate: dict[str, Any]) -> None:
+    candidate["outputs"]["flat_hc"]["elements"] = 1
+
+
+def mutate_candidate_weight_offset(candidate: dict[str, Any]) -> None:
+    candidate["weights"]["hc_attn_fn"]["abs_offset"] += 4
+
+
+def print_errors(errors: list[str]) -> None:
+    print("Rust layer-0 attention HC-pre comparator failures:")
+    for error in errors:
+        print(f"  - {error}")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

@@ -4007,17 +4007,55 @@
 - Owner path: current-C first-kernel oracle helper, Rust first-kernel JSON,
   paired comparator, `.memory/status.md`.
 
-### M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution
+### M10.5c4c2b2b2b1: Rust Layer-0 Attention HC-Pre B300 Execution
+
+- Status: completed
+- Goal: execute the first post-embedding layer-0 attention HC-pre prefix
+  through the M10.5c3 facade on B300 before taking ownership of the full
+  one-token scheduler.
+- Oracle: the current-C `model_open`, `config_validate_model`, `weights_bind`,
+  `ds4_gpu_set_model_fd`, `ds4_gpu_set_model_map_range`,
+  `ds4_gpu_embed_token_hc_tensor`, `ds4_gpu_rms_norm_plain_tensor`,
+  `ds4_gpu_matmul_f16_tensor`, and
+  `ds4_gpu_hc_split_weighted_sum_norm_tensor` path for token `0` and layer
+  `0`.
+- Fixture: B300 `ds4flash.gguf`, token `0`, layer `0`, `cur_hc`, `flat_hc`,
+  `hc_mix`, `hc_split`, `attn_cur`, and `attn_norm`.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests for `cur_hc`, `flat_hc`, `hc_mix`, `hc_split`,
+  `attn_cur`, and `attn_norm`; current-C SHA256 digests are captured for
+  evidence, and selected f32 samples compare within the existing `1e-6`
+  tolerance.
+- Acceptance: Rust launches `embed_token_hc`, `rms_norm_plain`, `matmul_f16`,
+  and `hc_split_weighted_sum_norm` in one command batch, synchronizes, and
+  matches the current-C layer-0 HC-pre oracle on B300.
+- Drift policy: token, layer, model offsets, tensor byte sizes, and FNV digests
+  are exact; selected f32 sample text may vary by JSON formatting but numeric
+  values must stay within `1e-6`.
+- Review gate: ask Claude to review C oracle helper sequencing, Rust facade
+  call ordering, tensor byte/readback sizes, and paired comparator failure
+  modes.
+- Validation passed: layer-0 HC-pre comparator with negative test, B300
+  current-C oracle plus Rust candidate paired validation, `make
+  ds4-layer0-attn-hc-pre-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-layer0-attn-hc-pre`, c2b1 first-kernel rerun, c2b2b2a
+  current-C oracle rerun, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and non-interactive Claude review with no
+  blockers.
+- Owner path: current-C layer-0 HC-pre oracle helper, Rust layer-0 HC-pre JSON,
+  paired comparator, `.memory/status.md`.
+
+### M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution
 
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
-  on B300 and capture Rust checkpoints for the M10.4 decode cases.
+  on B300 after the layer-0 HC-pre prefix is independently compared.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
-  M10.5c4c2b1 execution preflight, M10.5c4c2b2a full state allocation, and
-  M10.5c4c2b2b1 first-kernel execution plus the M10.5c4c2b2b2a current-C
-  first-kernel oracle comparator.
+  M10.5c4c2b1 execution preflight, M10.5c4c2b2a full state allocation,
+  M10.5c4c2b2b1 first-kernel execution, M10.5c4c2b2b2a current-C first-kernel
+  oracle comparator, and M10.5c4c2b2b2b1 layer-0 HC-pre comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -4032,8 +4070,9 @@
   unsafe backend-call containment.
 - Validation needed: targeted decode comparator on B300, c2b1 preflight rerun,
   c2b2a state allocation rerun, c2b2b1 first-kernel rerun, c2b2b2a current-C
-  oracle rerun, `cargo test --workspace`, `cargo fmt --all -- --check`,
-  `git diff --check`, and non-interactive Claude review with no blockers.
+  oracle rerun, c2b2b2b1 layer-0 HC-pre rerun, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 

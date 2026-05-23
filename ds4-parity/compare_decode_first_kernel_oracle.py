@@ -141,9 +141,9 @@ def validate_static(report: Report, texts: dict[str, str]) -> None:
 
     report.check("M10.5c4c2b2b2a Rust first-kernel current-C oracle" in texts["readme"], "README entry missing")
     report.check("M10.5c4c2b2b2a: Rust First-Kernel Current-C Oracle Comparator" in texts["roadmap"], "roadmap split missing")
-    report.check("M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution" in texts["roadmap"], "roadmap remainder split missing")
+    report.check("M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution" in texts["roadmap"], "roadmap remainder split missing")
     report.check("M10.5c4c2b2b2a: Rust First-Kernel Current-C Oracle Comparator" in texts["todo"], "TODO split missing")
-    report.check("M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution" in texts["todo"], "TODO remainder split missing")
+    report.check("M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution" in texts["todo"], "TODO remainder split missing")
 
 
 def validate_pair(report: Report, oracle: dict[str, Any], candidate: dict[str, Any]) -> None:

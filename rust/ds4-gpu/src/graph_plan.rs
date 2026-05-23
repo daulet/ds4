@@ -44,6 +44,8 @@ pub const N_INDEXER_HEAD_DIM: u32 = 128;
 pub const N_INDEXER_TOP_K: u32 = 512;
 pub const N_HC: u32 = 4;
 pub const N_HC_SINKHORN_ITER: u32 = 20;
+pub const RMS_EPS: f32 = 1.0e-6;
+pub const HC_EPS: f32 = 1.0e-6;
 
 const BYTES_F32: u64 = 4;
 const BYTES_I32: u64 = 4;

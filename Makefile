@@ -36,7 +36,7 @@ endif
 .PHONY: all help clean test cpu cuda cuda-spark cuda-generic cuda-regression rust-test
 
 ifeq ($(UNAME_S),Darwin)
-all: ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-graph-checkpoint-dump
+all: ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-layer0-attn-hc-pre-oracle-dump ds4-graph-checkpoint-dump
 
 help:
 	@echo "DS4 build targets:"
@@ -91,10 +91,13 @@ ds4-session-payload-dump: ds4_session_payload_dump.o $(CORE_OBJS)
 ds4-first-kernel-oracle-dump: ds4_first_kernel_oracle_dump.o $(CORE_OBJS)
 	$(CC) $(CFLAGS) -o $@ ds4_first_kernel_oracle_dump.o $(CORE_OBJS) $(METAL_LDLIBS)
 
+ds4-layer0-attn-hc-pre-oracle-dump: ds4_layer0_attn_hc_pre_oracle_dump.o $(CORE_OBJS)
+	$(CC) $(CFLAGS) -o $@ ds4_layer0_attn_hc_pre_oracle_dump.o $(CORE_OBJS) $(METAL_LDLIBS)
+
 ds4-graph-checkpoint-dump: ds4_graph_checkpoint_dump.o $(CORE_OBJS)
 	$(CC) $(CFLAGS) -o $@ ds4_graph_checkpoint_dump.o $(CORE_OBJS) $(METAL_LDLIBS)
 
-cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_restore_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_session_payload_dump_cpu.o ds4_first_kernel_oracle_dump_cpu.o ds4_graph_checkpoint_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
+cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_restore_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_session_payload_dump_cpu.o ds4_first_kernel_oracle_dump_cpu.o ds4_layer0_attn_hc_pre_oracle_dump_cpu.o ds4_graph_checkpoint_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
 	$(CC) $(CFLAGS) -o ds4 ds4_cli_cpu.o linenoise.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-server ds4_server_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-bench ds4_bench_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
@@ -110,6 +113,7 @@ cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu
 	$(CC) $(CFLAGS) -o ds4-kv-trailer-dump ds4_kv_trailer_dump_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-session-payload-dump ds4_session_payload_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-first-kernel-oracle-dump ds4_first_kernel_oracle_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o ds4-layer0-attn-hc-pre-oracle-dump ds4_layer0_attn_hc_pre_oracle_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-graph-checkpoint-dump ds4_graph_checkpoint_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 
 cuda-regression:
@@ -128,10 +132,10 @@ help:
 	@echo "  make clean               Remove build outputs"
 
 cuda-spark:
-	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-graph-checkpoint-dump CUDA_ARCH=
+	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-layer0-attn-hc-pre-oracle-dump ds4-graph-checkpoint-dump CUDA_ARCH=
 
 cuda-generic:
-	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-graph-checkpoint-dump CUDA_ARCH=native
+	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-layer0-attn-hc-pre-oracle-dump ds4-graph-checkpoint-dump CUDA_ARCH=native
 
 cuda:
 	@if [ -z "$(strip $(CUDA_ARCH))" ]; then \
@@ -139,7 +143,7 @@ cuda:
 		echo "       or use make cuda-spark / make cuda-generic"; \
 		exit 2; \
 	fi
-	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-graph-checkpoint-dump CUDA_ARCH="$(CUDA_ARCH)"
+	$(MAKE) ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-layer0-attn-hc-pre-oracle-dump ds4-graph-checkpoint-dump CUDA_ARCH="$(CUDA_ARCH)"
 
 ds4: ds4_cli.o linenoise.o $(CORE_OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
@@ -186,10 +190,13 @@ ds4-session-payload-dump: ds4_session_payload_dump.o $(CORE_OBJS)
 ds4-first-kernel-oracle-dump: ds4_first_kernel_oracle_dump.o $(CORE_OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
 
+ds4-layer0-attn-hc-pre-oracle-dump: ds4_layer0_attn_hc_pre_oracle_dump.o $(CORE_OBJS)
+	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
+
 ds4-graph-checkpoint-dump: ds4_graph_checkpoint_dump.o $(CORE_OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
 
-cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_restore_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_session_payload_dump_cpu.o ds4_first_kernel_oracle_dump_cpu.o ds4_graph_checkpoint_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
+cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu.o ds4_metadata_dump_cpu.o ds4_sampling_dump_cpu.o ds4_logits_dump_cpu.o ds4_restore_dump_cpu.o ds4_decode_policy_dump_cpu.o ds4_kv_policy_dump_cpu.o ds4_kvc_file_dump_cpu.o ds4_kv_trailer_dump_cpu.o ds4_session_payload_dump_cpu.o ds4_first_kernel_oracle_dump_cpu.o ds4_layer0_attn_hc_pre_oracle_dump_cpu.o ds4_graph_checkpoint_dump_cpu.o ds4_kvstore.o linenoise.o rax.o $(CPU_CORE_OBJS)
 	$(CC) $(CFLAGS) -o ds4 ds4_cli_cpu.o linenoise.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-server ds4_server_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-bench ds4_bench_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
@@ -205,6 +212,7 @@ cpu: ds4_cli_cpu.o ds4_server_cpu.o ds4_bench_cpu.o ds4_eval_cpu.o ds4_agent_cpu
 	$(CC) $(CFLAGS) -o ds4-kv-trailer-dump ds4_kv_trailer_dump_cpu.o ds4_kvstore.o rax.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-session-payload-dump ds4_session_payload_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-first-kernel-oracle-dump ds4_first_kernel_oracle_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o ds4-layer0-attn-hc-pre-oracle-dump ds4_layer0_attn_hc_pre_oracle_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 	$(CC) $(CFLAGS) -o ds4-graph-checkpoint-dump ds4_graph_checkpoint_dump_cpu.o $(CPU_CORE_OBJS) $(LDLIBS)
 
 cuda-regression: tests/cuda_long_context_smoke
@@ -258,6 +266,9 @@ ds4_session_payload_dump.o: ds4_session_payload_dump.c ds4.h
 
 ds4_first_kernel_oracle_dump.o: ds4_first_kernel_oracle_dump.c ds4.h
 	$(CC) $(CFLAGS) -c -o $@ ds4_first_kernel_oracle_dump.c
+
+ds4_layer0_attn_hc_pre_oracle_dump.o: ds4_layer0_attn_hc_pre_oracle_dump.c ds4.h
+	$(CC) $(CFLAGS) -c -o $@ ds4_layer0_attn_hc_pre_oracle_dump.c
 
 ds4_graph_checkpoint_dump.o: ds4_graph_checkpoint_dump.c ds4.h
 	$(CC) $(CFLAGS) -c -o $@ ds4_graph_checkpoint_dump.c
@@ -325,6 +336,9 @@ ds4_session_payload_dump_cpu.o: ds4_session_payload_dump.c ds4.h
 ds4_first_kernel_oracle_dump_cpu.o: ds4_first_kernel_oracle_dump.c ds4.h
 	$(CC) $(CFLAGS) -DDS4_NO_GPU -c -o $@ ds4_first_kernel_oracle_dump.c
 
+ds4_layer0_attn_hc_pre_oracle_dump_cpu.o: ds4_layer0_attn_hc_pre_oracle_dump.c ds4.h
+	$(CC) $(CFLAGS) -DDS4_NO_GPU -c -o $@ ds4_layer0_attn_hc_pre_oracle_dump.c
+
 ds4_graph_checkpoint_dump_cpu.o: ds4_graph_checkpoint_dump.c ds4.h
 	$(CC) $(CFLAGS) -DDS4_NO_GPU -c -o $@ ds4_graph_checkpoint_dump.c
 
@@ -351,4 +365,4 @@ rust-test:
 	cargo test --workspace
 
 clean:
-	rm -f ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-graph-checkpoint-dump ds4_cpu ds4_native ds4_server_test ds4_test *.o tests/cuda_long_context_smoke tests/cuda_long_context_smoke.o
+	rm -f ds4 ds4-server ds4-bench ds4-eval ds4-agent ds4-metadata-dump ds4-sampling-dump ds4-logits-dump ds4-restore-dump ds4-decode-policy-dump ds4-kv-policy-dump ds4-kvc-file-dump ds4-kv-trailer-dump ds4-session-payload-dump ds4-first-kernel-oracle-dump ds4-layer0-attn-hc-pre-oracle-dump ds4-graph-checkpoint-dump ds4_cpu ds4_native ds4_server_test ds4_test *.o tests/cuda_long_context_smoke tests/cuda_long_context_smoke.o

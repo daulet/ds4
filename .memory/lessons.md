@@ -74,6 +74,29 @@ available directly from the repo.
   artifacts into section errors so negative tests prove failure reporting as
   well as drift detection.
 
+## 2026-05-23: Pair Exact Tensor Digests With Tolerant JSON Float Samples
+
+- Symptom: the first B300 Rust-vs-current-C first-kernel comparator failed even
+  though the full `cur_hc` FNV digest matched exactly.
+- Root cause: Rust and C emitted equivalent sample floats with different JSON
+  decimal spelling.
+- Permanent rule: paired tensor comparators should keep full-buffer digests
+  exact, but compare selected JSON float samples numerically within the
+  milestone tolerance.
+
+## 2026-05-23: Execution-Behavior Oracles Need The Same GPU Math Path
+
+- Symptom: the first layer-0 HC-pre B300 comparator matched `cur_hc`, but exact
+  FNV digests diverged for `flat_hc`, `hc_mix`, `hc_split`, `attn_cur`, and
+  `attn_norm`.
+- Root cause: the initial C oracle used CPU helpers for RMS norm, F16 matvec,
+  HC split, weighted sum, and attention norm, while the Rust candidate used the
+  current C CUDA tensor ABI.
+- Permanent rule: when acceptance asks for exact execution-behavior digests,
+  the current-C oracle must drive the same GPU tensor functions as the Rust
+  facade. CPU helpers remain useful semantic references, but not exact digest
+  oracles for CUDA math.
+
 ## 2026-05-22: M0.3 Runtime Log Is Pass/Fail Evidence, Not A Numeric Dump
 
 - Symptom: M1.4 needed a numeric comparator, but

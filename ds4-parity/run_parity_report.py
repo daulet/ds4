@@ -7,8 +7,8 @@ The report has two jobs:
 * run the committed artifact comparators from M1.2 through M1.5, M4.6, M5.7,
   M6.7, M7.9, M9.9, M10.2, M10.3, M10.4, M10.5a, M10.5b, M10.5c1, M10.5c2,
   M10.5c3, M10.5c4a, M10.5c4b, M10.5c4c1, M10.5c4c2a, and
-  M10.5c4c2b1, M10.5c4c2b2a, M10.5c4c2b2b1, and
-  M10.5c4c2b2b2a.
+  M10.5c4c2b1, M10.5c4c2b2a, M10.5c4c2b2b1,
+  M10.5c4c2b2b2a, and M10.5c4c2b2b2b1.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -250,6 +250,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.5c4c2b2b2b1 Rust layer-0 attention HC-pre comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_decode_layer0_attn_hc_pre.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -429,6 +437,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "feature-gated Rust CUDA backend linkage"
             ),
             rerun_command=b300_first_kernel_current_c_oracle_command(),
+        ),
+        ReportItem(
+            name="M10.5c4c2b2b2b1 B300 layer-0 attention HC-pre oracle rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Layer-0 attention HC-pre current-C oracle comparison requires "
+                "the B300 pod, the real q2-imatrix GGUF, the current-C helper, "
+                "and feature-gated Rust CUDA backend linkage"
+            ),
+            rerun_command=b300_layer0_attn_hc_pre_oracle_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -682,6 +701,35 @@ def b300_first_kernel_current_c_oracle_command() -> str:
         "python3 ds4-parity/compare_decode_first_kernel_oracle.py "
         "--oracle /tmp/ds4-c2b2b2a-first-kernel-oracle.json "
         "--candidate /tmp/ds4-c2b2b2a-first-kernel-rust.json"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_layer0_attn_hc_pre_oracle_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    smoke = b300_exec(
+        "make ds4-layer0-attn-hc-pre-oracle-dump CUDA_ARCH=native && "
+        f"./ds4-layer0-attn-hc-pre-oracle-dump -m {B300_MODEL} --token 0 "
+        "-o /tmp/ds4-c2b2b2b1-layer0-attn-hc-pre-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-decode-layer0-attn-hc-pre --quiet -- "
+        f"--model {B300_MODEL} "
+        "> /tmp/ds4-c2b2b2b1-layer0-attn-hc-pre-rust.json && "
+        "python3 ds4-parity/compare_decode_layer0_attn_hc_pre.py "
+        "--oracle /tmp/ds4-c2b2b2b1-layer0-attn-hc-pre-oracle.json "
+        "--candidate /tmp/ds4-c2b2b2b1-layer0-attn-hc-pre-rust.json"
     )
     return f"{source_refresh} && {smoke}"
 

@@ -377,6 +377,26 @@ python3 ds4-parity/compare_decode_first_kernel_oracle.py \
   --candidate /tmp/ds4-c2b2b2a-first-kernel-rust.json
 ```
 
+Compare the M10.5c4c2b2b2b1 Rust layer-0 attention HC-pre prefix before
+adding more one-token scheduler calls:
+
+```sh
+python3 ds4-parity/compare_decode_layer0_attn_hc_pre.py
+python3 ds4-parity/compare_decode_layer0_attn_hc_pre.py --negative-test
+```
+
+The comparator checks that `ds4-layer0-attn-hc-pre-oracle-dump` uses the
+current C model loader, DS4 weight binding, model fd/map bridge, GPU embedding,
+GPU HC RMS normalization, layer-0 GPU `hc_attn_fn`, and the fused GPU HC
+split/weighted-sum/attention-norm kernel to emit independent tensor digests. On
+B300, validate the current-C oracle and Rust readback together:
+
+```sh
+python3 ds4-parity/compare_decode_layer0_attn_hc_pre.py \
+  --oracle /tmp/ds4-c2b2b2b1-layer0-attn-hc-pre-oracle.json \
+  --candidate /tmp/ds4-c2b2b2b1-layer0-attn-hc-pre-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
