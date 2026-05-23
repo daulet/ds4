@@ -7,7 +7,7 @@ The report has two jobs:
 * run the committed artifact comparators from M1.2 through M1.5, M4.6, M5.7,
   M6.7, M7.9, M9.9, M10.2, M10.3, M10.4, M10.5a, M10.5b, M10.5c1, M10.5c2,
   M10.5c3, M10.5c4a, M10.5c4b, M10.5c4c1, M10.5c4c2a, and
-  M10.5c4c2b1.
+  M10.5c4c2b1, and M10.5c4c2b2a.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -225,6 +225,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.5c4c2b2a Rust full decode state allocation comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_decode_state_allocation.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -373,6 +381,16 @@ def b300_skip_items() -> list[ReportItem]:
                 "real q2-imatrix GGUF, and feature-gated CUDA backend linkage"
             ),
             rerun_command=b300_rust_decode_preflight_command(),
+        ),
+        ReportItem(
+            name="M10.5c4c2b2a B300 Rust decode state allocation rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Rust decode state allocation requires the B300 pod and "
+                "feature-gated CUDA backend linkage"
+            ),
+            rerun_command=b300_rust_decode_state_allocation_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -548,6 +566,30 @@ def b300_rust_decode_preflight_command() -> str:
         "> /tmp/ds4-c2b1-preflight.json && "
         "python3 ds4-parity/compare_decode_execution_preflight.py "
         "--candidate /tmp/ds4-c2b1-preflight.json"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_rust_decode_state_allocation_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    smoke = b300_exec(
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-decode-state-alloc --quiet "
+        "> /tmp/ds4-c2b2a-state-allocation.json && "
+        "python3 ds4-parity/compare_decode_state_allocation.py "
+        "--candidate /tmp/ds4-c2b2a-state-allocation.json"
     )
     return f"{source_refresh} && {smoke}"
 

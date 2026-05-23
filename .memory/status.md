@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2 Rust One-Token Decode B300 Execution
-- Last validated source commit: M10.5c4c2a Rust decode model-map bridge in
-  commit `6a7e46067d36d7ddbc76f63a920e04d88471d960`
+- Active item: M10.5c4c2b2b Rust One-Token Decode B300 Execution
+- Last validated source commit before the current stage: M10.5c4c2b1 Rust
+  decode execution preflight in commit
+  `5f0c47892ece727dfb09bd1755168c0afae9ae08`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,10 +26,38 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2a splits the remaining numeric B300 execution item into a full
+  decode-state allocation bridge and the next active one-token scheduler slice
+  M10.5c4c2b2b.
+- M10.5c4c2b2a adds `ds4-decode-state-alloc`, which walks the M10.5c2
+  graph-state table for `ctx32768_mtp_off`, allocates every initially owned
+  tensor, applies zero and negative-infinity fills, creates the planned
+  `hc_pre`, `hc_post`, and `hc_comb` views, reports the allocation surface, and
+  releases the backend with cleanup.
+- The B300 state-allocation run emitted `ds4.decode_state_allocation.v1` and
+  the candidate validator passed 63 checks. Evidence: 349 logical instances,
+  272 initially owned allocations, 806,175,248 owned bytes, three views, one
+  lazy owned tensor, one external input, 105 zero-full-capacity fills, 62
+  zero-state fills, and 62 negative-infinity fills. Largest required
+  allocations included `comp_mask`, `indexer_scores`, and layer-2
+  `layer_attn_comp_cache`.
+- M10.5c4c2b2a adds `ds4-parity/compare_decode_state_allocation.py`, which
+  checks the static contract and optionally validates the B300 JSON candidate.
+  It is wired into the unified parity report as `M10.5c4c2b2a Rust full decode
+  state allocation comparator` with an exact B300 rerun command.
+- M10.5c4c2b2a validation passed `cargo check -p ds4-gpu --bin
+  ds4-decode-state-alloc`, `python3
+  ds4-parity/compare_decode_state_allocation.py --negative-test`, `python3
+  -m py_compile ds4-parity/compare_decode_state_allocation.py
+  ds4-parity/run_parity_report.py`, B300 `CUDA_ARCH=native cargo run -p
+  ds4-gpu --features cuda-backend --bin ds4-decode-state-alloc --quiet`
+  followed by candidate validation, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles`, `cargo test --workspace`, `cargo fmt --all --
+  --check`, and `git diff --check`.
 - M10.5c4c2b1 splits the original B300 one-token execution item into a
-  model-backed preflight and the remaining numeric decode slice. The next
-  active slice is M10.5c4c2b2, which must launch the actual one-token facade
-  schedule and compare M10.4 tensors/logits.
+  model-backed preflight and the remaining numeric decode slice. After the
+  M10.5c4c2b2a state-allocation bridge, the active M10.5c4c2b2b slice must
+  launch the actual one-token facade schedule and compare M10.4 tensors/logits.
 - M10.5c4c2b1 adds `rust/ds4-gpu/src/decode_execution.rs` and
   `ds4-decode-exec-preflight`, which mmap the real GGUF on B300, parse the
   GGUF header without copying tensor data, bind DS4 weights, set the model fd

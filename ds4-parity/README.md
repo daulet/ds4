@@ -321,6 +321,25 @@ python3 ds4-parity/compare_decode_execution_preflight.py \
   --candidate /tmp/ds4-c2b1-preflight.json
 ```
 
+Compare the M10.5c4c2b2a Rust full decode state allocation before scheduling
+the one-token decode facade:
+
+```sh
+python3 ds4-parity/compare_decode_state_allocation.py
+python3 ds4-parity/compare_decode_state_allocation.py --negative-test
+```
+
+The comparator checks that `ds4-decode-state-alloc` walks the M10.5c2
+graph-state table, allocates every initially owned tensor for the
+`ctx32768_mtp_off` plan, applies zero and negative-infinity initialization,
+creates the planned `hc_*` views, and releases the backend through cleanup. On
+B300, validate the emitted JSON too:
+
+```sh
+python3 ds4-parity/compare_decode_state_allocation.py \
+  --candidate /tmp/ds4-c2b2a-state-allocation.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
