@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6c Streaming Tool-Call Deltas
-- Last validated source commit: M9.6b model-backed tool-call replay in
-  this commit; prior pushed source commit
-  `269d43c8ee51d5b8f929486c5e3e93cd34636191`
+- Active item: M9.6c1 Tool-Call SSE Event Formatter
+- Last validated source commit: M9.6c docs-only streaming split in this
+  commit; prior pushed source commit
+  `664d65aab7f5a4f105b1cfcdd9584bdb1af53b39`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,18 @@
 
 ## Last Evidence
 
+- M9.6c was split before implementation because byte-level SSE event
+  formatting, incremental DSML-to-delta translation, and model-backed runtime
+  replay have distinct oracle/comparator surfaces.
+- M9.6c1 is active first because byte-stable tool-call SSE event helpers
+  unblock both the stateful streaming translator and the model-backed runtime
+  replay without mixing parser or runtime policy into the formatter commit.
+- M9.6c docs-only split validation passed for `git diff --check`.
+- M9.6c docs-only split Claude review returned no blockers after checking
+  tangible goals, oracle/fixture/comparator/acceptance/drift coverage per
+  child item, and preservation of event order, argument fragments, finish
+  reasons, prompt text, generated DSML, trace records, usage fields, and
+  `[DONE]` bytes.
 - M9.6b routes supported non-streaming OpenAI tool chat requests through the
   Rust server runtime instead of rejecting them, while keeping streaming tool
   calls rejected for M9.6c and preserving the thinking/stop-list unsupported

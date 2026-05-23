@@ -2578,27 +2578,88 @@ rendering, so the remaining server work is split before implementation.
 
 #### M9.6c: Streaming Tool-Call Deltas
 
-- Goal: add OpenAI streaming `tool_calls` delta formatting and runtime routing
-  for complete/partial generated DSML tool-call output without mixing it into
-  the non-streaming replay commit.
-- Oracle: C tool-call streaming unit tests, M5.6 agent/server DSML partial
-  parser vectors, and M9.5a SSE header/event formatting behavior.
-- Fixture: unit vectors for one call, multiple calls, partial arguments,
-  split UTF-8, generated IDs, usage chunks, and malformed/recoverable DSML
-  tails.
-- Comparator: event-by-event SSE comparison for role, tool-call deltas, finish
-  chunk, optional usage chunk, and `[DONE]`.
-- Acceptance: streamed tool-call deltas preserve argument bytes and C finish
-  semantics while non-tool streaming behavior from M9.5 remains unchanged.
-- Drift policy: normalize generated call IDs only; event order, field order,
-  argument fragments, finish reason, usage fields, and terminator bytes are
-  exact.
-- Review gate: ask Claude to review SSE delta ordering, partial-DSML holds,
-  UTF-8 boundaries, generated-ID stability, and non-tool streaming regression
-  coverage.
-- Validation gate: targeted streaming tool-call tests, existing SSE tests,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+M9.6c spans three surfaces: byte-level SSE event builders, a stateful DSML
+stream translator, and model-backed runtime replay. Split it before
+implementation so each commit has one oracle and comparator.
+
+#### M9.6c1: Tool-Call SSE Event Formatter
+
+- Goal: add pure OpenAI chat SSE helpers for streamed `tool_calls` deltas:
+  role chunk, tool-call start delta, argument-fragment deltas, full-call
+  fallback delta, finish chunk, optional usage chunk, and `[DONE]`.
+- Oracle: C helpers `sse_chat_tool_call_start_delta`,
+  `sse_chat_tool_call_args_delta_n`, `append_tool_call_deltas_json`,
+  `openai_sse_finish_live`, and M9.5a non-tool SSE formatting behavior.
+- Fixture: model-free vectors for one call, multiple calls, explicit IDs,
+  generated IDs, escaped names, argument fragments containing JSON escapes,
+  full-call fallback deltas, optional usage, and stream headers.
+- Comparator: exact SSE byte comparison with injected chat ID/timestamp/call
+  IDs and pre-split argument fragments.
+- Acceptance: formatter emits C-compatible event order and JSON field order for
+  tool-call deltas without owning DSML parsing or model runtime routing.
+- Drift policy: event names, object field order, blank lines, usage fields, and
+  `[DONE]` bytes are exact; injected IDs and timestamps are the only normalized
+  values.
+- Review gate: ask Claude to review SSE byte shape, field ordering, generated
+  ID fallback, escaping, usage chunk placement, and separation from parser and
+  runtime policy.
+- Validation gate: targeted SSE formatter tests, existing response formatter
+  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, and
   `git diff --check`.
+
+#### M9.6c2: Incremental DSML Tool-Call Stream Translator
+
+- Goal: translate incremental generated DSML bytes into the M9.6c1 OpenAI
+  tool-call start/argument delta events while holding incomplete tags,
+  parameter close sentinels, DSML entities, and UTF-8 tails.
+- Oracle: C `openai_sse_stream_update`, `openai_tool_stream_update`, related
+  `tool_param_value_stream_safe_len` and partial-tool unit tests, plus M5.6
+  generated-message parser behavior for completed DSML.
+- Fixture: chunk schedules for one call, multiple calls, partial invoke tags,
+  partial parameter tags, partial `</｜DSML｜parameter>` sentinels, partial
+  `&lt;` entities, split UTF-8, raw JSON arguments, malformed/recoverable
+  tails, and complete fallback blocks.
+- Comparator: model-free event-by-event SSE comparison for every chunk
+  schedule, including held bytes and emitted argument fragments.
+- Acceptance: streamed argument fragments match C for partial DSML schedules,
+  completed calls still parse to the same final `DsmlJsonCall` values, and
+  non-tool streaming behavior from M9.5 remains unchanged.
+- Drift policy: normalize generated call IDs only; emitted/held argument
+  bytes, event order, finish reason, and malformed-tail behavior are exact.
+- Review gate: ask Claude to review state transitions, partial-hold logic,
+  UTF-8/entity boundaries, malformed tail recovery, and non-tool streaming
+  regression coverage.
+- Validation gate: targeted stream-translator tests, existing SSE formatter
+  tests, DSML parser tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+
+#### M9.6c3: Model-Backed Streaming Tool-Call Replay
+
+- Goal: route supported streaming OpenAI tool chat requests through the Rust
+  server runtime, feed per-token bytes through the M9.6c2 translator, and emit
+  the M9.6c1 SSE response shape.
+- Oracle: B300 model-backed replay of the M0.4 `chat_tool_call` request with
+  `"stream":true`, C streaming unit-test event order, M9.6b prompt/trace
+  behavior, and M9.5b non-tool streaming replay behavior.
+- Fixture: raw M0.4 trace request with streaming enabled, normalized SSE body,
+  stream headers, generated DSML, trace fields, usage/cache fields, and B300
+  model identity.
+- Comparator: B300 replay compares normalized chat ID, timestamp, and
+  generated call ID while checking exact tool name, argument fragments,
+  finish reason, usage/cache fields, rendered prompt, generated DSML, trace
+  records, and `[DONE]` bytes.
+- Acceptance: Rust streams deterministic tool-call output through the HTTP
+  runtime, preserves M9.6b non-streaming behavior, and keeps thinking/stop-list
+  requests outside this path until their own roadmap items.
+- Drift policy: normalize IDs, timestamps, startup timing, and token rates
+  only; event order, argument fragments, finish reason, usage fields, prompt
+  text, generated DSML, and trace tool records are exact.
+- Review gate: ask Claude to review runtime routing, write/flush behavior,
+  translator integration, unsupported-route boundaries, trace fields, and B300
+  comparator normalization.
+- Validation gate: B300 streaming tool-call comparator, targeted runtime tests,
+  targeted stream-translator/SSE tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
 
 #### M9.6d: Tool-Call Quality Parity Hook
 

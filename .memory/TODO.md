@@ -2911,31 +2911,122 @@
 
 ### M9.6c: Streaming Tool-Call Deltas
 
+- Status: split
+- Goal: split OpenAI streaming tool-call work into pure SSE event formatting,
+  incremental DSML-to-delta translation, and model-backed runtime replay.
+- Source evidence needed: C tool-call streaming unit tests,
+  `sse_chat_tool_call_start_delta`, `sse_chat_tool_call_args_delta_n`,
+  `openai_sse_stream_update`, `openai_tool_stream_update`, M5.6 DSML parser
+  vectors, M9.5a SSE formatting, and M9.6b model-backed tool replay.
+- Oracle: documentation-only split preserving the M9.6c oracle set while
+  assigning byte formatting, parser state, and runtime replay to child items.
+- Comparator: roadmap/TODO/status diff shows no behavior change and assigns
+  exact oracle, fixture, comparator, acceptance, and drift policy per sub-item.
+- Acceptance: M9.6c1-c3 are documented before implementation starts, with
+  M9.6c1 active first because byte-stable SSE formatting unblocks the parser
+  and runtime replay.
+- Drift policy: docs-only split must not relax event order, argument
+  fragments, finish reasons, prompt text, generated DSML, trace records, usage
+  fields, or `[DONE]` bytes.
+- Review gate: ask Claude to review whether the split isolates independent
+  oracle surfaces and preserves the original streaming tool-call parity
+  requirements.
+- Validation needed: `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
+
+### M9.6c1: Tool-Call SSE Event Formatter
+
 - Status: active
-- Goal: add OpenAI streaming `tool_calls` delta formatting and runtime routing
-  for complete/partial generated DSML tool-call output without mixing it into
-  the non-streaming replay commit.
-- Source evidence needed: C tool-call streaming unit tests, M5.6 agent/server
-  DSML partial parser vectors, and M9.5a SSE header/event formatting behavior.
-- Oracle: event-by-event SSE parity for tool-call streaming chunks.
-- Fixture: unit vectors for one call, multiple calls, partial arguments,
-  split UTF-8, generated IDs, usage chunks, and malformed/recoverable DSML
-  tails.
-- Comparator: event-by-event SSE comparison for role, tool-call deltas, finish
-  chunk, optional usage chunk, and `[DONE]`.
-- Acceptance: streamed tool-call deltas preserve argument bytes and C finish
-  semantics while non-tool streaming behavior from M9.5 remains unchanged.
-- Drift policy: normalize generated call IDs only; event order, field order,
-  argument fragments, finish reason, usage fields, and terminator bytes are
-  exact.
-- Review gate: ask Claude to review SSE delta ordering, partial-DSML holds,
-  UTF-8 boundaries, generated-ID stability, and non-tool streaming regression
-  coverage.
-- Validation needed: targeted streaming tool-call tests, existing SSE tests,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+- Goal: add pure OpenAI chat SSE helpers for streamed `tool_calls` deltas:
+  role chunk, tool-call start delta, argument-fragment deltas, full-call
+  fallback delta, finish chunk, optional usage chunk, and `[DONE]`.
+- Source evidence needed: C helpers `sse_chat_tool_call_start_delta`,
+  `sse_chat_tool_call_args_delta_n`, `append_tool_call_deltas_json`,
+  `openai_sse_finish_live`, and M9.5a non-tool SSE formatting behavior.
+- Oracle: exact C-shaped SSE bytes for model-free tool-call streaming event
+  cases with injected IDs/timestamps.
+- Fixture: one call, multiple calls, explicit IDs, generated IDs, escaped
+  names, argument fragments containing JSON escapes, full-call fallback deltas,
+  optional usage, and stream headers.
+- Comparator: exact SSE byte comparison with injected chat ID/timestamp/call
+  IDs and pre-split argument fragments.
+- Acceptance: formatter emits C-compatible event order and JSON field order for
+  tool-call deltas without owning DSML parsing or model runtime routing.
+- Drift policy: event names, object field order, blank lines, usage fields, and
+  `[DONE]` bytes are exact; injected IDs and timestamps are the only normalized
+  values.
+- Review gate: ask Claude to review SSE byte shape, field ordering, generated
+  ID fallback, escaping, usage chunk placement, and separation from parser and
+  runtime policy.
+- Validation needed: targeted SSE formatter tests, existing response formatter
+  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, and
   `git diff --check`.
+- Owner path: `rust/ds4-gguf/src/server_response.rs`, `.memory/status.md`.
+
+### M9.6c2: Incremental DSML Tool-Call Stream Translator
+
+- Status: pending
+- Goal: translate incremental generated DSML bytes into the M9.6c1 OpenAI
+  tool-call start/argument delta events while holding incomplete tags,
+  parameter close sentinels, DSML entities, and UTF-8 tails.
+- Source evidence needed: C `openai_sse_stream_update`,
+  `openai_tool_stream_update`, `tool_param_value_stream_safe_len`, partial-tool
+  unit tests, and M5.6 generated-message parser behavior for completed DSML.
+- Oracle: model-free C-compatible event streams for partial DSML chunk
+  schedules.
+- Fixture: chunk schedules for one call, multiple calls, partial invoke tags,
+  partial parameter tags, partial `</｜DSML｜parameter>` sentinels, partial
+  `&lt;` entities, split UTF-8, raw JSON arguments, malformed/recoverable
+  tails, and complete fallback blocks.
+- Comparator: model-free event-by-event SSE comparison for every chunk
+  schedule, including held bytes and emitted argument fragments.
+- Acceptance: streamed argument fragments match C for partial DSML schedules,
+  completed calls still parse to the same final `DsmlJsonCall` values, and
+  non-tool streaming behavior from M9.5 remains unchanged.
+- Drift policy: normalize generated call IDs only; emitted/held argument
+  bytes, event order, finish reason, and malformed-tail behavior are exact.
+- Review gate: ask Claude to review state transitions, partial-hold logic,
+  UTF-8/entity boundaries, malformed tail recovery, and non-tool streaming
+  regression coverage.
+- Validation needed: targeted stream-translator tests, existing SSE formatter
+  tests, DSML parser tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
 - Owner path: `rust/ds4-gguf/src/server_response.rs`,
   `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`, `.memory/status.md`.
+
+### M9.6c3: Model-Backed Streaming Tool-Call Replay
+
+- Status: pending
+- Goal: route supported streaming OpenAI tool chat requests through the Rust
+  server runtime, feed per-token bytes through the M9.6c2 translator, and emit
+  the M9.6c1 SSE response shape.
+- Source evidence needed: B300 model-backed replay of the M0.4
+  `chat_tool_call` request with `"stream":true`, C streaming unit-test event
+  order, M9.6b prompt/trace behavior, and M9.5b non-tool streaming replay
+  behavior.
+- Oracle: B300 streaming replay for deterministic tool-call generation.
+- Fixture: raw M0.4 trace request with streaming enabled, normalized SSE body,
+  stream headers, generated DSML, trace fields, usage/cache fields, and B300
+  model identity.
+- Comparator: B300 replay compares normalized chat ID, timestamp, and
+  generated call ID while checking exact tool name, argument fragments, finish
+  reason, usage/cache fields, rendered prompt, generated DSML, trace records,
+  and `[DONE]` bytes.
+- Acceptance: Rust streams deterministic tool-call output through the HTTP
+  runtime, preserves M9.6b non-streaming behavior, and keeps thinking/stop-list
+  requests outside this path until their own roadmap items.
+- Drift policy: normalize IDs, timestamps, startup timing, and token rates
+  only; event order, argument fragments, finish reason, usage fields, prompt
+  text, generated DSML, and trace tool records are exact.
+- Review gate: ask Claude to review runtime routing, write/flush behavior,
+  translator integration, unsupported-route boundaries, trace fields, and B300
+  comparator normalization.
+- Validation needed: B300 streaming tool-call comparator, targeted runtime
+  tests, targeted stream-translator/SSE tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Owner path: `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`,
+  `ds4-parity/`, `.memory/status.md`.
 
 ### M9.6d: Tool-Call Quality Parity Hook
 
