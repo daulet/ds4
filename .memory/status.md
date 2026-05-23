@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.2 Backend Operation Inventory And Graph Plan Oracle
-- Last validated source commit: M10.1 runtime graph work item breakdown in
-  this commit; prior pushed source commit
-  `dd98399950d7c57a31b72b8cf0cbf4aa74feb730`
+- Active item: M10.3 Rust Backend Trait And Graph Plan Surface
+- Last validated source commit: M10.2 graph plan inventory oracle in this
+  commit; prior pushed source commit
+  `f62cf22dc7e36bd2ec99552bab25607ca0e03060`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,23 @@
 
 ## Last Evidence
 
+- M10.2 adds `ds4-parity/check_graph_plan_inventory.py` and the committed
+  source-derived oracle
+  `ds4-parity/baselines/graph/m10.2/graph-plan-inventory.json`. The checker
+  compares the oracle against `ds4_gpu.h`, `ds4.c` graph tensor fields, fixed
+  DS4 model constants, compression-ratio source, context-cap calculations, and
+  command-buffer boundary functions.
+- M10.2 records 81 `ds4_gpu.h` operations with named Rust facade targets, 113
+  `ds4_gpu_graph` tensor fields with owner groups, graph plan cases for
+  ctx=128, ctx=2048, and ctx=32768 with MTP off/on, and 15 command-boundary
+  records covering decode, chunked/layer-major prefill, MTP draft/verifier,
+  profile split helpers, and speculative frontier copy/restore/commit.
+- M10.2 validation passed `python3
+  ds4-parity/check_graph_plan_inventory.py`, `python3
+  ds4-parity/check_graph_plan_inventory.py --negative-test`, JSON report smoke,
+  Python syntax checks, the unified parity report comparator row, `git
+  diff --check`, NUL scan over touched files, and non-interactive Claude review
+  with `NO BLOCKERS`.
 - M10.1 split broad runtime graph orchestration into comparator-first work
   items M10.2 through M10.9: backend operation inventory/graph plan oracle,
   Rust backend trait and graph-plan surface, current-C intermediate tensor

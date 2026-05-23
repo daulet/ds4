@@ -125,6 +125,27 @@ comparator-only report:
 python3 ds4-parity/run_parity_report.py --skip-local-oracles
 ```
 
+## Runtime Graph Inventory
+
+Validate the Milestone 10.2 current-C graph plan and backend operation
+inventory:
+
+```sh
+python3 ds4-parity/check_graph_plan_inventory.py
+```
+
+The checker compares the committed graph oracle under
+`baselines/graph/m10.2/` against `ds4_gpu.h`, `ds4.c` graph tensor fields,
+fixed DS4 model constants, compression ratios, context-cap calculations, and
+recorded command-buffer boundaries. Plan cases assume
+`DS4_METAL_PREFILL_CHUNK` and `DS4_METAL_GRAPH_RAW_CAP` are unset. Its negative
+test removes a backend facade assignment, removes a tensor owner, and mutates a
+raw-cap plan value:
+
+```sh
+python3 ds4-parity/check_graph_plan_inventory.py --negative-test
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

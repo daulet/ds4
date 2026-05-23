@@ -1,0 +1,567 @@
+{
+  "schema": "ds4.graph_plan_inventory.v1",
+  "milestone": "M10.2",
+  "oracle_sources": {
+    "backend_header": "ds4_gpu.h",
+    "graph_source": "ds4.c",
+    "graph_struct": "ds4_gpu_graph",
+    "allocation_entry": "metal_graph_alloc_raw_cap",
+    "decode_entry": "metal_graph_eval_token_raw_swa",
+    "prefill_entry": "metal_graph_prefill_chunked_range",
+    "mtp_verifier_entry": "metal_graph_verify_decode2_exact"
+  },
+  "assumptions": {
+    "environment": {
+      "DS4_METAL_PREFILL_CHUNK": "unset",
+      "DS4_METAL_GRAPH_RAW_CAP": "unset"
+    }
+  },
+  "model_constants": {
+    "DS4_N_LAYER": 43,
+    "DS4_N_EMBD": 4096,
+    "DS4_N_VOCAB": 129280,
+    "DS4_N_HEAD": 64,
+    "DS4_N_HEAD_KV": 1,
+    "DS4_N_HEAD_DIM": 512,
+    "DS4_N_VALUE_DIM": 512,
+    "DS4_N_ROT": 64,
+    "DS4_N_OUT_GROUP": 8,
+    "DS4_N_LORA_Q": 1024,
+    "DS4_N_LORA_O": 1024,
+    "DS4_N_EXPERT": 256,
+    "DS4_N_EXPERT_USED": 6,
+    "DS4_N_EXPERT_SHARED": 1,
+    "DS4_N_FF_EXP": 2048,
+    "DS4_N_HASH_LAYER": 3,
+    "DS4_N_SWA": 128,
+    "DS4_N_INDEXER_HEAD": 64,
+    "DS4_N_INDEXER_HEAD_DIM": 128,
+    "DS4_N_INDEXER_TOP_K": 512,
+    "DS4_N_HC": 4,
+    "DS4_N_HC_SINKHORN_ITER": 20
+  },
+  "operation_groups": [
+    {
+      "name": "backend_lifecycle",
+      "rust_facade": "BackendLifecycle",
+      "operations": [
+        "ds4_gpu_init",
+        "ds4_gpu_cleanup",
+        "ds4_gpu_set_quality",
+        "ds4_gpu_print_memory_report"
+      ]
+    },
+    {
+      "name": "tensor_lifetime",
+      "rust_facade": "TensorBackend",
+      "operations": [
+        "ds4_gpu_tensor_alloc",
+        "ds4_gpu_tensor_alloc_managed",
+        "ds4_gpu_tensor_view",
+        "ds4_gpu_tensor_free",
+        "ds4_gpu_tensor_bytes",
+        "ds4_gpu_tensor_contents",
+        "ds4_gpu_tensor_fill_f32",
+        "ds4_gpu_tensor_write",
+        "ds4_gpu_tensor_read",
+        "ds4_gpu_tensor_copy"
+      ]
+    },
+    {
+      "name": "command_buffers",
+      "rust_facade": "CommandBackend",
+      "operations": [
+        "ds4_gpu_begin_commands",
+        "ds4_gpu_flush_commands",
+        "ds4_gpu_end_commands",
+        "ds4_gpu_synchronize"
+      ]
+    },
+    {
+      "name": "model_mapping",
+      "rust_facade": "ModelMapBackend",
+      "operations": [
+        "ds4_gpu_set_model_map",
+        "ds4_gpu_set_model_fd",
+        "ds4_gpu_set_model_map_range",
+        "ds4_gpu_cache_model_range",
+        "ds4_gpu_cache_q8_f16_range",
+        "ds4_gpu_should_use_managed_kv_cache"
+      ]
+    },
+    {
+      "name": "embedding_and_indexer",
+      "rust_facade": "EmbeddingIndexerBackend",
+      "operations": [
+        "ds4_gpu_embed_token_hc_tensor",
+        "ds4_gpu_embed_tokens_hc_tensor",
+        "ds4_gpu_indexer_score_one_tensor",
+        "ds4_gpu_indexer_scores_prefill_tensor",
+        "ds4_gpu_indexer_scores_decode_batch_tensor",
+        "ds4_gpu_indexer_topk_tensor",
+        "ds4_gpu_dsv4_topk_mask_tensor"
+      ]
+    },
+    {
+      "name": "dense_norm_rope_kv",
+      "rust_facade": "ProjectionNormKvBackend",
+      "operations": [
+        "ds4_gpu_matmul_q8_0_tensor",
+        "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
+        "ds4_gpu_matmul_f16_tensor",
+        "ds4_gpu_matmul_f16_pair_tensor",
+        "ds4_gpu_matmul_f32_tensor",
+        "ds4_gpu_repeat_hc_tensor",
+        "ds4_gpu_rms_norm_plain_tensor",
+        "ds4_gpu_rms_norm_plain_rows_tensor",
+        "ds4_gpu_rms_norm_weight_tensor",
+        "ds4_gpu_rms_norm_weight_rows_tensor",
+        "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
+        "ds4_gpu_head_rms_norm_tensor",
+        "ds4_gpu_dsv4_fp8_kv_quantize_tensor",
+        "ds4_gpu_dsv4_indexer_qat_tensor",
+        "ds4_gpu_rope_tail_tensor",
+        "ds4_gpu_kv_fp8_store_raw_tensor",
+        "ds4_gpu_store_raw_kv_tensor",
+        "ds4_gpu_store_raw_kv_batch_tensor"
+      ]
+    },
+    {
+      "name": "compressor_attention",
+      "rust_facade": "AttentionCompressorBackend",
+      "operations": [
+        "ds4_gpu_compressor_update_tensor",
+        "ds4_gpu_compressor_store_batch_tensor",
+        "ds4_gpu_compressor_prefill_tensor",
+        "ds4_gpu_compressor_prefill_ratio4_replay_tensor",
+        "ds4_gpu_compressor_prefill_state_ratio4_tensor",
+        "ds4_gpu_attention_decode_heads_tensor",
+        "ds4_gpu_attention_prefill_raw_heads_tensor",
+        "ds4_gpu_attention_decode_raw_batch_heads_tensor",
+        "ds4_gpu_attention_decode_mixed_batch_heads_tensor",
+        "ds4_gpu_attention_indexed_mixed_batch_heads_tensor",
+        "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
+        "ds4_gpu_attention_prefill_masked_mixed_heads_tensor",
+        "ds4_gpu_attention_output_q8_batch_tensor",
+        "ds4_gpu_attention_output_low_q8_tensor"
+      ]
+    },
+    {
+      "name": "routing_moe",
+      "rust_facade": "RoutingMoeBackend",
+      "operations": [
+        "ds4_gpu_swiglu_tensor",
+        "ds4_gpu_add_tensor",
+        "ds4_gpu_directional_steering_project_tensor",
+        "ds4_gpu_router_select_tensor",
+        "ds4_gpu_router_select_batch_tensor",
+        "ds4_gpu_routed_moe_one_tensor",
+        "ds4_gpu_routed_moe_batch_tensor"
+      ]
+    },
+    {
+      "name": "hc_output",
+      "rust_facade": "HyperConnectionOutputBackend",
+      "operations": [
+        "ds4_gpu_hc_split_sinkhorn_tensor",
+        "ds4_gpu_hc_weighted_sum_tensor",
+        "ds4_gpu_hc_weighted_sum_split_tensor",
+        "ds4_gpu_hc_split_weighted_sum_tensor",
+        "ds4_gpu_hc_split_weighted_sum_norm_tensor",
+        "ds4_gpu_output_hc_weights_tensor",
+        "ds4_gpu_hc_expand_tensor",
+        "ds4_gpu_hc_expand_split_tensor",
+        "ds4_gpu_hc_expand_add_split_tensor",
+        "ds4_gpu_shared_down_hc_expand_q8_0_tensor",
+        "ds4_gpu_matmul_q8_0_hc_expand_tensor"
+      ]
+    }
+  ],
+  "tensor_owner_groups": [
+    {
+      "name": "decode_activation",
+      "owner": "GraphDecodeState",
+      "fields": [
+        "cur_hc",
+        "flat_hc",
+        "hc_mix",
+        "hc_split",
+        "hc_pre",
+        "hc_post",
+        "hc_comb",
+        "attn_cur",
+        "attn_norm",
+        "qr",
+        "qr_norm",
+        "q",
+        "kv_raw",
+        "kv"
+      ]
+    },
+    {
+      "name": "persistent_kv",
+      "owner": "GraphPersistentKvState",
+      "fields": [
+        "layer_raw_cache",
+        "layer_attn_comp_cache",
+        "layer_attn_state_kv",
+        "layer_attn_state_score",
+        "layer_index_comp_cache",
+        "layer_index_state_kv",
+        "layer_index_state_score"
+      ]
+    },
+    {
+      "name": "speculative_frontier",
+      "owner": "GraphSpeculativeFrontierState",
+      "fields": [
+        "spec_attn_state_kv",
+        "spec_attn_state_score",
+        "spec_index_state_kv",
+        "spec_index_state_score",
+        "spec_prefix1_attn_state_kv",
+        "spec_prefix1_attn_state_score",
+        "spec_prefix1_index_state_kv",
+        "spec_prefix1_index_state_score",
+        "spec_logits"
+      ]
+    },
+    {
+      "name": "per_layer_work",
+      "owner": "GraphLayerWorkState",
+      "fields": [
+        "comp_kv_cur",
+        "comp_sc_cur",
+        "indexer_q",
+        "indexer_weights",
+        "indexer_scores",
+        "comp_mask",
+        "comp_selected",
+        "heads",
+        "attn_low",
+        "attn_out",
+        "after_attn_hc",
+        "ffn_cur",
+        "ffn_norm",
+        "shared_gate",
+        "shared_up",
+        "shared_mid",
+        "shared_out",
+        "router_logits",
+        "router_probs",
+        "router_selected",
+        "router_weights",
+        "routed_gate",
+        "routed_up",
+        "routed_mid",
+        "routed_down",
+        "routed_out",
+        "ffn_out",
+        "after_ffn_hc",
+        "output_pre",
+        "output_weights",
+        "output_embd",
+        "output_norm",
+        "logits"
+      ]
+    },
+    {
+      "name": "mtp_optional_state",
+      "owner": "GraphMtpState",
+      "fields": [
+        "mtp_embed",
+        "mtp_enorm",
+        "mtp_eproj",
+        "mtp_eproj_hc",
+        "mtp_hnorm_hc",
+        "mtp_hproj_hc",
+        "mtp_input_hc",
+        "mtp_state_hc",
+        "mtp_next_hc",
+        "mtp_raw_cache"
+      ]
+    },
+    {
+      "name": "prefill_batch",
+      "owner": "GraphPrefillBatchState",
+      "fields": [
+        "prefill_tokens",
+        "batch_cur_hc",
+        "batch_next_hc",
+        "batch_flat_hc",
+        "batch_hc_mix",
+        "batch_hc_split",
+        "batch_attn_cur",
+        "batch_attn_norm",
+        "batch_qr",
+        "batch_qr_norm",
+        "batch_q",
+        "batch_kv_raw",
+        "batch_kv",
+        "batch_comp_kv",
+        "batch_comp_sc",
+        "batch_indexer_q",
+        "batch_indexer_weights",
+        "batch_heads",
+        "batch_attn_low",
+        "batch_attn_out",
+        "batch_group_tmp",
+        "batch_low_tmp",
+        "batch_after_attn_hc",
+        "batch_ffn_cur",
+        "batch_ffn_norm",
+        "batch_shared_gate",
+        "batch_shared_up",
+        "batch_shared_mid",
+        "batch_shared_out",
+        "batch_router_logits",
+        "batch_router_probs",
+        "batch_router_selected",
+        "batch_router_weights",
+        "batch_routed_gate",
+        "batch_routed_up",
+        "batch_routed_mid",
+        "batch_routed_down",
+        "batch_routed_out",
+        "batch_ffn_out"
+      ]
+    },
+    {
+      "name": "optional_controls",
+      "owner": "GraphOptionalControlState",
+      "fields": [
+        "directional_steering_dirs"
+      ]
+    }
+  ],
+  "graph_plan_cases": [
+    {
+      "name": "short_ctx128_mtp_off",
+      "ctx_size": 128,
+      "prompt_len": 128,
+      "mtp_enabled": false,
+      "prefill_cap": 128,
+      "raw_window": 128,
+      "requested_raw_cap": 256,
+      "allocated_raw_cap": 128,
+      "comp_cap": 34,
+      "layer_counts": {
+        "dense": 2,
+        "ratio4": 21,
+        "ratio128": 20
+      },
+      "layer_comp_cap_by_ratio": {
+        "dense": 0,
+        "ratio4": 34,
+        "ratio128": 3
+      },
+      "ratio4_indexer_layers": 21,
+      "mtp_tensor_group": "none"
+    },
+    {
+      "name": "ctx2048_mtp_off",
+      "ctx_size": 2048,
+      "prompt_len": 2048,
+      "mtp_enabled": false,
+      "prefill_cap": 2048,
+      "raw_window": 128,
+      "requested_raw_cap": 2048,
+      "allocated_raw_cap": 2048,
+      "comp_cap": 514,
+      "layer_counts": {
+        "dense": 2,
+        "ratio4": 21,
+        "ratio128": 20
+      },
+      "layer_comp_cap_by_ratio": {
+        "dense": 0,
+        "ratio4": 514,
+        "ratio128": 18
+      },
+      "ratio4_indexer_layers": 21,
+      "mtp_tensor_group": "none"
+    },
+    {
+      "name": "ctx32768_mtp_off",
+      "ctx_size": 32768,
+      "prompt_len": 32768,
+      "mtp_enabled": false,
+      "prefill_cap": 2048,
+      "raw_window": 128,
+      "requested_raw_cap": 2304,
+      "allocated_raw_cap": 2304,
+      "comp_cap": 8194,
+      "layer_counts": {
+        "dense": 2,
+        "ratio4": 21,
+        "ratio128": 20
+      },
+      "layer_comp_cap_by_ratio": {
+        "dense": 0,
+        "ratio4": 8194,
+        "ratio128": 258
+      },
+      "ratio4_indexer_layers": 21,
+      "mtp_tensor_group": "none"
+    },
+    {
+      "name": "ctx32768_mtp_on",
+      "ctx_size": 32768,
+      "prompt_len": 32768,
+      "mtp_enabled": true,
+      "prefill_cap": 2048,
+      "raw_window": 128,
+      "requested_raw_cap": 2304,
+      "allocated_raw_cap": 2304,
+      "comp_cap": 8194,
+      "layer_counts": {
+        "dense": 2,
+        "ratio4": 21,
+        "ratio128": 20
+      },
+      "layer_comp_cap_by_ratio": {
+        "dense": 0,
+        "ratio4": 8194,
+        "ratio128": 258
+      },
+      "ratio4_indexer_layers": 21,
+      "mtp_tensor_group": "mtp_optional_state"
+    }
+  ],
+  "command_boundaries": [
+    {
+      "name": "optional_indexer_stage_profile",
+      "c_function": "metal_graph_indexer_stage_profile_boundary",
+      "begin_end_min": 1,
+      "synchronize_on_failure": false
+    },
+    {
+      "name": "optional_layer_stage_profile",
+      "c_function": "metal_graph_layer_stage_profile_boundary",
+      "begin_end_min": 1,
+      "synchronize_on_failure": false
+    },
+    {
+      "name": "optional_q_stage_profile",
+      "c_function": "metal_graph_q_stage_profile_boundary",
+      "begin_end_min": 1,
+      "synchronize_on_failure": false
+    },
+    {
+      "name": "prefill_kernel_warmup",
+      "c_function": "metal_graph_warmup_prefill_kernels",
+      "begin_end_min": 1,
+      "synchronize_on_failure": false
+    },
+    {
+      "name": "decode_token_logits",
+      "c_function": "metal_graph_eval_token_raw_swa",
+      "begin_end_min": 1,
+      "reads_after_end": [
+        "logits"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "decode_token_top1",
+      "c_function": "metal_graph_eval_token_raw_swa_top",
+      "begin_end_min": 1,
+      "reads_after_end": [
+        "top_id",
+        "logits"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "mtp_draft",
+      "c_function": "metal_graph_eval_mtp_draft_from_hc",
+      "begin_end_min": 1,
+      "reads_after_end": [
+        "top_id",
+        "logits"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "layer_major_prefill",
+      "c_function": "metal_graph_prefill_layer_major",
+      "begin_end_min": 1,
+      "reads_after_end": [
+        "logits"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "prefill_row_logits",
+      "c_function": "metal_graph_prefill_batch_row_logits",
+      "begin_end_min": 1,
+      "reads_after_end": [
+        "logits"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "chunked_prefill",
+      "c_function": "metal_graph_prefill_chunked_range",
+      "begin_end_min": 1,
+      "reads_after_end": [
+        "logits"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "mtp_suffix_tops",
+      "c_function": "metal_graph_verify_suffix_tops",
+      "begin_end_min": 2,
+      "reads_after_end": [
+        "row_tops",
+        "row_logits"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "mtp_decode2_exact",
+      "c_function": "metal_graph_verify_decode2_exact",
+      "begin_end_min": 3,
+      "reads_after_end": [
+        "top0",
+        "logits0",
+        "logits1"
+      ],
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "spec_frontier_snapshot",
+      "c_function": "spec_frontier_snapshot",
+      "begin_end_min": 1,
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "spec_frontier_restore",
+      "c_function": "spec_frontier_restore",
+      "begin_end_min": 1,
+      "synchronize_on_failure": true
+    },
+    {
+      "name": "spec_frontier_commit_prefix1",
+      "c_function": "spec_frontier_commit_prefix1",
+      "begin_end_min": 1,
+      "synchronize_on_failure": true
+    }
+  ],
+  "drift_policy": {
+    "exact": [
+      "operation_names",
+      "tensor_fields",
+      "context_caps",
+      "compression_ratios",
+      "command_boundaries",
+      "mtp_enablement"
+    ],
+    "ignored": [
+      "pointer_addresses",
+      "timings",
+      "allocation_addresses"
+    ]
+  }
+}

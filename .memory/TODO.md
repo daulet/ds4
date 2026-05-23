@@ -3533,7 +3533,7 @@
 
 ### M10.2: Backend Operation Inventory And Graph Plan Oracle
 
-- Status: active
+- Status: done
 - Goal: capture a current-C oracle for the graph tensor plan, backend primitive
   surface, and command-buffer boundaries that Rust must preserve.
 - Oracle: `ds4_gpu.h`, C call sites under `metal_graph_alloc_raw_cap`,
@@ -3556,12 +3556,17 @@
   `ds4_gpu.h` and graph call sites.
 - Validation needed: oracle checker with negative fixture, `git diff --check`,
   and non-interactive Claude review with no blockers.
+- Validation passed: `python3 ds4-parity/check_graph_plan_inventory.py`,
+  `python3 ds4-parity/check_graph_plan_inventory.py --negative-test`, JSON
+  report smoke, Python syntax check, unified parity report comparator row,
+  `git diff --check`, NUL scan over touched files, and non-interactive Claude
+  review with no blockers.
 - Owner path: graph plan/oracle files under `ds4-parity/`, `ds4_gpu.h`
   inventory references, `.memory/status.md`.
 
 ### M10.3: Rust Backend Trait And Graph Plan Surface
 
-- Status: pending
+- Status: active
 - Goal: add Rust graph-plan data structures and backend trait/facade coverage
   for the full M10.2 operation inventory without executing a model graph yet.
 - Oracle: M10.2 graph plan and backend operation inventory.
