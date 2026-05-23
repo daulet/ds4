@@ -206,6 +206,26 @@ pub struct GenerationResult {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ServerGenerationOptions {
+    pub n_predict: i32,
+    pub ctx_size: i32,
+    pub temperature: f32,
+    pub top_k: i32,
+    pub top_p: f32,
+    pub min_p: f32,
+    pub seed: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerGenerationResult {
+    pub exit_code: i32,
+    pub text: Vec<u8>,
+    pub prompt_tokens: i32,
+    pub completion_tokens: i32,
+    pub finish_reason: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InteractiveTurnOptions {
     pub n_predict: i32,
     pub think_mode: ThinkMode,
@@ -408,6 +428,98 @@ impl Engine {
         GenerationResult {
             exit_code: 0,
             stdout: printer.into_bytes(),
+        }
+    }
+
+    pub fn generate_server_text(
+        &self,
+        prompt: &Tokens,
+        options: ServerGenerationOptions,
+    ) -> ServerGenerationResult {
+        let mut session = std::ptr::null_mut();
+        let rc = unsafe {
+            ds4_session_create(&mut session, self.raw.as_ptr(), options.ctx_size as c_int)
+        };
+        let Some(session) = NonNull::new(session) else {
+            eprintln!("ds4: server generation requires a session backend");
+            return ServerGenerationResult {
+                exit_code: if rc == 0 { 1 } else { rc },
+                text: Vec::new(),
+                prompt_tokens: prompt.len(),
+                completion_tokens: 0,
+                finish_reason: "error",
+            };
+        };
+        let session = Session { raw: session };
+        let mut err = [0 as c_char; 160];
+        let sync_rc = unsafe {
+            ds4_session_sync(
+                session.raw.as_ptr(),
+                &prompt.raw,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if sync_rc != 0 {
+            eprintln!("ds4: prompt processing failed: {}", c_error(&err));
+            return ServerGenerationResult {
+                exit_code: sync_rc,
+                text: Vec::new(),
+                prompt_tokens: prompt.len(),
+                completion_tokens: 0,
+                finish_reason: "error",
+            };
+        }
+
+        let room = unsafe {
+            ds4_session_ctx(session.raw.as_ptr()) - ds4_session_pos(session.raw.as_ptr())
+        };
+        let max_tokens = options.n_predict.max(0).min(room.max(0));
+        let mut rng = options.seed;
+        let eos = unsafe { ds4_token_eos(self.raw.as_ptr()) };
+        let mut text = Vec::new();
+        let mut completion_tokens = 0;
+        let mut finish_reason = "length";
+        while completion_tokens < max_tokens {
+            let token = unsafe {
+                ds4_session_sample(
+                    session.raw.as_ptr(),
+                    options.temperature,
+                    options.top_k,
+                    options.top_p,
+                    options.min_p,
+                    &mut rng,
+                )
+            };
+            if token == eos {
+                finish_reason = "stop";
+                break;
+            }
+            let eval_rc = unsafe {
+                ds4_session_eval(session.raw.as_ptr(), token, err.as_mut_ptr(), err.len())
+            };
+            if eval_rc != 0 {
+                eprintln!("ds4: decode failed: {}", c_error(&err));
+                return ServerGenerationResult {
+                    exit_code: eval_rc,
+                    text,
+                    prompt_tokens: prompt.len(),
+                    completion_tokens,
+                    finish_reason: "error",
+                };
+            }
+            unsafe {
+                append_token_text_bytes(self.raw.as_ptr(), &mut text, token);
+            }
+            completion_tokens += 1;
+        }
+
+        ServerGenerationResult {
+            exit_code: 0,
+            text,
+            prompt_tokens: prompt.len(),
+            completion_tokens,
+            finish_reason,
         }
     }
 
@@ -778,6 +890,17 @@ unsafe fn append_token_text(engine: *mut RawEngine, printer: &mut TokenPrinter, 
     }
     let bytes = slice::from_raw_parts(text.cast::<u8>(), len);
     printer.write_token_text(bytes);
+    free(text.cast());
+}
+
+unsafe fn append_token_text_bytes(engine: *mut RawEngine, out: &mut Vec<u8>, token: c_int) {
+    let mut len = 0usize;
+    let text = ds4_token_text(engine, token, &mut len);
+    if text.is_null() {
+        return;
+    }
+    let bytes = slice::from_raw_parts(text.cast::<u8>(), len);
+    out.extend_from_slice(bytes);
     free(text.cast());
 }
 

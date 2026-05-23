@@ -1,13 +1,19 @@
-use ds4_engine::{context_memory_estimate, Backend, Engine, EngineOptions, ThinkMode};
+use ds4_engine::{
+    context_memory_estimate, Backend, Engine, EngineOptions, ServerGenerationOptions, ThinkMode,
+};
 use ds4_gguf::{
-    parse_http_request, route_no_model_server_http_with_generation_message, HttpRequestParseError,
-    NoModelRouteConfig,
+    format_http_error, format_http_response, format_openai_chat_completion_http,
+    openai_context_length_error_body, parse_http_request, parse_openai_chat_request,
+    request_exceeds_context, route_no_model_server_request_with_generation_message, HttpRequest,
+    HttpRequestParseError, NoModelRouteConfig, OpenAiChatCompletion, OpenAiChatRequest,
+    OpenAiUsage,
 };
 use std::env;
+use std::fs::File;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Shutdown, SocketAddrV4, TcpListener, TcpStream};
 use std::process;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -28,6 +34,7 @@ struct ServerConfig {
     quality: bool,
     host: String,
     port: u16,
+    trace_path: Option<String>,
     context_length: i32,
     default_tokens: i32,
     enable_cors: bool,
@@ -49,6 +56,7 @@ impl Default for ServerConfig {
             quality: false,
             host: "127.0.0.1".to_string(),
             port: 8000,
+            trace_path: None,
             context_length: 32768,
             default_tokens: 393216,
             enable_cors: false,
@@ -99,10 +107,17 @@ fn serve(config: ServerConfig, engine: &Engine) -> io::Result<()> {
     let actual_addr = listener.local_addr()?;
     eprintln!("ds4-server-runtime-rs: listening on http://{actual_addr}");
 
+    let mut state = RuntimeState {
+        sequence: 0,
+        trace: match config.trace_path.as_deref() {
+            Some(path) => Some(File::create(path)?),
+            None => None,
+        },
+    };
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
-                if let Err(err) = handle_client(&mut stream, &config, engine) {
+                if let Err(err) = handle_client(&mut stream, &config, engine, &mut state) {
                     eprintln!("ds4-server-runtime-rs: client error: {err}");
                 }
             }
@@ -114,24 +129,208 @@ fn serve(config: ServerConfig, engine: &Engine) -> io::Result<()> {
     Ok(())
 }
 
-fn handle_client(stream: &mut TcpStream, config: &ServerConfig, engine: &Engine) -> io::Result<()> {
+struct RuntimeState {
+    sequence: u64,
+    trace: Option<File>,
+}
+
+fn handle_client(
+    stream: &mut TcpStream,
+    config: &ServerConfig,
+    engine: &Engine,
+    state: &mut RuntimeState,
+) -> io::Result<()> {
     stream.set_read_timeout(Some(READ_TIMEOUT))?;
     stream.set_write_timeout(Some(WRITE_TIMEOUT))?;
     let request = read_request_bytes(stream)?;
-    let route_config = NoModelRouteConfig {
-        enable_cors: config.enable_cors,
-        context_length: config.context_length,
-        default_tokens: config.default_tokens,
+    let response = route_runtime_http(&request, config, engine, state);
+    stream.write_all(response.as_bytes())?;
+    let _ = stream.shutdown(Shutdown::Both);
+    Ok(())
+}
+
+fn route_runtime_http(
+    input: &[u8],
+    config: &ServerConfig,
+    engine: &Engine,
+    state: &mut RuntimeState,
+) -> String {
+    let route_config = route_config(config);
+    let request = match parse_http_request(input) {
+        Ok(request) => request,
+        Err(_) => return format_http_error(config.enable_cors, 400, "bad HTTP request"),
     };
-    let response = route_no_model_server_http_with_generation_message(
+    if request.method == "POST" && request.path == "/v1/chat/completions" {
+        return route_chat_completions(&request, config, engine, state);
+    }
+    route_no_model_server_request_with_generation_message(
         &request,
         route_config,
         |prompt| count_prompt_tokens(engine, prompt),
         MODEL_BACKED_GENERATION_MESSAGE,
+    )
+}
+
+fn route_chat_completions(
+    request: &HttpRequest,
+    config: &ServerConfig,
+    engine: &Engine,
+    state: &mut RuntimeState,
+) -> String {
+    let parsed = match parse_openai_chat_request(
+        &request.body,
+        config.default_tokens,
+        config.context_length,
+    ) {
+        Ok(parsed) => parsed,
+        Err(err) => return format_http_error(config.enable_cors, 400, err.message()),
+    };
+    let prompt = match engine.encode_chat_prompt("", &parsed.prompt_text, ThinkMode::None) {
+        Ok(prompt) => prompt,
+        Err(err) => {
+            eprintln!("ds4-server-runtime-rs: failed to tokenize chat prompt: {err}");
+            return format_http_error(config.enable_cors, 400, "invalid prompt text");
+        }
+    };
+    let prompt_tokens = prompt.len().max(0) as usize;
+    if request_exceeds_context(prompt_tokens, config.context_length) {
+        let body = openai_context_length_error_body(prompt_tokens, config.context_length);
+        return format_http_response(config.enable_cors, 400, Some("application/json"), &body);
+    }
+    if let Some(message) = unsupported_chat_generation_message(&parsed) {
+        return format_http_error(config.enable_cors, 503, message);
+    }
+
+    let generated = engine.generate_server_text(
+        &prompt,
+        ServerGenerationOptions {
+            n_predict: parsed.max_tokens,
+            ctx_size: config.context_length,
+            temperature: parsed.sampling.temperature,
+            top_k: parsed.sampling.top_k,
+            top_p: parsed.sampling.top_p,
+            min_p: parsed.sampling.min_p,
+            seed: parsed.seed,
+        },
     );
-    stream.write_all(response.as_bytes())?;
-    let _ = stream.shutdown(Shutdown::Both);
-    Ok(())
+    if generated.exit_code != 0 || generated.finish_reason == "error" {
+        return format_http_error(config.enable_cors, 500, "generation failed");
+    }
+    let content = String::from_utf8_lossy(&generated.text);
+    state.sequence += 1;
+    let id = format!("chatcmpl-{}", state.sequence);
+    if let Some(trace) = state.trace.as_mut() {
+        if let Err(err) = write_chat_trace(
+            trace,
+            state.sequence,
+            &request.body,
+            &parsed,
+            generated.prompt_tokens,
+            &generated,
+            &content,
+        ) {
+            eprintln!("ds4-server-runtime-rs: failed to write trace: {err}");
+        }
+    }
+    format_openai_chat_completion_http(
+        config.enable_cors,
+        &OpenAiChatCompletion {
+            id: &id,
+            created: unix_timestamp(),
+            model: &parsed.model,
+            content: &content,
+            reasoning_content: None,
+            finish_reason: generated.finish_reason,
+            usage: OpenAiUsage::new(
+                generated.prompt_tokens,
+                generated.completion_tokens,
+                0,
+                generated.prompt_tokens,
+            ),
+        },
+    )
+}
+
+fn unsupported_chat_generation_message(parsed: &OpenAiChatRequest) -> Option<&'static str> {
+    if parsed.stream {
+        Some("streaming chat generation is not implemented yet")
+    } else if parsed.has_tools {
+        Some("tool chat generation is not implemented yet")
+    } else if map_think_mode(parsed.think_mode).enabled() {
+        Some("thinking chat generation is not implemented yet")
+    } else if !parsed.stops.is_empty() {
+        Some("stop sequences are not implemented yet")
+    } else {
+        None
+    }
+}
+
+fn write_chat_trace(
+    trace: &mut File,
+    sequence: u64,
+    raw_body: &str,
+    request: &OpenAiChatRequest,
+    prompt_tokens: i32,
+    generated: &ds4_engine::ServerGenerationResult,
+    content: &str,
+) -> io::Result<()> {
+    writeln!(trace, "===== request {sequence} =====")?;
+    writeln!(trace, "kind: chat")?;
+    writeln!(trace, "model: {}", request.model)?;
+    writeln!(trace, "stream: {}", if request.stream { 1 } else { 0 })?;
+    writeln!(trace, "tools: {}", if request.has_tools { 1 } else { 0 })?;
+    writeln!(trace, "think_mode: {}", request.think_mode.name())?;
+    writeln!(trace, "prompt_tokens: {prompt_tokens}")?;
+    writeln!(trace, "effective_prompt_tokens: {prompt_tokens}")?;
+    writeln!(trace, "cached_tokens: 0")?;
+    writeln!(trace, "max_tokens: {}", request.max_tokens)?;
+    writeln!(trace, "temperature: {:.3}", request.sampling.temperature)?;
+    writeln!(trace, "top_k: {}", request.sampling.top_k)?;
+    writeln!(trace, "top_p: {:.3}", request.sampling.top_p)?;
+    writeln!(trace, "min_p: {:.3}", request.sampling.min_p)?;
+    writeln!(trace, "seed: {}", request.seed)?;
+    writeln!(
+        trace,
+        "stream_include_usage: {}",
+        if request.stream_include_usage { 1 } else { 0 }
+    )?;
+    writeln!(trace)?;
+    writeln!(trace, "--- cache decision ---")?;
+    writeln!(trace, "live_tokens_before: 0")?;
+    writeln!(trace, "prompt_tokens: {prompt_tokens}")?;
+    writeln!(trace, "live_prompt_common: 0")?;
+    writeln!(trace, "memory_token_reusable: 0")?;
+    writeln!(trace, "memory_miss_reason: no-live-checkpoint")?;
+    writeln!(trace, "cache_source: none")?;
+    writeln!(trace, "cached_tokens: 0")?;
+    writeln!(trace, "disk_cached_tokens: 0")?;
+    writeln!(trace)?;
+    writeln!(trace, "--- raw request json ---")?;
+    writeln!(trace, "{raw_body}")?;
+    writeln!(trace)?;
+    writeln!(trace, "--- rendered prompt ---")?;
+    writeln!(trace, "{}", request.prompt_text)?;
+    writeln!(trace)?;
+    writeln!(trace, "--- generated text ---")?;
+    writeln!(trace, "{content}")?;
+    writeln!(trace)?;
+    writeln!(trace, "--- parsed message ---")?;
+    writeln!(trace, "finish: {}", generated.finish_reason)?;
+    writeln!(trace, "generated_tokens: {}", generated.completion_tokens)?;
+    writeln!(trace, "content:")?;
+    writeln!(trace, "{content}")?;
+    writeln!(trace)?;
+    writeln!(trace, "===== end request {sequence} =====")?;
+    writeln!(trace)?;
+    trace.flush()
+}
+
+fn route_config(config: &ServerConfig) -> NoModelRouteConfig {
+    NoModelRouteConfig {
+        enable_cors: config.enable_cors,
+        context_length: config.context_length,
+        default_tokens: config.default_tokens,
+    }
 }
 
 fn read_request_bytes(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
@@ -166,6 +365,20 @@ fn count_prompt_tokens(engine: &Engine, prompt_text: &str) -> usize {
             usize::MAX
         }
     }
+}
+
+fn map_think_mode(mode: ds4_gguf::ThinkMode) -> ThinkMode {
+    match mode {
+        ds4_gguf::ThinkMode::None => ThinkMode::None,
+        ds4_gguf::ThinkMode::High => ThinkMode::High,
+        ds4_gguf::ThinkMode::Max => ThinkMode::Max,
+    }
+}
+
+fn unix_timestamp() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs() as i64)
 }
 
 fn engine_options_from_config(config: &ServerConfig) -> EngineOptions<'_> {
@@ -265,6 +478,9 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<ServerCon
             }
             "--port" => {
                 config.port = parse_port(&need_arg(&mut args, &arg)?, &arg)?;
+            }
+            "--trace" => {
+                config.trace_path = Some(need_arg(&mut args, &arg)?);
             }
             "-c" | "--ctx" => {
                 config.context_length = parse_positive_i32(&need_arg(&mut args, &arg)?, &arg)?;
@@ -386,6 +602,8 @@ HTTP API:\n\
       Bind port. Default: 8000\n\
   --cors\n\
       Add Access-Control-Allow-* headers for browser JS clients. Does not change --host.\n\
+  --trace FILE\n\
+      Write a human-readable no-cache chat trace for supported M9.4c requests.\n\
   -c, --ctx N\n\
       Context size used for request parsing and prompt-token limits. Default: 32768\n\
   -n, --tokens N\n\
@@ -399,8 +617,18 @@ HTTP API:\n\
 mod tests {
     use super::*;
 
+    const CHAT_BASIC: &str =
+        include_str!("../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_basic.json");
+    const CHAT_THINKING_DISABLED: &str = include_str!(
+        "../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_thinking_disabled.json"
+    );
+
     fn parse(args: &[&str]) -> Result<Option<ServerConfig>, CliExit> {
         parse_args(args.iter().copied().map(str::to_string))
+    }
+
+    fn parse_chat(body: &str) -> ds4_gguf::OpenAiChatRequest {
+        parse_openai_chat_request(body, 64, 32_768).expect("chat request parses")
     }
 
     #[test]
@@ -424,6 +652,8 @@ mod tests {
                 "localhost",
                 "--port",
                 "18080",
+                "--trace",
+                "server.trace",
                 "--ctx",
                 "16",
                 "--tokens",
@@ -449,6 +679,7 @@ mod tests {
                 quality: true,
                 host: "localhost".to_string(),
                 port: 18080,
+                trace_path: Some("server.trace".to_string()),
                 context_length: 16,
                 default_tokens: 64,
                 enable_cors: true,
@@ -544,5 +775,41 @@ mod tests {
         assert_eq!(bind_host("localhost").unwrap(), Ipv4Addr::new(127, 0, 0, 1));
         assert_eq!(bind_host("127.0.0.1").unwrap(), Ipv4Addr::new(127, 0, 0, 1));
         assert!(bind_host("example.com").is_err());
+    }
+
+    #[test]
+    fn m94c_allows_only_no_cache_non_streaming_non_thinking_chat() {
+        assert_eq!(
+            unsupported_chat_generation_message(&parse_chat(CHAT_BASIC)),
+            None
+        );
+        assert_eq!(
+            unsupported_chat_generation_message(&parse_chat(CHAT_THINKING_DISABLED)),
+            None
+        );
+        assert_eq!(
+            unsupported_chat_generation_message(&parse_chat(
+                r#"{"messages":[{"role":"user","content":"hi"}],"stream":true}"#
+            )),
+            Some("streaming chat generation is not implemented yet")
+        );
+        assert_eq!(
+            unsupported_chat_generation_message(&parse_chat(
+                r#"{"messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{}}}}]}"#
+            )),
+            Some("tool chat generation is not implemented yet")
+        );
+        assert_eq!(
+            unsupported_chat_generation_message(&parse_chat(
+                r#"{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"hi"}]}"#
+            )),
+            Some("thinking chat generation is not implemented yet")
+        );
+        assert_eq!(
+            unsupported_chat_generation_message(&parse_chat(
+                r#"{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"stop":"done"}"#
+            )),
+            Some("stop sequences are not implemented yet")
+        );
     }
 }

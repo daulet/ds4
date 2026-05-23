@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.4c No-Cache Non-Streaming Chat Generation Replay
-- Last validated source commit: M9.4b OpenAI non-streaming response and usage
-  builder in this commit; prior pushed source commit
-  `035b156a20fbe0eaeb971cfe7cdb4317e125ebec`
+- Active item: M9.4d Memory-Token Cache Seed And Continuation Replay
+- Last validated source commit: M9.4c no-cache non-streaming chat generation
+  replay in this commit; prior pushed source commit
+  `2eb85baac18f7856b4c1795cb2495875a57b702b`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,32 @@
 
 ## Last Evidence
 
+- M9.4c added server-generation runtime support in `ds4-engine` that syncs a
+  rendered prompt into a fresh session, samples raw token text without the CLI
+  trailing-newline printer, returns prompt/completion token counts, and reports
+  `stop`, `length`, or `error` finish reasons.
+- M9.4c routes model-backed OpenAI `/v1/chat/completions` requests through the
+  runtime only for the no-cache M0.4 surface: non-streaming, no tools,
+  non-thinking, no stop-list requests. Streaming, tools, thinking, and stops
+  remain explicit 503 boundaries for later M9 items.
+- M9.4c uses the M9.4b response builder for successful chat responses and
+  writes a `--trace` file with request metadata, no-cache decision fields,
+  rendered prompt, generated text, finish reason, and generated-token count.
+- M9.4c local validation passed for targeted
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.4c B300 validation used `/workspace/ds4-m94c` and model
+  `/workspace/ds4/ds4flash.gguf`; targeted runtime tests passed, and the
+  server replay on port `18196` normalized only IDs/timestamps while matching
+  `chat_basic` content `baseline ready`, finish `stop`, usage `11/3/14`, and
+  `chat_thinking_disabled` content `2`, finish `stop`, usage `15/1/16`.
+- M9.4c B300 trace validation checked rendered prompts, `cache_source: none`,
+  prompt token counts, generated token counts, and final content for both
+  no-cache fixtures. Artifacts remain in the pod at
+  `/tmp/ds4-m94c-server.trace`, `/tmp/ds4-m94c-server.stderr`, and
+  `/tmp/ds4-m94c-*.json`; the server process was stopped by the validation
+  script.
 - M9.4b added `rust/ds4-gguf/src/server_response.rs` with pure formatting
   helpers for OpenAI non-streaming chat-completion JSON, HTTP response
   wrapping, usage details, finish reasons, optional reasoning content, and

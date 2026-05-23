@@ -2670,7 +2670,7 @@
 
 ### M9.4c: No-Cache Non-Streaming Chat Generation Replay
 
-- Status: active
+- Status: done
 - Goal: route model-backed non-streaming `/v1/chat/completions` requests
   through the Rust engine for the no-cache M0.4 cases, returning the M9.4b
   response surface for `chat_basic` and `chat_thinking_disabled`.
@@ -2692,15 +2692,17 @@
 - Review gate: ask Claude to review request-to-runtime option mapping,
   prompt-token accounting, thinking-disabled behavior, response assembly,
   unsupported-route fallbacks, and B300 comparator normalization.
-- Validation needed: B300 no-cache non-streaming comparator, local parser/error
-  tests, existing M8 runtime comparator or documented B300 skip,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, and
-  `git diff --check`.
+- Validation passed: targeted runtime tests
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  full `cargo test --workspace`, B300 no-cache normalized replay for
+  `chat_basic` and `chat_thinking_disabled` from `/workspace/ds4-m94c` using
+  `/workspace/ds4/ds4flash.gguf`, B300 trace prompt/generated-field checks,
+  `cargo fmt --all -- --check`, and `git diff --check`.
 - Owner path: Rust server runtime path, `ds4-parity/`, `.memory/status.md`.
 
 ### M9.4d: Memory-Token Cache Seed And Continuation Replay
 
-- Status: pending
+- Status: active
 - Goal: add the in-memory server session/cache behavior needed for M0.4
   `chat_cache_seed` and `chat_cache_continuation`, including cache read/write
   usage fields and trace cache decisions.
