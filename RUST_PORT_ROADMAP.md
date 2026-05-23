@@ -3276,6 +3276,96 @@ Acceptance:
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 
+Split implementation into reviewable, comparable slices before executing GPU
+kernels:
+
+##### M10.5c4a: Rust Decode Execution Trace Oracle
+
+- Goal: add a Rust dry-run decode execution trace that expands the M10.5b
+  token/layer plan into facade method calls and cache-counter transitions,
+  without calling backend kernels.
+- Oracle: M10.5b decode plan, M10.5c3 facade operation table, and current-C
+  default branches in `metal_graph_encode_decode_layer` and
+  `metal_graph_encode_output_head`.
+- Fixture: first-token, short-prefill decode, ratio-4 emit, long indexed
+  decode, and no-logits/no-split cases from the M10.5b oracle.
+- Comparator: JSON trace comparator for stage order, facade method names,
+  tensor argument roles, raw/compressed/indexer counter deltas, split flush,
+  read, and synchronize-on-failure markers.
+- Acceptance: the Rust trace proves the full default one-token call tape and
+  state-counter mutations before any FFI execution is introduced.
+- Drift policy: method names, stage order, tensor roles, counters, and command
+  boundaries are exact; no tensor values or GPU execution are compared.
+- Review gate: ask Claude to review trace completeness against C default
+  branches and M10.5c3 facade coverage.
+- Validation gate: trace comparator with negative test, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.5c4b: Rust Decode Runtime State Bridge
+
+- Goal: instantiate the decode graph runtime state from M10.5c2 tensor plans
+  and M10.5c1 structured weights, still without launching kernels.
+- Oracle: M10.5c1 structured weight table, M10.5c2 graph-state allocation
+  plan, and M10.5c4a trace tensor roles.
+- Fixture: `ctx32768_mtp_off` state plus dense, ratio-4, ratio-128, and
+  hash-layer weight-presence slices.
+- Comparator: runtime-state dump comparing allocated/view/lazy/external tensor
+  roles, per-layer cache counters, required weight offsets/types, and facade
+  call inputs against the dry-run trace.
+- Acceptance: every tensor and weight role needed by the default decode trace
+  resolves to a Rust-owned runtime handle or explicit external input before
+  backend execution.
+- Drift policy: tensor names, weight roles, offsets/types, allocation sizes,
+  and initial counters are exact; backend kernel values remain out of scope.
+- Review gate: ask Claude to review lifetime ownership, optional tensor
+  handling, and weight-role mapping.
+- Validation gate: runtime-state comparator with negative test, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.5c4c: Rust One-Token Decode B300 Execution
+
+- Goal: execute the default one-token decode trace through the M10.5c3 facade
+  on B300 and capture Rust checkpoints for the M10.4 decode cases.
+- Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
+  and counter transitions, and the M10.5c4b runtime state bridge.
+- Fixture: official-vector first-token and continuation-token layer-coverage
+  cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
+  compressed layers. Continuation-state reuse is deferred to M10.5c4d.
+- Comparator: B300 Rust-vs-C intermediate tensor hashes/samples, logits diff,
+  raw/compressed/indexer counter comparison, and command-boundary trace diff.
+- Acceptance: Rust one-token decode matches the selected M10.4 tensor
+  checkpoints and logits within recorded tolerances while preserving cache
+  counters and command boundaries.
+- Drift policy: scheduling order, cache counters, token position, and command
+  boundaries are exact; f32 tensor values follow M10.4 tolerances.
+- Review gate: ask Claude to review decode ordering, cache mutation, and
+  unsafe backend-call containment.
+- Validation gate: targeted decode comparator on B300, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.5c4d: Decode Continuation And Optional Steering Closure
+
+- Goal: close one-token decode coverage for continuation-state and optional
+  directional-steering cases after default B300 execution is passing.
+- Oracle: M10.4 continuation checkpoints, C directional-steering decode
+  branches, and M10.5c4c execution results.
+- Fixture: continuation-token decode after prefill, long indexed decode, and
+  directional-steering enabled cases when support vectors are available.
+- Comparator: continuation Rust-vs-C tensor/logit/counter diffs plus optional
+  steering-specific tensor diffs or an explicit unavailable-fixture skip.
+- Acceptance: continuation decode stays comparable to C, and steering coverage
+  is either validated or explicitly skipped with the missing fixture recorded.
+- Drift policy: continuation counters and command boundaries are exact; f32
+  values follow M10.4 tolerances; optional steering skip text is exact.
+- Review gate: ask Claude to review continuation state reuse, optional tensor
+  ownership, and skip conditions.
+- Validation gate: continuation/steering comparator on B300 or exact skip,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+
 #### M10.6: Rust Layer-Major Prefill And Chunking
 
 - Goal: move layer-major and chunked prefill scheduling into Rust while keeping

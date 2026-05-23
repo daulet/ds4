@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4 Rust Single-Token Decode Graph Execution
-- Last validated source commit: M10.5c3 Rust decode backend facade in this
+- Active item: M10.5c4a Rust Decode Execution Trace Oracle
+- Last validated source commit: M10.5c4 work-item split in this
   commit; prior pushed source commit
-  `82dd43aa71910e52516e2fef772210688bd61699`
+  `07d84fc2fbea6f49614e3bea364bbdec619b19b7`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,17 @@
 
 ## Last Evidence
 
+- M10.5c4 was split before implementation because the original item spans
+  dry-run scheduling, runtime tensor/weight bridge construction, B300 numeric
+  execution, continuation-state validation, and optional directional-steering
+  coverage. The active next slice is M10.5c4a, a no-FFI Rust decode execution
+  trace oracle that must prove default one-token facade call order, tensor
+  roles, cache-counter deltas, split flush, read, and synchronize markers
+  before GPU kernels are launched from Rust.
+- M10.5c4b is the runtime-state bridge from M10.5c1/M10.5c2 weights and
+  tensor plans. M10.5c4c is the first B300 one-token execution/checkpoint
+  slice, and M10.5c4d closes continuation and optional directional-steering
+  coverage or records exact unavailable-fixture skips.
 - M10.5c3 adds `rust/ds4-gpu/src/decode_backend.rs`, a safe facade over the
   default fused one-token decode backend primitives. The facade uses
   `TensorRef`/`TensorMut` handles from `Tensor` and `TensorView`, keeps raw
