@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b Rust One-Token Decode B300 Execution
-- Last validated source commit before the current stage: M10.5c4c2b1 Rust
-  decode execution preflight in commit
-  `5f0c47892ece727dfb09bd1755168c0afae9ae08`
+- Active item: M10.5c4c2b2b2 Rust One-Token Decode B300 Execution
+- Last validated source commit before the current stage: M10.5c4c2b2a Rust
+  full decode state allocation in commit
+  `830cfb11d482e4d8c2b4ffbc448d60e4b194125e`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,9 +26,34 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b1 splits the remaining one-token scheduler item into a first
+  real-kernel execution bridge and the next active full scheduler slice
+  M10.5c4c2b2b2.
+- M10.5c4c2b2b1 adds `ds4-decode-first-kernel`, which maps the real GGUF on
+  B300, binds DS4 weights, sets the model fd/range, allocates `cur_hc`, opens a
+  command batch, launches `embed_token_hc` through the safe Rust facade for
+  token `0`, synchronizes, reads back `cur_hc`, and releases the backend.
+- The B300 first-kernel run emitted `ds4.decode_first_kernel.v1` and the
+  candidate validator passed 64 checks. Evidence: model size 86,720,111,488
+  bytes, tensor-data offset 5,333,824, 1,328 tensors, 43 bound layers,
+  `base.token_embd` offset 77,928,033,088, `cur_hc` 65,536 bytes, 16,384
+  nonzero f32 elements, and pinned samples at indices 0, 1, 8192, 16382, and
+  16383.
+- M10.5c4c2b2b1 adds `ds4-parity/compare_decode_first_kernel.py`, which checks
+  the static contract and optionally validates the B300 JSON candidate. It is
+  wired into the unified parity report as `M10.5c4c2b2b1 Rust first decode
+  kernel comparator` with an exact B300 rerun command.
+- M10.5c4c2b2b1 validation passed `cargo check -p ds4-gpu --bin
+  ds4-decode-first-kernel`, `python3
+  ds4-parity/compare_decode_first_kernel.py --negative-test`, `python3 -m
+  py_compile ds4-parity/compare_decode_first_kernel.py
+  ds4-parity/run_parity_report.py`, B300 `CUDA_ARCH=native cargo run -p
+  ds4-gpu --features cuda-backend --bin ds4-decode-first-kernel --quiet --
+  --model /workspace/ds4/ds4flash.gguf` followed by candidate validation,
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check`.
 - M10.5c4c2b2a splits the remaining numeric B300 execution item into a full
-  decode-state allocation bridge and the next active one-token scheduler slice
-  M10.5c4c2b2b.
+  decode-state allocation bridge and the remaining one-token scheduler work.
 - M10.5c4c2b2a adds `ds4-decode-state-alloc`, which walks the M10.5c2
   graph-state table for `ctx32768_mtp_off`, allocates every initially owned
   tensor, applies zero and negative-infinity fills, creates the planned
@@ -56,8 +81,9 @@
   --check`, and `git diff --check`.
 - M10.5c4c2b1 splits the original B300 one-token execution item into a
   model-backed preflight and the remaining numeric decode slice. After the
-  M10.5c4c2b2a state-allocation bridge, the active M10.5c4c2b2b slice must
-  launch the actual one-token facade schedule and compare M10.4 tensors/logits.
+  M10.5c4c2b2a state-allocation bridge and M10.5c4c2b2b1 first-kernel bridge,
+  the active M10.5c4c2b2b2 slice must launch the actual one-token facade
+  schedule and compare M10.4 tensors/logits.
 - M10.5c4c2b1 adds `rust/ds4-gpu/src/decode_execution.rs` and
   `ds4-decode-exec-preflight`, which mmap the real GGUF on B300, parse the
   GGUF header without copying tensor data, bind DS4 weights, set the model fd

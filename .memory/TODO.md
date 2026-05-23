@@ -3947,7 +3947,36 @@
 - Owner path: Rust decode state allocation binary, B300 comparator,
   `.memory/status.md`.
 
-### M10.5c4c2b2b: Rust One-Token Decode B300 Execution
+### M10.5c4c2b2b1: Rust First Decode Kernel Execution
+
+- Status: completed
+- Goal: cross from allocation/preflight into one real model-backed decode
+  kernel on B300 before scheduling the full one-token tape.
+- Oracle: the M10.5c4c2b1 real-GGUF map/bind path, M10.5c4c2b2a `cur_hc`
+  allocation shape, the M10.5c3 `embed_token_hc` facade wrapper, and C decode
+  startup behavior that launches kernels inside command batches.
+- Fixture: `/workspace/ds4/ds4flash.gguf` on B300, token `0`,
+  `base.token_embd`, and the `cur_hc` graph-state tensor.
+- Comparator: static first-kernel contract plus optional B300 JSON validator
+  checking model identity, command-batch execution, token-embedding offset,
+  `cur_hc` shape, nonzero readback, and pinned sample values.
+- Acceptance: Rust emits `ds4.decode_first_kernel.v1` after mapping the real
+  GGUF, launching `embed_token_hc` through the safe facade, synchronizing,
+  reading back `cur_hc`, and cleaning up the backend.
+- Drift policy: model size, tensor-data offset, token embedding offset/size,
+  token id, output shape, and selected samples are exact; backend stderr logs
+  and B300 host identity may vary.
+- Review gate: ask Claude to review command-batch lifecycle, model-map
+  lifetime, tensor readback, and cleanup ordering.
+- Validation passed: first-kernel comparator with negative test, B300
+  first-kernel binary plus candidate JSON validation, `cargo check -p ds4-gpu
+  --bin ds4-decode-first-kernel`, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, and non-interactive Claude review with no
+  blockers.
+- Owner path: Rust decode first-kernel binary, B300 comparator,
+  `.memory/status.md`.
+
+### M10.5c4c2b2b2: Rust One-Token Decode B300 Execution
 
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
@@ -3955,7 +3984,8 @@
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
-  M10.5c4c2b1 execution preflight, and M10.5c4c2b2a full state allocation.
+  M10.5c4c2b1 execution preflight, M10.5c4c2b2a full state allocation, and
+  M10.5c4c2b2b1 first-kernel execution.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -3969,9 +3999,9 @@
 - Review gate: ask Claude to review decode ordering, cache mutation, and
   unsafe backend-call containment.
 - Validation needed: targeted decode comparator on B300, c2b1 preflight rerun,
-  c2b2a state allocation rerun, `cargo test --workspace`, `cargo fmt --all --
-  --check`, `git diff --check`, and non-interactive Claude review with no
-  blockers.
+  c2b2a state allocation rerun, c2b2b1 first-kernel rerun, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 

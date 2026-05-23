@@ -340,6 +340,24 @@ python3 ds4-parity/compare_decode_state_allocation.py \
   --candidate /tmp/ds4-c2b2a-state-allocation.json
 ```
 
+Compare the M10.5c4c2b2b1 Rust first decode kernel before running the full
+one-token scheduler:
+
+```sh
+python3 ds4-parity/compare_decode_first_kernel.py
+python3 ds4-parity/compare_decode_first_kernel.py --negative-test
+```
+
+The comparator checks that `ds4-decode-first-kernel` maps the real GGUF,
+binds DS4 weights, opens a command batch, calls the Rust `embed_token_hc`
+facade with `base.token_embd`, synchronizes, reads `cur_hc`, and cleans up the
+backend. On B300, validate the emitted JSON too:
+
+```sh
+python3 ds4-parity/compare_decode_first_kernel.py \
+  --candidate /tmp/ds4-c2b2b1-first-kernel.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
