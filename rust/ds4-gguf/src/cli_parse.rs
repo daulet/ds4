@@ -18,10 +18,17 @@ pub struct CliParseResult {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CliConfig {
     pub model_path: String,
+    pub mtp_path: Option<String>,
     pub prompt: Option<String>,
     pub system: String,
     pub n_predict: i32,
     pub ctx_size: i32,
+    pub n_threads: i32,
+    pub mtp_draft_tokens: i32,
+    pub mtp_margin: f32,
+    pub directional_steering_file: Option<String>,
+    pub directional_steering_attn: f32,
+    pub directional_steering_ffn: f32,
     pub temperature: f32,
     pub top_p: f32,
     pub min_p: f32,
@@ -38,10 +45,17 @@ impl Default for CliConfig {
     fn default() -> Self {
         Self {
             model_path: "ds4flash.gguf".to_string(),
+            mtp_path: None,
             prompt: None,
             system: "You are a helpful assistant".to_string(),
             n_predict: 50000,
             ctx_size: 32768,
+            n_threads: 0,
+            mtp_draft_tokens: 1,
+            mtp_margin: 3.0,
+            directional_steering_file: None,
+            directional_steering_attn: 0.0,
+            directional_steering_ffn: 0.0,
             temperature: 1.0,
             top_p: 1.0,
             min_p: 0.05,
@@ -79,6 +93,7 @@ struct CliState {
     imatrix_dataset: Option<String>,
     imatrix_out: Option<String>,
     perplexity_file: Option<String>,
+    directional_steering_scale_set: bool,
 }
 
 const HELP: &str = "\
@@ -221,18 +236,33 @@ where
                 };
                 match arg {
                     "-sys" | "--system" => state.config.system = value,
+                    "--mtp" => state.config.mtp_path = Some(value),
+                    "--dir-steering-file" => state.config.directional_steering_file = Some(value),
                     "--perplexity-file" => state.perplexity_file = Some(value),
                     "--imatrix-dataset" => state.imatrix_dataset = Some(value),
                     "--imatrix-out" => state.imatrix_out = Some(value),
                     _ => {}
                 }
             }
-            "--mtp-draft"
-            | "-t"
-            | "--threads"
-            | "--logprobs-top-k"
-            | "--imatrix-max-prompts"
-            | "--imatrix-max-tokens" => {
+            "--mtp-draft" | "-t" | "--threads" => {
+                let value = match need_arg(&argv, &mut i, arg) {
+                    Ok(value) => value,
+                    Err(result) => return Err(result),
+                };
+                let Some(parsed) = parse_positive_i32(value) else {
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!("ds4: invalid value for {arg}: {value}\n"),
+                    ));
+                };
+                if arg == "--mtp-draft" {
+                    state.config.mtp_draft_tokens = parsed;
+                } else {
+                    state.config.n_threads = parsed;
+                }
+            }
+            "--logprobs-top-k" | "--imatrix-max-prompts" | "--imatrix-max-tokens" => {
                 let value = match need_arg(&argv, &mut i, arg) {
                     Ok(value) => value,
                     Err(result) => return Err(result),
@@ -292,13 +322,14 @@ where
                     Ok(value) => value,
                     Err(result) => return Err(result),
                 };
-                if parse_float_range(value, 0.0, 1000.0).is_none() {
+                let Some(parsed) = parse_float_range(value, 0.0, 1000.0) else {
                     return Err(exit(
                         2,
                         "",
                         &format!("ds4: invalid value for {arg}: {value}\n"),
                     ));
-                }
+                };
+                state.config.mtp_margin = parsed;
             }
             "--temp" => {
                 let value = match need_arg(&argv, &mut i, arg) {
@@ -337,12 +368,18 @@ where
                     Ok(value) => value,
                     Err(result) => return Err(result),
                 };
-                if parse_float_range(value, -100.0, 100.0).is_none() {
+                let Some(parsed) = parse_float_range(value, -100.0, 100.0) else {
                     return Err(exit(
                         2,
                         "",
                         &format!("ds4: invalid value for {arg}: {value}\n"),
                     ));
+                };
+                state.directional_steering_scale_set = true;
+                if arg == "--dir-steering-ffn" {
+                    state.config.directional_steering_ffn = parsed;
+                } else {
+                    state.config.directional_steering_attn = parsed;
                 }
             }
             "--backend" => {
@@ -433,6 +470,9 @@ where
             "",
             "ds4: --dump-tokens requires -p or --prompt-file\n",
         ));
+    }
+    if state.config.directional_steering_file.is_some() && !state.directional_steering_scale_set {
+        state.config.directional_steering_ffn = 1.0;
     }
 
     Ok(state.config)
@@ -615,5 +655,67 @@ mod tests {
         assert_eq!(config.min_p, 0.05);
         assert_eq!(config.seed, Some(12345));
         assert_eq!(config.think_mode, ThinkMode::None);
+    }
+
+    #[test]
+    fn config_retains_runtime_controls() {
+        let config = parse_cli_config([
+            "--backend",
+            "cuda",
+            "--quality",
+            "-t",
+            "2",
+            "--warm-weights",
+            "--mtp",
+            "/tmp/mtp.gguf",
+            "--mtp-draft",
+            "2",
+            "--mtp-margin",
+            "3",
+            "--dir-steering-file",
+            "dir-steering/out/verbosity.f32",
+            "--dir-steering-ffn",
+            "0.25",
+            "--dir-steering-attn",
+            "0",
+            "-m",
+            "model.gguf",
+            "-p",
+            "prompt",
+        ])
+        .expect("valid runtime-control config");
+
+        assert_eq!(config.backend, CliBackend::Cuda);
+        assert!(config.quality);
+        assert!(config.warm_weights);
+        assert_eq!(config.n_threads, 2);
+        assert_eq!(config.mtp_path.as_deref(), Some("/tmp/mtp.gguf"));
+        assert_eq!(config.mtp_draft_tokens, 2);
+        assert_eq!(config.mtp_margin, 3.0);
+        assert_eq!(
+            config.directional_steering_file.as_deref(),
+            Some("dir-steering/out/verbosity.f32")
+        );
+        assert_eq!(config.directional_steering_ffn, 0.25);
+        assert_eq!(config.directional_steering_attn, 0.0);
+    }
+
+    #[test]
+    fn dir_steering_file_defaults_ffn_scale() {
+        let config = parse_cli_config([
+            "--cuda",
+            "--dir-steering-file",
+            "dir-steering/out/verbosity.f32",
+            "-p",
+            "prompt",
+        ])
+        .expect("valid steering config");
+
+        assert_eq!(
+            config.directional_steering_file.as_deref(),
+            Some("dir-steering/out/verbosity.f32")
+        );
+        assert_eq!(config.directional_steering_ffn, 1.0);
+        assert_eq!(config.directional_steering_attn, 0.0);
     }
 }

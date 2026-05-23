@@ -43,9 +43,20 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     }
 
     let mut options = EngineOptions::new(&config.model_path, backend);
+    options.mtp_path = config.mtp_path.as_deref();
+    options.n_threads = config.n_threads;
+    options.mtp_draft_tokens = config.mtp_draft_tokens;
+    options.mtp_margin = config.mtp_margin;
+    options.directional_steering_file = config.directional_steering_file.as_deref();
+    options.directional_steering_attn = config.directional_steering_attn;
+    options.directional_steering_ffn = config.directional_steering_ffn;
     options.warm_weights = config.warm_weights;
     options.quality = config.quality;
-    let engine = Engine::open(&options)?;
+    let engine = match Engine::open(&options) {
+        Ok(engine) => engine,
+        Err(err) if err.open_failed_code().is_some() => return Ok(1),
+        Err(err) => return Err(Box::new(err)),
+    };
     let prompt = engine.encode_chat_prompt(&config.system, prompt_text, effective_think)?;
     let generation = if config.temperature <= 0.0 {
         engine.generate_argmax_text(

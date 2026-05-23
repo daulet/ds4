@@ -1,12 +1,12 @@
 # DS4 Rust Port Status
 
-- Date: 2026-05-22 UTC
+- Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.13d Rust CLI One-Shot Runtime-Control Surface
-- Last validated source commit: M8.13c Rust CLI one-shot core transcript
+- Active item: M8.14 Current-C Interactive CLI Transcript Oracle
+- Last validated source commit: M8.13d Rust CLI one-shot runtime-control
   surface in this commit; prior pushed source commit
-  `63dd830c0779957c08657e198f22778ddd83adf1`
+  `92d43ab1bb5226ffa62d8e5a69cc0cd5017f0c67`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1231,6 +1231,41 @@
   -p ds4-gguf cli_parse -- --nocapture`, `cargo build -p ds4-engine --bin
   ds4-cli-one-shot-rs`, `cargo test -p ds4-engine`, full
   `cargo test --workspace`, `python3 -m py_compile
+  ds4-parity/compare_cli_one_shot_runtime.py
+  ds4-parity/compare_cli_argmax_runtime.py
+  ds4-parity/compare_cli_session_runtime.py`, and `git diff --check`.
+- M8.13d extends `EngineOptions` and `ds4-cli-one-shot-rs` so Rust one-shot
+  generation passes through M8.12b runtime controls: optional MTP path, thread
+  count, MTP draft tokens and margin, directional steering file and scales,
+  warm weights, and quality.
+- M8.13d extends `rust/ds4-gguf/src/cli_parse.rs` so the shared Rust CLI parser
+  retains `--mtp`, `--mtp-draft`, `--mtp-margin`, `-t`/`--threads`,
+  `--dir-steering-file`, `--dir-steering-ffn`, and `--dir-steering-attn`; it
+  also preserves the current-C default of `--dir-steering-file` without an
+  explicit scale implying FFN scale `1.0`.
+- M8.13d makes `ds4-cli-one-shot-rs` return the C-side blocked startup exit
+  path for `ds4_engine_open` failures, avoiding an extra Rust stderr wrapper for
+  the M8.12b blocked `--backend metal` and missing-MTP cases.
+- M8.13d adds `ds4-parity/compare_cli_runtime_controls_runtime.py`, which runs
+  `target/debug/ds4-cli-one-shot-rs` against all five M8.12b current-C cases:
+  `backend_name_cuda_quality_threads`, `warm_weights`, `directional_steering`,
+  `backend_metal_error`, and `mtp_missing_model`.
+- M8.13d B300 validation over `/workspace/ds4/ds4flash.gguf` passed after
+  copying the changed files one by one to `/workspace/ds4`, verifying SHA256
+  matches, building with `CARGO_HOME=/tmp/ds4-cargo
+  RUSTUP_HOME=/tmp/ds4-rustup PATH=/tmp/ds4-cargo/bin:$PATH CUDA_ARCH=native
+  cargo build -p ds4-engine --bin ds4-cli-one-shot-rs`, and running
+  `python3 ds4-parity/compare_cli_runtime_controls_runtime.py
+  ds4-parity/baselines/cli/m8.12b/current-c.json --candidate-binary
+  target/debug/ds4-cli-one-shot-rs --negative-test`.
+- M8.13d B300 comparator reported `CLI runtime-controls runtime comparator:
+  PASS, 154 checks` and `CLI runtime-controls runtime negative tests: PASS, 6
+  checks`.
+- M8.13d local validation passed for `cargo fmt --all -- --check`, `cargo test
+  -p ds4-gguf cli_parse -- --nocapture`, `cargo build -p ds4-engine --bin
+  ds4-cli-one-shot-rs`, `cargo test -p ds4-engine`, full
+  `cargo test --workspace`, `python3 -m py_compile
+  ds4-parity/compare_cli_runtime_controls_runtime.py
   ds4-parity/compare_cli_one_shot_runtime.py
   ds4-parity/compare_cli_argmax_runtime.py
   ds4-parity/compare_cli_session_runtime.py`, and `git diff --check`.

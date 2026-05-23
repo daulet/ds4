@@ -96,10 +96,17 @@ impl ThinkMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EngineOptions<'a> {
     pub model_path: &'a str,
+    pub mtp_path: Option<&'a str>,
     pub backend: Backend,
+    pub n_threads: i32,
+    pub mtp_draft_tokens: i32,
+    pub mtp_margin: f32,
+    pub directional_steering_file: Option<&'a str>,
+    pub directional_steering_attn: f32,
+    pub directional_steering_ffn: f32,
     pub warm_weights: bool,
     pub quality: bool,
 }
@@ -108,7 +115,14 @@ impl<'a> EngineOptions<'a> {
     pub const fn new(model_path: &'a str, backend: Backend) -> Self {
         Self {
             model_path,
+            mtp_path: None,
             backend,
+            n_threads: 0,
+            mtp_draft_tokens: 1,
+            mtp_margin: 3.0,
+            directional_steering_file: None,
+            directional_steering_attn: 0.0,
+            directional_steering_ffn: 0.0,
             warm_weights: false,
             quality: false,
         }
@@ -181,16 +195,25 @@ pub struct GenerationResult {
 impl Engine {
     pub fn open(options: &EngineOptions<'_>) -> Result<Self, EngineError> {
         let model_path = CString::new(options.model_path)?;
+        let mtp_path = options.mtp_path.map(CString::new).transpose()?;
+        let directional_steering_file = options
+            .directional_steering_file
+            .map(CString::new)
+            .transpose()?;
         let raw_options = RawEngineOptions {
             model_path: model_path.as_ptr(),
-            mtp_path: std::ptr::null(),
+            mtp_path: mtp_path
+                .as_ref()
+                .map_or(std::ptr::null(), |path| path.as_ptr()),
             backend: options.backend.as_raw(),
-            n_threads: 0,
-            mtp_draft_tokens: 1,
-            mtp_margin: 3.0,
-            directional_steering_file: std::ptr::null(),
-            directional_steering_attn: 0.0,
-            directional_steering_ffn: 0.0,
+            n_threads: options.n_threads as c_int,
+            mtp_draft_tokens: options.mtp_draft_tokens as c_int,
+            mtp_margin: options.mtp_margin,
+            directional_steering_file: directional_steering_file
+                .as_ref()
+                .map_or(std::ptr::null(), |path| path.as_ptr()),
+            directional_steering_attn: options.directional_steering_attn,
+            directional_steering_ffn: options.directional_steering_ffn,
             warm_weights: options.warm_weights,
             quality: options.quality,
         };
@@ -379,6 +402,13 @@ enum EngineErrorKind {
 }
 
 impl EngineError {
+    pub fn open_failed_code(&self) -> Option<i32> {
+        match self.kind {
+            EngineErrorKind::OpenFailed(code) => Some(code),
+            _ => None,
+        }
+    }
+
     fn open_failed(code: c_int) -> Self {
         Self {
             kind: EngineErrorKind::OpenFailed(code),
@@ -712,6 +742,13 @@ mod tests {
     #[test]
     fn options_default_runtime_flags_match_c_cli_inspect() {
         let options = EngineOptions::new("model.gguf", Backend::Cuda);
+        assert_eq!(options.mtp_path, None);
+        assert_eq!(options.n_threads, 0);
+        assert_eq!(options.mtp_draft_tokens, 1);
+        assert_eq!(options.mtp_margin, 3.0);
+        assert_eq!(options.directional_steering_file, None);
+        assert_eq!(options.directional_steering_attn, 0.0);
+        assert_eq!(options.directional_steering_ffn, 0.0);
         assert!(!options.warm_weights);
         assert!(!options.quality);
     }

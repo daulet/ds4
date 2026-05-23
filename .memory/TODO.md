@@ -1833,7 +1833,7 @@
 
 ### M8.13d: Rust CLI One-Shot Runtime-Control Surface
 
-- Status: pending
+- Status: done
 - Goal: extend Rust CLI one-shot parity to the M8.12b runtime-control cases.
 - Source evidence needed: committed M8.12b current-C transcript fixture, Rust
   CLI parse/dispatch code, advanced runtime-control plumbing, and support
@@ -1850,10 +1850,45 @@
 - Drift policy: timing/progress/path normalization only.
 - Review gate: ask Claude to review advanced option plumbing and blocker
   evidence.
-- Validation needed: comparator with negative tests, targeted Rust CLI tests,
-  B300 comparison run, `cargo test --workspace`, and `git diff --check`.
+- Validation passed: local `cargo fmt --all -- --check`; local `cargo test -p
+  ds4-gguf cli_parse -- --nocapture`; local `cargo build -p ds4-engine --bin
+  ds4-cli-one-shot-rs`; local `cargo test -p ds4-engine`; local full
+  `cargo test --workspace`; local `python3 -m py_compile` for M8.13a through
+  M8.13d comparators; local `git diff --check`; B300 `cargo build -p
+  ds4-engine --bin ds4-cli-one-shot-rs` with `CUDA_ARCH=native`; and B300
+  `python3 ds4-parity/compare_cli_runtime_controls_runtime.py
+  ds4-parity/baselines/cli/m8.12b/current-c.json --candidate-binary
+  target/debug/ds4-cli-one-shot-rs --negative-test` (`CLI runtime-controls
+  runtime comparator: PASS, 154 checks`; negative tests `PASS, 6 checks`).
 - Owner path: Rust CLI one-shot path, runtime-control transcript comparator,
   `ds4-parity/`, `.memory/status.md`.
+
+### M8.14: Current-C Interactive CLI Transcript Oracle
+
+- Status: pending
+- Goal: capture scripted current-C interactive CLI behavior.
+- Source evidence needed: current `./ds4` REPL implementation, PTY behavior for
+  `linenoise`, prompts, Ctrl+C, and command output, and B300 model-backed CLI
+  availability.
+- Oracle: current `./ds4` REPL using a PTY so prompts, command output, terminal
+  control, and interruption behavior are represented.
+- Fixture: `/help`, `/think`, `/think-max`, `/nothink`, `/ctx`, `/read`,
+  unknown command, `/quit`, empty input, one short model-backed turn, and a
+  Ctrl+C interruption case if the PTY harness can make it deterministic.
+- Comparator: PTY transcript checker for prompt markers, command responses,
+  normalized progress/timing lines, exit status, transcript hashes, and exact
+  B300 refresh commands for model-backed cases.
+- Acceptance: command-only cases run locally without a model where possible;
+  model-backed transcript cases have reproducible B300 commands and stable
+  normalization for timing, terminal control, and color.
+- Drift policy: terminal color/control sequences, timing, and absolute paths may
+  be normalized; prompt markers, command responses, and exit categories are
+  exact.
+- Review gate: ask Claude to review PTY determinism and command coverage.
+- Validation needed: local or B300 PTY capture, checker with negative tests, and
+  `git diff --check`.
+- Owner path: CLI interactive oracle artifacts, `ds4-parity/`,
+  `ds4-parity/baselines/cli/`, `.memory/status.md`.
 
 ## Later Items
 
