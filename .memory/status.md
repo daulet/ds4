@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.15 Rust Interactive CLI Transcript Parity
-- Last validated source commit: M8.14 current-C interactive CLI transcript
-  oracle in this commit; prior pushed source commit
-  `a023d98eb0f3bec92c1de6a3fd1df01e2749cf26`
+- Active item: M8.15a Rust Reusable Interactive Session Boundary
+- Last validated source commit: M8.15 interactive parity split in this commit;
+  prior pushed source commit `4e47ab50950ed5800a59c33bab661718d4e1bf38`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1299,3 +1298,19 @@
 - M8.14 local validation also passed `python3 -m json.tool` for both M8.14 JSON
   files, `python3 -m py_compile ds4-parity/check_cli_interactive_dump.py`, and
   `git diff --check`.
+- M8.15 was split before implementation because the current Rust runtime has
+  one-shot generation but not reusable sessions, chat transcript mutation,
+  session progress callbacks, or REPL command state.
+- M8.15 source inspection found the needed current-C APIs in `ds4.h`:
+  `ds4_chat_begin`, `ds4_chat_append_message`,
+  `ds4_chat_append_assistant_prefix`, `ds4_chat_append_max_effort_prefix`,
+  `ds4_tokens_push`, reusable `ds4_session_*` APIs,
+  `ds4_session_set_progress`, `ds4_session_common_prefix`,
+  `ds4_session_invalidate`, `ds4_session_pos`, and `ds4_session_ctx`.
+- M8.15 source inspection found that `rust/ds4-engine/src/lib.rs` currently
+  exposes one-shot prompt encoding plus argmax/session generation helpers, but
+  `Session` and `TokenPrinter` are private and there is no public reusable
+  chat transcript/session boundary for interactive turns.
+- M8.15 has been split in `RUST_PORT_ROADMAP.md` into M8.15a reusable
+  interactive session boundary, M8.15b REPL command-state surface, and M8.15c
+  final interactive PTY transcript surface.
