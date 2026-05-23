@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c Rust One-Token Decode B300 Execution
-- Last validated source commit: M10.5c4b Rust decode runtime state bridge in
-  this commit; prior pushed source commit
-  `78112153c139367eab6375c766810668eb5e7883`
+- Active item: M10.5c4c2 Rust One-Token Decode B300 Execution
+- Last validated source commit: M10.5c4c1 Rust CUDA backend linkage and B300
+  ABI smoke in this commit; prior pushed source commit
+  `d3607c3b145c4fddcbf4987d358819b5533e60df`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,27 @@
 
 ## Last Evidence
 
+- M10.5c4c1 adds a feature-gated `ds4-gpu` `cuda-backend` build path that links
+  `ds4.c` and `ds4_cuda.cu` into the Rust GPU crate on Linux only when the
+  feature is requested, while preserving the existing macOS backend link path
+  and keeping ordinary non-CUDA Linux builds no-link by default.
+- M10.5c4c1 broadens the backend ABI smoke test to B300 Linux under
+  `--features cuda-backend`, fixes the compiler helper so macOS `arch`
+  wrapping is never used on Linux, and records the exact B300 source-refresh
+  and smoke command in the unified parity report.
+- M10.5c4c1 adds `ds4-parity/compare_b300_rust_backend_smoke.py`, which checks
+  CUDA feature gating, C/CUDA source tracking, CUDA library links, Linux test
+  cfg containment, and the unified B300 rerun command. It is wired into the
+  unified parity report as `M10.5c4c1 Rust CUDA backend smoke contract`.
+- M10.5c4c1 validation passed `python3
+  ds4-parity/compare_b300_rust_backend_smoke.py --negative-test`, `python3 -m
+  py_compile ds4-parity/compare_b300_rust_backend_smoke.py
+  ds4-parity/run_parity_report.py`, B300 `CUDA_ARCH=native cargo test -p
+  ds4-gpu --features cuda-backend --test backend_abi -- --nocapture`, local
+  `cargo test -p ds4-gpu --features cuda-backend --test backend_abi --
+  --nocapture`, `python3 ds4-parity/run_parity_report.py --skip-local-oracles`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and `git diff
+  --check`.
 - M10.5c4b adds `rust/ds4-gpu/src/decode_runtime.rs` and
   `ds4-decode-runtime-bridge`, a no-execute runtime-state bridge for
   `ctx32768_mtp_off` that resolves M10.5c2 graph-state handles, initial
@@ -77,12 +98,16 @@
 - M10.5c4 was split before implementation because the original item spans
   dry-run scheduling, runtime tensor/weight bridge construction, B300 numeric
   execution, continuation-state validation, and optional directional-steering
-  coverage. The active next slice is M10.5c4c, the first B300 one-token
-  execution/checkpoint slice using the c4a trace and c4b runtime bridge.
+  coverage. M10.5c4c1 is the completed B300 Rust CUDA backend linkage and ABI
+  smoke prerequisite for numeric one-token execution; the active next slice is
+  M10.5c4c2.
 - M10.5c4b is the runtime-state bridge from M10.5c1/M10.5c2 weights and
-  tensor plans. M10.5c4c is the first B300 one-token execution/checkpoint
-  slice, and M10.5c4d closes continuation and optional directional-steering
-  coverage or records exact unavailable-fixture skips.
+  tensor plans. M10.5c4c was further split because the B300 pod had no default
+  Rust toolchain and `ds4-gpu` only linked the C backend on macOS. M10.5c4c1
+  creates the feature-gated Linux CUDA backend link/smoke path; M10.5c4c2 is
+  the first B300 one-token execution/checkpoint slice, and M10.5c4d closes
+  continuation and optional directional-steering coverage or records exact
+  unavailable-fixture skips.
 - M10.5c3 adds `rust/ds4-gpu/src/decode_backend.rs`, a safe facade over the
   default fused one-token decode backend primitives. The facade uses
   `TensorRef`/`TensorMut` handles from `Tensor` and `TensorView`, keeps raw

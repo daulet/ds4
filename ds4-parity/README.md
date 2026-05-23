@@ -275,6 +275,20 @@ ratio-4, ratio-128, and hash-layer weight roles against the M10.5c1 structured
 weight table. Its negative test mutates summary, handle, binding, and
 weight-role data in memory.
 
+Compare the M10.5c4c1 Rust CUDA backend smoke contract before running the B300
+ABI smoke:
+
+```sh
+python3 ds4-parity/compare_b300_rust_backend_smoke.py
+python3 ds4-parity/compare_b300_rust_backend_smoke.py --negative-test
+```
+
+The comparator checks that `ds4-gpu` exposes a feature-gated `cuda-backend`
+Linux build path, that the build script tracks and links the C/CUDA backend
+sources and CUDA libraries, that the backend ABI smoke test is enabled for
+B300 only under that feature, and that the unified report carries the exact
+B300 rerun command.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

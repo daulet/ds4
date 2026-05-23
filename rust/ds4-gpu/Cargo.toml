@@ -7,5 +7,9 @@ publish.workspace = true
 [dependencies]
 ds4-gpu-sys = { path = "../ds4-gpu-sys" }
 
+[features]
+default = []
+cuda-backend = []
+
 [lib]
 path = "src/lib.rs"

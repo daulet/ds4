@@ -6,7 +6,7 @@ The report has two jobs:
 * run local no-model C checks that are available in this workspace;
 * run the committed artifact comparators from M1.2 through M1.5, M4.6, M5.7,
   M6.7, M7.9, M9.9, M10.2, M10.3, M10.4, M10.5a, M10.5b, M10.5c1, M10.5c2,
-  M10.5c3, M10.5c4a, and M10.5c4b.
+  M10.5c3, M10.5c4a, M10.5c4b, and M10.5c4c1.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -200,6 +200,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.5c4c1 Rust CUDA backend smoke contract",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_b300_rust_backend_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -320,6 +328,16 @@ def local_oracle_commands() -> list[tuple[str, list[str]]]:
 def b300_skip_items() -> list[ReportItem]:
     return [
         ReportItem(
+            name="M10.5c4c1 B300 Rust CUDA backend smoke rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Rust CUDA backend smoke requires the B300 pod, CUDA toolchain, "
+                "and a Rust toolchain bootstrap in that pod"
+            ),
+            rerun_command=b300_rust_backend_smoke_command(),
+        ),
+        ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
             kind="b300-oracle",
             status="SKIP",
@@ -426,6 +444,28 @@ def b300_metadata_refresh_command() -> str:
         prefix + ["cp", f"{KUBE_POD}:/tmp/ds4-metadata-m4.6-c.json", "/tmp/ds4-metadata-m4.6-c.json"]
     )
     return " && ".join([*copy_commands, capture, copy_back])
+
+
+def b300_rust_backend_smoke_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    smoke = b300_exec(
+        "rustup default stable && "
+        "CUDA_ARCH=native cargo test -p ds4-gpu --features cuda-backend "
+        "--test backend_abi -- --nocapture"
+    )
+    return f"{source_refresh} && {smoke}"
 
 
 def b300_exec(script: str) -> str:

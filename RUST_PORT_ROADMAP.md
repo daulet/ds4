@@ -3324,12 +3324,38 @@ kernels:
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 
-##### M10.5c4c: Rust One-Token Decode B300 Execution
+##### M10.5c4c1: Rust CUDA Backend Linkage And B300 ABI Smoke
+
+- Goal: make the Rust GPU crate link the C/CUDA backend on Linux when explicitly
+  requested and prove the safe tensor wrappers can execute on the B300 pod.
+- Oracle: M10.5a GPU ABI declarations, the existing C CUDA build flags in the
+  Makefile, and the safe-vs-direct backend ABI smoke test.
+- Fixture: B300 `ds4-rust-port-b300` pod, `CUDA_ARCH=native`, and a feature-gated
+  `ds4-gpu --features cuda-backend` build so non-CUDA Linux builds remain
+  no-link by default.
+- Comparator: static smoke-contract checker plus B300 `backend_abi` Rust test
+  exercising initialize, tensor allocation, write/read/fill/view/copy,
+  command flush/end, synchronize, and failure paths through the CUDA backend.
+- Acceptance: B300 Rust can compile/link `ds4.c` and `ds4_cuda.cu`, execute the
+  backend ABI smoke test through CUDA, and preserve the existing macOS backend
+  ABI coverage without requiring CUDA for ordinary Linux builds.
+- Drift policy: C/CUDA compiler/link flags follow the Makefile unless a future
+  validated B300 run requires a concrete override; runtime outputs are exact
+  byte comparisons against direct C ABI calls.
+- Review gate: ask Claude to review feature gating, CUDA link flags, and backend
+  test containment.
+- Validation gate: static smoke-contract comparator with negative test, B300
+  `cargo test -p ds4-gpu --features cuda-backend --test backend_abi`, `cargo
+  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.5c4c2: Rust One-Token Decode B300 Execution
 
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
   on B300 and capture Rust checkpoints for the M10.4 decode cases.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
-  and counter transitions, and the M10.5c4b runtime state bridge.
+  and counter transitions, the M10.5c4b runtime state bridge, and the
+  M10.5c4c1 B300 Rust CUDA backend smoke.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -3351,7 +3377,7 @@ kernels:
 - Goal: close one-token decode coverage for continuation-state and optional
   directional-steering cases after default B300 execution is passing.
 - Oracle: M10.4 continuation checkpoints, C directional-steering decode
-  branches, and M10.5c4c execution results.
+  branches, and M10.5c4c2 execution results.
 - Fixture: continuation-token decode after prefill, long indexed decode, and
   directional-steering enabled cases when support vectors are available.
 - Comparator: continuation Rust-vs-C tensor/logit/counter diffs plus optional

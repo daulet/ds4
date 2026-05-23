@@ -1,4 +1,7 @@
-#![cfg(target_os = "macos")]
+#![cfg(any(
+    target_os = "macos",
+    all(target_os = "linux", feature = "cuda-backend")
+))]
 
 use core::ffi::c_void;
 use core::ptr::NonNull;
