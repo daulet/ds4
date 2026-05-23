@@ -2877,7 +2877,7 @@
 
 ### M9.6b: Model-Backed Tool-Call Replay
 
-- Status: active
+- Status: done
 - Goal: route supported non-streaming OpenAI tool requests through the Rust
   server runtime, parse generated DSML with the existing generated-message
   parser, and emit the M9.6a tool-call response shape.
@@ -2899,14 +2899,19 @@
 - Review gate: ask Claude to review runtime routing, parser finish mapping,
   trace records, unsupported-route boundaries, and B300 comparator
   normalization.
-- Validation needed: B300 tool-call comparator for `chat_tool_call`, targeted
-  runtime tests, targeted response/parser tests, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, and `git diff --check`.
+- Validation passed: B300 tool-call comparator for `chat_tool_call` using the
+  raw M0.4 trace request as prompt oracle, B300 targeted runtime tests
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  local targeted runtime tests with the same command, targeted response tests
+  `cargo test -p ds4-gguf server_response -- --nocapture`, targeted DSML
+  parser tests `cargo test -p ds4-gguf dsml -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`; Claude review returned no blockers.
 - Owner path: Rust server runtime path, `ds4-parity/`, `.memory/status.md`.
 
 ### M9.6c: Streaming Tool-Call Deltas
 
-- Status: pending
+- Status: active
 - Goal: add OpenAI streaming `tool_calls` delta formatting and runtime routing
   for complete/partial generated DSML tool-call output without mixing it into
   the non-streaming replay commit.

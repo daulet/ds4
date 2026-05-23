@@ -4,11 +4,12 @@ use ds4_engine::{
 };
 use ds4_gguf::{
     format_http_error, format_http_response, format_openai_chat_completion_http,
-    format_openai_chat_stream_http, openai_context_length_error_body, parse_http_request,
+    format_openai_chat_stream_http, format_openai_chat_tool_completion_http,
+    openai_context_length_error_body, parse_generated_message_for_response, parse_http_request,
     parse_openai_chat_request, request_exceeds_context,
-    route_no_model_server_request_with_generation_message, utf8_stream_safe_len, HttpRequest,
-    HttpRequestParseError, NoModelRouteConfig, OpenAiChatCompletion, OpenAiChatRequest,
-    OpenAiChatStream, OpenAiUsage,
+    route_no_model_server_request_with_generation_message, utf8_stream_safe_len, DsmlJsonCall,
+    HttpRequest, HttpRequestParseError, NoModelRouteConfig, OpenAiChatCompletion,
+    OpenAiChatRequest, OpenAiChatStream, OpenAiUsage,
 };
 use std::env;
 use std::fs::File;
@@ -224,9 +225,11 @@ fn route_chat_completions(
     if generated.exit_code != 0 || generated.finish_reason == "error" {
         return format_http_error(config.enable_cors, 500, "generation failed");
     }
-    let content = String::from_utf8_lossy(&generated.text);
+    let generated_text = String::from_utf8_lossy(&generated.text);
     state.sequence += 1;
     let id = format!("chatcmpl-{}", state.sequence);
+    let parsed_generation =
+        parse_chat_generation(&parsed, &generated, &generated_text, state.sequence);
     if let Some(trace) = state.trace.as_mut() {
         if let Err(err) = write_chat_trace(
             trace,
@@ -235,7 +238,8 @@ fn route_chat_completions(
             &parsed,
             generated.prompt_tokens,
             &generated,
-            &content,
+            &generated_text,
+            &parsed_generation,
         ) {
             eprintln!("ds4-server-runtime-rs: failed to write trace: {err}");
         }
@@ -260,13 +264,27 @@ fn route_chat_completions(
                 created,
                 model: &parsed.model,
                 content_deltas: &content_deltas,
-                finish_reason: generated.finish_reason,
+                finish_reason: &parsed_generation.finish_reason,
                 usage: if parsed.stream_include_usage {
                     Some(usage)
                 } else {
                     None
                 },
             },
+        )
+    } else if !parsed_generation.calls.is_empty() {
+        format_openai_chat_tool_completion_http(
+            config.enable_cors,
+            &OpenAiChatCompletion {
+                id: &id,
+                created,
+                model: &parsed.model,
+                content: &parsed_generation.content,
+                reasoning_content: parsed_generation.reasoning.as_deref(),
+                finish_reason: &parsed_generation.finish_reason,
+                usage,
+            },
+            &parsed_generation.calls,
         )
     } else {
         format_openai_chat_completion_http(
@@ -275,9 +293,9 @@ fn route_chat_completions(
                 id: &id,
                 created,
                 model: &parsed.model,
-                content: &content,
-                reasoning_content: None,
-                finish_reason: generated.finish_reason,
+                content: &parsed_generation.content,
+                reasoning_content: parsed_generation.reasoning.as_deref(),
+                finish_reason: &parsed_generation.finish_reason,
                 usage,
             },
         )
@@ -285,8 +303,8 @@ fn route_chat_completions(
 }
 
 fn unsupported_chat_generation_message(parsed: &OpenAiChatRequest) -> Option<&'static str> {
-    if parsed.has_tools {
-        Some("tool chat generation is not implemented yet")
+    if parsed.has_tools && parsed.stream {
+        Some("tool chat streaming is not implemented yet")
     } else if map_think_mode(parsed.think_mode).enabled() {
         Some("thinking chat generation is not implemented yet")
     } else if !parsed.stops.is_empty() {
@@ -294,6 +312,68 @@ fn unsupported_chat_generation_message(parsed: &OpenAiChatRequest) -> Option<&'s
     } else {
         None
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedChatGeneration {
+    content: String,
+    reasoning: Option<String>,
+    calls: Vec<DsmlJsonCall>,
+    finish_reason: String,
+    saw_tool_start: bool,
+    saw_tool_end: bool,
+}
+
+fn parse_chat_generation(
+    request: &OpenAiChatRequest,
+    generated: &ds4_engine::ServerGenerationResult,
+    text: &str,
+    sequence: u64,
+) -> ParsedChatGeneration {
+    let saw_tool_start = saw_dsml_tool_start(text);
+    let saw_tool_end = saw_dsml_tool_end(text);
+    let response = parse_generated_message_for_response(
+        text,
+        request.has_tools,
+        saw_tool_start,
+        map_think_mode(request.think_mode).enabled(),
+        generated.finish_reason,
+    );
+    let mut message = response.message;
+    let mut finish_reason = response.finish;
+    if !message.calls.is_empty() {
+        assign_openai_tool_call_ids(&mut message.calls, sequence);
+        finish_reason = "tool_calls".to_string();
+    }
+    ParsedChatGeneration {
+        content: message.content,
+        reasoning: message.reasoning,
+        calls: message.calls,
+        finish_reason,
+        saw_tool_start,
+        saw_tool_end,
+    }
+}
+
+fn assign_openai_tool_call_ids(calls: &mut [DsmlJsonCall], sequence: u64) {
+    for (index, call) in calls.iter_mut().enumerate() {
+        if call.id.as_ref().is_some_and(|id| !id.is_empty()) {
+            continue;
+        }
+        call.id = Some(format!("call_{sequence:016x}{index:016x}"));
+    }
+}
+
+fn saw_dsml_tool_start(text: &str) -> bool {
+    text.contains("<｜DSML｜tool_calls>")
+        || text.contains("<DSML｜tool_calls>")
+        || text.contains("<tool_calls>")
+}
+
+fn saw_dsml_tool_end(text: &str) -> bool {
+    text.contains("</｜DSML｜tool_calls>")
+        || text.contains("</DSML｜tool_calls>")
+        || text.contains("</tool_calls>")
 }
 
 fn stream_delta_strings(generated: &ds4_engine::ServerGenerationResult) -> Result<Vec<String>, ()> {
@@ -320,7 +400,8 @@ fn write_chat_trace<W: Write>(
     request: &OpenAiChatRequest,
     prompt_tokens: i32,
     generated: &ds4_engine::ServerGenerationResult,
-    content: &str,
+    generated_text: &str,
+    parsed: &ParsedChatGeneration,
 ) -> io::Result<()> {
     let cached_tokens = generated.cache_read_tokens.clamp(0, prompt_tokens.max(0));
     let live_prompt_common = generated.live_prompt_common.max(0);
@@ -380,13 +461,43 @@ fn write_chat_trace<W: Write>(
     writeln!(trace, "{}", request.prompt_text)?;
     writeln!(trace)?;
     writeln!(trace, "--- generated text ---")?;
-    writeln!(trace, "{content}")?;
+    writeln!(trace, "{generated_text}")?;
     writeln!(trace)?;
     writeln!(trace, "--- parsed message ---")?;
-    writeln!(trace, "finish: {}", generated.finish_reason)?;
+    writeln!(trace, "finish: {}", parsed.finish_reason)?;
     writeln!(trace, "generated_tokens: {}", generated.completion_tokens)?;
-    writeln!(trace, "content:")?;
-    writeln!(trace, "{content}")?;
+    writeln!(
+        trace,
+        "dsml_start: {}",
+        if parsed.saw_tool_start { 1 } else { 0 }
+    )?;
+    writeln!(
+        trace,
+        "dsml_end: {}",
+        if parsed.saw_tool_end { 1 } else { 0 }
+    )?;
+    if let Some(reasoning) = parsed
+        .reasoning
+        .as_deref()
+        .filter(|reasoning| !reasoning.is_empty())
+    {
+        writeln!(trace)?;
+        writeln!(trace, "reasoning:")?;
+        writeln!(trace, "{reasoning}")?;
+    }
+    if !parsed.content.is_empty() {
+        writeln!(trace)?;
+        writeln!(trace, "content:")?;
+        writeln!(trace, "{}", parsed.content)?;
+    }
+    for (index, call) in parsed.calls.iter().enumerate() {
+        writeln!(trace)?;
+        writeln!(trace, "tool_call[{index}]:")?;
+        writeln!(trace, "id: {}", call.id.as_deref().unwrap_or(""))?;
+        writeln!(trace, "name: {}", call.name)?;
+        writeln!(trace, "arguments:")?;
+        writeln!(trace, "{}", call.arguments)?;
+    }
     writeln!(trace)?;
     writeln!(trace, "===== end request {sequence} =====")?;
     writeln!(trace)?;
@@ -692,9 +803,16 @@ mod tests {
     );
     const CHAT_STREAM: &str =
         include_str!("../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_stream.json");
+    const CHAT_TOOL_CALL: &str =
+        include_str!("../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_tool_call.json");
     const CHAT_CACHE_CONTINUATION: &str = include_str!(
         "../../../../ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json"
     );
+    const GENERATED_TOOL_CALL: &str = "<｜DSML｜tool_calls>\n\
+<｜DSML｜invoke name=\"list_files\">\n\
+<｜DSML｜parameter name=\"path\" string=\"true\">.</｜DSML｜parameter>\n\
+</｜DSML｜invoke>\n\
+</｜DSML｜tool_calls>";
 
     fn parse(args: &[&str]) -> Result<Option<ServerConfig>, CliExit> {
         parse_args(args.iter().copied().map(str::to_string))
@@ -851,7 +969,7 @@ mod tests {
     }
 
     #[test]
-    fn m95b_allows_only_supported_no_tool_non_thinking_chat() {
+    fn m96b_allows_supported_non_streaming_tool_chat() {
         assert_eq!(
             unsupported_chat_generation_message(&parse_chat(CHAT_BASIC)),
             None
@@ -865,10 +983,14 @@ mod tests {
             None
         );
         assert_eq!(
+            unsupported_chat_generation_message(&parse_chat(CHAT_TOOL_CALL)),
+            None
+        );
+        assert_eq!(
             unsupported_chat_generation_message(&parse_chat(
-                r#"{"messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{}}}}]}"#
+                r#"{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{}}}}],"stream":true,"think":false}"#
             )),
-            Some("tool chat generation is not implemented yet")
+            Some("tool chat streaming is not implemented yet")
         );
         assert_eq!(
             unsupported_chat_generation_message(&parse_chat(
@@ -933,6 +1055,7 @@ mod tests {
             completion_tokens: 2,
             finish_reason: "stop",
         };
+        let parsed_generation = parse_chat_generation(&parsed, &generated, "cache continued", 6);
         let mut trace = Vec::new();
         write_chat_trace(
             &mut trace,
@@ -942,6 +1065,7 @@ mod tests {
             generated.prompt_tokens,
             &generated,
             "cache continued",
+            &parsed_generation,
         )
         .unwrap();
         let trace = String::from_utf8(trace).unwrap();
@@ -952,5 +1076,61 @@ mod tests {
         assert!(trace.contains("memory_miss_reason: live-prefix-match\n"));
         assert!(trace.contains("cache_source: memory-token\n"));
         assert!(trace.contains("generated_tokens: 2\n"));
+        assert!(trace.contains("dsml_start: 0\n"));
+        assert!(trace.contains("dsml_end: 0\n"));
+        assert!(trace.contains("\ncontent:\ncache continued\n"));
+    }
+
+    #[test]
+    fn parses_tool_generation_for_response_and_trace() {
+        let parsed = parse_chat(CHAT_TOOL_CALL);
+        let generated = ds4_engine::ServerGenerationResult {
+            exit_code: 0,
+            text: GENERATED_TOOL_CALL.as_bytes().to_vec(),
+            token_texts: Vec::new(),
+            prompt_tokens: 394,
+            cache_read_tokens: 0,
+            cache_write_tokens: 394,
+            live_tokens_before: 0,
+            live_prompt_common: 0,
+            completion_tokens: 42,
+            finish_reason: "stop",
+        };
+        let parsed_generation = parse_chat_generation(&parsed, &generated, GENERATED_TOOL_CALL, 3);
+        assert_eq!(parsed_generation.finish_reason, "tool_calls");
+        assert_eq!(parsed_generation.content, "");
+        assert_eq!(parsed_generation.reasoning, None);
+        assert!(parsed_generation.saw_tool_start);
+        assert!(parsed_generation.saw_tool_end);
+        assert_eq!(parsed_generation.calls.len(), 1);
+        assert_eq!(
+            parsed_generation.calls[0].id.as_deref(),
+            Some("call_00000000000000030000000000000000")
+        );
+        assert_eq!(parsed_generation.calls[0].name, "list_files");
+        assert_eq!(parsed_generation.calls[0].arguments, "{\"path\": \".\"}");
+
+        let mut trace = Vec::new();
+        write_chat_trace(
+            &mut trace,
+            3,
+            CHAT_TOOL_CALL,
+            &parsed,
+            generated.prompt_tokens,
+            &generated,
+            GENERATED_TOOL_CALL,
+            &parsed_generation,
+        )
+        .unwrap();
+        let trace = String::from_utf8(trace).unwrap();
+        assert!(trace.contains("tools: 1\n"));
+        assert!(trace.contains("finish: tool_calls\n"));
+        assert!(trace.contains("generated_tokens: 42\n"));
+        assert!(trace.contains("dsml_start: 1\n"));
+        assert!(trace.contains("dsml_end: 1\n"));
+        assert!(trace.contains("tool_call[0]:\n"));
+        assert!(trace.contains("id: call_00000000000000030000000000000000\n"));
+        assert!(trace.contains("name: list_files\n"));
+        assert!(trace.contains("arguments:\n{\"path\": \".\"}\n"));
     }
 }

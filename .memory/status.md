@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6b Model-Backed Tool-Call Replay
-- Last validated source commit: M9.6a OpenAI tool-call response formatter in
+- Active item: M9.6c Streaming Tool-Call Deltas
+- Last validated source commit: M9.6b model-backed tool-call replay in
   this commit; prior pushed source commit
-  `5b02e5e7452a1109cdb3e735e08da35c5d769bf1`
+  `269d43c8ee51d5b8f929486c5e3e93cd34636191`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,46 @@
 
 ## Last Evidence
 
+- M9.6b routes supported non-streaming OpenAI tool chat requests through the
+  Rust server runtime instead of rejecting them, while keeping streaming tool
+  calls rejected for M9.6c and preserving the thinking/stop-list unsupported
+  boundaries.
+- M9.6b parses completed generated DSML with the existing M5.6
+  `parse_generated_message_for_response` path, maps parsed calls to
+  `finish_reason:"tool_calls"`, assigns deterministic OpenAI `call_` IDs for
+  normalized comparison, and emits the M9.6a tool-call response formatter.
+- M9.6b extends runtime traces with parsed-message `dsml_start`, `dsml_end`,
+  parsed content/reasoning when present, and `tool_call[n]` records containing
+  ID, name, and parser-produced argument JSON.
+- M9.6b B300 validation used `/workspace/ds4-m96b` and model
+  `/workspace/ds4/ds4flash.gguf`; targeted runtime tests passed in the pod.
+  The server replay on port `18200` normalized only outer response ID,
+  timestamp, and generated tool-call ID while matching M0.4 `chat_tool_call`
+  headers/body semantics, tool name `list_files`, arguments `{"path":"."}`,
+  finish `tool_calls`, usage `394/42/436`, cache `0/394`, generated DSML, and
+  trace fields.
+- The M9.6b prompt comparator used the raw request JSON extracted from the
+  M0.4 trace rather than the pretty-printed committed
+  `chat_tool_call.json` fixture, because the C/Rust prompt renderer preserves
+  raw tool-schema whitespace. The pretty fixture still produced the same
+  normalized response, but not byte-identical prompt text.
+- M9.6b artifacts remain in the pod at
+  `/tmp/ds4-m96b-chat_tool_call.request.json`,
+  `/tmp/ds4-m96b-chat_tool_call.json`,
+  `/tmp/ds4-m96b-chat_tool_call.headers`,
+  `/tmp/ds4-m96b-server.trace`, and `/tmp/ds4-m96b-server.stderr`; the server
+  process was stopped and `pgrep` showed no lingering `ds4-server-runtime-rs`
+  process beyond the check shell.
+- M9.6b local validation passed for targeted
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  targeted `cargo test -p ds4-gguf server_response -- --nocapture`, targeted
+  `cargo test -p ds4-gguf dsml -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.6b Claude review returned no blockers after checking runtime routing,
+  parser finish mapping, deterministic call-ID fallback, response/usage
+  preservation, trace records, unsupported-route boundaries, and the
+  raw-trace-request prompt comparator.
 - M9.6a added pure OpenAI chat tool-call response formatting in
   `ds4_gguf::server_response`, reusing the existing chat completion response
   struct while adding explicit tool-call JSON/HTTP helpers.
