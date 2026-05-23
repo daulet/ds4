@@ -44,7 +44,9 @@ pub use server_chat::{
     ServerRequestErrorCategory, ToolSchemaOrder,
 };
 pub use server_http::{
-    format_http_error, format_http_response, parse_http_request, HttpRequest, HttpRequestParseError,
+    format_http_error, format_http_response, format_model_metadata_json, parse_http_request,
+    route_no_model_http, route_no_model_request, HttpRequest, HttpRequestParseError,
+    NoModelRouteConfig, DS4_MODEL_ID,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

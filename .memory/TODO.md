@@ -2484,7 +2484,7 @@
 
 ### M9.3b: Model Metadata And Route Dispatch Surface
 
-- Status: active
+- Status: done
 - Goal: port no-model route dispatch for OPTIONS, `/v1/models`,
   `/v1/models/deepseek-v4-flash`, and unknown endpoints on top of the M9.3a
   HTTP helpers.
@@ -2502,13 +2502,14 @@
 - Drift policy: exact for model JSON fields and route response bytes.
 - Review gate: ask Claude to review route precedence, model metadata constants,
   CORS propagation, and unknown endpoint behavior.
-- Validation needed: targeted Rust route tests, `cargo test --workspace`, and
-  `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_http -- --nocapture`,
+  full `cargo test --workspace`, `cargo fmt --all -- --check`,
+  and `git diff --check`.
 - Owner path: Rust server HTTP route modules, `.memory/status.md`.
 
 ### M9.3c: No-Model Server Binary And Negative HTTP Replay
 
-- Status: pending
+- Status: active
 - Goal: add a Rust server binary that binds/listens, wires M9.3a/M9.3b helpers
   to a socket loop, exposes server CLI startup flags needed by M9.3, and
   rejects generation routes through the existing model-free parsers/error

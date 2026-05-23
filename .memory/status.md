@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.3b Model Metadata And Route Dispatch Surface
-- Last validated source commit: M9.3a HTTP helper surface in this commit;
-  prior pushed source commit `80b26bb7d3ae80ded5898d284ecfa1dd2d5039cb`
+- Active item: M9.3c No-Model Server Binary And Negative HTTP Replay
+- Last validated source commit: M9.3b model metadata route surface in this
+  commit; prior pushed source commit
+  `6ed77e87f015910e46c9d02c412ec4d5907baad5`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,23 @@
 
 ## Last Evidence
 
+- M9.3b added a no-model HTTP route dispatch surface over the M9.3a in-memory
+  parser/formatter helpers.
+- M9.3b covers C `client_main` behavior for `OPTIONS`, `GET /v1/models`,
+  `GET /v1/models/deepseek-v4-flash`, unknown endpoint rejection, and bad HTTP
+  request rejection without opening sockets or loading a model.
+- M9.3b added deterministic model metadata JSON matching C
+  `append_model_json_values`, including `deepseek-v4-flash`, created timestamp
+  `1767225600`, owner `ds4.c`, provider context length, capped
+  `max_completion_tokens`, and supported parameter ordering.
+- M9.3b route tests compare exact response bytes for preflight, model list,
+  single-model, bad HTTP, unknown endpoint, wrong method, CORS propagation, and
+  parser-level query stripping; the model-list body is also compared with the
+  captured M0.4 `models.json` fixture.
+- M9.3b validation passed for targeted
+  `cargo test -p ds4-gguf server_http -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
 - M9.3a added `rust/ds4-gguf/src/server_http.rs` with in-memory HTTP request
   parsing plus C-shaped response/error formatting and exported the helper
   surface from `ds4_gguf`.
