@@ -1,6 +1,6 @@
 use ds4_engine::{
-    context_memory_estimate, Backend, Engine, EngineOptions, ServerGenerationOptions,
-    ServerSession, ThinkMode,
+    context_memory_estimate, Backend, Engine, EngineOptions, KvDiskCache, KvDiskCacheLoad,
+    KvDiskCacheOptions, ServerCacheProbe, ServerGenerationOptions, ServerSession, ThinkMode,
 };
 use ds4_gguf::kv_policy::{KvOptions, KvPolicyConfig, DEFAULT_MB as KV_DEFAULT_MB};
 use ds4_gguf::{
@@ -8,14 +8,15 @@ use ds4_gguf::{
     format_openai_chat_stream_http, format_openai_chat_tool_completion_http,
     format_openai_chat_tool_stream_http, openai_context_length_error_body,
     parse_generated_message_for_response, parse_http_request, parse_openai_chat_request,
-    request_exceeds_context, route_no_model_server_request_with_generation_message,
-    utf8_stream_safe_len, DsmlJsonCall, HttpRequest, HttpRequestParseError, NoModelRouteConfig,
-    OpenAiChatCompletion, OpenAiChatRequest, OpenAiChatStream, OpenAiChatToolStream,
-    OpenAiToolCallStreamEvent, OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator,
-    OpenAiUsage, ToolReplayStats, TOOL_MEMORY_DEFAULT_MAX_IDS,
+    render_chat_prompt_text, request_exceeds_context,
+    route_no_model_server_request_with_generation_message, utf8_stream_safe_len, ChatMessage,
+    DsmlJsonCall, HttpRequest, HttpRequestParseError, NoModelRouteConfig, OpenAiChatCompletion,
+    OpenAiChatRequest, OpenAiChatStream, OpenAiChatToolStream, OpenAiToolCallStreamEvent,
+    OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator, OpenAiUsage, ToolMemory,
+    ToolReplayStats, TOOL_MEMORY_DEFAULT_MAX_IDS, TOOL_MEMORY_MAX_BYTES,
 };
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Shutdown, SocketAddrV4, TcpListener, TcpStream};
 use std::process;
@@ -119,6 +120,27 @@ impl RuntimeCacheConfig {
             continued_last_store_tokens: 0,
         }
     }
+
+    fn open_disk_cache(&self) -> Option<KvDiskCache> {
+        let dir = self.disk_dir.as_deref()?;
+        let options = KvDiskCacheOptions {
+            dir,
+            budget_mb: self.effective_disk_space_mb(),
+            reject_different_quant: self.reject_different_quant,
+            min_tokens: self.policy.min_tokens,
+            cold_max_tokens: self.policy.cold_max_tokens,
+            continued_interval_tokens: self.policy.continued_interval_tokens,
+            boundary_trim_tokens: self.policy.boundary_trim_tokens,
+            boundary_align_tokens: self.policy.boundary_align_tokens,
+        };
+        match KvDiskCache::open(&options) {
+            Ok(cache) => cache,
+            Err(err) => {
+                eprintln!("ds4-server-runtime-rs: failed to open disk KV cache: {err}");
+                None
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,28 +221,128 @@ struct RuntimeState<'a> {
     cache: RuntimeCacheState,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 struct RuntimeCacheState {
     config: RuntimeCacheConfig,
+    disk: Option<KvDiskCache>,
+    tool_memory: ToolMemory,
 }
 
 impl RuntimeCacheState {
     fn new(config: RuntimeCacheConfig) -> Self {
-        Self { config }
+        let disk = config.open_disk_cache();
+        let tool_memory =
+            ToolMemory::with_limits(config.tool_memory_max_ids, TOOL_MEMORY_MAX_BYTES);
+        Self {
+            config,
+            disk,
+            tool_memory,
+        }
+    }
+
+    fn prepare_chat_prompt(&mut self, request: &mut OpenAiChatRequest) -> ToolReplayStats {
+        if self.config.disable_exact_dsml_tool_replay {
+            return ToolReplayStats::default();
+        }
+        self.restore_tool_maps_for_messages(&request.messages);
+        let stats = self.tool_memory.attach_to_messages(&mut request.messages);
+        let active_tool_schemas = if request.has_tools {
+            request.tool_schemas.as_deref()
+        } else {
+            None
+        };
+        request.prompt_text =
+            render_chat_prompt_text(&request.messages, active_tool_schemas, request.think_mode);
+        stats
+    }
+
+    fn try_load_disk_text(
+        &mut self,
+        session: &mut ServerSession<'_>,
+        prompt_text: &str,
+    ) -> Option<KvDiskCacheLoad> {
+        let cache = self.disk.as_mut()?;
+        match session.try_load_text_cache(cache, prompt_text, false) {
+            Ok(load) => load,
+            Err(err) => {
+                eprintln!("ds4-server-runtime-rs: failed to load disk KV cache: {err}");
+                None
+            }
+        }
     }
 
     fn trace_decision(
         &self,
         prompt_tokens: i32,
+        cache_probe: ServerCacheProbe,
         generated: &ds4_engine::ServerGenerationResult,
+        tool_replay: ToolReplayStats,
+        disk_load: Option<&KvDiskCacheLoad>,
     ) -> RuntimeCacheDecision {
-        let mut decision = RuntimeCacheDecision::from_generation(prompt_tokens, generated);
+        let mut decision = RuntimeCacheDecision::from_runtime(
+            prompt_tokens,
+            cache_probe,
+            generated,
+            tool_replay,
+            disk_load,
+        );
         if !self.config.policy_config().enabled {
             decision.disk_cached_tokens = 0;
             decision.disk_cache_file = None;
         }
         decision
     }
+
+    fn restore_tool_maps_for_messages(&mut self, messages: &[ChatMessage]) {
+        if self.disk.is_none() {
+            return;
+        }
+        let Some(dir) = self.config.disk_dir.as_deref() else {
+            return;
+        };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !is_kv_cache_file_name(name) {
+                continue;
+            }
+            let Ok(bytes) = fs::read(&path) else {
+                continue;
+            };
+            self.tool_memory
+                .restore_tool_map_from_kvc_for_messages(&bytes, messages);
+        }
+    }
+}
+
+fn is_kv_cache_file_name(name: &str) -> bool {
+    let Some(sha) = name.strip_suffix(".kv") else {
+        return false;
+    };
+    sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn memory_cached_tokens(cache_probe: ServerCacheProbe, prompt_tokens: i32) -> i32 {
+    if cache_probe.live_tokens_before > 0
+        && cache_probe.live_prompt_common == cache_probe.live_tokens_before
+        && prompt_tokens >= cache_probe.live_tokens_before
+    {
+        cache_probe.live_prompt_common
+    } else {
+        0
+    }
+}
+
+fn should_try_disk_text_cache(cache_probe: ServerCacheProbe, memory_cached_tokens: i32) -> bool {
+    // The C server persists a store-worthy live checkpoint before replacing it
+    // with a disk snapshot. Until Rust has that store path, only restore disk
+    // payloads into an empty session.
+    memory_cached_tokens == 0 && cache_probe.live_tokens_before <= 0
 }
 
 fn handle_client(
@@ -266,7 +388,7 @@ fn route_chat_completions(
     engine: &Engine,
     state: &mut RuntimeState<'_>,
 ) -> String {
-    let parsed = match parse_openai_chat_request(
+    let mut parsed = match parse_openai_chat_request(
         &request.body,
         config.default_tokens,
         config.context_length,
@@ -274,6 +396,7 @@ fn route_chat_completions(
         Ok(parsed) => parsed,
         Err(err) => return format_http_error(config.enable_cors, 400, err.message()),
     };
+    let tool_replay = state.cache.prepare_chat_prompt(&mut parsed);
     let prompt = match engine.encode_chat_prompt("", &parsed.prompt_text, ThinkMode::None) {
         Ok(prompt) => prompt,
         Err(err) => {
@@ -290,8 +413,21 @@ fn route_chat_completions(
         return format_http_error(config.enable_cors, 503, message);
     }
 
+    let prompt_cache_probe = state.session.cache_probe(&prompt);
+    let memory_cached_tokens = memory_cached_tokens(prompt_cache_probe, prompt.len());
+    let disk_load = if should_try_disk_text_cache(prompt_cache_probe, memory_cached_tokens) {
+        state
+            .cache
+            .try_load_disk_text(&mut state.session, &parsed.prompt_text)
+    } else {
+        None
+    };
+    let prompt_for_generation = disk_load
+        .as_ref()
+        .map(|load| &load.effective_prompt)
+        .unwrap_or(&prompt);
     let generated = state.session.generate(
-        &prompt,
+        prompt_for_generation,
         ServerGenerationOptions {
             n_predict: parsed.max_tokens,
             ctx_size: config.context_length,
@@ -310,9 +446,13 @@ fn route_chat_completions(
     let id = format!("chatcmpl-{}", state.sequence);
     let parsed_generation =
         parse_chat_generation(&parsed, &generated, &generated_text, state.sequence);
-    let cache_decision = state
-        .cache
-        .trace_decision(generated.prompt_tokens, &generated);
+    let cache_decision = state.cache.trace_decision(
+        prompt.len(),
+        prompt_cache_probe,
+        &generated,
+        tool_replay,
+        disk_load.as_ref(),
+    );
     if let Some(trace) = state.trace.as_mut() {
         if let Err(err) = write_chat_trace_with_cache_decision(
             trace,
@@ -560,6 +700,7 @@ fn format_streaming_tool_chat_http(
     )
 }
 
+#[cfg(test)]
 fn write_chat_trace<W: Write>(
     trace: &mut W,
     sequence: u64,
@@ -711,23 +852,51 @@ struct RuntimeCacheDecision {
 }
 
 impl RuntimeCacheDecision {
+    #[cfg(test)]
     fn from_generation(prompt_tokens: i32, generated: &ds4_engine::ServerGenerationResult) -> Self {
-        let cached_tokens = generated.cache_read_tokens.clamp(0, prompt_tokens.max(0));
-        let cache_source = if cached_tokens > 0 {
+        let cache_probe = ServerCacheProbe {
+            live_tokens_before: generated.live_tokens_before,
+            live_prompt_common: generated.live_prompt_common,
+        };
+        Self::from_runtime(
+            prompt_tokens,
+            cache_probe,
+            generated,
+            ToolReplayStats::default(),
+            None,
+        )
+    }
+
+    fn from_runtime(
+        prompt_tokens: i32,
+        cache_probe: ServerCacheProbe,
+        generated: &ds4_engine::ServerGenerationResult,
+        tool_replay: ToolReplayStats,
+        disk_load: Option<&KvDiskCacheLoad>,
+    ) -> Self {
+        let disk_cached_tokens = disk_load.map_or(0, |load| load.tokens.max(0));
+        let cached_tokens = if disk_cached_tokens > 0 {
+            disk_cached_tokens
+        } else {
+            memory_cached_tokens(cache_probe, prompt_tokens)
+        };
+        let cache_source = if disk_cached_tokens > 0 {
+            "disk-text"
+        } else if cached_tokens > 0 {
             "memory-token"
         } else {
             "none"
         };
         Self {
-            live_tokens_before: generated.live_tokens_before.max(0),
+            live_tokens_before: cache_probe.live_tokens_before.max(0),
             prompt_tokens,
-            effective_prompt_tokens: prompt_tokens,
-            live_prompt_common: generated.live_prompt_common.max(0),
-            tool_replay: ToolReplayStats::default(),
+            effective_prompt_tokens: generated.prompt_tokens,
+            live_prompt_common: cache_probe.live_prompt_common.max(0),
+            tool_replay,
             cache_source,
             cached_tokens,
-            disk_cached_tokens: 0,
-            disk_cache_file: None,
+            disk_cached_tokens,
+            disk_cache_file: disk_load.and_then(|load| load.path.clone()),
         }
     }
 
@@ -1143,6 +1312,51 @@ mod tests {
         parse_openai_chat_request(body, 64, 32_768).expect("chat request parses")
     }
 
+    fn unique_temp_dir(label: &str) -> std::path::PathBuf {
+        let mut dir = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        dir.push(format!(
+            "ds4-server-runtime-rs-{label}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn write_tool_map_kvc(dir: &std::path::Path, id: &str, dsml: &str) {
+        use ds4_gguf::kv_policy::{
+            sha1_bytes_hex, write_kvc_file, write_tool_map_trailer, KvHeader, ToolMapEntry,
+            EXT_TOOL_MAP, REASON_CONTINUED,
+        };
+
+        let text = b"tool map carrier";
+        let trailer = write_tool_map_trailer(
+            dsml.as_bytes(),
+            &[ToolMapEntry {
+                id: id.to_string(),
+                dsml: dsml.as_bytes().to_vec(),
+            }],
+            false,
+        )
+        .expect("write tool map trailer");
+        let header = KvHeader {
+            quant_bits: 2,
+            reason: REASON_CONTINUED,
+            ext_flags: EXT_TOOL_MAP,
+            tokens: 512,
+            hits: 0,
+            ctx_size: 32_768,
+            created_at: 1,
+            last_used: 1,
+            payload_bytes: 0,
+        };
+        let bytes = write_kvc_file(&header, text, &[], &trailer).expect("write KVC");
+        fs::write(dir.join(format!("{}.kv", sha1_bytes_hex(text))), bytes).expect("write KVC file");
+    }
+
     #[test]
     fn parses_default_and_m94a_flags() {
         assert_eq!(parse(&[]).unwrap(), Some(ServerConfig::default()));
@@ -1259,6 +1473,118 @@ mod tests {
         cache.disk_dir = None;
         assert_eq!(cache.effective_disk_space_mb(), 0);
         assert!(!cache.policy_config().enabled);
+    }
+
+    #[test]
+    fn runtime_cache_state_restores_tool_map_before_prompt_render() {
+        let dir = unique_temp_dir("tool-map-restore");
+        let sampled_dsml = "\n\n<｜DSML｜tool_calls>\n\
+<｜DSML｜invoke name=\"bash\">\n\
+<｜DSML｜parameter name=\"command\" string=\"true\">pwd sampled</｜DSML｜parameter>\n\
+</｜DSML｜invoke>\n\
+</｜DSML｜tool_calls>";
+        write_tool_map_kvc(&dir, "call_keep", sampled_dsml);
+
+        let mut request = parse_chat(
+            r#"{
+  "model": "deepseek-v4-flash",
+  "think": false,
+  "messages": [
+    {"role": "user", "content": "run a command"},
+    {"role": "assistant", "tool_calls": [
+      {"id": "call_keep", "type": "function", "function": {"name": "bash", "arguments": "{\"command\":\"pwd canonical\"}"}}
+    ]},
+    {"role": "tool", "tool_call_id": "call_keep", "content": "/tmp"},
+    {"role": "user", "content": "continue"}
+  ]
+}"#,
+        );
+        assert!(request.prompt_text.contains("pwd canonical"));
+
+        let mut cache = RuntimeCacheState::new(RuntimeCacheConfig {
+            disk_dir: Some(dir.to_string_lossy().into_owned()),
+            ..RuntimeCacheConfig::default()
+        });
+        let stats = cache.prepare_chat_prompt(&mut request);
+        assert_eq!(stats.disk, 1);
+        assert_eq!(stats.mem, 0);
+        assert_eq!(stats.canonical, 0);
+        assert!(request.prompt_text.contains("pwd sampled"));
+        assert!(!request.prompt_text.contains("pwd canonical"));
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn runtime_cache_state_respects_disabled_exact_tool_replay() {
+        let dir = unique_temp_dir("tool-map-disabled");
+        let sampled_dsml = "\n\n<｜DSML｜tool_calls>\n\
+<｜DSML｜invoke name=\"bash\">\n\
+<｜DSML｜parameter name=\"command\" string=\"true\">pwd sampled</｜DSML｜parameter>\n\
+</｜DSML｜invoke>\n\
+</｜DSML｜tool_calls>";
+        write_tool_map_kvc(&dir, "call_keep", sampled_dsml);
+        let mut request = parse_chat(
+            r#"{
+  "model": "deepseek-v4-flash",
+  "think": false,
+  "messages": [
+    {"role": "user", "content": "run a command"},
+    {"role": "assistant", "tool_calls": [
+      {"id": "call_keep", "type": "function", "function": {"name": "bash", "arguments": "{\"command\":\"pwd canonical\"}"}}
+    ]}
+  ]
+}"#,
+        );
+        let mut cache = RuntimeCacheState::new(RuntimeCacheConfig {
+            disk_dir: Some(dir.to_string_lossy().into_owned()),
+            disable_exact_dsml_tool_replay: true,
+            ..RuntimeCacheConfig::default()
+        });
+        let stats = cache.prepare_chat_prompt(&mut request);
+        assert_eq!(stats, ToolReplayStats::default());
+        assert!(request.prompt_text.contains("pwd canonical"));
+        assert!(!request.prompt_text.contains("pwd sampled"));
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn kv_cache_file_name_requires_sha_hex_suffix() {
+        assert!(is_kv_cache_file_name(
+            "0123456789abcdef0123456789abcdef01234567.kv"
+        ));
+        assert!(!is_kv_cache_file_name(
+            "0123456789abcdef0123456789abcdef0123456.kv"
+        ));
+        assert!(!is_kv_cache_file_name(
+            "0123456789abcdef0123456789abcdef0123456z.kv"
+        ));
+        assert!(!is_kv_cache_file_name(
+            "0123456789abcdef0123456789abcdef01234567.tmp"
+        ));
+    }
+
+    #[test]
+    fn disk_text_cache_restore_only_replaces_empty_sessions() {
+        let empty = ServerCacheProbe {
+            live_tokens_before: 0,
+            live_prompt_common: 0,
+        };
+        assert!(should_try_disk_text_cache(empty, 0));
+        assert!(!should_try_disk_text_cache(empty, 4));
+
+        let live_miss = ServerCacheProbe {
+            live_tokens_before: 512,
+            live_prompt_common: 12,
+        };
+        assert!(!should_try_disk_text_cache(live_miss, 0));
+
+        let live_hit = ServerCacheProbe {
+            live_tokens_before: 512,
+            live_prompt_common: 512,
+        };
+        assert!(!should_try_disk_text_cache(live_hit, 512));
     }
 
     #[test]

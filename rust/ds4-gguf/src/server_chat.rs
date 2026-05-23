@@ -1289,6 +1289,7 @@ fn parse_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestEr
         let mut content = None;
         let mut reasoning = None;
         let mut tool_calls = Vec::new();
+        let mut tool_call_ids = Vec::new();
         for (key, value) in fields {
             match key.as_str() {
                 "role" => {
@@ -1308,6 +1309,15 @@ fn parse_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestEr
                 "tool_calls" => {
                     tool_calls = parse_tool_calls_value(value)?;
                 }
+                "tool_call_id" => {
+                    push_unique_id(
+                        &mut tool_call_ids,
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
+                }
                 _ => {}
             }
         }
@@ -1317,6 +1327,9 @@ fn parse_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestEr
         );
         message.reasoning = reasoning.unwrap_or_default();
         message.tool_calls = tool_calls;
+        for id in tool_call_ids {
+            message.add_tool_call_id(id);
+        }
         messages.push(message);
     }
     Ok(messages)
@@ -1697,41 +1710,56 @@ fn parse_tool_calls_value(value: &JsonValue) -> Result<Vec<ToolCall>, ServerRequ
         let JsonValue::Object(fields) = value else {
             return Err(ServerRequestError::invalid_json());
         };
+        let mut id = None;
         let mut name = None;
         let mut arguments = None;
         for (key, value) in fields {
-            if key != "function" {
-                continue;
-            }
-            let JsonValue::Object(function_fields) = value else {
-                return Err(ServerRequestError::invalid_json());
-            };
-            for (key, value) in function_fields {
-                match key.as_str() {
-                    "name" => {
-                        name = Some(
-                            value
-                                .as_str()
-                                .ok_or_else(ServerRequestError::invalid_json)?
-                                .to_string(),
-                        );
-                    }
-                    "arguments" => {
-                        arguments = Some(match value {
-                            JsonValue::String(arguments) => arguments.clone(),
-                            _ => minify_json_value(value),
-                        });
-                    }
-                    _ => {}
+            match key.as_str() {
+                "id" => {
+                    id = Some(
+                        value
+                            .as_str()
+                            .ok_or_else(ServerRequestError::invalid_json)?
+                            .to_string(),
+                    );
                 }
+                "function" => {
+                    let JsonValue::Object(function_fields) = value else {
+                        return Err(ServerRequestError::invalid_json());
+                    };
+                    for (key, value) in function_fields {
+                        match key.as_str() {
+                            "name" => {
+                                name = Some(
+                                    value
+                                        .as_str()
+                                        .ok_or_else(ServerRequestError::invalid_json)?
+                                        .to_string(),
+                                );
+                            }
+                            "arguments" => {
+                                arguments = Some(match value {
+                                    JsonValue::String(arguments) => arguments.clone(),
+                                    _ => minify_json_value(value),
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
             }
         }
         if let (Some(name), Some(arguments)) = (name, arguments) {
-            calls.push(ToolCall::new(
-                name,
-                tool_arguments_from_json(&arguments)
-                    .unwrap_or_else(|| vec![ToolArgument::string("arguments", arguments.as_str())]),
-            ));
+            calls.push(
+                ToolCall::new(
+                    name,
+                    tool_arguments_from_json(&arguments).unwrap_or_else(|| {
+                        vec![ToolArgument::string("arguments", arguments.as_str())]
+                    }),
+                )
+                .with_id(id.unwrap_or_default()),
+            );
         }
     }
     Ok(calls)
@@ -3974,7 +4002,7 @@ mod tests {
                 "messages":[
                     {"role":"user","content":"run"},
                     {"role":"assistant","reasoning_content":"need lookup","tool_calls":[{"id":"call_1","function":{"name":"lookup","arguments":"{\"query\":\"ds4\",\"limit\":2,\"ratio\":1.0,\"nested\":{\"x\":true}}"}}]},
-                    {"role":"tool","content":"result </tool_result> & raw"},
+                    {"role":"tool","tool_call_id":"call_1","content":"result </tool_result> & raw"},
                     {"role":"user","content":"continue"}
                 ],
                 "tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer"},"ratio":{"type":"number"},"nested":{"type":"object"}}}}}]
@@ -3982,6 +4010,8 @@ mod tests {
         );
         assert!(req.has_tools);
         assert!(req.prompt_preserves_reasoning);
+        assert_eq!(req.messages[1].tool_calls[0].id, "call_1");
+        assert_eq!(req.messages[2].tool_call_ids, ["call_1"]);
         assert!(req.prompt_text.contains("<think>need lookup</think>"));
         assert!(req
             .prompt_text

@@ -18,12 +18,14 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CUDA_HOME");
 
     let ds4_obj = out_dir.join("ds4_engine_core.o");
+    let kvstore_obj = out_dir.join("ds4_engine_kvstore.o");
     let backend_obj = match target_os.as_str() {
         "macos" => {
             compile_c(&repo_root, &out_dir, "ds4.c", &ds4_obj, false);
+            compile_c(&repo_root, &out_dir, "ds4_kvstore.c", &kvstore_obj, false);
             let obj = out_dir.join("ds4_engine_metal.o");
             compile_objc(&repo_root, &out_dir, "ds4_metal.m", &obj);
-            link_macos(&out_dir, &[&ds4_obj, &obj]);
+            link_macos(&out_dir, &[&ds4_obj, &kvstore_obj, &obj]);
             return;
         }
         "linux" => {
@@ -31,29 +33,40 @@ fn main() {
             let nvcc = PathBuf::from(&cuda_home).join("bin/nvcc");
             if nvcc.is_file() {
                 compile_c(&repo_root, &out_dir, "ds4.c", &ds4_obj, false);
+                compile_c(&repo_root, &out_dir, "ds4_kvstore.c", &kvstore_obj, false);
                 let obj = out_dir.join("ds4_engine_cuda.o");
                 compile_cuda(&repo_root, &out_dir, &nvcc, "ds4_cuda.cu", &obj);
-                link_linux_cuda(&out_dir, &cuda_home, &[&ds4_obj, &obj]);
+                link_linux_cuda(&out_dir, &cuda_home, &[&ds4_obj, &kvstore_obj, &obj]);
                 return;
             }
             compile_c(&repo_root, &out_dir, "ds4.c", &ds4_obj, true);
+            compile_c(&repo_root, &out_dir, "ds4_kvstore.c", &kvstore_obj, true);
             None
         }
         _ => {
             compile_c(&repo_root, &out_dir, "ds4.c", &ds4_obj, true);
+            compile_c(&repo_root, &out_dir, "ds4_kvstore.c", &kvstore_obj, true);
             None
         }
     };
 
     let objects = match backend_obj.as_ref() {
-        Some(obj) => vec![&ds4_obj, obj],
-        None => vec![&ds4_obj],
+        Some(obj) => vec![&ds4_obj, &kvstore_obj, obj],
+        None => vec![&ds4_obj, &kvstore_obj],
     };
     link_cpu(&out_dir, &objects);
 }
 
 fn rerun_for_backend_sources(repo_root: &Path) {
-    for path in ["ds4.c", "ds4.h", "ds4_gpu.h", "ds4_metal.m", "ds4_cuda.cu"] {
+    for path in [
+        "ds4.c",
+        "ds4.h",
+        "ds4_gpu.h",
+        "ds4_kvstore.c",
+        "ds4_kvstore.h",
+        "ds4_metal.m",
+        "ds4_cuda.cu",
+    ] {
         println!("cargo:rerun-if-changed={}", repo_root.join(path).display());
     }
     let metal_dir = repo_root.join("metal");

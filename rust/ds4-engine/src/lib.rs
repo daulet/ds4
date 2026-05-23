@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::ffi::{c_char, c_float, c_int, c_void, CStr, CString, NulError};
+use std::ffi::{c_char, c_double, c_float, c_int, c_void, CStr, CString, NulError};
 use std::fmt;
 use std::io::{self, Write};
 use std::ptr::NonNull;
@@ -214,6 +214,41 @@ pub struct ServerGenerationOptions {
     pub top_p: f32,
     pub min_p: f32,
     pub seed: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KvDiskCacheOptions<'a> {
+    pub dir: &'a str,
+    pub budget_mb: u64,
+    pub reject_different_quant: bool,
+    pub min_tokens: i32,
+    pub cold_max_tokens: i32,
+    pub continued_interval_tokens: i32,
+    pub boundary_trim_tokens: i32,
+    pub boundary_align_tokens: i32,
+}
+
+#[derive(Debug)]
+pub struct KvDiskCache {
+    raw: RawKvStore,
+}
+
+#[derive(Debug)]
+pub struct KvDiskCacheLoad {
+    pub tokens: i32,
+    pub text_bytes: u32,
+    pub quant_bits: u8,
+    pub ext_flags: u8,
+    pub load_ms: f64,
+    pub consumed: bool,
+    pub path: Option<String>,
+    pub effective_prompt: Tokens,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ServerCacheProbe {
+    pub live_tokens_before: i32,
+    pub live_prompt_common: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -790,6 +825,67 @@ impl ChatSession<'_> {
 }
 
 impl ServerSession<'_> {
+    pub fn cache_probe(&self, prompt: &Tokens) -> ServerCacheProbe {
+        ServerCacheProbe {
+            live_tokens_before: self.session.pos(),
+            live_prompt_common: self.session.common_prefix(prompt),
+        }
+    }
+
+    pub fn try_load_text_cache(
+        &mut self,
+        cache: &mut KvDiskCache,
+        prompt_text: &str,
+        responses_protocol: bool,
+    ) -> Result<Option<KvDiskCacheLoad>, EngineError> {
+        let prompt_text = CString::new(prompt_text)?;
+        let mut effective_raw = RawTokens::default();
+        let mut result = RawKvLoadResult::default();
+        let loaded = unsafe {
+            ds4_kvstore_try_load_text(
+                &mut cache.raw,
+                self.engine.raw.as_ptr(),
+                self.session.raw.as_ptr(),
+                prompt_text.as_ptr(),
+                &mut effective_raw,
+                &mut result,
+                std::ptr::null(),
+                responses_protocol,
+            )
+        };
+        let effective_prompt = Tokens { raw: effective_raw };
+        if loaded <= 0 {
+            unsafe {
+                ds4_kvstore_load_result_free(&mut result);
+            }
+            drop(effective_prompt);
+            return Ok(None);
+        }
+        let path = if result.path.is_null() {
+            None
+        } else {
+            Some(
+                unsafe { CStr::from_ptr(result.path) }
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+        };
+        let load = KvDiskCacheLoad {
+            tokens: loaded,
+            text_bytes: result.text_bytes,
+            quant_bits: result.quant_bits,
+            ext_flags: result.ext_flags,
+            load_ms: result.load_ms,
+            consumed: result.consumed,
+            path,
+            effective_prompt,
+        };
+        unsafe {
+            ds4_kvstore_load_result_free(&mut result);
+        }
+        Ok(Some(load))
+    }
+
     pub fn generate(
         &mut self,
         prompt: &Tokens,
@@ -892,6 +988,41 @@ impl ServerSession<'_> {
             live_prompt_common,
             completion_tokens,
             finish_reason,
+        }
+    }
+}
+
+impl KvDiskCache {
+    pub fn open(options: &KvDiskCacheOptions<'_>) -> Result<Option<Self>, EngineError> {
+        let dir = CString::new(options.dir)?;
+        let mut raw = RawKvStore::default();
+        let raw_options = RawKvOptions {
+            min_tokens: options.min_tokens,
+            cold_max_tokens: options.cold_max_tokens,
+            continued_interval_tokens: options.continued_interval_tokens,
+            boundary_trim_tokens: options.boundary_trim_tokens,
+            boundary_align_tokens: options.boundary_align_tokens,
+        };
+        let opened = unsafe {
+            ds4_kvstore_open(
+                &mut raw,
+                dir.as_ptr(),
+                options.budget_mb,
+                options.reject_different_quant,
+                raw_options,
+                std::ptr::null(),
+                None,
+                std::ptr::null_mut(),
+            )
+        };
+        Ok(opened.then_some(Self { raw }))
+    }
+}
+
+impl Drop for KvDiskCache {
+    fn drop(&mut self) {
+        unsafe {
+            ds4_kvstore_close(&mut self.raw);
         }
     }
 }
@@ -1227,6 +1358,111 @@ struct RawEngineOptions {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RawKvOptions {
+    min_tokens: c_int,
+    cold_max_tokens: c_int,
+    continued_interval_tokens: c_int,
+    boundary_trim_tokens: c_int,
+    boundary_align_tokens: c_int,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+struct RawKvEntry {
+    sha: [c_char; 41],
+    path: *mut c_char,
+    quant_bits: u8,
+    reason: u8,
+    tokens: u32,
+    hits: u32,
+    ctx_size: u32,
+    ext_flags: u8,
+    created_at: u64,
+    last_used: u64,
+    payload_bytes: u64,
+    text_bytes: u64,
+    file_size: u64,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+struct RawKvStore {
+    enabled: bool,
+    dir: *mut c_char,
+    budget_bytes: u64,
+    reject_different_quant: bool,
+    opt: RawKvOptions,
+    continued_last_store_tokens: c_int,
+    entry: *mut RawKvEntry,
+    len: c_int,
+    cap: c_int,
+    log_name: *const c_char,
+    log_ud: *mut c_void,
+    log: Option<unsafe extern "C" fn(*mut c_void, c_int, *const c_char)>,
+}
+
+impl Default for RawKvStore {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            dir: std::ptr::null_mut(),
+            budget_bytes: 0,
+            reject_different_quant: false,
+            opt: RawKvOptions {
+                min_tokens: 0,
+                cold_max_tokens: 0,
+                continued_interval_tokens: 0,
+                boundary_trim_tokens: 0,
+                boundary_align_tokens: 0,
+            },
+            continued_last_store_tokens: 0,
+            entry: std::ptr::null_mut(),
+            len: 0,
+            cap: 0,
+            log_name: std::ptr::null(),
+            log_ud: std::ptr::null_mut(),
+            log: None,
+        }
+    }
+}
+
+#[repr(C)]
+struct RawKvTrailerHooks {
+    ud: *mut c_void,
+    ext_flag: u8,
+    serialized_size: Option<unsafe extern "C" fn(*mut c_void, *const c_char, *mut u64) -> bool>,
+    write: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_char, *mut u64) -> bool>,
+    load: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_void) -> c_int>,
+    load_wanted: *const c_void,
+}
+
+#[repr(C)]
+struct RawKvLoadResult {
+    tokens: c_int,
+    text_bytes: u32,
+    quant_bits: u8,
+    ext_flags: u8,
+    load_ms: c_double,
+    consumed: bool,
+    path: *mut c_char,
+}
+
+impl Default for RawKvLoadResult {
+    fn default() -> Self {
+        Self {
+            tokens: 0,
+            text_bytes: 0,
+            quant_bits: 0,
+            ext_flags: 0,
+            load_ms: 0.0,
+            consumed: false,
+            path: std::ptr::null_mut(),
+        }
+    }
+}
+
+#[repr(C)]
 struct RawContextMemory {
     total_bytes: u64,
     raw_bytes: u64,
@@ -1315,6 +1551,28 @@ unsafe extern "C" {
     fn ds4_session_common_prefix(session: *mut RawSession, prompt: *const RawTokens) -> c_int;
     fn ds4_session_pos(session: *mut RawSession) -> c_int;
     fn ds4_session_ctx(session: *mut RawSession) -> c_int;
+    fn ds4_kvstore_open(
+        cache: *mut RawKvStore,
+        dir: *const c_char,
+        budget_mb: u64,
+        reject_different_quant: bool,
+        options: RawKvOptions,
+        log_name: *const c_char,
+        log: Option<unsafe extern "C" fn(*mut c_void, c_int, *const c_char)>,
+        log_ud: *mut c_void,
+    ) -> bool;
+    fn ds4_kvstore_close(cache: *mut RawKvStore);
+    fn ds4_kvstore_try_load_text(
+        cache: *mut RawKvStore,
+        engine: *mut RawEngine,
+        session: *mut RawSession,
+        prompt_text: *const c_char,
+        effective_prompt: *mut RawTokens,
+        result: *mut RawKvLoadResult,
+        hooks: *const RawKvTrailerHooks,
+        responses_protocol: bool,
+    ) -> c_int;
+    fn ds4_kvstore_load_result_free(result: *mut RawKvLoadResult);
     fn free(ptr: *mut c_void);
 }
 

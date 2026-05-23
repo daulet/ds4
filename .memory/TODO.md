@@ -3365,7 +3365,7 @@
 
 ### M9.8f3: Runtime Disk-KV Lookup And Payload Restore
 
-- Status: active
+- Status: done
 - Goal: wire text-prefix KVC lookup, session payload restore, effective prompt
   suffix tokenization, and tool-map trailer restore into the runtime request
   path before generation.
@@ -3388,12 +3388,21 @@
   ds4-parity/compare_kv_replay.py --negative-test`, B300 restore smoke if local
   model is unavailable, `cargo test --workspace`, `cargo fmt --all -- --check`,
   `git diff --check`, and non-interactive Claude review with no blockers.
+- Validation passed: targeted `cargo test -p ds4-engine --bin
+  ds4-server-runtime-rs -- --nocapture`, `cargo build -p ds4-engine --bin
+  ds4-server-runtime-rs`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, B300 smoke on
+  `ds4-rust-port-b300` covering one C-seeded disk hit, one miss, and one
+  disk-restored tool-map prompt, full `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, NUL scan over touched files, and two
+  non-interactive Claude reviews with no blockers after the live-session disk
+  restore guard fix.
 - Owner path: Rust engine session FFI, runtime server cache path,
   `rust/ds4-gguf/src/tool_memory.rs`, `.memory/status.md`.
 
 ### M9.8f4: Runtime KV Store, Continued Frontier, And Eviction
 
-- Status: pending
+- Status: active
 - Goal: write cold/continued/shutdown KVC checkpoints from the runtime server,
   preserve continued-frontier suppression/restoration, write tool-map trailers,
   and evict without deleting the just-written protected checkpoint.

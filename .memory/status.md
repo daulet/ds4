@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.8f3 Runtime Disk-KV Lookup And Payload Restore
-- Last validated source commit: M9.8f2 runtime cache configuration and trace
-  contract in this commit; prior pushed source commit
-  `16ca80e67b79500ead82833647b4f4dccb8da74d`
+- Active item: M9.8f4 Runtime KV Store, Continued Frontier, And Eviction
+- Last validated source commit: M9.8f3 runtime disk-KV lookup and payload
+  restore in this commit; prior pushed source commit
+  `7f998f366fe270d8db4b7d7fcaac12d55c5ff1b7`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,42 @@
 
 ## Last Evidence
 
+- M9.8f3 links `ds4_kvstore.c` into `ds4-engine` and adds Rust FFI for
+  `ds4_kvstore_open`, `ds4_kvstore_try_load_text`, and
+  `ds4_kvstore_load_result_free`, preserving the C `ds4_kvstore`,
+  `ds4_kvstore_entry`, options, trailer-hooks, and load-result layouts.
+- M9.8f3 wires OpenAI Chat runtime disk restore before generation for empty
+  sessions: Rust opens the C KV store, probes live cache state, restores a
+  rendered-text prefix KVC payload with C session-load logic, and generates
+  from the C-built effective prompt containing the exact loaded token prefix
+  plus a newly tokenized visible suffix.
+- M9.8f3 intentionally guards disk restore to empty Rust sessions until the
+  store milestone lands, because C persists the current live checkpoint before
+  replacing it with an older disk snapshot. Claude initially flagged the
+  missing live-checkpoint persist as a blocker; the final reviewed code skips
+  disk replacement when `live_tokens_before > 0`.
+- M9.8f3 restores disk KVC tool-map trailers before prompt rendering, reuses
+  the existing `ToolMemory` exact sampled-DSML path, and fixes OpenAI Chat
+  parsing so assistant `tool_calls[].id` and tool-message `tool_call_id` survive
+  into `ChatMessage`.
+- M9.8f3 B300 smoke used temp kubeconfig
+  `/tmp/ds4-hou2-prod1.kubeconfig`, pod `ds4-rust-port-b300`, model
+  `/workspace/ds4/ds4flash.gguf`, and temp artifacts under
+  `/tmp/ds4-m98f3-smoke`. The smoke passed after building
+  `target/debug/ds4-server-runtime-rs` on the pod with a temporary Rust toolchain
+  in `/tmp`: one C-seeded Rust disk hit restored 550 tokens from
+  `/tmp/ds4-m98f3-smoke/kv/0ab2314538b11686a11e296b7f697651fbd17e60.kv`, one
+  unrelated Rust request missed with `cache_source: none`, and one synthetic KVC
+  tool-map request reported `tool_replay: mem=0 disk=1 canonical=0
+  missing_ids=0` with `pwd sampled` in the rendered prompt and no canonical
+  fallback in that rendered prompt.
+- M9.8f3 validation passed targeted `cargo test -p ds4-engine --bin
+  ds4-server-runtime-rs -- --nocapture`, `cargo build -p ds4-engine --bin
+  ds4-server-runtime-rs`, `python3
+  ds4-parity/compare_kv_replay.py --negative-test`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, NUL scan
+  over touched files, the B300 smoke above, and two non-interactive Claude
+  reviews with `NO BLOCKERS`.
 - M9.8f2 adds the Rust runtime server cache configuration surface for C's
   disk-KV flags: cache directory, disk budget, min/cold/continued/boundary
   policy options, cross-quant rejection, exact DSML tool replay disablement,
