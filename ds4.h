@@ -152,6 +152,7 @@ int ds4_engine_metal_graph_prompt_test(ds4_engine *e, const ds4_tokens *prompt, 
 int ds4_dump_metadata_json(const char *model_path, const char *mtp_path, FILE *fp);
 int ds4_dump_metadata_json_ex(const char *model_path, const char *mtp_path, FILE *fp, unsigned flags);
 int ds4_dump_sampling_oracle_json(FILE *fp);
+int ds4_dump_first_kernel_oracle_json(const char *model_path, int token, FILE *fp);
 int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *opt, FILE *fp);
 
 void ds4_tokens_push(ds4_tokens *tv, int token);

@@ -28,6 +28,7 @@ MODEL_SIZE = 86720111488
 TENSOR_DATA_OFFSET = 5333824
 TOKEN_EMBD_OFFSET = 77928033088
 TOKEN_EMBD_BYTES = 1059061760
+FNV1A64 = "f76512db41f80c4d"
 SAMPLES = {
     0: -0.107421875,
     1: -0.019897461,
@@ -35,8 +36,6 @@ SAMPLES = {
     16382: 0.22558594,
     16383: -0.17285156,
 }
-
-
 @dataclass
 class Report:
     checks: int = 0
@@ -93,6 +92,7 @@ def validate_static(report: Report, texts: dict[str, str]) -> None:
         ("weights.token_embd.abs_offset", "token embedding offset missing"),
         ("Tensor::allocate", "cur_hc allocation missing"),
         ("read_bytes", "cur_hc readback missing"),
+        ("fnv1a64(&bytes)", "cur_hc full-buffer digest missing"),
         ("synchronize", "backend synchronization missing"),
         ("BackendGuard", "cleanup guard missing"),
         ("ds4_gpu::cleanup", "backend cleanup missing"),
@@ -107,9 +107,9 @@ def validate_static(report: Report, texts: dict[str, str]) -> None:
 
     report.check("M10.5c4c2b2b1 Rust first decode kernel" in texts["readme"], "README entry missing")
     report.check("M10.5c4c2b2b1: Rust First Decode Kernel Execution" in texts["roadmap"], "roadmap first-kernel split missing")
-    report.check("M10.5c4c2b2b2: Rust One-Token Decode B300 Execution" in texts["roadmap"], "roadmap decode remainder missing")
+    report.check("M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution" in texts["roadmap"], "roadmap decode remainder missing")
     report.check("M10.5c4c2b2b1: Rust First Decode Kernel Execution" in texts["todo"], "TODO first-kernel split missing")
-    report.check("M10.5c4c2b2b2: Rust One-Token Decode B300 Execution" in texts["todo"], "TODO decode remainder missing")
+    report.check("M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution" in texts["todo"], "TODO decode remainder missing")
 
 
 def validate_candidate(report: Report, obj: dict[str, Any]) -> None:
@@ -152,6 +152,7 @@ def validate_candidate(report: Report, obj: dict[str, Any]) -> None:
         report.check(output.get("bytes") == 65536, "candidate output byte drift")
         report.check(output.get("elements") == 16384, "candidate output element drift")
         report.check(output.get("nonzero_elements") == 16384, "candidate output nonzero count drift")
+        report.check(output.get("fnv1a64") == FNV1A64, "candidate output FNV digest drift")
         validate_samples(report, output.get("samples"))
 
 
@@ -184,6 +185,7 @@ def run_negative_tests(texts: dict[str, str]) -> int:
         ("remove command batch", "bin", "CommandBatch::begin", "CommandBatch_removed::begin"),
         ("remove facade call", "bin", ".embed_token_hc(", ".embed_token_hc_removed("),
         ("remove readback", "bin", "read_bytes", "read_removed"),
+        ("remove digest", "bin", "fnv1a64(&bytes)", "fnv1a64_removed(&bytes)"),
         ("remove b300 candidate check", "report", "--candidate /tmp/ds4-c2b2b1-first-kernel.json", ""),
         ("remove roadmap split", "roadmap", "M10.5c4c2b2b1: Rust First Decode Kernel Execution", "M10.5c4c2b2b1 removed"),
     ]
@@ -202,6 +204,7 @@ def run_negative_tests(texts: dict[str, str]) -> int:
     candidate_mutations = [
         ("weight offset", mutate_weight_offset),
         ("nonzero count", mutate_nonzero_count),
+        ("output digest", mutate_output_digest),
         ("sample value", mutate_sample_value),
     ]
     for label, mutate in candidate_mutations:
@@ -250,6 +253,7 @@ def valid_candidate() -> dict[str, Any]:
             "bytes": 65536,
             "elements": 16384,
             "nonzero_elements": 16384,
+            "fnv1a64": FNV1A64,
             "samples": [{"index": index, "value": value} for index, value in SAMPLES.items()],
         },
     }
@@ -262,6 +266,11 @@ def mutate_weight_offset(obj: dict[str, Any]) -> dict[str, Any]:
 
 def mutate_nonzero_count(obj: dict[str, Any]) -> dict[str, Any]:
     obj["output"]["nonzero_elements"] -= 1
+    return obj
+
+
+def mutate_output_digest(obj: dict[str, Any]) -> dict[str, Any]:
+    obj["output"]["fnv1a64"] = "0123456789abcdef"
     return obj
 
 

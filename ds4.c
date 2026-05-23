@@ -16166,6 +16166,118 @@ static void sampling_oracle_json_f32(FILE *fp, float v) {
     }
 }
 
+static uint64_t ds4_fnv1a64_bytes(const void *ptr, size_t len) {
+    const uint8_t *p = ptr;
+    uint64_t hash = 14695981039346656037ull;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= (uint64_t)p[i];
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+static uint64_t count_nonzero_f32_values(const float *values, uint64_t n) {
+    uint64_t count = 0;
+    for (uint64_t i = 0; i < n; i++) {
+        if (values[i] != 0.0f) count++;
+    }
+    return count;
+}
+
+static void first_kernel_oracle_write_samples(FILE *fp, const float *values, uint64_t elements) {
+    uint64_t samples[5] = {0, 1, elements / 2, elements > 1 ? elements - 2 : 0, elements - 1};
+    bool first = true;
+    for (size_t i = 0; i < sizeof(samples) / sizeof(samples[0]); i++) {
+        const uint64_t index = samples[i];
+        if (index >= elements) continue;
+        bool duplicate = false;
+        for (size_t j = 0; j < i; j++) {
+            if (samples[j] == index) duplicate = true;
+        }
+        if (duplicate) continue;
+        if (!first) fputs(",\n", fp);
+        first = false;
+        fputs("      {\"index\": ", fp);
+        fprintf(fp, "%" PRIu64, index);
+        fputs(", \"value\": ", fp);
+        sampling_oracle_json_f32(fp, values[index]);
+        fputc('}', fp);
+    }
+}
+
+int ds4_dump_first_kernel_oracle_json(const char *model_path, int token, FILE *fp) {
+    if (!model_path || !fp) return 1;
+
+    ds4_model model = { .fd = -1 };
+    ds4_weights weights;
+    memset(&weights, 0, sizeof(weights));
+
+    const uint64_t output_elements = (uint64_t)DS4_N_EMBD * DS4_N_HC;
+    const size_t output_bytes = (size_t)output_elements * sizeof(float);
+    float *plain = xmalloc((size_t)DS4_N_EMBD * sizeof(plain[0]));
+    float *cur_hc = xmalloc(output_bytes);
+
+    model_open(&model, model_path, false, false);
+    config_validate_model(&model);
+    weights_bind(&weights, &model);
+    embed_token_f16(&model, &weights, token, plain);
+    hc_from_plain_embedding(cur_hc, plain, DS4_N_EMBD, DS4_N_HC);
+
+    char sha[65];
+    ds4_sha256_hex(cur_hc, output_bytes, sha);
+    const uint64_t fnv = ds4_fnv1a64_bytes(cur_hc, output_bytes);
+    const uint64_t nonzero = count_nonzero_f32_values(cur_hc, output_elements);
+    const ds4_tensor *te = weights.token_embd;
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.first_kernel_oracle.v1\",\n", fp);
+    fprintf(fp, "  \"case\": \"embed_token_hc_token%d\",\n", token);
+    fputs("  \"source\": \"current-c\",\n", fp);
+    fputs("  \"model\": {\n", fp);
+    fprintf(fp, "    \"mapped_size\": %" PRIu64 ",\n", model.size);
+    fprintf(fp, "    \"tensor_count\": %" PRIu64 ",\n", model.n_tensors);
+    fprintf(fp, "    \"tensor_data_offset\": %" PRIu64 ",\n", model.tensor_data_pos);
+    fprintf(fp, "    \"bound_layers\": %u\n", (unsigned)DS4_N_LAYER);
+    fputs("  },\n", fp);
+    fputs("  \"operation\": {\n", fp);
+    fputs("    \"name\": \"current_c_embed_token_f16_hc_from_plain_embedding\",\n", fp);
+    fputs("    \"method\": \"embed_token_f16+hc_from_plain_embedding\",\n", fp);
+    fprintf(fp, "    \"token\": %d,\n", token);
+    fprintf(fp, "    \"n_vocab\": %u,\n", (unsigned)DS4_N_VOCAB);
+    fprintf(fp, "    \"n_embd\": %u,\n", (unsigned)DS4_N_EMBD);
+    fprintf(fp, "    \"n_hc\": %u\n", (unsigned)DS4_N_HC);
+    fputs("  },\n", fp);
+    fputs("  \"weight\": {\n", fp);
+    fputs("    \"role\": \"base.token_embd\",\n", fp);
+    fprintf(fp, "    \"abs_offset\": %" PRIu64 ",\n", te->abs_offset);
+    fprintf(fp, "    \"bytes\": %" PRIu64 ",\n", te->bytes);
+    fprintf(fp, "    \"type\": %u,\n", te->type);
+    fputs("    \"type_name\": ", fp);
+    json_cstr_write(fp, tensor_type_name(te->type));
+    fputc('\n', fp);
+    fputs("  },\n", fp);
+    fputs("  \"output\": {\n", fp);
+    fputs("    \"field\": \"cur_hc\",\n", fp);
+    fprintf(fp, "    \"bytes\": %zu,\n", output_bytes);
+    fprintf(fp, "    \"elements\": %" PRIu64 ",\n", output_elements);
+    fprintf(fp, "    \"nonzero_elements\": %" PRIu64 ",\n", nonzero);
+    fputs("    \"sha256\": \"", fp);
+    fputs(sha, fp);
+    fputs("\",\n", fp);
+    fprintf(fp, "    \"fnv1a64\": \"%016" PRIx64 "\",\n", fnv);
+    fputs("    \"samples\": [\n", fp);
+    first_kernel_oracle_write_samples(fp, cur_hc, output_elements);
+    fputs("\n    ]\n", fp);
+    fputs("  }\n", fp);
+    fputs("}\n", fp);
+
+    weights_free(&weights);
+    model_close(&model);
+    free(cur_hc);
+    free(plain);
+    return ferror(fp) ? 1 : 0;
+}
+
 static void sampling_oracle_trace_free(sampling_oracle_trace *t) {
     free(t->filtered);
     t->filtered = NULL;

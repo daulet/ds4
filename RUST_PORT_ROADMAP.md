@@ -3458,7 +3458,34 @@ kernels:
   -- --check`, `git diff --check`, and non-interactive Claude review with no
   blockers.
 
-##### M10.5c4c2b2b2: Rust One-Token Decode B300 Execution
+##### M10.5c4c2b2b2a: Rust First-Kernel Current-C Oracle Comparator
+
+- Goal: compare the B300 Rust `embed_token_hc` readback against an
+  independently emitted current-C oracle before adding more scheduler calls.
+- Oracle: current C model startup semantics for `token_embd.weight`, including
+  `model_open`, `config_validate_model`, `weights_bind`, `embed_token_f16`, and
+  `hc_from_plain_embedding`.
+- Fixture: `/workspace/ds4/ds4flash.gguf` on B300, token `0`,
+  `base.token_embd`, and the `cur_hc` graph-state tensor read back from Rust.
+- Comparator: B300 paired JSON comparator that checks current-C oracle and Rust
+  candidate model identity, token embedding offset/size, output shape, full
+  `cur_hc` FNV digest, nonzero count, and selected f32 samples.
+- Acceptance: `ds4-first-kernel-oracle-dump` emits
+  `ds4.first_kernel_oracle.v1`, `ds4-decode-first-kernel` emits
+  `ds4.decode_first_kernel.v1`, and the paired comparator accepts their
+  `cur_hc` output on B300.
+- Drift policy: model size, tensor-data offset, token id, token embedding
+  offset/size, output shape, digest, nonzero count, and selected samples are
+  exact; output file paths and backend stderr may vary by rerun.
+- Review gate: ask Claude to review the oracle helper's use of current-C
+  helpers, Rust digest emission, and paired comparator failure modes.
+- Validation gate: oracle comparator with negative test, B300 current-C oracle
+  plus Rust candidate paired validation, `make ds4-first-kernel-oracle-dump`,
+  `cargo check -p ds4-gpu --bin ds4-decode-first-kernel`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.5c4c2b2b2b: Rust One-Token Decode B300 Execution
 
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
   on B300 and capture Rust checkpoints for the M10.4 decode cases.
@@ -3466,7 +3493,8 @@ kernels:
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
   M10.5c4c2b1 execution preflight, M10.5c4c2b2a full state allocation, and
-  M10.5c4c2b2b1 first-kernel execution.
+  M10.5c4c2b2b1 first-kernel execution plus the M10.5c4c2b2b2a current-C
+  first-kernel oracle comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -3480,9 +3508,9 @@ kernels:
 - Review gate: ask Claude to review decode ordering, cache mutation, and
   unsafe backend-call containment.
 - Validation gate: targeted decode comparator on B300, c2b1 preflight rerun,
-  c2b2a state allocation rerun, c2b2b1 first-kernel rerun, `cargo test
-  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
-  non-interactive Claude review with no blockers.
+  c2b2a state allocation rerun, c2b2b1 first-kernel rerun, c2b2b2a current-C
+  oracle rerun, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and non-interactive Claude review with no blockers.
 
 ##### M10.5c4d: Decode Continuation And Optional Steering Closure
 

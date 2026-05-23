@@ -358,6 +358,25 @@ python3 ds4-parity/compare_decode_first_kernel.py \
   --candidate /tmp/ds4-c2b2b1-first-kernel.json
 ```
 
+Compare the M10.5c4c2b2b2a Rust first-kernel current-C oracle before adding
+more one-token scheduler calls:
+
+```sh
+python3 ds4-parity/compare_decode_first_kernel_oracle.py
+python3 ds4-parity/compare_decode_first_kernel_oracle.py --negative-test
+```
+
+The comparator checks that `ds4-first-kernel-oracle-dump` uses the current C
+model loader, DS4 weight binding, `embed_token_f16`, and
+`hc_from_plain_embedding` to emit an independent `cur_hc` oracle. On B300,
+validate the current-C oracle and Rust readback together:
+
+```sh
+python3 ds4-parity/compare_decode_first_kernel_oracle.py \
+  --oracle /tmp/ds4-c2b2b2a-first-kernel-oracle.json \
+  --candidate /tmp/ds4-c2b2b2a-first-kernel-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

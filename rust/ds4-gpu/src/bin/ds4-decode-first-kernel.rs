@@ -81,6 +81,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|err| format!("cur_hc readback failed: {err}"))?;
     let samples = read_samples(&bytes)?;
     let nonzero_elements = count_nonzero_f32(&bytes)?;
+    let output_fnv1a64 = fnv1a64(&bytes);
     write_report(
         &gguf,
         &weights,
@@ -88,6 +89,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         mapped.size,
         cur_hc.byte_len(),
         nonzero_elements,
+        output_fnv1a64,
         &samples,
     );
     Ok(())
@@ -222,6 +224,15 @@ fn count_nonzero_f32(bytes: &[u8]) -> Result<u32, String> {
     Ok(count)
 }
 
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
 #[allow(clippy::too_many_arguments)]
 fn write_report(
     gguf: &Gguf,
@@ -230,6 +241,7 @@ fn write_report(
     mapped_size: u64,
     cur_hc_bytes: u64,
     nonzero_elements: u32,
+    output_fnv1a64: u64,
     samples: &[F32Sample],
 ) {
     println!("{{");
@@ -270,6 +282,7 @@ fn write_report(
         cur_hc_bytes.checked_div(4).unwrap_or(0)
     );
     println!("    \"nonzero_elements\": {nonzero_elements},");
+    println!("    \"fnv1a64\": \"{output_fnv1a64:016x}\",");
     println!("    \"samples\": [");
     for (idx, sample) in samples.iter().enumerate() {
         if idx != 0 {

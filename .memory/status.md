@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2 Rust One-Token Decode B300 Execution
-- Last validated source commit before the current stage: M10.5c4c2b2a Rust
-  full decode state allocation in commit
-  `830cfb11d482e4d8c2b4ffbc448d60e4b194125e`
+- Active item: M10.5c4c2b2b2b Rust One-Token Decode B300 Execution
+- Last validated source commit before the current stage: M10.5c4c2b2b2a Rust
+  first-kernel current-C oracle comparator in the commit produced by this
+  stage.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,9 +26,40 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2a splits the remaining one-token scheduler item before adding
+  more Rust decode calls because M10.5c4c2b2b1 compared Rust first-kernel
+  readback only against static pinned values. The new slice must compare the
+  same B300 Rust `cur_hc` readback against a current-C oracle emitted through
+  `model_open`, `config_validate_model`, `weights_bind`, `embed_token_f16`, and
+  `hc_from_plain_embedding`.
+- M10.5c4c2b2b2a adds `ds4-first-kernel-oracle-dump` and
+  `ds4_dump_first_kernel_oracle_json`, which emit
+  `ds4.first_kernel_oracle.v1` for token `0` using the current-C model loader,
+  config validation, weight binding, F16 token embedding load, and HC
+  broadcast.
+- M10.5c4c2b2b2a adds a full-buffer FNV digest to the Rust
+  `ds4.decode_first_kernel.v1` readback and
+  `ds4-parity/compare_decode_first_kernel_oracle.py`, which pairs the current-C
+  oracle and Rust candidate on B300. The paired B300 rerun passed 103 checks
+  with exact `cur_hc` FNV `f76512db41f80c4d`, current-C SHA256
+  `46e80d78c0dc648b773c230b37a4afd1446d7a3cc39f3a43a01a07d4ecf40dca`,
+  16,384 nonzero f32 elements, and matching selected samples within the
+  existing `1e-6` sample tolerance.
+- M10.5c4c2b2b2a validation passed `python3
+  ds4-parity/compare_decode_first_kernel_oracle.py --negative-test`, `python3
+  ds4-parity/compare_decode_first_kernel.py --negative-test`, `python3 -m
+  py_compile ds4-parity/compare_decode_first_kernel.py
+  ds4-parity/compare_decode_first_kernel_oracle.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-first-kernel-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-first-kernel`, B300 current-C oracle plus Rust candidate paired
+  validation, B300 first-kernel candidate validation, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, touched-file
+  NUL scan, and non-interactive Claude review with no blockers.
 - M10.5c4c2b2b1 splits the remaining one-token scheduler item into a first
   real-kernel execution bridge and the next active full scheduler slice
-  M10.5c4c2b2b2.
+  M10.5c4c2b2b2a.
 - M10.5c4c2b2b1 adds `ds4-decode-first-kernel`, which maps the real GGUF on
   B300, binds DS4 weights, sets the model fd/range, allocates `cur_hc`, opens a
   command batch, launches `embed_token_hc` through the safe Rust facade for
@@ -82,8 +113,9 @@
 - M10.5c4c2b1 splits the original B300 one-token execution item into a
   model-backed preflight and the remaining numeric decode slice. After the
   M10.5c4c2b2a state-allocation bridge and M10.5c4c2b2b1 first-kernel bridge,
-  the active M10.5c4c2b2b2 slice must launch the actual one-token facade
-  schedule and compare M10.4 tensors/logits.
+  the active M10.5c4c2b2b2a slice must first anchor that first-kernel readback
+  to a current-C oracle before the remaining one-token facade schedule compares
+  M10.4 tensors/logits.
 - M10.5c4c2b1 adds `rust/ds4-gpu/src/decode_execution.rs` and
   `ds4-decode-exec-preflight`, which mmap the real GGUF on B300, parse the
   GGUF header without copying tensor data, bind DS4 weights, set the model fd
