@@ -164,6 +164,7 @@ int ds4_dump_layer2_attn_output_oracle_json(const char *model_path, int token, F
 int ds4_dump_layer2_ffn_output_oracle_json(const char *model_path, int token, FILE *fp);
 int ds4_dump_layer3_ffn_output_oracle_json(const char *model_path, int token, FILE *fp);
 int ds4_dump_layer4_ffn_output_oracle_json(const char *model_path, int token, FILE *fp);
+int ds4_dump_all_layer_final_hc_oracle_json(const char *model_path, int token, FILE *fp);
 int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *opt, FILE *fp);
 
 void ds4_tokens_push(ds4_tokens *tv, int token);

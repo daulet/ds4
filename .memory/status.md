@@ -3,8 +3,8 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2b2b2b2 Rust Remaining Layer Loop And Logits B300 Execution
-- Last validated source before the active item: M10.5c4c2b2b2b2b2b2b2b2b1
+- Active item: M10.5c4c2b2b2b2b2b2b2b2b2b Rust Full One-Token Output Head And Logits B300 Execution
+- Last validated source before the active item: M10.5c4c2b2b2b2b2b2b2b2b2a
   validation is recorded below in this status update.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
@@ -25,6 +25,53 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2b2b2b2a adds
+  `ds4-all-layer-final-hc-oracle-dump` and
+  `ds4_dump_all_layer_final_hc_oracle_json`, which emit
+  `ds4.all_layer_final_hc_oracle.v1` for token `0`, position `0`, all 43
+  production current-C decode layers, HC swaps after every layer, HC
+  checkpoints after layers `4`, `5`, and `42`, raw-cache rows for layers `5`
+  and `42`, ratio-128 layer-5 attention compressor state, and ratio-4
+  layer-42 attention/indexer compressor state.
+- M10.5c4c2b2b2b2b2b2b2b2b2a adds
+  `ds4-decode-all-layer-final-hc`, which maps the real GGUF on B300, allocates
+  per-layer raw/cache/state tensors, executes all layers through the safe Rust
+  facade using the DS4 compression schedule, preserves zero compressed/indexer
+  counters for position `0`, swaps `cur_hc`/`after_ffn_hc` after each layer,
+  and stops before the output-head kernels.
+- The B300 paired all-layer final-HC validator passed 730 pinned checks with
+  `decoded_layers=43`, `dense_layers=2`, `ratio4_layers=21`,
+  `ratio128_layers=20`, `raw_cap=2304`, `raw_window=128`,
+  `layer5_comp_cap=258`, `layer42_comp_cap=8194`, and zero compressed/indexer
+  counters. Full-buffer FNV digests are
+  `after_layer4_hc=b19322ec84d84935`,
+  `after_layer5_hc=b9c9026559412805`,
+  `after_layer42_hc=cbd17b425564f63f`,
+  `layer5_raw_cache_row=8f2606992a7f1a18`,
+  `layer5_attn_state_kv=8c17d55c4b8e6de9`,
+  `layer5_attn_state_score=292852343a4b4512`,
+  `layer42_raw_cache_row=029806013304ca31`,
+  `layer42_attn_state_kv=42a2f55a8dc3403b`,
+  `layer42_attn_state_score=5b0a233b9c74b3ee`,
+  `layer42_index_state_kv=2f5aefc0f5ed2728`, and
+  `layer42_index_state_score=6a5003b30aad1406`.
+- M10.5c4c2b2b2b2b2b2b2b2b2a validation passed `python3
+  ds4-parity/compare_decode_all_layer_final_hc.py --negative-test`, `python3
+  ds4-parity/compare_decode_all_layer_final_hc.py`, paired local artifact
+  validation with 730 checks, local `arch -arm64 make
+  ds4-all-layer-final-hc-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-all-layer-final-hc`, B300 current-C oracle plus Rust CUDA
+  candidate validation with 730 checks, B300 c2b2b2b2b2b2b2b2b1 layer-4
+  FFN-output predecessor rerun with 1,209 checks, `python3 -m py_compile
+  ds4-parity/compare_decode_all_layer_final_hc.py ds4-parity/run_parity_report.py`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 38 passed, 28
+  skipped, and 0 failed, `git diff --check`, touched-file NUL scan,
+  non-interactive Claude review with `NO BLOCKERS`, and
+  artifact SHA256
+  `oracle=a86956a394942dae56c446f4c51f37790f50b3b249c01c8fa932aac1efba9fb3`
+  and
+  `rust=e3e124043cd2d829c23bc8196971b0fa498fd63feca8b66473919bf3313807c1`.
 - M10.5c4c2b2b2b2b2b2b2b2b1 adds
   `ds4-layer4-ffn-output-oracle-dump` and
   `ds4_dump_layer4_ffn_output_oracle_json`, which emit
@@ -85,6 +132,11 @@
   `oracle=71ca50531844a0b062aa2f44773c8247fd38a3ebfe92877c9ed0bf8269c2f7eb`
   and
   `rust=fe75f0554993151a5dfff569d8517b6b70acb4a42a7c710a661d4180ac2cdd28`.
+- M10.5c4c2b2b2b2b2b2b2b2b2 splits the remaining layer-loop/logits item into
+  M10.5c4c2b2b2b2b2b2b2b2b2a all-layer final-HC execution and
+  M10.5c4c2b2b2b2b2b2b2b2b2b full one-token output-head/logits execution. The
+  split keeps the next commit comparable at the post-layer-42 HC boundary
+  before final vocab projection is attached.
 - M10.5c4c2b2b2b2b2b2b2b2 splits the remaining one-token scheduler item into
   a layer-3 ratio-128 FFN-output execution bridge and the next full
   all-layer/output-head/logits slice M10.5c4c2b2b2b2b2b2b2b2b. The split keeps

@@ -3978,6 +3978,54 @@ kernels:
 
 ##### M10.5c4c2b2b2b2b2b2b2b2b2: Rust Remaining Layer Loop And Logits B300 Execution
 
+- Split into M10.5c4c2b2b2b2b2b2b2b2b2a and
+  M10.5c4c2b2b2b2b2b2b2b2b2b so the repeated all-layer decode loop reaches a
+  comparable final HC boundary before the output-head and final logits are
+  attached.
+
+##### M10.5c4c2b2b2b2b2b2b2b2b2a: Rust All-Layer Final HC B300 Execution
+
+- Goal: execute token `0` at position `0` through all 43 decode layers on
+  B300 using the Rust safe facade, stopping after the production layer-42
+  `cur_hc`/`after_ffn_hc` swap and before the output-head kernels. This
+  proves the repeated layer scheduler, alternating ratio-4/indexer and
+  ratio-128 compressed layers, and per-layer raw/cache state mutation without
+  mixing in vocab projection drift.
+- Oracle: the current-C GPU path for token `0`, position `0`, layers `0`
+  through `42` via production `metal_graph_encode_decode_layer` execution and
+  HC swaps after every layer. The oracle reads layer-loop HC checkpoints after
+  layers `4`, `5`, and `42`, raw-cache rows for layers `5` and `42`, and
+  attention/indexer compressor state for the first newly covered ratio-128
+  layer and the final ratio-4/indexer layer.
+- Fixture: B300 `ds4flash.gguf`, token `0`, position `0`, dense layers `0`
+  and `1`, ratio-4 layers `2,4,...,42`, ratio-128 layers `3,5,...,41`,
+  `raw_row=0`, `n_raw=1`, `raw_start=0`, no emitted compressed rows, and
+  zero compressed/indexer counters for all compressed layers at this position.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests for the selected HC, raw-cache, and compressor-state
+  checkpoints, exact layer/count metadata, and tolerant JSON float samples.
+- Acceptance: Rust executes every layer through the same safe facade calls used
+  by the layer-4 comparator, swaps the HC buffers after each layer, preserves
+  zero compressed/indexer counters for position `0`, and matches the current-C
+  final layer-42 HC and selected cache/state checkpoints on B300.
+- Drift policy: layer count, compression schedule, cache counters, raw row,
+  `n_raw`, `raw_start`, tensor byte sizes, and FNV digests are exact; selected
+  f32 samples may differ only by JSON formatting and must stay within `1e-6`
+  relative or absolute tolerance.
+- Review gate: ask Claude to review the generic all-layer decode helper,
+  per-layer cache/state ownership, compression schedule, HC swap loop, and
+  checkpoint readback before commit.
+- Validation evidence: all-layer final-HC comparator with negative test, B300
+  current-C oracle plus Rust candidate paired validation, `make
+  ds4-all-layer-final-hc-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-all-layer-final-hc`, c2b2b2b2b2b2b2b2b1 layer-4 FFN-output
+  rerun, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, local unified parity report with B300 rerun command coverage, and
+  730 pinned B300 checks with final-HC digest
+  `after_layer42_hc=cbd17b425564f63f`.
+
+##### M10.5c4c2b2b2b2b2b2b2b2b2b: Rust Full One-Token Output Head And Logits B300 Execution
+
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
   on B300 after the layer-4 post-ratio128 ratio-4 FFN-output boundary, the
   layer-3 ratio-128 FFN-output boundary, the layer-2 FFN-output boundary, the
@@ -4000,6 +4048,7 @@ kernels:
   M10.5c4c2b2b2b2b2b2b2b1 layer-2 FFN-output comparator,
   M10.5c4c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output comparator, and
   M10.5c4c2b2b2b2b2b2b2b2b1 layer-4 post-ratio128 ratio-4 FFN-output
+  comparator, and M10.5c4c2b2b2b2b2b2b2b2b2a all-layer final-HC
   comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
