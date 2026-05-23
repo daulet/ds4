@@ -4047,15 +4047,57 @@
 
 ### M10.5c4c2b2b2b2: Rust One-Token Decode B300 Execution
 
+- Status: split
+- Split into M10.5c4c2b2b2b2a and M10.5c4c2b2b2b2b so the next commit has a
+  tensor-level execution oracle before cache mutation and attention scheduling
+  enter the same diff.
+
+### M10.5c4c2b2b2b2a: Rust Layer-0 QKV RoPE B300 Execution
+
+- Status: completed
+- Goal: execute the layer-0 Q/KV projection and RoPE prefix after the
+  M10.5c4c2b2b2b1 HC-pre boundary on B300.
+- Oracle: the current-C GPU tensor path for token `0`, layer `0`: model
+  fd/map bridge, embedding, HC RMS/matmul/split/norm, `ds4_gpu_matmul_q8_0`
+  for `attn_q_a` and `attn_kv`, fused `ds4_gpu_dsv4_qkv_rms_norm_rows`,
+  `ds4_gpu_matmul_q8_0` for `attn_q_b`, `ds4_gpu_head_rms_norm`, and
+  `ds4_gpu_rope_tail` for dense layer-0 `q` and `kv`.
+- Fixture: B300 `ds4flash.gguf`, token `0`, layer `0`, position `0`,
+  `attn_norm`, `qr`, `kv_raw`, `qr_norm`, final RoPE `q`, and final RoPE
+  `kv`.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests for the six tensors, current-C SHA256 evidence, and
+  selected f32 samples within the existing `1e-6` tolerance.
+- Acceptance: Rust launches the HC-pre prefix plus `matmul_q8_0`,
+  `dsv4_qkv_rms_norm_rows`, `head_rms_norm`, and `rope_tail` through the safe
+  facade in one command batch, synchronizes, and matches the current-C GPU
+  oracle on B300.
+- Drift policy: token, layer, position, dense RoPE constants, model offsets,
+  tensor byte sizes, and FNV digests are exact; selected f32 sample text may
+  vary by JSON formatting but numeric values must stay within `1e-6`.
+- Review gate: ask Claude to review Q/KV operation ordering, fused norm
+  arguments, RoPE constants, tensor sizes, and comparator failure modes.
+- Validation passed: QKV/RoPE comparator with negative test, B300 current-C
+  oracle plus Rust candidate paired validation, `make
+  ds4-layer0-qkv-rope-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-layer0-qkv-rope`, c2b2b2b1 layer-0 HC-pre rerun, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+- Owner path: current-C layer-0 QKV/RoPE oracle helper, Rust layer-0 QKV/RoPE
+  JSON, paired comparator, `.memory/status.md`.
+
+### M10.5c4c2b2b2b2b: Rust One-Token Decode B300 Execution
+
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
-  on B300 after the layer-0 HC-pre prefix is independently compared.
+  on B300 after layer-0 QKV/RoPE is independently compared.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
   M10.5c4c2b1 execution preflight, M10.5c4c2b2a full state allocation,
   M10.5c4c2b2b1 first-kernel execution, M10.5c4c2b2b2a current-C first-kernel
-  oracle comparator, and M10.5c4c2b2b2b1 layer-0 HC-pre comparator.
+  oracle comparator, M10.5c4c2b2b2b1 layer-0 HC-pre comparator, and
+  M10.5c4c2b2b2b2a layer-0 QKV/RoPE comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -4070,9 +4112,9 @@
   unsafe backend-call containment.
 - Validation needed: targeted decode comparator on B300, c2b1 preflight rerun,
   c2b2a state allocation rerun, c2b2b1 first-kernel rerun, c2b2b2a current-C
-  oracle rerun, c2b2b2b1 layer-0 HC-pre rerun, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
-  review with no blockers.
+  oracle rerun, c2b2b2b1 layer-0 HC-pre rerun, c2b2b2b2a layer-0 QKV/RoPE
+  rerun, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 

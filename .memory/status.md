@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2 Rust One-Token Decode B300 Execution
-- Last validated source commit before the current stage: M10.5c4c2b2b2b1 Rust
-  layer-0 attention HC-pre comparator in the commit produced by this stage.
+- Active item: M10.5c4c2b2b2b2b Rust One-Token Decode B300 Execution
+- Last validated source commit before the current stage:
+  M10.5c4c2b2b2b2a Rust layer-0 QKV/RoPE execution in the commit produced by
+  this stage.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,34 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2a split the remaining one-token scheduler item into a
+  layer-0 QKV/RoPE execution bridge and the next active full scheduler slice
+  M10.5c4c2b2b2b2b.
+- M10.5c4c2b2b2b2a adds `ds4-layer0-qkv-rope-oracle-dump` and
+  `ds4_dump_layer0_qkv_rope_oracle_json`, which emit
+  `ds4.layer0_qkv_rope_oracle.v1` for token `0`, layer `0`, position `0`
+  using the current-C model loader, config validation, weight binding, model
+  fd/map bridge, GPU HC-pre prefix, Q/KV projection, fused QKV RMS norm, dense
+  Q projection, head RMS norm, and RoPE for dense `q` and `kv`.
+- M10.5c4c2b2b2b2a adds `ds4-decode-layer0-qkv-rope`, which maps the real GGUF
+  on B300, binds DS4 weights, launches the HC-pre prefix plus
+  `matmul_q8_0`, `dsv4_qkv_rms_norm_rows`, `head_rms_norm`, and `rope_tail`
+  through the safe Rust facade in one command batch, synchronizes, and reads
+  back `attn_norm`, `qr`, `kv_raw`, `qr_norm`, `q`, and `kv`.
+- The B300 paired QKV/RoPE validator passed 426 checks with exact FNV digests:
+  `attn_norm=24e0d5fc736b2ace`, `qr=a04804371dd4a6ae`,
+  `kv_raw=a1c0a2aae4fedc0e`, `qr_norm=059a86592fc239a9`,
+  `q=a4af0bca4d611025`, and `kv=c18013c1fe8e0391`.
+- M10.5c4c2b2b2b2a validation passed `python3
+  ds4-parity/compare_decode_layer0_qkv_rope.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer0_qkv_rope.py`, `python3 -m py_compile
+  ds4-parity/compare_decode_layer0_qkv_rope.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer0-qkv-rope-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer0-qkv-rope`, B300 current-C oracle plus Rust candidate
+  paired validation, B300 c2b2b2b1 layer-0 HC-pre rerun, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles`, and `cargo test
+  --workspace`.
 - M10.5c4c2b2b2b1 splits the remaining one-token scheduler item into a
   layer-0 attention HC-pre execution bridge and the next active full
   scheduler slice M10.5c4c2b2b2b2.

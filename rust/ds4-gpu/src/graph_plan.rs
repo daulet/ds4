@@ -46,6 +46,9 @@ pub const N_HC: u32 = 4;
 pub const N_HC_SINKHORN_ITER: u32 = 20;
 pub const RMS_EPS: f32 = 1.0e-6;
 pub const HC_EPS: f32 = 1.0e-6;
+pub const ROPE_FREQ_BASE: f32 = 10_000.0;
+pub const ROPE_YARN_BETA_FAST: f32 = 32.0;
+pub const ROPE_YARN_BETA_SLOW: f32 = 1.0;
 
 const BYTES_F32: u64 = 4;
 const BYTES_I32: u64 = 4;

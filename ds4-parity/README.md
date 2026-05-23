@@ -397,6 +397,25 @@ python3 ds4-parity/compare_decode_layer0_attn_hc_pre.py \
   --candidate /tmp/ds4-c2b2b2b1-layer0-attn-hc-pre-rust.json
 ```
 
+Compare the M10.5c4c2b2b2b2a Rust layer-0 QKV/RoPE prefix before adding
+the full one-token scheduler:
+
+```sh
+python3 ds4-parity/compare_decode_layer0_qkv_rope.py
+python3 ds4-parity/compare_decode_layer0_qkv_rope.py --negative-test
+```
+
+The comparator checks that `ds4-layer0-qkv-rope-oracle-dump` emits the
+current-C GPU tensor path through HC-pre, Q/KV projection, fused QKV RMS norm,
+dense Q projection, head RMS norm, and dense RoPE. On B300, validate the
+current-C oracle and Rust readback together:
+
+```sh
+python3 ds4-parity/compare_decode_layer0_qkv_rope.py \
+  --oracle /tmp/ds4-c2b2b2b2a-layer0-qkv-rope-oracle.json \
+  --candidate /tmp/ds4-c2b2b2b2a-layer0-qkv-rope-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
