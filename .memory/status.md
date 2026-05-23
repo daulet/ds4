@@ -3,12 +3,12 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2b2b Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b2b2b2b2b2b2b2 Rust One-Token Decode B300 Execution
 - Last validated source commit before the current stage:
-  `d1a72f183a05bb8785239b5ed994da290447227a` (M10.5c4c2b2b2b2b2b2b1 Rust
-  layer-2 compressor-state execution; this stage's layer-2 attention-output
-  validation is recorded below and its commit SHA is not available until this
-  staged change lands).
+  M10.5c4c2b2b2b2b2b2b2b1 validation is recorded below; its commit SHA will
+  be available after this staged change lands. Last committed predecessor:
+  `d18217b087bd11485872099c3093a31eeb40c186` (M10.5c4c2b2b2b2b2b2b2a Rust
+  layer-2 attention-output execution).
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -28,6 +28,59 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2b2b splits the remaining one-token scheduler item into a
+  layer-2 FFN-output execution bridge and the next full scheduler/logits slice
+  M10.5c4c2b2b2b2b2b2b2b2. The split keeps the next commit comparable at the
+  layer-2 FFN HC expansion boundary before the remaining layers, ratio-128
+  coverage, output head, and final logits are introduced together.
+- M10.5c4c2b2b2b2b2b2b2b1 adds
+  `ds4-layer2-ffn-output-oracle-dump` and
+  `ds4_dump_layer2_ffn_output_oracle_json`, which emit
+  `ds4.layer2_ffn_output_oracle.v1` for token `0`, position `0`, dense
+  layers `0` and `1` through the production current-C decode-layer encoder and
+  HC swaps, then layer `2` through production attention-output, FFN HC-pre,
+  router selection, routed MoE, shared expert, and final `after_ffn_hc`.
+- M10.5c4c2b2b2b2b2b2b2b1 adds
+  `ds4-decode-layer2-ffn-output`, which maps the real GGUF on B300, binds DS4
+  weights, launches the validated dense layer `0`/`1` and layer-2
+  attention-output prefix, then runs `hc_split_weighted_sum_norm`,
+  `router_select`, `routed_moe_one`, `shared_gate_up_swiglu_q8_0`, and
+  `shared_down_hc_expand_q8_0` through the safe Rust facade.
+- The B300 paired layer-2 FFN-output validator passed 1,383 pinned checks with
+  full-buffer FNV digests `layer2_ffn_cur=d0becc7729c8b33d`,
+  `layer2_ffn_norm=ead9d19c71277f8a`,
+  `layer2_router_logits=89b254c2cac1245a`,
+  `layer2_router_probs=23b3dac5b0b03386`,
+  `layer2_router_selected=cadcd78086393cff`,
+  `layer2_router_weights=fa578aa92d03d83d`,
+  `layer2_routed_mid=16dd75f68757ccb7`,
+  `layer2_routed_out=4ffcffcb3c9d6daf`,
+  `layer2_shared_mid=e717a53c9497794b`,
+  `layer2_shared_out=3e7b4f4e70d9b893`, and
+  `layer2_after_ffn_hc=26babcdeac41b377`, while preserving the previously
+  pinned layer-2 attention-output boundary digests. Pinned layer-2 FFN weights
+  include `layer2_hc_ffn_fn=(79456856864,786432,1,f16)`,
+  `layer2_ffn_gate_tid2eid=(11539264,3102720,26,i32)`,
+  `layer2_ffn_gate_exps=(3638520640,553648128,16,iq2_xxs)`,
+  `layer2_ffn_up_exps=(4896811840,553648128,16,iq2_xxs)`,
+  `layer2_ffn_down_exps=(4192168768,704643072,10,q2_k)`, and
+  `layer2_ffn_down_shexp=(79438228032,8912896,8,q8_0)`.
+- M10.5c4c2b2b2b2b2b2b2b1 validation passed `python3
+  ds4-parity/compare_decode_layer2_ffn_output.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer2_ffn_output.py`, `python3 -m py_compile
+  ds4-parity/compare_decode_layer2_ffn_output.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer2-ffn-output-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer2-ffn-output`, B300 current-C oracle plus Rust candidate
+  paired validation with artifact SHA256
+  `oracle=63ab2f77418ec2ea933dfb223f056b2ffeabd6857b8aa86f0137187cdcb36242`
+  and
+  `rust=ba67b7cd2abfcad3ddbcaa0c48895cbc1176f729128703748fbb1a231be33503`,
+  B300 c2b2b2b2b2b2b2a layer-2 attention-output rerun with 815 checks, local
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 35
+  passed, 25 skipped, and 0 failed, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, touched-file NUL scan, and
+  non-interactive Claude review with `NO BLOCKERS`.
 - M10.5c4c2b2b2b2b2b2b2a adds
   `ds4-layer2-attn-output-oracle-dump` and
   `ds4_dump_layer2_attn_output_oracle_json`, which emit
