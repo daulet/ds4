@@ -2822,26 +2822,140 @@
 
 ### M9.6: Tool-Call And DSML Server Surface
 
+- Status: split
+- Goal: split the remaining OpenAI tool-call server work into response
+  formatting, non-streaming model-backed replay, streaming tool-call deltas,
+  and quality-regression wiring.
+- Source evidence needed: M5.6 server DSML parser/formatter, M9.2b OpenAI tool
+  schema prompt rendering, M0.4 `chat_tool_call` fixtures/traces, M9.5 SSE
+  formatter, and `test_tool_call_quality`.
+- Oracle: documentation-only split preserving the existing M9.6 oracle set
+  while assigning one comparator and review gate per implementation surface.
+- Comparator: roadmap/TODO/status diff shows no behavior change and assigns
+  exact oracle, fixture, comparator, acceptance, and drift policy per sub-item.
+- Acceptance: M9.6a-d are documented before implementation starts, with M9.6a
+  active first because it is pure response JSON and unblocks runtime replay.
+- Drift policy: docs-only split must not relax exact tool names, arguments,
+  finish reasons, prompt text, trace records, or SSE bytes.
+- Review gate: ask Claude to review whether the split isolates independent
+  oracle surfaces and avoids reimplementing already completed M5.6/M9.2b work.
+- Validation needed: `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
+
+### M9.6a: OpenAI Tool-Call Response Formatter
+
 - Status: active
-- Goal: port OpenAI tool schema parsing, DSML prompt rendering, tool-call
-  extraction, and tool-call response JSON for the server path.
-- Oracle: M0.4 `chat_tool_call`, `test_tool_call_quality`, DSML/tool parser
-  unit tests, tool schema order tests, and tool-call streaming unit tests.
-- Fixture: M0.4 tool-call request/response/trace plus unit vectors for OpenAI
-  tools, DSML argument ordering, loose nested parameters, partial tool-call
-  streaming, multiple calls, and raw argument/entity holds.
-- Comparator: model-free parser/dump tests for tool schemas and DSML plus B300
-  replay for deterministic tool-call generation and response shape.
-- Acceptance: Rust produces the same tool prompt, detects the same executable
-  tool-call boundaries, emits matching tool-call JSON, and preserves argument
-  ordering/canonicalization.
-- Drift policy: normalize generated call IDs where random; tool names,
-  arguments, finish reasons, prompt text, and trace tool records are exact.
-- Review gate: ask Claude to review DSML state-machine parity, schema ordering,
-  random-ID normalization, and malformed/recoverable tool parse paths.
-- Validation needed: model-free tool parser tests, B300 tool-call comparator
-  with negative tests, `cargo test --workspace`, and `git diff --check`.
-- Owner path: Rust server tool/DSML modules, `ds4-parity/`,
+- Goal: add a pure formatter for final OpenAI chat responses whose assistant
+  message contains parsed `tool_calls`, including optional reasoning content
+  and usage details.
+- Source evidence needed: M0.4 `chat_tool_call` response JSON, M5.6
+  generated-message parser unit vectors, and existing M9.4 response/usage
+  formatting tests.
+- Oracle: exact M0.4 `chat_tool_call` response shape with injected
+  outer ID/timestamp/call IDs and parser-produced `DsmlJsonCall` values.
+- Fixture: M0.4 `chat_tool_call` response plus model-free vectors for one
+  call, multiple calls, explicit IDs, generated IDs, ordered arguments, and
+  escaped tool names/arguments.
+- Comparator: exact JSON byte comparison with normalized outer IDs,
+  timestamps, and generated call IDs.
+- Acceptance: formatter emits C-compatible `tool_calls` arrays, empty
+  assistant content, `finish_reason:"tool_calls"`, stable argument strings,
+  and unchanged cache usage fields without touching model execution.
+- Drift policy: response object field order, tool-call field order, argument
+  strings, finish reason, and usage fields are exact; injected IDs/timestamps
+  are the only normalized values.
+- Review gate: ask Claude to review response JSON field order, call-ID
+  injection, escaping, and separation from runtime DSML parsing.
+- Validation needed: targeted response formatter tests, DSML parser tests,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Owner path: `rust/ds4-gguf/src/server_response.rs`,
+  `rust/ds4-gguf/src/dsml.rs`, `.memory/status.md`.
+
+### M9.6b: Model-Backed Tool-Call Replay
+
+- Status: pending
+- Goal: route supported non-streaming OpenAI tool requests through the Rust
+  server runtime, parse generated DSML with the existing generated-message
+  parser, and emit the M9.6a tool-call response shape.
+- Source evidence needed: M0.4 `chat_tool_call` request/response/trace,
+  M9.2b prompt-render tests, M5.6 parser tests, and B300 model-backed replay.
+- Oracle: deterministic M0.4 `chat_tool_call` replay on B300.
+- Fixture: M0.4 `chat_tool_call.json`, response JSON, trace segment with
+  rendered tool prompt, generated DSML, prompt/completion token counts, and
+  `tool_call[0]` trace record.
+- Comparator: B300 replay compares normalized response ID/timestamp/call ID,
+  exact tool name, arguments, finish reason, usage/cache fields, rendered
+  prompt, generated DSML parse result, and trace tool records.
+- Acceptance: the Rust server no longer rejects supported non-streaming tool
+  chat requests, matches the deterministic C fixture, and still rejects
+  streaming tool-call requests until M9.6c.
+- Drift policy: normalize IDs, timestamps, startup timing, and token rates
+  only; prompt text, tool schema order, generated DSML parse output, finish
+  reason, and trace records are exact.
+- Review gate: ask Claude to review runtime routing, parser finish mapping,
+  trace records, unsupported-route boundaries, and B300 comparator
+  normalization.
+- Validation needed: B300 tool-call comparator for `chat_tool_call`, targeted
+  runtime tests, targeted response/parser tests, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check`.
+- Owner path: Rust server runtime path, `ds4-parity/`, `.memory/status.md`.
+
+### M9.6c: Streaming Tool-Call Deltas
+
+- Status: pending
+- Goal: add OpenAI streaming `tool_calls` delta formatting and runtime routing
+  for complete/partial generated DSML tool-call output without mixing it into
+  the non-streaming replay commit.
+- Source evidence needed: C tool-call streaming unit tests, M5.6 agent/server
+  DSML partial parser vectors, and M9.5a SSE header/event formatting behavior.
+- Oracle: event-by-event SSE parity for tool-call streaming chunks.
+- Fixture: unit vectors for one call, multiple calls, partial arguments,
+  split UTF-8, generated IDs, usage chunks, and malformed/recoverable DSML
+  tails.
+- Comparator: event-by-event SSE comparison for role, tool-call deltas, finish
+  chunk, optional usage chunk, and `[DONE]`.
+- Acceptance: streamed tool-call deltas preserve argument bytes and C finish
+  semantics while non-tool streaming behavior from M9.5 remains unchanged.
+- Drift policy: normalize generated call IDs only; event order, field order,
+  argument fragments, finish reason, usage fields, and terminator bytes are
+  exact.
+- Review gate: ask Claude to review SSE delta ordering, partial-DSML holds,
+  UTF-8 boundaries, generated-ID stability, and non-tool streaming regression
+  coverage.
+- Validation needed: targeted streaming tool-call tests, existing SSE tests,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- Owner path: `rust/ds4-gguf/src/server_response.rs`,
+  `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`, `.memory/status.md`.
+
+### M9.6d: Tool-Call Quality Parity Hook
+
+- Status: pending
+- Goal: connect the Rust server/runtime tool-call path to the existing
+  tool-call quality regression surface after non-streaming and streaming
+  behavior is in place.
+- Source evidence needed: `test_tool_call_quality`, current C quality
+  thresholds/logs, M0.4 tool-call trace fixtures, and the M9.6b/M9.6c
+  response comparators.
+- Oracle: current C tool-call quality pass/fail categories and raw artifacts.
+- Fixture: quality-run command lines, model identity, seed/sampling controls,
+  expected tool-call success categories, and preserved raw outputs for
+  failures.
+- Comparator: Rust quality run reports the same pass/fail categories and
+  stores raw tool-call outputs for any drift investigation.
+- Acceptance: `./ds4_test --tool-call-quality` has a Rust-runtime path or a
+  documented equivalent runner with exact model/seed controls and artifact
+  capture.
+- Drift policy: no threshold changes without recording C and Rust raw outputs;
+  tool names, argument strings, and failure categories remain comparable.
+- Review gate: ask Claude to review quality-run wiring, artifact preservation,
+  and whether the comparator can distinguish runtime regressions from model
+  nondeterminism.
+- Validation needed: B300 quality run or documented blocker with exact command,
+  targeted tool-call tests, `cargo test --workspace`, and `git diff --check`.
+- Owner path: `tests/`, Rust server runtime path, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.7: Responses And Anthropic Protocol Surface

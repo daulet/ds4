@@ -3,10 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6 Tool-Call And DSML Server Surface
-- Last validated source commit: M9.5b model-backed streaming chat replay in
-  this commit; prior pushed source commit
-  `e7b16aa35ff814ef6a4cb75af2eb44c313ce3a1e`
+- Active item: M9.6a OpenAI Tool-Call Response Formatter
+- Last validated source commit: M9.6 docs-only tool-call split in this commit;
+  prior pushed source commit `88969a19ea7b97e8b63db349295f57b2bc937fbd`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +25,16 @@
 
 ## Last Evidence
 
+- M9.6 was split before implementation because the remaining server tool-call
+  work spans independent oracle surfaces: pure final-response JSON formatting,
+  model-backed non-streaming replay, streaming tool-call deltas, and
+  tool-quality regression wiring.
+- M9.6a is active first because M5.6 already owns generated DSML parsing and
+  M9.2b already owns model-free tool schema prompt rendering; a pure
+  `tool_calls` response formatter is the smallest remaining prerequisite for
+  the runtime replay.
+- M9.6 split validation passed for `git diff --check`; implementation
+  validation remains owned by M9.6a and later sub-items.
 - M9.5 was split before implementation because pure SSE byte formatting and
   model-backed per-token streaming replay have distinct oracles, comparators,
   and validation gates.
