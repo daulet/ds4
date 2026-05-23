@@ -51,8 +51,10 @@ pub use server_http::{
     NoModelRouteConfig, DS4_MODEL_ID,
 };
 pub use server_no_model::{
-    route_no_model_server_http, route_no_model_server_http_with_prompt_tokens,
-    route_no_model_server_request, route_no_model_server_request_with_prompt_tokens,
+    route_no_model_server_http, route_no_model_server_http_with_generation_message,
+    route_no_model_server_http_with_prompt_tokens, route_no_model_server_request,
+    route_no_model_server_request_with_generation_message,
+    route_no_model_server_request_with_prompt_tokens,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

@@ -2602,7 +2602,7 @@
 
 ### M9.4a: Model-Backed Server Runtime Boundary
 
-- Status: active
+- Status: done
 - Goal: give the Rust server a model-backed runtime boundary that can load
   `ds4flash.gguf`, own the engine/session lifetime from the server binary, and
   keep M9.3 no-model route/error behavior available while generation remains
@@ -2627,15 +2627,18 @@
 - Review gate: ask Claude to review crate ownership, engine lifetime, CLI flag
   parity, prompt-token counting, socket shutdown behavior, and no-model
   regression coverage.
-- Validation needed: local no-model socket replay, B300 model-load smoke replay,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, and
-  `git diff --check`.
+- Validation passed: local no-model socket replay
+  `cargo test -p ds4-gguf server_no_model -- --nocapture`, targeted runtime
+  tests `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  full `cargo test --workspace`, B300 model-load smoke replay from
+  `/workspace/ds4-m94a` using `/workspace/ds4/ds4flash.gguf`, B300 targeted
+  runtime tests, `cargo fmt --all -- --check`, and `git diff --check`.
 - Owner path: `rust/ds4-engine`, Rust server binary/modules, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.4b: OpenAI Non-Streaming Response And Usage Builder
 
-- Status: pending
+- Status: active
 - Goal: add pure Rust helpers for non-streaming OpenAI chat-completion response
   JSON, HTTP headers, usage accounting, finish reasons, and trace-ready
   request metadata without running the model.

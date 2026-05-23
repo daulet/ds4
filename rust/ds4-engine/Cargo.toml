@@ -37,3 +37,7 @@ path = "src/bin/ds4-interactive-runtime-rs.rs"
 [[bin]]
 name = "ds4-cli-interactive-rs"
 path = "src/bin/ds4-cli-interactive-rs.rs"
+
+[[bin]]
+name = "ds4-server-runtime-rs"
+path = "src/bin/ds4-server-runtime-rs.rs"

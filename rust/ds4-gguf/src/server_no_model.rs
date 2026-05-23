@@ -51,10 +51,27 @@ pub fn route_no_model_server_http_with_prompt_tokens(
     config: NoModelRouteConfig,
     prompt_tokens: impl FnMut(&str) -> usize,
 ) -> String {
+    route_no_model_server_http_with_generation_message(
+        input,
+        config,
+        prompt_tokens,
+        NO_MODEL_GENERATION_MESSAGE,
+    )
+}
+
+pub fn route_no_model_server_http_with_generation_message(
+    input: &[u8],
+    config: NoModelRouteConfig,
+    prompt_tokens: impl FnMut(&str) -> usize,
+    generation_message: &str,
+) -> String {
     match parse_http_request(input) {
-        Ok(request) => {
-            route_no_model_server_request_with_prompt_tokens(&request, config, prompt_tokens)
-        }
+        Ok(request) => route_no_model_server_request_with_generation_message(
+            &request,
+            config,
+            prompt_tokens,
+            generation_message,
+        ),
         Err(_) => format_http_error(config.enable_cors, 400, "bad HTTP request"),
     }
 }
@@ -67,6 +84,20 @@ pub fn route_no_model_server_request_with_prompt_tokens(
     request: &HttpRequest,
     config: NoModelRouteConfig,
     mut prompt_tokens: impl FnMut(&str) -> usize,
+) -> String {
+    route_no_model_server_request_with_generation_message(
+        request,
+        config,
+        &mut prompt_tokens,
+        NO_MODEL_GENERATION_MESSAGE,
+    )
+}
+
+pub fn route_no_model_server_request_with_generation_message(
+    request: &HttpRequest,
+    config: NoModelRouteConfig,
+    mut prompt_tokens: impl FnMut(&str) -> usize,
+    generation_message: &str,
 ) -> String {
     let Some(route) = generation_route(request) else {
         return route_no_model_request(request, config);
@@ -83,7 +114,7 @@ pub fn route_no_model_server_request_with_prompt_tokens(
         return format_http_response(config.enable_cors, 400, Some("application/json"), &body);
     }
 
-    format_http_error(config.enable_cors, 503, NO_MODEL_GENERATION_MESSAGE)
+    format_http_error(config.enable_cors, 503, generation_message)
 }
 
 fn generation_route(request: &HttpRequest) -> Option<GenerationRoute> {
@@ -306,6 +337,27 @@ mod tests {
         assert_eq!(
             response,
             format_http_error(false, 503, NO_MODEL_GENERATION_MESSAGE)
+        );
+    }
+
+    #[test]
+    fn dispatch_allows_model_backed_boundary_generation_message() {
+        let response = route_no_model_server_http_with_generation_message(
+            &post(
+                "/v1/chat/completions",
+                r#"{"messages":[{"role":"user","content":"hi"}]}"#,
+            ),
+            config(false),
+            |_| 0,
+            "model-backed chat generation is not implemented yet",
+        );
+        assert_eq!(
+            response,
+            format_http_error(
+                false,
+                503,
+                "model-backed chat generation is not implemented yet"
+            )
         );
     }
 }

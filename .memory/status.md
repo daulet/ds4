@@ -3,9 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.4a Model-Backed Server Runtime Boundary
-- Last validated source commit: M9.4 split docs in this commit; prior pushed
-  source commit `c8ccf1b8e0b02f902b2a4a385edb9dca87762a1e`
+- Active item: M9.4b OpenAI Non-Streaming Response And Usage Builder
+- Last validated source commit: M9.4a model-backed server runtime boundary in
+  this commit; prior pushed source commit
+  `4347583c6ece8b7e189b639edcc5cc74e3820ce5`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -25,6 +26,31 @@
 
 ## Last Evidence
 
+- M9.4a added `ds4-server-runtime-rs` under `rust/ds4-engine` so the
+  model-backed server boundary lives in the runtime crate and depends on
+  `ds4-gguf` helpers without creating a dependency cycle.
+- M9.4a parses the C server startup subset for model path, backend selection,
+  MTP options, threads, directional steering, warm/quality flags, host, port,
+  context length, default tokens, and CORS.
+- M9.4a opens `Engine`, creates a session, uses `Engine::encode_chat_prompt`
+  for tokenizer-backed prompt-token counts, preserves M9.3 no-model
+  route/error behavior, and returns a distinct 503 JSON error for valid
+  generation while model-backed chat generation remains unimplemented.
+- M9.4a local validation passed for targeted
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  targeted `cargo test -p ds4-gguf server_no_model -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.4a B300 validation used a copied source snapshot at `/workspace/ds4-m94a`
+  and model `/workspace/ds4/ds4flash.gguf`; targeted runtime tests passed and
+  the server smoke on port `18194` loaded CUDA, answered `/v1/models` with
+  `context_length=16`, returned `missing messages` for bad chat JSON,
+  returned a tokenizer-backed completion context error with
+  `n_prompt_tokens=29` and `n_ctx=16`, and rejected valid chat generation with
+  `model-backed chat generation is not implemented yet`.
+- M9.4a B300 smoke artifacts remain in the pod at
+  `/tmp/ds4-m94a-server.stderr` and `/tmp/ds4-m94a-*.out`; the server process
+  was stopped by the validation script.
 - M9.4 was split before implementation because model-backed server ownership,
   non-streaming response formatting, no-cache B300 generation replay, and
   memory-token cache continuation have distinct oracles and validation gates.
