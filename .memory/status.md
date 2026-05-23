@@ -3,9 +3,10 @@
 - Date: 2026-05-22 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.13a Rust Argmax One-Shot Runtime Boundary
-- Last validated source commit: M8.13 split in this commit; prior pushed source
-  commit `845f8ea17637d17875505c455cd9c4f27c6aef60`
+- Active item: M8.13b Rust Session Sampling Runtime Boundary
+- Last validated source commit: M8.13a Rust argmax one-shot runtime boundary in
+  this commit; prior pushed source commit
+  `f8b534bf36f8d9bd881ab669122c433bd6265b7e`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1150,3 +1151,31 @@
   `ds4_engine_generate_argmax`, `ds4_token_text`, `ds4_tokens_free`,
   `ds4_session_create`, `ds4_session_sync`, `ds4_session_sample`, and
   `ds4_session_eval`.
+- M8.13a adds safe Rust ownership for `ds4_tokens`, `ThinkMode`, C context
+  memory estimates, prompt encoding through `ds4_encode_chat_prompt` or
+  `ds4_tokenize_rendered_chat`, and argmax generation through
+  `ds4_engine_generate_argmax` with Rust callbacks that convert generated token
+  IDs through `ds4_token_text` and free the C-allocated pieces.
+- M8.13a adds `ds4-argmax-runtime-rs`, a narrow runtime-boundary binary for
+  greedy one-shot generation. It accepts the M8.12a greedy/error argv surface,
+  logs context memory and Think Max downgrade warnings, but rejects nonzero
+  `--temp` so seeded sampling remains in M8.13b.
+- M8.13a adds `ds4-parity/compare_cli_argmax_runtime.py`, which runs
+  `target/debug/ds4-argmax-runtime-rs` against the M8.12a current-C
+  `greedy_inline_nothink`, `prompt_file_think`, `think_max_downgrade`, and
+  `ctx_too_small` cases. It excludes `seeded_sampling_nothink` for M8.13b.
+- M8.13a B300 validation over `/workspace/ds4/ds4flash.gguf` passed after
+  overlaying the M8.13a files on the pushed M8.13 split commit, building with
+  `CARGO_HOME=/tmp/ds4-cargo RUSTUP_HOME=/tmp/ds4-rustup
+  PATH=/tmp/ds4-cargo/bin:$PATH CUDA_ARCH=native cargo build -p ds4-engine
+  --bin ds4-argmax-runtime-rs`, and running
+  `python3 ds4-parity/compare_cli_argmax_runtime.py
+  ds4-parity/baselines/cli/m8.12a/current-c.json --candidate-binary
+  target/debug/ds4-argmax-runtime-rs --negative-test`.
+- M8.13a B300 comparator reported `CLI argmax runtime comparator: PASS, 109
+  checks` and `CLI argmax runtime negative tests: PASS, 4 checks`.
+- M8.13a local validation passed for `cargo fmt --all -- --check`, focused
+  `cargo test -p ds4-engine token_printer -- --nocapture`, `cargo build -p
+  ds4-engine --bin ds4-argmax-runtime-rs`, full `cargo test --workspace`,
+  `python3 -m py_compile ds4-parity/compare_cli_argmax_runtime.py`, and
+  `git diff --check`.

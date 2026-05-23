@@ -17,3 +17,7 @@ path = "src/bin/ds4-inspect-runtime-rs.rs"
 [[bin]]
 name = "ds4-cli-inspect-rs"
 path = "src/bin/ds4-cli-inspect-rs.rs"
+
+[[bin]]
+name = "ds4-argmax-runtime-rs"
+path = "src/bin/ds4-argmax-runtime-rs.rs"

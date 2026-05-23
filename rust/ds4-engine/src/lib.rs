@@ -1,7 +1,8 @@
 use std::error::Error;
-use std::ffi::{c_char, c_float, c_int, CString, NulError};
+use std::ffi::{c_char, c_float, c_int, c_void, CString, NulError};
 use std::fmt;
 use std::ptr::NonNull;
+use std::slice;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Backend {
@@ -11,6 +12,14 @@ pub enum Backend {
 }
 
 impl Backend {
+    pub const fn default_backend() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Metal
+        } else {
+            Self::Cuda
+        }
+    }
+
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "metal" => Some(Self::Metal),
@@ -20,11 +29,68 @@ impl Backend {
         }
     }
 
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Metal => "metal",
+            Self::Cuda => "cuda",
+            Self::Cpu => "cpu",
+        }
+    }
+
     const fn as_raw(self) -> c_int {
         match self {
             Self::Metal => 0,
             Self::Cuda => 1,
             Self::Cpu => 2,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ThinkMode {
+    None,
+    High,
+    Max,
+}
+
+impl ThinkMode {
+    pub const fn default_mode() -> Self {
+        Self::High
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::High => "high",
+            Self::Max => "max",
+        }
+    }
+
+    pub fn for_context(self, ctx_size: i32) -> Self {
+        Self::from_raw(unsafe { ds4_think_mode_for_context(self.as_raw(), ctx_size as c_int) })
+    }
+
+    pub fn enabled(self) -> bool {
+        unsafe { ds4_think_mode_enabled(self.as_raw()) }
+    }
+
+    pub fn max_min_context() -> u32 {
+        unsafe { ds4_think_max_min_context() }
+    }
+
+    const fn as_raw(self) -> c_int {
+        match self {
+            Self::None => 0,
+            Self::High => 1,
+            Self::Max => 2,
+        }
+    }
+
+    const fn from_raw(value: c_int) -> Self {
+        match value {
+            0 => Self::None,
+            2 => Self::Max,
+            _ => Self::High,
         }
     }
 }
@@ -51,6 +117,53 @@ impl<'a> EngineOptions<'a> {
 #[derive(Debug)]
 pub struct Engine {
     raw: NonNull<RawEngine>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ContextMemory {
+    pub total_bytes: u64,
+    pub raw_bytes: u64,
+    pub compressed_bytes: u64,
+    pub scratch_bytes: u64,
+    pub prefill_cap: u32,
+    pub raw_cap: u32,
+    pub comp_cap: u32,
+}
+
+#[derive(Debug)]
+pub struct Tokens {
+    raw: RawTokens,
+}
+
+impl Tokens {
+    pub fn len(&self) -> i32 {
+        self.raw.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.raw.len == 0
+    }
+}
+
+impl Drop for Tokens {
+    fn drop(&mut self) {
+        unsafe {
+            ds4_tokens_free(&mut self.raw);
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArgmaxOptions {
+    pub n_predict: i32,
+    pub ctx_size: i32,
+    pub think_mode: ThinkMode,
+}
+
+#[derive(Debug)]
+pub struct GenerationResult {
+    pub exit_code: i32,
+    pub stdout: Vec<u8>,
 }
 
 impl Engine {
@@ -82,6 +195,59 @@ impl Engine {
     pub fn print_summary(&self) {
         unsafe {
             ds4_engine_summary(self.raw.as_ptr());
+        }
+    }
+
+    pub fn encode_chat_prompt(
+        &self,
+        system: &str,
+        prompt: &str,
+        think_mode: ThinkMode,
+    ) -> Result<Tokens, EngineError> {
+        let system = CString::new(system)?;
+        let prompt = CString::new(prompt)?;
+        let mut raw = RawTokens::default();
+        unsafe {
+            if is_rendered_chat_prompt(prompt.as_bytes()) {
+                ds4_tokenize_rendered_chat(self.raw.as_ptr(), prompt.as_ptr(), &mut raw);
+            } else {
+                ds4_encode_chat_prompt(
+                    self.raw.as_ptr(),
+                    system.as_ptr(),
+                    prompt.as_ptr(),
+                    think_mode.as_raw(),
+                    &mut raw,
+                );
+            }
+        }
+        Ok(Tokens { raw })
+    }
+
+    pub fn generate_argmax_text(
+        &self,
+        prompt: &Tokens,
+        options: ArgmaxOptions,
+    ) -> GenerationResult {
+        let mut state = EmitState {
+            engine: self.raw.as_ptr(),
+            printer: TokenPrinter::new(options.think_mode),
+        };
+        let rc = unsafe {
+            ds4_engine_generate_argmax(
+                self.raw.as_ptr(),
+                &prompt.raw,
+                options.n_predict as c_int,
+                options.ctx_size as c_int,
+                Some(emit_generated_token),
+                Some(finish_generation),
+                (&mut state as *mut EmitState).cast(),
+                None,
+                std::ptr::null_mut(),
+            )
+        };
+        GenerationResult {
+            exit_code: rc,
+            stdout: state.printer.into_bytes(),
         }
     }
 }
@@ -140,9 +306,161 @@ impl fmt::Display for EngineError {
 
 impl Error for EngineError {}
 
+pub fn context_memory_estimate(backend: Backend, ctx_size: i32) -> ContextMemory {
+    let raw = unsafe { ds4_context_memory_estimate(backend.as_raw(), ctx_size as c_int) };
+    ContextMemory {
+        total_bytes: raw.total_bytes,
+        raw_bytes: raw.raw_bytes,
+        compressed_bytes: raw.compressed_bytes,
+        scratch_bytes: raw.scratch_bytes,
+        prefill_cap: raw.prefill_cap,
+        raw_cap: raw.raw_cap,
+        comp_cap: raw.comp_cap,
+    }
+}
+
+fn is_rendered_chat_prompt(prompt: &[u8]) -> bool {
+    prompt.starts_with("<｜begin▁of▁sentence｜>".as_bytes())
+}
+
+struct EmitState {
+    engine: *mut RawEngine,
+    printer: TokenPrinter,
+}
+
+unsafe extern "C" fn emit_generated_token(ud: *mut c_void, token: c_int) {
+    let Some(state) = ud.cast::<EmitState>().as_mut() else {
+        return;
+    };
+    let mut len = 0usize;
+    let text = ds4_token_text(state.engine, token, &mut len);
+    if text.is_null() {
+        return;
+    }
+    let bytes = slice::from_raw_parts(text.cast::<u8>(), len);
+    state.printer.write_token_text(bytes);
+    free(text.cast());
+}
+
+unsafe extern "C" fn finish_generation(ud: *mut c_void) {
+    let Some(state) = ud.cast::<EmitState>().as_mut() else {
+        return;
+    };
+    state.printer.finish_generation();
+}
+
+#[derive(Debug)]
+struct TokenPrinter {
+    bytes: Vec<u8>,
+    format_thinking: bool,
+    in_think: bool,
+    last_output_newline: bool,
+    pending: Vec<u8>,
+}
+
+impl TokenPrinter {
+    fn new(think_mode: ThinkMode) -> Self {
+        let format_thinking = think_mode.enabled();
+        Self {
+            bytes: Vec::new(),
+            format_thinking,
+            in_think: format_thinking,
+            last_output_newline: true,
+            pending: Vec::new(),
+        }
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    fn write_token_text(&mut self, text: &[u8]) {
+        if self.format_thinking {
+            self.process_thinking_text(text, false);
+        } else {
+            self.bytes.extend_from_slice(text);
+            if let Some(&last) = text.last() {
+                self.last_output_newline = last == b'\n';
+            }
+        }
+    }
+
+    fn finish_generation(&mut self) {
+        if self.format_thinking {
+            self.process_thinking_text(&[], true);
+        }
+        if !self.last_output_newline {
+            self.bytes.push(b'\n');
+            self.last_output_newline = true;
+        }
+    }
+
+    fn process_thinking_text(&mut self, text: &[u8], finish: bool) {
+        const THINK_OPEN: &[u8] = b"<think>";
+        const THINK_CLOSE: &[u8] = b"</think>";
+        let mut buf = Vec::with_capacity(self.pending.len() + text.len());
+        buf.extend_from_slice(&self.pending);
+        buf.extend_from_slice(text);
+        self.pending.clear();
+
+        let mut i = 0usize;
+        while i < buf.len() {
+            let cur = &buf[i..];
+            if cur.starts_with(THINK_OPEN) {
+                self.in_think = true;
+                i += THINK_OPEN.len();
+                continue;
+            }
+            if cur.starts_with(THINK_CLOSE) {
+                self.in_think = false;
+                if !self.last_output_newline {
+                    self.bytes.push(b'\n');
+                    self.last_output_newline = true;
+                }
+                i += THINK_CLOSE.len();
+                continue;
+            }
+            if !finish
+                && cur[0] == b'<'
+                && (is_partial_prefix(cur, THINK_OPEN) || is_partial_prefix(cur, THINK_CLOSE))
+            {
+                if cur.len() < 16 {
+                    self.pending.extend_from_slice(cur);
+                    break;
+                }
+            }
+            self.bytes.push(cur[0]);
+            self.last_output_newline = cur[0] == b'\n';
+            i += 1;
+        }
+    }
+}
+
+fn is_partial_prefix(bytes: &[u8], prefix: &[u8]) -> bool {
+    bytes.len() < prefix.len() && prefix.starts_with(bytes)
+}
+
 #[repr(C)]
 struct RawEngine {
     _private: [u8; 0],
+}
+
+#[repr(C)]
+#[derive(Debug)]
+struct RawTokens {
+    v: *mut c_int,
+    len: c_int,
+    cap: c_int,
+}
+
+impl Default for RawTokens {
+    fn default() -> Self {
+        Self {
+            v: std::ptr::null_mut(),
+            len: 0,
+            cap: 0,
+        }
+    }
 }
 
 #[repr(C)]
@@ -160,21 +478,59 @@ struct RawEngineOptions {
     quality: bool,
 }
 
+#[repr(C)]
+struct RawContextMemory {
+    total_bytes: u64,
+    raw_bytes: u64,
+    compressed_bytes: u64,
+    scratch_bytes: u64,
+    prefill_cap: u32,
+    raw_cap: u32,
+    comp_cap: u32,
+}
+
 unsafe extern "C" {
     fn ds4_engine_open(out: *mut *mut RawEngine, opt: *const RawEngineOptions) -> c_int;
     fn ds4_engine_close(engine: *mut RawEngine);
     fn ds4_engine_summary(engine: *mut RawEngine);
+    fn ds4_think_mode_enabled(mode: c_int) -> bool;
+    fn ds4_think_mode_for_context(mode: c_int, ctx_size: c_int) -> c_int;
+    fn ds4_think_max_min_context() -> u32;
+    fn ds4_context_memory_estimate(backend: c_int, ctx_size: c_int) -> RawContextMemory;
+    fn ds4_tokenize_rendered_chat(engine: *mut RawEngine, text: *const c_char, out: *mut RawTokens);
+    fn ds4_encode_chat_prompt(
+        engine: *mut RawEngine,
+        system: *const c_char,
+        prompt: *const c_char,
+        think_mode: c_int,
+        out: *mut RawTokens,
+    );
+    fn ds4_tokens_free(tokens: *mut RawTokens);
+    fn ds4_token_text(engine: *mut RawEngine, token: c_int, len: *mut usize) -> *mut c_char;
+    fn ds4_engine_generate_argmax(
+        engine: *mut RawEngine,
+        prompt: *const RawTokens,
+        n_predict: c_int,
+        ctx_size: c_int,
+        emit: Option<unsafe extern "C" fn(*mut c_void, c_int)>,
+        done: Option<unsafe extern "C" fn(*mut c_void)>,
+        emit_ud: *mut c_void,
+        progress: Option<unsafe extern "C" fn(*mut c_void, *const c_char, c_int, c_int)>,
+        progress_ud: *mut c_void,
+    ) -> c_int;
+    fn free(ptr: *mut c_void);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Backend, EngineOptions, RawEngineOptions};
+    use super::{Backend, EngineOptions, RawEngineOptions, ThinkMode, TokenPrinter};
 
     #[test]
     fn backend_values_match_c_enum() {
         assert_eq!(Backend::Metal.as_raw(), 0);
         assert_eq!(Backend::Cuda.as_raw(), 1);
         assert_eq!(Backend::Cpu.as_raw(), 2);
+        assert_eq!(Backend::Cuda.name(), "cuda");
     }
 
     #[test]
@@ -188,5 +544,31 @@ mod tests {
         let options = EngineOptions::new("model.gguf", Backend::Cuda);
         assert!(!options.warm_weights);
         assert!(!options.quality);
+    }
+
+    #[test]
+    fn think_mode_values_match_c_enum() {
+        assert_eq!(ThinkMode::None.as_raw(), 0);
+        assert_eq!(ThinkMode::High.as_raw(), 1);
+        assert_eq!(ThinkMode::Max.as_raw(), 2);
+        assert_eq!(ThinkMode::default_mode(), ThinkMode::High);
+    }
+
+    #[test]
+    fn token_printer_matches_thinking_delimiter_rules() {
+        let mut printer = TokenPrinter::new(ThinkMode::High);
+        printer.write_token_text(b"reason");
+        printer.write_token_text(b"</thi");
+        printer.write_token_text(b"nk>answer");
+        printer.finish_generation();
+        assert_eq!(printer.into_bytes(), b"reason\nanswer\n");
+    }
+
+    #[test]
+    fn token_printer_preserves_text_in_non_thinking_mode() {
+        let mut printer = TokenPrinter::new(ThinkMode::None);
+        printer.write_token_text(b"</think>answer");
+        printer.finish_generation();
+        assert_eq!(printer.into_bytes(), b"</think>answer\n");
     }
 }

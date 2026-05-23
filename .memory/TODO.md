@@ -1739,7 +1739,7 @@
 
 ### M8.13a: Rust Argmax One-Shot Runtime Boundary
 
-- Status: pending
+- Status: done
 - Goal: expose a Rust-accessible one-shot argmax generation boundary over the
   current engine API without implementing the full CLI surface yet.
 - Source evidence needed: `ds4.h`, `ds4.c`, `rust/ds4-engine/src/lib.rs`, the
@@ -1758,14 +1758,21 @@
   exit categories exact.
 - Review gate: ask Claude to review unsafe callback ownership, token text
   lifetimes, prompt token ownership, and cleanup behavior.
-- Validation needed: B300 runtime comparator with negative tests, targeted Rust
-  tests, `cargo test --workspace`, and `git diff --check`.
-- Owner path: Rust engine runtime boundary, argmax runtime comparator,
-  `ds4-parity/`, `.memory/status.md`.
+- Validation passed: B300 `cargo build -p ds4-engine --bin
+  ds4-argmax-runtime-rs` with `CUDA_ARCH=native`; B300
+  `python3 ds4-parity/compare_cli_argmax_runtime.py
+  ds4-parity/baselines/cli/m8.12a/current-c.json --candidate-binary
+  target/debug/ds4-argmax-runtime-rs --negative-test` (`CLI argmax runtime
+  comparator: PASS, 109 checks`; negative tests `PASS, 4 checks`); local
+  `cargo fmt --all -- --check`; local `cargo test --workspace`; local
+  `python3 -m py_compile ds4-parity/compare_cli_argmax_runtime.py`; and
+  `git diff --check`.
+- Owner path: `rust/ds4-engine/`,
+  `ds4-parity/compare_cli_argmax_runtime.py`, `.memory/status.md`.
 
 ### M8.13b: Rust Session Sampling Runtime Boundary
 
-- Status: pending after M8.13a
+- Status: pending
 - Goal: expose the session-backed Rust runtime boundary needed for seeded
   non-greedy one-shot sampling and future MTP speculation.
 - Source evidence needed: `ds4.h`, `ds4.c`, `rust/ds4-engine/src/lib.rs`, the
