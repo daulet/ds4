@@ -115,6 +115,10 @@ class ParityReport:
                 "M7.9 KV/snapshot parity report",
                 [sys.executable, "ds4-parity/run_kv_parity_report.py"],
             ),
+            (
+                "M8.16 CLI parity report",
+                [sys.executable, "ds4-parity/run_cli_parity_report.py"],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.16 CLI Parity Report Integration
-- Last validated source commit: M8.15c Rust interactive PTY transcript surface
-  in this commit; prior pushed source commit
-  `85f87f7fe0d146596d8ff0fb909615d7fab3f51c`
+- Active item: M9.1 Server Surface Work Item Breakdown
+- Last validated source commit: M8.16 CLI parity report integration in this
+  commit; prior pushed source commit
+  `daf8af5f5bbc56884a40835ae4717476dc1b8e20`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1382,3 +1382,17 @@
   `cargo test --workspace`, `python3 -m py_compile
   ds4-parity/compare_cli_interactive_pty.py
   ds4-parity/check_cli_interactive_dump.py`, and `git diff --check`.
+- M8.16 adds `ds4-parity/run_cli_parity_report.py`, which executes local M8 CLI
+  artifact validators/comparators and records model-backed B300 current-C
+  refreshes plus Rust runtime/PTY checks as skipped items with exact rerun
+  commands.
+- M8.16 wires the CLI report into `ds4-parity/run_parity_report.py` as the
+  `M8.16 CLI parity report` comparator item.
+- M8.16 local CLI report validation passed with `summary: 9 passed, 13 skipped,
+  0 failed`; JSON output from `python3 ds4-parity/run_cli_parity_report.py
+  --json` parsed with `python3 -m json.tool`.
+- M8.16 unified report validation passed with `summary: 14 passed, 5 skipped,
+  0 failed`, including the nested `M8.16 CLI parity report`.
+- M8.16 local validation also passed `python3 -m py_compile
+  ds4-parity/run_cli_parity_report.py ds4-parity/run_parity_report.py`, full
+  `cargo test --workspace`, and `git diff --check`.

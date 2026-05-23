@@ -2023,7 +2023,7 @@
 
 ### M8.16: CLI Parity Report Integration
 
-- Status: pending
+- Status: done
 - Goal: wire M8 CLI comparators and B300 refresh records into parity reports.
 - Source evidence needed: M8.2 through M8.15 fixtures, local comparator
   commands, B300 recapture records, and PTY transcript records.
@@ -2031,17 +2031,47 @@
 - Fixture: M8 manifest entries, local comparator commands, B300 recapture
   records, and PTY transcript records.
 - Comparator: a Milestone 8 report that runs all local CLI comparators,
-  summarizes first drift paths, and skips only model-backed B300 recaptures with
-  exact commands; the unified parity report includes that M8 report.
+  summarizes first drift paths, and skips model-backed B300 refresh/runtime
+  checks with exact commands; the unified parity report includes that M8 report.
 - Acceptance: local report passes without the model, JSON output is
   machine-readable, failures name fixture/field/expected/got where underlying
   comparators provide it, and B300 refreshes are reproducible from the report.
 - Drift policy: report normalizes only capture paths and timestamps.
 - Review gate: ask Claude to review report integration and skipped-B300 command
   fidelity.
-- Validation needed: M8 report, unified parity report, `py_compile`, `cargo
-  test --workspace`, and `git diff --check`.
+- Validation passed: local `python3 -m py_compile
+  ds4-parity/run_cli_parity_report.py ds4-parity/run_parity_report.py`; local
+  `python3 ds4-parity/run_cli_parity_report.py` (`summary: 9 passed, 13
+  skipped, 0 failed`); local `python3 ds4-parity/run_cli_parity_report.py
+  --json` plus `python3 -m json.tool`; local `python3
+  ds4-parity/run_parity_report.py` (`summary: 14 passed, 5 skipped, 0
+  failed`); local `cargo test --workspace`; and local `git diff --check`.
 - Owner path: `ds4-parity/`, `.memory/status.md`.
+
+### M9.1: Server Surface Work Item Breakdown
+
+- Status: pending
+- Goal: split Milestone 9 into commit-sized Rust server parity work items
+  before adding Rust server source behavior.
+- Source evidence needed: `RUST_PORT_ROADMAP.md` Milestone 9, `ds4_server.c`,
+  `tests/ds4_test.c` server tests, M0.4 server fixtures/traces, and M0.5 KV
+  restore fixtures.
+- Oracle: current `./ds4-server` behavior captured in M0.4/M0.5 plus
+  `./ds4_test --server`.
+- Fixture: fixed request JSON fixtures, server trace outputs, KV/cache
+  fixtures, and streaming/non-streaming response cases.
+- Comparator: documentation-only breakdown that assigns concrete oracle,
+  fixture, comparator, acceptance, drift policy, validation, and owner paths to
+  each server parity work item.
+- Acceptance: the next server implementation items are small enough to validate
+  independently and include request/response, streaming, trace, cache, and
+  tool-call coverage without mixing unrelated server behavior.
+- Drift policy: documentation-only; no source behavior changes.
+- Review gate: ask Claude to review item boundaries and missing server
+  behavioral surfaces.
+- Validation needed: roadmap/board diff and `git diff --check`.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
 
 ## Later Items
 
