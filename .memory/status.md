@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.2b OpenAI Tool Schema And DSML Prompt Render Surface
-- Last validated source commit: M9.2a OpenAI chat request core parse/render in
-  this commit; prior pushed source commit
-  `525414f7f6232bf5196a06db6b045b9bca568759`
+- Active item: M9.2c Responses And Anthropic Request Parse Surface
+- Last validated source commit: M9.2b OpenAI tool schema and DSML prompt
+  rendering in this commit; prior pushed source commit
+  `b29188c287e02956c9199c7b02b3cdab3016e813`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,18 @@
 
 ## Last Evidence
 
+- M9.2b extended `rust/ds4-gguf/src/server_chat.rs` to parse OpenAI `tools`,
+  `tool_choice`, assistant `tool_calls`, tool schema property order, tool role
+  prompt rendering, and DSML request-history rendering without loading a model
+  or opening sockets.
+- M9.2b exact prompt-byte coverage uses the raw request body captured in the
+  M0.4 `chat_tool_call` trace because C preserves raw tool-schema whitespace in
+  the prompt; the pretty committed JSON fixture is still used for semantic
+  parser checks.
+- M9.2b validation covered schema order, `tool_choice: "none"` suppression,
+  DSML argument ordering, raw JSON argument minification, numeric spelling
+  preservation, tool-result delimiter escaping, and reasoning preservation when
+  tools are active.
 - M9.2a added a dependency-free Rust OpenAI chat request parser in
   `rust/ds4-gguf/src/server_chat.rs`, exported through `ds4-gguf`, for
   model-free `/v1/chat/completions` core fields.

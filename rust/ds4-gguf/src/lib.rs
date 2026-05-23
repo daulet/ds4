@@ -36,6 +36,7 @@ pub use sampling::{
 pub use server_chat::{
     openai_context_length_error_body, parse_openai_chat_request, request_exceeds_context,
     think_mode_for_context, OpenAiChatRequest, ServerRequestError, ServerRequestErrorCategory,
+    ToolSchemaOrder,
 };
 pub use tokenizer::{Ds4Tokenizer, SpecialTokenIds, TokenizerError, TokenizerIdentity};
 

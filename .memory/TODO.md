@@ -2126,7 +2126,7 @@
 
 ### M9.2b: OpenAI Tool Schema And DSML Prompt Render Surface
 
-- Status: active
+- Status: done
 - Goal: port model-free OpenAI tool schema parsing and DSML prompt rendering
   without implementing model-backed tool-call generation.
 - Oracle: C `parse_tools_value`, `openai_function_schema_from_tool`,
@@ -2144,14 +2144,15 @@
   text; random call IDs are out of scope for this parser-only item.
 - Review gate: ask Claude to review schema ordering, DSML state-machine edges,
   malformed/recoverable tool parsing, and prompt placement before system text.
-- Validation needed: targeted Rust tool/DSML tests, `cargo test --workspace`,
-  `python3 ds4-parity/run_cli_parity_report.py`, and `git diff --check`.
+- Validation passed: targeted `cargo test -p ds4-gguf server_chat`, full
+  `cargo test --workspace`, `python3 ds4-parity/run_cli_parity_report.py`,
+  `git diff --check`, staged diff check, and Claude review PASS.
 - Owner path: Rust server tool/DSML parser modules, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M9.2c: Responses And Anthropic Request Parse Surface
 
-- Status: pending
+- Status: active
 - Goal: port model-free Responses and Anthropic request parsing/rendering inputs
   while leaving response/event emission for M9.7.
 - Oracle: C `parse_responses_request`, `parse_anthropic_request`,

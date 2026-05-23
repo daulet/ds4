@@ -1,6 +1,8 @@
 use std::fmt;
 
-use crate::{render_chat_prompt_text, ChatMessage, SamplingParams, ThinkMode};
+use crate::{
+    render_chat_prompt_text, ChatMessage, SamplingParams, ThinkMode, ToolArgument, ToolCall,
+};
 
 const DEFAULT_MODEL: &str = "deepseek-v4-flash";
 const THINK_MAX_MIN_CONTEXT: i32 = 393_216;
@@ -9,6 +11,9 @@ const THINK_MAX_MIN_CONTEXT: i32 = 393_216;
 pub struct OpenAiChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
+    pub has_tools: bool,
+    pub tool_schemas: Option<String>,
+    pub tool_orders: Vec<ToolSchemaOrder>,
     pub max_tokens: i32,
     pub sampling: SamplingParams,
     pub seed: u64,
@@ -18,6 +23,12 @@ pub struct OpenAiChatRequest {
     pub stops: Vec<String>,
     pub prompt_text: String,
     pub prompt_preserves_reasoning: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolSchemaOrder {
+    pub name: String,
+    pub properties: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,15 +80,15 @@ pub fn parse_openai_chat_request(
     def_tokens: i32,
     ctx_size: i32,
 ) -> Result<OpenAiChatRequest, ServerRequestError> {
-    let value = JsonParser::new(body)
-        .parse()
+    let fields = JsonParser::new(body)
+        .parse_root_object_fields_raw()
         .map_err(|_| ServerRequestError::invalid_json())?;
-    let JsonValue::Object(fields) = value else {
-        return Err(ServerRequestError::invalid_json());
-    };
 
     let mut model = DEFAULT_MODEL.to_string();
     let mut messages = None;
+    let mut tool_schemas = None;
+    let mut tool_orders = Vec::new();
+    let mut tool_choice_none = false;
     let mut max_tokens = def_tokens;
     let mut sampling = SamplingParams::defaults();
     let mut seed = 0_u64;
@@ -88,10 +99,20 @@ pub fn parse_openai_chat_request(
     let mut reasoning_effort = ThinkMode::High;
     let mut stops = Vec::new();
 
-    for (key, value) in fields {
+    for (key, raw, value) in fields {
         match key.as_str() {
             "messages" => {
                 messages = Some(parse_messages(&value)?);
+            }
+            "tools" => {
+                let parsed = parse_tools_value(&raw)?;
+                tool_schemas = Some(parsed.schemas);
+                tool_orders = parsed.orders;
+            }
+            "tool_choice" => {
+                if let Some(choice) = value.as_str() {
+                    tool_choice_none = choice == "none";
+                }
             }
             "model" => {
                 model = value
@@ -156,18 +177,28 @@ pub fn parse_openai_chat_request(
     if !got_thinking && model_alias_enables_thinking(&model) {
         thinking_enabled = true;
     }
+    let has_tools = tool_schemas
+        .as_deref()
+        .is_some_and(|schemas| !schemas.is_empty())
+        && !tool_choice_none;
+    let active_tool_schemas = if has_tools {
+        tool_schemas.as_deref()
+    } else {
+        None
+    };
     let think_mode = think_mode_for_context(
         think_mode_from_enabled(thinking_enabled, reasoning_effort),
         ctx_size,
     );
-    let prompt_preserves_reasoning = messages
-        .iter()
-        .any(|message| message.role == "tool" || message.role == "function");
-    let prompt_text = render_chat_prompt_text(&messages, None, think_mode);
+    let prompt_preserves_reasoning = chat_history_uses_tool_context(&messages, active_tool_schemas);
+    let prompt_text = render_chat_prompt_text(&messages, active_tool_schemas, think_mode);
 
     Ok(OpenAiChatRequest {
         model,
         messages,
+        has_tools,
+        tool_schemas,
+        tool_orders,
         max_tokens,
         sampling,
         seed,
@@ -229,6 +260,7 @@ fn parse_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestEr
         let mut role = None;
         let mut content = None;
         let mut reasoning = None;
+        let mut tool_calls = Vec::new();
         for (key, value) in fields {
             match key.as_str() {
                 "role" => {
@@ -245,6 +277,9 @@ fn parse_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestEr
                 "reasoning_content" => {
                     reasoning = Some(json_content(value)?);
                 }
+                "tool_calls" => {
+                    tool_calls = parse_tool_calls_value(value)?;
+                }
                 _ => {}
             }
         }
@@ -253,9 +288,204 @@ fn parse_messages(value: &JsonValue) -> Result<Vec<ChatMessage>, ServerRequestEr
             content.unwrap_or_default(),
         );
         message.reasoning = reasoning.unwrap_or_default();
+        message.tool_calls = tool_calls;
         messages.push(message);
     }
     Ok(messages)
+}
+
+fn chat_history_uses_tool_context(messages: &[ChatMessage], tool_schemas: Option<&str>) -> bool {
+    if tool_schemas.is_some_and(|schemas| !schemas.is_empty()) {
+        return true;
+    }
+    messages.iter().any(|message| {
+        (message.role == "assistant" && !message.tool_calls.is_empty())
+            || message.role == "tool"
+            || message.role == "function"
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ToolParseResult {
+    schemas: String,
+    orders: Vec<ToolSchemaOrder>,
+}
+
+fn parse_tools_value(raw: &str) -> Result<ToolParseResult, ServerRequestError> {
+    let value = JsonParser::new(raw)
+        .parse()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    if matches!(value, JsonValue::Null) {
+        return Ok(ToolParseResult {
+            schemas: String::new(),
+            orders: Vec::new(),
+        });
+    }
+    let raw_tools = JsonParser::new(raw)
+        .parse_root_array_values_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    let mut schemas = String::new();
+    let mut orders = Vec::new();
+    for raw_tool in raw_tools {
+        let function = openai_function_schema_from_tool(&raw_tool)?;
+        let schema = function.unwrap_or(raw_tool);
+        append_raw_json_line(&mut schemas, schema.trim());
+        if let Some(order) = tool_schema_order_from_json(schema.trim())? {
+            push_tool_schema_order(&mut orders, order);
+        }
+    }
+    Ok(ToolParseResult { schemas, orders })
+}
+
+fn append_raw_json_line(out: &mut String, json: &str) {
+    if json.is_empty() {
+        return;
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out.push_str(json);
+}
+
+fn openai_function_schema_from_tool(raw: &str) -> Result<Option<String>, ServerRequestError> {
+    if !raw.trim_start().starts_with('{') {
+        return Ok(None);
+    }
+    let fields = JsonParser::new(raw)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    for (key, raw, _) in fields {
+        if key == "function" {
+            return Ok(Some(raw.trim().to_string()));
+        }
+    }
+    Ok(None)
+}
+
+fn tool_schema_order_from_json(raw: &str) -> Result<Option<ToolSchemaOrder>, ServerRequestError> {
+    if !raw.trim_start().starts_with('{') {
+        return Ok(None);
+    }
+    let fields = JsonParser::new(raw)
+        .parse_root_object_fields_raw()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    let mut name = None;
+    let mut properties = Vec::new();
+    for (key, raw, value) in fields {
+        match key.as_str() {
+            "name" => {
+                name = Some(
+                    value
+                        .as_str()
+                        .ok_or_else(ServerRequestError::invalid_json)?
+                        .to_string(),
+                );
+            }
+            "parameters" | "input_schema" => {
+                properties = parse_schema_properties(&raw)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(name.map(|name| ToolSchemaOrder { name, properties }))
+}
+
+fn parse_schema_properties(raw: &str) -> Result<Vec<String>, ServerRequestError> {
+    let value = JsonParser::new(raw)
+        .parse()
+        .map_err(|_| ServerRequestError::invalid_json())?;
+    let JsonValue::Object(fields) = value else {
+        return Ok(Vec::new());
+    };
+    for (key, value) in fields {
+        if key != "properties" {
+            continue;
+        }
+        let JsonValue::Object(properties) = value else {
+            return Ok(Vec::new());
+        };
+        return Ok(properties.into_iter().map(|(name, _)| name).collect());
+    }
+    Ok(Vec::new())
+}
+
+fn push_tool_schema_order(orders: &mut Vec<ToolSchemaOrder>, order: ToolSchemaOrder) {
+    if let Some(existing) = orders
+        .iter_mut()
+        .find(|existing| existing.name == order.name)
+    {
+        *existing = order;
+    } else {
+        orders.push(order);
+    }
+}
+
+fn parse_tool_calls_value(value: &JsonValue) -> Result<Vec<ToolCall>, ServerRequestError> {
+    if matches!(value, JsonValue::Null) {
+        return Ok(Vec::new());
+    }
+    let JsonValue::Array(values) = value else {
+        return Err(ServerRequestError::invalid_json());
+    };
+    let mut calls = Vec::new();
+    for value in values {
+        let JsonValue::Object(fields) = value else {
+            return Err(ServerRequestError::invalid_json());
+        };
+        let mut name = None;
+        let mut arguments = None;
+        for (key, value) in fields {
+            if key != "function" {
+                continue;
+            }
+            let JsonValue::Object(function_fields) = value else {
+                return Err(ServerRequestError::invalid_json());
+            };
+            for (key, value) in function_fields {
+                match key.as_str() {
+                    "name" => {
+                        name = Some(
+                            value
+                                .as_str()
+                                .ok_or_else(ServerRequestError::invalid_json)?
+                                .to_string(),
+                        );
+                    }
+                    "arguments" => {
+                        arguments = Some(match value {
+                            JsonValue::String(arguments) => arguments.clone(),
+                            _ => minify_json_value(value),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let (Some(name), Some(arguments)) = (name, arguments) {
+            calls.push(ToolCall::new(
+                name,
+                tool_arguments_from_json(&arguments)
+                    .unwrap_or_else(|| vec![ToolArgument::string("arguments", arguments.as_str())]),
+            ));
+        }
+    }
+    Ok(calls)
+}
+
+fn tool_arguments_from_json(json: &str) -> Option<Vec<ToolArgument>> {
+    let fields = JsonParser::new(json).parse_root_object_fields_raw().ok()?;
+    let mut args = Vec::new();
+    for (name, raw, value) in fields {
+        match value {
+            JsonValue::String(value) => args.push(ToolArgument::string(name, value)),
+            _ => args.push(ToolArgument {
+                name,
+                value: minify_json_raw_value(&raw),
+                is_string: false,
+            }),
+        }
+    }
+    Some(args)
 }
 
 fn json_content(value: &JsonValue) -> Result<String, ServerRequestError> {
@@ -396,6 +626,90 @@ fn json_number(value: &JsonValue) -> Option<f64> {
     }
 }
 
+fn minify_json_value(value: &JsonValue) -> String {
+    match value {
+        JsonValue::Null => "null".to_string(),
+        JsonValue::Bool(value) => value.to_string(),
+        JsonValue::Number(value) => {
+            let mut out = value.to_string();
+            if out.ends_with(".0") {
+                out.truncate(out.len() - 2);
+            }
+            out
+        }
+        JsonValue::String(value) => json_escape_string(value),
+        JsonValue::Array(values) => {
+            let mut out = String::from("[");
+            for (idx, value) in values.iter().enumerate() {
+                if idx > 0 {
+                    out.push(',');
+                }
+                out.push_str(&minify_json_value(value));
+            }
+            out.push(']');
+            out
+        }
+        JsonValue::Object(fields) => {
+            let mut out = String::from("{");
+            for (idx, (key, value)) in fields.iter().enumerate() {
+                if idx > 0 {
+                    out.push(',');
+                }
+                out.push_str(&json_escape_string(key));
+                out.push(':');
+                out.push_str(&minify_json_value(value));
+            }
+            out.push('}');
+            out
+        }
+    }
+}
+
+fn minify_json_raw_value(raw: &str) -> String {
+    let mut out = String::new();
+    let mut in_string = false;
+    let mut escape = false;
+    for ch in raw.trim().chars() {
+        if in_string {
+            out.push(ch);
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+        } else if ch == '"' {
+            in_string = true;
+            out.push(ch);
+        } else if !ch.is_ascii_whitespace() {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn json_escape_string(value: &str) -> String {
+    let mut out = String::from("\"");
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{0008}' => out.push_str("\\b"),
+            '\u{000c}' => out.push_str("\\f"),
+            ch if ch <= '\u{001f}' => {
+                out.push_str(&format!("\\u{:04x}", ch as u32));
+            }
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum JsonValue {
     Null,
@@ -442,6 +756,76 @@ impl<'a> JsonParser<'a> {
             Ok(value)
         } else {
             Err(JsonParseError)
+        }
+    }
+
+    fn parse_root_object_fields_raw(
+        mut self,
+    ) -> Result<Vec<(String, String, JsonValue)>, JsonParseError> {
+        self.skip_ws();
+        self.expect_byte(b'{')?;
+        self.skip_ws();
+        let mut fields = Vec::new();
+        if self.consume_byte(b'}') {
+            self.skip_ws();
+            return if self.pos == self.input.len() {
+                Ok(fields)
+            } else {
+                Err(JsonParseError)
+            };
+        }
+        loop {
+            let key = self.parse_string()?;
+            self.skip_ws();
+            self.expect_byte(b':')?;
+            self.skip_ws();
+            let raw_start = self.pos;
+            let value = self.parse_value(1)?;
+            let raw = self.input[raw_start..self.pos].to_string();
+            fields.push((key, raw, value));
+            self.skip_ws();
+            if self.consume_byte(b'}') {
+                self.skip_ws();
+                return if self.pos == self.input.len() {
+                    Ok(fields)
+                } else {
+                    Err(JsonParseError)
+                };
+            }
+            self.expect_byte(b',')?;
+            self.skip_ws();
+        }
+    }
+
+    fn parse_root_array_values_raw(mut self) -> Result<Vec<String>, JsonParseError> {
+        self.skip_ws();
+        self.expect_byte(b'[')?;
+        self.skip_ws();
+        let mut values = Vec::new();
+        if self.consume_byte(b']') {
+            self.skip_ws();
+            return if self.pos == self.input.len() {
+                Ok(values)
+            } else {
+                Err(JsonParseError)
+            };
+        }
+        loop {
+            self.skip_ws();
+            let raw_start = self.pos;
+            self.parse_value(1)?;
+            values.push(self.input[raw_start..self.pos].to_string());
+            self.skip_ws();
+            if self.consume_byte(b']') {
+                self.skip_ws();
+                return if self.pos == self.input.len() {
+                    Ok(values)
+                } else {
+                    Err(JsonParseError)
+                };
+            }
+            self.expect_byte(b',')?;
+            self.skip_ws();
         }
     }
 
@@ -672,20 +1056,56 @@ mod tests {
     const CHAT_THINKING_DISABLED: &str = include_str!(
         "../../../ds4-parity/baselines/server-fixtures/m0.4/chat_thinking_disabled.json"
     );
+    const CHAT_TOOL_CALL: &str =
+        include_str!("../../../ds4-parity/baselines/server-fixtures/m0.4/chat_tool_call.json");
     const CHAT_CACHE_SEED: &str =
         include_str!("../../../ds4-parity/baselines/server-fixtures/m0.4/chat_cache_seed.json");
     const CHAT_CACHE_CONTINUATION: &str = include_str!(
         "../../../ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json"
     );
+    const M04_SERVER_TRACE: &str =
+        include_str!("../../../ds4-parity/baselines/server-traces/m0.4/traces/server.trace");
 
     fn parse_fixture(body: &str) -> OpenAiChatRequest {
         parse_openai_chat_request(body, 128, 32_768).expect("fixture parses")
+    }
+
+    fn rendered_prompt_from_trace(request: usize) -> &'static str {
+        let marker = format!("===== request {request} ");
+        let start = M04_SERVER_TRACE.find(&marker).expect("request marker");
+        let prompt = M04_SERVER_TRACE[start..]
+            .find("--- rendered prompt ---\n")
+            .expect("prompt marker")
+            + start
+            + "--- rendered prompt ---\n".len();
+        let end = M04_SERVER_TRACE[prompt..]
+            .find("\n\n--- generated text ---")
+            .expect("generated marker")
+            + prompt;
+        &M04_SERVER_TRACE[prompt..end]
+    }
+
+    fn raw_request_from_trace(request: usize) -> &'static str {
+        let marker = format!("===== request {request} ");
+        let start = M04_SERVER_TRACE.find(&marker).expect("request marker");
+        let raw = M04_SERVER_TRACE[start..]
+            .find("--- raw request json ---\n")
+            .expect("raw marker")
+            + start
+            + "--- raw request json ---\n".len();
+        let end = M04_SERVER_TRACE[raw..]
+            .find("\n\n--- rendered prompt ---")
+            .expect("prompt marker")
+            + raw;
+        &M04_SERVER_TRACE[raw..end]
     }
 
     #[test]
     fn m04_non_tool_fixtures_match_rendered_prompt_and_fields() {
         let basic = parse_fixture(CHAT_BASIC);
         assert_eq!(basic.model, "deepseek-chat");
+        assert!(!basic.has_tools);
+        assert!(basic.tool_schemas.is_none());
         assert_eq!(basic.max_tokens, 8);
         assert_eq!(basic.sampling.temperature, 0.0);
         assert_eq!(basic.sampling.top_k, 0);
@@ -783,6 +1203,70 @@ mod tests {
             req.prompt_text,
             "<｜begin▁of▁sentence｜><｜User｜>a b<｜Assistant｜></think>"
         );
+    }
+
+    #[test]
+    fn m04_tool_fixture_matches_c_rendered_prompt_and_schema_order() {
+        let req = parse_fixture(CHAT_TOOL_CALL);
+        assert_eq!(req.model, "deepseek-v4-flash");
+        assert!(req.has_tools);
+        assert_eq!(req.think_mode, ThinkMode::None);
+        assert_eq!(req.max_tokens, 192);
+        assert_eq!(req.seed, 23);
+        assert!(req.prompt_preserves_reasoning);
+        assert_eq!(req.tool_orders.len(), 1);
+        assert_eq!(req.tool_orders[0].name, "list_files");
+        assert_eq!(req.tool_orders[0].properties, ["path"]);
+
+        let trace_req = parse_fixture(raw_request_from_trace(3));
+        assert_eq!(trace_req.prompt_text, rendered_prompt_from_trace(3));
+    }
+
+    #[test]
+    fn tool_choice_none_parses_schemas_but_disables_tool_prompt() {
+        let req = parse_fixture(
+            r#"{
+                "messages":[{"role":"user","content":"No tool prompt"}],
+                "tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}}],
+                "tool_choice":"none"
+            }"#,
+        );
+        assert!(!req.has_tools);
+        assert!(req
+            .tool_schemas
+            .as_deref()
+            .is_some_and(|s| s.contains("\"name\":\"lookup\"")));
+        assert_eq!(req.tool_orders[0].name, "lookup");
+        assert_eq!(req.tool_orders[0].properties, ["query"]);
+        assert_eq!(
+            req.prompt_text,
+            "<｜begin▁of▁sentence｜><｜User｜>No tool prompt<｜Assistant｜><think>"
+        );
+        assert!(!req.prompt_preserves_reasoning);
+    }
+
+    #[test]
+    fn assistant_tool_calls_render_dsml_arguments_in_request_history() {
+        let req = parse_fixture(
+            r#"{
+                "messages":[
+                    {"role":"user","content":"run"},
+                    {"role":"assistant","reasoning_content":"need lookup","tool_calls":[{"id":"call_1","function":{"name":"lookup","arguments":"{\"query\":\"ds4\",\"limit\":2,\"ratio\":1.0,\"nested\":{\"x\":true}}"}}]},
+                    {"role":"tool","content":"result </tool_result> & raw"},
+                    {"role":"user","content":"continue"}
+                ],
+                "tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer"},"ratio":{"type":"number"},"nested":{"type":"object"}}}}}]
+            }"#,
+        );
+        assert!(req.has_tools);
+        assert!(req.prompt_preserves_reasoning);
+        assert!(req.prompt_text.contains("<think>need lookup</think>"));
+        assert!(req
+            .prompt_text
+            .contains("<｜DSML｜invoke name=\"lookup\">\n<｜DSML｜parameter name=\"query\" string=\"true\">ds4</｜DSML｜parameter>\n<｜DSML｜parameter name=\"limit\" string=\"false\">2</｜DSML｜parameter>\n<｜DSML｜parameter name=\"ratio\" string=\"false\">1.0</｜DSML｜parameter>\n<｜DSML｜parameter name=\"nested\" string=\"false\">{\"x\":true}</｜DSML｜parameter>"));
+        assert!(req
+            .prompt_text
+            .contains("<tool_result>result &lt;/tool_result> & raw</tool_result>"));
     }
 
     #[test]
