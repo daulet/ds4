@@ -16812,6 +16812,408 @@ int ds4_dump_layer0_qkv_rope_oracle_json(const char *model_path, int token, FILE
     return ferror(fp) ? 1 : 0;
 }
 
+int ds4_dump_layer0_attn_output_oracle_json(const char *model_path, int token, FILE *fp) {
+    if (!model_path || !fp || token < 0 || token >= DS4_N_VOCAB) return 1;
+
+    ds4_model model = { .fd = -1 };
+    ds4_weights weights;
+    memset(&weights, 0, sizeof(weights));
+
+    const uint32_t ctx_size = 32768u;
+    const uint32_t prefill_cap = metal_graph_prefill_cap_for_prompt((int)ctx_size);
+    const uint32_t raw_cap = metal_graph_raw_cap_for_context((int)ctx_size, prefill_cap);
+    uint32_t raw_window = DS4_N_SWA;
+    if (raw_window > ctx_size) raw_window = ctx_size;
+    if (raw_window == 0) raw_window = 1;
+    const uint32_t raw_row = 0;
+    const uint32_t n_raw = 1;
+    const uint32_t raw_start = 0;
+    const uint64_t hc_dim = (uint64_t)DS4_N_EMBD * DS4_N_HC;
+    const uint64_t hc_mix_dim = 2ull * DS4_N_HC + (uint64_t)DS4_N_HC * DS4_N_HC;
+    const uint64_t q_rank = DS4_N_LORA_Q;
+    const uint64_t q_dim = (uint64_t)DS4_N_HEAD * DS4_N_HEAD_DIM;
+    const uint64_t kv_dim = DS4_N_HEAD_DIM;
+    const uint32_t n_groups = DS4_N_OUT_GROUP;
+    const uint32_t group_heads = DS4_N_HEAD / n_groups;
+    const uint64_t group_dim = (uint64_t)DS4_N_HEAD_DIM * group_heads;
+    const uint64_t rank = DS4_N_LORA_O;
+    const uint64_t low_dim = (uint64_t)n_groups * rank;
+    float *kv = xmalloc((size_t)kv_dim * sizeof(kv[0]));
+    float *raw_cache_row = xmalloc((size_t)kv_dim * sizeof(raw_cache_row[0]));
+    float *heads = xmalloc((size_t)q_dim * sizeof(heads[0]));
+    float *attn_low = xmalloc((size_t)low_dim * sizeof(attn_low[0]));
+    float *attn_out = xmalloc((size_t)DS4_N_EMBD * sizeof(attn_out[0]));
+    float *after_attn_hc = xmalloc((size_t)hc_dim * sizeof(after_attn_hc[0]));
+    ds4_gpu_tensor *cur_hc_tensor = NULL;
+    ds4_gpu_tensor *flat_hc_tensor = NULL;
+    ds4_gpu_tensor *hc_mix_tensor = NULL;
+    ds4_gpu_tensor *hc_split_tensor = NULL;
+    ds4_gpu_tensor *attn_cur_tensor = NULL;
+    ds4_gpu_tensor *attn_norm_tensor = NULL;
+    ds4_gpu_tensor *qr_tensor = NULL;
+    ds4_gpu_tensor *kv_raw_tensor = NULL;
+    ds4_gpu_tensor *qr_norm_tensor = NULL;
+    ds4_gpu_tensor *q_tensor = NULL;
+    ds4_gpu_tensor *kv_tensor = NULL;
+    ds4_gpu_tensor *raw_cache_tensor = NULL;
+    ds4_gpu_tensor *heads_tensor = NULL;
+    ds4_gpu_tensor *attn_low_tensor = NULL;
+    ds4_gpu_tensor *attn_out_tensor = NULL;
+    ds4_gpu_tensor *after_attn_hc_tensor = NULL;
+    int rc = 1;
+
+    model_open(&model, model_path, false, false);
+    config_validate_model(&model);
+    weights_bind(&weights, &model);
+    const ds4_layer_weights *layer = &weights.layer[0];
+
+    bool ok = ds4_gpu_init() != 0;
+    if (ok) ok = ds4_gpu_set_model_fd(model.fd) != 0;
+    if (ok) {
+        ok = ds4_gpu_set_model_map_range(model.map,
+                                         model.size,
+                                         model.tensor_data_pos,
+                                         model.size - model.tensor_data_pos) != 0;
+    }
+    if (ok) {
+        cur_hc_tensor = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
+        flat_hc_tensor = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
+        hc_mix_tensor = ds4_gpu_tensor_alloc(hc_mix_dim * sizeof(float));
+        hc_split_tensor = ds4_gpu_tensor_alloc(hc_mix_dim * sizeof(float));
+        attn_cur_tensor = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+        attn_norm_tensor = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+        qr_tensor = ds4_gpu_tensor_alloc(q_rank * sizeof(float));
+        kv_raw_tensor = ds4_gpu_tensor_alloc(kv_dim * sizeof(float));
+        qr_norm_tensor = ds4_gpu_tensor_alloc(q_rank * sizeof(float));
+        q_tensor = ds4_gpu_tensor_alloc(q_dim * sizeof(float));
+        kv_tensor = ds4_gpu_tensor_alloc(kv_dim * sizeof(float));
+        raw_cache_tensor = ds4_gpu_tensor_alloc((uint64_t)raw_cap * kv_dim * sizeof(float));
+        heads_tensor = ds4_gpu_tensor_alloc(q_dim * sizeof(float));
+        attn_low_tensor = ds4_gpu_tensor_alloc(low_dim * sizeof(float));
+        attn_out_tensor = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+        after_attn_hc_tensor = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
+        ok = cur_hc_tensor &&
+             flat_hc_tensor &&
+             hc_mix_tensor &&
+             hc_split_tensor &&
+             attn_cur_tensor &&
+             attn_norm_tensor &&
+             qr_tensor &&
+             kv_raw_tensor &&
+             qr_norm_tensor &&
+             q_tensor &&
+             kv_tensor &&
+             raw_cache_tensor &&
+             heads_tensor &&
+             attn_low_tensor &&
+             attn_out_tensor &&
+             after_attn_hc_tensor;
+    }
+    bool commands_open = false;
+    if (ok) {
+        ok = ds4_gpu_begin_commands() != 0;
+        commands_open = ok;
+    }
+    if (ok) {
+        ok = ds4_gpu_embed_token_hc_tensor(cur_hc_tensor,
+                                           model.map,
+                                           model.size,
+                                           weights.token_embd->abs_offset,
+                                           DS4_N_VOCAB,
+                                           (uint32_t)token,
+                                           DS4_N_EMBD,
+                                           DS4_N_HC) != 0;
+    }
+    if (ok) ok = ds4_gpu_rms_norm_plain_tensor(flat_hc_tensor, cur_hc_tensor, (uint32_t)hc_dim, DS4_RMS_EPS) != 0;
+    if (ok) {
+        ok = ds4_gpu_matmul_f16_tensor(hc_mix_tensor,
+                                       model.map,
+                                       model.size,
+                                       layer->hc_attn_fn->abs_offset,
+                                       hc_dim,
+                                       hc_mix_dim,
+                                       flat_hc_tensor,
+                                       1) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_hc_split_weighted_sum_norm_tensor(attn_cur_tensor,
+                                                       attn_norm_tensor,
+                                                       hc_split_tensor,
+                                                       hc_mix_tensor,
+                                                       cur_hc_tensor,
+                                                       model.map,
+                                                       model.size,
+                                                       layer->hc_attn_scale->abs_offset,
+                                                       layer->hc_attn_base->abs_offset,
+                                                       layer->attn_norm->abs_offset,
+                                                       DS4_N_EMBD,
+                                                       DS4_N_HC,
+                                                       DS4_N_HC_SINKHORN_ITER,
+                                                       DS4_HC_EPS,
+                                                       DS4_RMS_EPS) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_matmul_q8_0_tensor(qr_tensor,
+                                        model.map,
+                                        model.size,
+                                        layer->attn_q_a->abs_offset,
+                                        DS4_N_EMBD,
+                                        q_rank,
+                                        attn_norm_tensor,
+                                        1) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_matmul_q8_0_tensor(kv_raw_tensor,
+                                        model.map,
+                                        model.size,
+                                        layer->attn_kv->abs_offset,
+                                        DS4_N_EMBD,
+                                        kv_dim,
+                                        attn_norm_tensor,
+                                        1) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_dsv4_qkv_rms_norm_rows_tensor(qr_norm_tensor,
+                                                   qr_tensor,
+                                                   model.map,
+                                                   model.size,
+                                                   layer->attn_q_a_norm->abs_offset,
+                                                   (uint32_t)q_rank,
+                                                   kv_tensor,
+                                                   kv_raw_tensor,
+                                                   layer->attn_kv_a_norm->abs_offset,
+                                                   (uint32_t)kv_dim,
+                                                   1,
+                                                   DS4_RMS_EPS) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_matmul_q8_0_tensor(q_tensor,
+                                        model.map,
+                                        model.size,
+                                        layer->attn_q_b->abs_offset,
+                                        q_rank,
+                                        q_dim,
+                                        qr_norm_tensor,
+                                        1) != 0;
+    }
+    if (ok) ok = ds4_gpu_head_rms_norm_tensor(q_tensor, 1, DS4_N_HEAD, DS4_N_HEAD_DIM, DS4_RMS_EPS) != 0;
+    if (ok) {
+        ok = ds4_gpu_rope_tail_tensor(q_tensor,
+                                      1,
+                                      DS4_N_HEAD,
+                                      DS4_N_HEAD_DIM,
+                                      DS4_N_ROT,
+                                      0,
+                                      0,
+                                      false,
+                                      DS4_ROPE_FREQ_BASE,
+                                      1.0f,
+                                      0.0f,
+                                      1.0f,
+                                      DS4_ROPE_YARN_BETA_FAST,
+                                      DS4_ROPE_YARN_BETA_SLOW) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_rope_tail_tensor(kv_tensor,
+                                      1,
+                                      DS4_N_HEAD_KV,
+                                      DS4_N_HEAD_DIM,
+                                      DS4_N_ROT,
+                                      0,
+                                      0,
+                                      false,
+                                      DS4_ROPE_FREQ_BASE,
+                                      1.0f,
+                                      0.0f,
+                                      1.0f,
+                                      DS4_ROPE_YARN_BETA_FAST,
+                                      DS4_ROPE_YARN_BETA_SLOW) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_kv_fp8_store_raw_tensor(kv_tensor,
+                                             raw_cache_tensor,
+                                             raw_cap,
+                                             raw_row,
+                                             DS4_N_HEAD_DIM,
+                                             DS4_N_ROT) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_attention_decode_heads_tensor(heads_tensor,
+                                                   model.map,
+                                                   model.size,
+                                                   layer->attn_sinks->abs_offset,
+                                                   q_tensor,
+                                                   raw_cache_tensor,
+                                                   n_raw,
+                                                   raw_cap,
+                                                   raw_start,
+                                                   NULL,
+                                                   0,
+                                                   NULL,
+                                                   0,
+                                                   DS4_N_HEAD,
+                                                   DS4_N_HEAD_DIM) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_rope_tail_tensor(heads_tensor,
+                                      1,
+                                      DS4_N_HEAD,
+                                      DS4_N_HEAD_DIM,
+                                      DS4_N_ROT,
+                                      0,
+                                      0,
+                                      true,
+                                      DS4_ROPE_FREQ_BASE,
+                                      1.0f,
+                                      0.0f,
+                                      1.0f,
+                                      DS4_ROPE_YARN_BETA_FAST,
+                                      DS4_ROPE_YARN_BETA_SLOW) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_attention_output_low_q8_tensor(attn_low_tensor,
+                                                    model.map,
+                                                    model.size,
+                                                    layer->attn_output_a->abs_offset,
+                                                    group_dim,
+                                                    rank,
+                                                    n_groups,
+                                                    heads_tensor) != 0;
+    }
+    if (ok) {
+        ok = ds4_gpu_matmul_q8_0_hc_expand_tensor(after_attn_hc_tensor,
+                                                  attn_out_tensor,
+                                                  model.map,
+                                                  model.size,
+                                                  layer->attn_output_b->abs_offset,
+                                                  low_dim,
+                                                  DS4_N_EMBD,
+                                                  attn_low_tensor,
+                                                  cur_hc_tensor,
+                                                  hc_split_tensor,
+                                                  DS4_N_EMBD,
+                                                  DS4_N_HC) != 0;
+    }
+    if (commands_open && ds4_gpu_end_commands() == 0) ok = false;
+    if (ok) ok = ds4_gpu_synchronize() != 0;
+    if (ok) {
+        ok = ds4_gpu_tensor_read(kv_tensor, 0, kv, kv_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(raw_cache_tensor,
+                                 (uint64_t)raw_row * kv_dim * sizeof(float),
+                                 raw_cache_row,
+                                 kv_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(heads_tensor, 0, heads, q_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(attn_low_tensor, 0, attn_low, low_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(attn_out_tensor, 0, attn_out, (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(after_attn_hc_tensor, 0, after_attn_hc, hc_dim * sizeof(float)) != 0;
+    }
+    if (!ok) {
+        fprintf(stderr, "ds4: failed to run layer-0 attention-output GPU oracle\n");
+        goto cleanup;
+    }
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.layer0_attn_output_oracle.v1\",\n", fp);
+    fprintf(fp, "  \"case\": \"token%d_layer0_attn_output\",\n", token);
+    fputs("  \"source\": \"current-c\",\n", fp);
+    fputs("  \"model\": {\n", fp);
+    fprintf(fp, "    \"mapped_size\": %" PRIu64 ",\n", model.size);
+    fprintf(fp, "    \"tensor_count\": %" PRIu64 ",\n", model.n_tensors);
+    fprintf(fp, "    \"tensor_data_offset\": %" PRIu64 ",\n", model.tensor_data_pos);
+    fprintf(fp, "    \"bound_layers\": %u\n", (unsigned)DS4_N_LAYER);
+    fputs("  },\n", fp);
+    fputs("  \"operation\": {\n", fp);
+    fputs("    \"name\": \"current_c_gpu_layer0_attn_output_prefix\",\n", fp);
+    fputs("    \"method\": \"qkv_rope_prefix+ds4_gpu_kv_fp8_store_raw_tensor+ds4_gpu_attention_decode_heads_tensor+ds4_gpu_rope_tail_tensor_inverse+ds4_gpu_attention_output_low_q8_tensor+ds4_gpu_matmul_q8_0_hc_expand_tensor\",\n", fp);
+    fprintf(fp, "    \"token\": %d,\n", token);
+    fputs("    \"layer\": 0,\n", fp);
+    fputs("    \"position\": 0,\n", fp);
+    fprintf(fp, "    \"ctx_size\": %u,\n", ctx_size);
+    fprintf(fp, "    \"prefill_cap\": %u,\n", prefill_cap);
+    fprintf(fp, "    \"raw_cap\": %u,\n", raw_cap);
+    fprintf(fp, "    \"raw_window\": %u,\n", raw_window);
+    fprintf(fp, "    \"raw_row\": %u,\n", raw_row);
+    fprintf(fp, "    \"raw_start\": %u,\n", raw_start);
+    fprintf(fp, "    \"n_raw\": %u,\n", n_raw);
+    fputs("    \"n_comp\": 0,\n", fp);
+    fputs("    \"use_mask\": 0,\n", fp);
+    fprintf(fp, "    \"n_vocab\": %u,\n", (unsigned)DS4_N_VOCAB);
+    fprintf(fp, "    \"n_embd\": %u,\n", (unsigned)DS4_N_EMBD);
+    fprintf(fp, "    \"n_hc\": %u,\n", (unsigned)DS4_N_HC);
+    fprintf(fp, "    \"q_rank\": %" PRIu64 ",\n", q_rank);
+    fprintf(fp, "    \"q_dim\": %" PRIu64 ",\n", q_dim);
+    fprintf(fp, "    \"head_dim\": %" PRIu64 ",\n", kv_dim);
+    fprintf(fp, "    \"n_head\": %u,\n", (unsigned)DS4_N_HEAD);
+    fprintf(fp, "    \"n_head_kv\": %u,\n", (unsigned)DS4_N_HEAD_KV);
+    fprintf(fp, "    \"n_rot\": %u,\n", (unsigned)DS4_N_ROT);
+    fprintf(fp, "    \"n_groups\": %u,\n", n_groups);
+    fprintf(fp, "    \"group_heads\": %u,\n", group_heads);
+    fprintf(fp, "    \"group_dim\": %" PRIu64 ",\n", group_dim);
+    fprintf(fp, "    \"rank\": %" PRIu64 ",\n", rank);
+    fprintf(fp, "    \"low_dim\": %" PRIu64 ",\n", low_dim);
+    fprintf(fp, "    \"rope_freq_base\": %.9g,\n", (double)DS4_ROPE_FREQ_BASE);
+    fputs("    \"rope_freq_scale\": 1,\n", fp);
+    fputs("    \"rope_ext_factor\": 0,\n", fp);
+    fputs("    \"rope_attn_factor\": 1,\n", fp);
+    fprintf(fp, "    \"rope_yarn_beta_fast\": %.9g,\n", (double)DS4_ROPE_YARN_BETA_FAST);
+    fprintf(fp, "    \"rope_yarn_beta_slow\": %.9g,\n", (double)DS4_ROPE_YARN_BETA_SLOW);
+    fprintf(fp, "    \"rms_eps\": %.9g\n", (double)DS4_RMS_EPS);
+    fputs("  },\n", fp);
+    fputs("  \"weights\": {\n", fp);
+    layer0_attn_oracle_write_weight(fp, "token_embd", "base.token_embd", weights.token_embd, true);
+    layer0_attn_oracle_write_weight(fp, "hc_attn_fn", "base.layer.0.hc_attn_fn", layer->hc_attn_fn, true);
+    layer0_attn_oracle_write_weight(fp, "hc_attn_scale", "base.layer.0.hc_attn_scale", layer->hc_attn_scale, true);
+    layer0_attn_oracle_write_weight(fp, "hc_attn_base", "base.layer.0.hc_attn_base", layer->hc_attn_base, true);
+    layer0_attn_oracle_write_weight(fp, "attn_norm", "base.layer.0.attn_norm", layer->attn_norm, true);
+    layer0_attn_oracle_write_weight(fp, "attn_q_a", "base.layer.0.attn_q_a", layer->attn_q_a, true);
+    layer0_attn_oracle_write_weight(fp, "attn_q_a_norm", "base.layer.0.attn_q_a_norm", layer->attn_q_a_norm, true);
+    layer0_attn_oracle_write_weight(fp, "attn_q_b", "base.layer.0.attn_q_b", layer->attn_q_b, true);
+    layer0_attn_oracle_write_weight(fp, "attn_kv", "base.layer.0.attn_kv", layer->attn_kv, true);
+    layer0_attn_oracle_write_weight(fp, "attn_kv_a_norm", "base.layer.0.attn_kv_a_norm", layer->attn_kv_a_norm, true);
+    layer0_attn_oracle_write_weight(fp, "attn_sinks", "base.layer.0.attn_sinks", layer->attn_sinks, true);
+    layer0_attn_oracle_write_weight(fp, "attn_output_a", "base.layer.0.attn_output_a", layer->attn_output_a, true);
+    layer0_attn_oracle_write_weight(fp, "attn_output_b", "base.layer.0.attn_output_b", layer->attn_output_b, false);
+    fputs("  },\n", fp);
+    fputs("  \"outputs\": {\n", fp);
+    layer0_attn_oracle_write_output(fp, "kv", kv, kv_dim, true);
+    layer0_attn_oracle_write_output(fp, "raw_cache_row", raw_cache_row, kv_dim, true);
+    layer0_attn_oracle_write_output(fp, "heads", heads, q_dim, true);
+    layer0_attn_oracle_write_output(fp, "attn_low", attn_low, low_dim, true);
+    layer0_attn_oracle_write_output(fp, "attn_out", attn_out, DS4_N_EMBD, true);
+    layer0_attn_oracle_write_output(fp, "after_attn_hc", after_attn_hc, hc_dim, false);
+    fputs("  }\n", fp);
+    fputs("}\n", fp);
+    rc = ferror(fp) ? 1 : 0;
+
+cleanup:
+    ds4_gpu_tensor_free(after_attn_hc_tensor);
+    ds4_gpu_tensor_free(attn_out_tensor);
+    ds4_gpu_tensor_free(attn_low_tensor);
+    ds4_gpu_tensor_free(heads_tensor);
+    ds4_gpu_tensor_free(raw_cache_tensor);
+    ds4_gpu_tensor_free(kv_tensor);
+    ds4_gpu_tensor_free(q_tensor);
+    ds4_gpu_tensor_free(qr_norm_tensor);
+    ds4_gpu_tensor_free(kv_raw_tensor);
+    ds4_gpu_tensor_free(qr_tensor);
+    ds4_gpu_tensor_free(attn_norm_tensor);
+    ds4_gpu_tensor_free(attn_cur_tensor);
+    ds4_gpu_tensor_free(hc_split_tensor);
+    ds4_gpu_tensor_free(hc_mix_tensor);
+    ds4_gpu_tensor_free(flat_hc_tensor);
+    ds4_gpu_tensor_free(cur_hc_tensor);
+    ds4_gpu_cleanup();
+    weights_free(&weights);
+    model_close(&model);
+    free(after_attn_hc);
+    free(attn_out);
+    free(attn_low);
+    free(heads);
+    free(raw_cache_row);
+    free(kv);
+    return rc;
+}
+
 static void sampling_oracle_trace_free(sampling_oracle_trace *t) {
     free(t->filtered);
     t->filtered = NULL;

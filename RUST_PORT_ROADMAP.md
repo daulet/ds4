@@ -3559,15 +3559,58 @@ kernels:
 
 ##### M10.5c4c2b2b2b2b: Rust One-Token Decode B300 Execution
 
+- Split into M10.5c4c2b2b2b2b1 and M10.5c4c2b2b2b2b2 so cache mutation and
+  layer-0 attention output get an exact tensor oracle before the remaining
+  all-layer scheduler and logits path are introduced.
+
+##### M10.5c4c2b2b2b2b1: Rust Layer-0 Attention Output B300 Execution
+
+- Goal: execute the dense layer-0 raw KV store, attention, inverse RoPE,
+  attention output projection, and HC expansion after the M10.5c4c2b2b2b2a
+  QKV/RoPE boundary on B300.
+- Oracle: the current-C GPU tensor path for token `0`, layer `0`, position
+  `0`: HC-pre, QKV/RoPE, `ds4_gpu_kv_fp8_store_raw_tensor`,
+  `ds4_gpu_attention_decode_heads_tensor`, inverse `ds4_gpu_rope_tail`,
+  `ds4_gpu_attention_output_low_q8_tensor`, and
+  `ds4_gpu_matmul_q8_0_hc_expand_tensor` with dense-layer `raw_cap`,
+  `raw_row`, `n_raw`, and `raw_start` pinned.
+- Fixture: B300 `ds4flash.gguf`, token `0`, layer `0`, position `0`, dense
+  raw SWA cache row `0`, post-store `kv`, raw cache row, final inverse-RoPE
+  `heads`, `attn_low`, `attn_out`, and `after_attn_hc`.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests for the six tensors, current-C SHA256 evidence,
+  dense cache counter fields, selected f32 samples within `1e-6`, and pinned
+  layer-0 attention-output weight metadata.
+- Acceptance: Rust launches the QKV/RoPE prefix plus raw KV store,
+  attention decode, inverse RoPE, low-rank attention output, and HC expansion
+  through the safe facade in one command batch, synchronizes, and matches the
+  current-C GPU oracle on B300.
+- Drift policy: token, layer, position, raw cache counters, dense RoPE
+  constants, model offsets, tensor byte sizes, and FNV digests are exact;
+  selected f32 sample text may vary by JSON formatting but numeric values must
+  stay within `1e-6`.
+- Review gate: ask Claude to review cache-row/counter handling, attention
+  arguments, inverse RoPE constants, output projection dimensions, HC expansion
+  inputs, and comparator failure modes.
+- Validation gate: layer-0 attention-output comparator with negative test,
+  B300 current-C oracle plus Rust candidate paired validation, `make
+  ds4-layer0-attn-output-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-decode-layer0-attn-output`, c2b2b2b2a layer-0 QKV/RoPE rerun, `cargo
+  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.5c4c2b2b2b2b2: Rust One-Token Decode B300 Execution
+
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
-  on B300 after layer-0 QKV/RoPE is independently compared.
+  on B300 after layer-0 attention output is independently compared.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
   M10.5c4c2b1 execution preflight, M10.5c4c2b2a full state allocation,
   M10.5c4c2b2b1 first-kernel execution, M10.5c4c2b2b2a current-C first-kernel
   oracle comparator, M10.5c4c2b2b2b1 layer-0 HC-pre comparator, and
-  M10.5c4c2b2b2b2a layer-0 QKV/RoPE comparator.
+  M10.5c4c2b2b2b2a layer-0 QKV/RoPE comparator, and
+  M10.5c4c2b2b2b2b1 layer-0 attention-output comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -3583,8 +3626,9 @@ kernels:
 - Validation gate: targeted decode comparator on B300, c2b1 preflight rerun,
   c2b2a state allocation rerun, c2b2b1 first-kernel rerun, c2b2b2a current-C
   oracle rerun, c2b2b2b1 layer-0 HC-pre rerun, c2b2b2b2a layer-0 QKV/RoPE
-  rerun, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
-  --check`, and non-interactive Claude review with no blockers.
+  rerun, c2b2b2b2b1 layer-0 attention-output rerun, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive
+  Claude review with no blockers.
 
 ##### M10.5c4d: Decode Continuation And Optional Steering Closure
 

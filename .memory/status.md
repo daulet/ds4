@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b Rust One-Token Decode B300 Execution
+- Active item: M10.5c4c2b2b2b2b2 Rust One-Token Decode B300 Execution
 - Last validated source commit before the current stage:
-  M10.5c4c2b2b2b2a Rust layer-0 QKV/RoPE execution in the commit produced by
-  this stage.
+  M10.5c4c2b2b2b2b1 Rust layer-0 attention-output execution in the commit
+  produced by this stage.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,39 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b1 splits the remaining one-token scheduler item into a
+  layer-0 attention-output execution bridge and the next active full scheduler
+  slice M10.5c4c2b2b2b2b2.
+- M10.5c4c2b2b2b2b1 adds `ds4-layer0-attn-output-oracle-dump` and
+  `ds4_dump_layer0_attn_output_oracle_json`, which emit
+  `ds4.layer0_attn_output_oracle.v1` for token `0`, layer `0`, position `0`
+  using the current-C model loader, config validation, weight binding, model
+  fd/map bridge, GPU HC-pre prefix, QKV/RoPE, dense raw KV store, dense
+  attention decode, inverse RoPE, low-rank attention output, and HC expansion.
+- M10.5c4c2b2b2b2b1 adds `ds4-decode-layer0-attn-output`, which maps the real
+  GGUF on B300, binds DS4 weights, launches the QKV/RoPE prefix plus
+  `kv_fp8_store_raw`, `attention_decode_heads`, inverse `rope_tail`,
+  `attention_output_low_q8`, and `matmul_q8_0_hc_expand` through the safe Rust
+  facade in one command batch, synchronizes, and reads back `kv`,
+  `raw_cache_row`, `heads`, `attn_low`, `attn_out`, and `after_attn_hc`.
+- The B300 paired layer-0 attention-output validator passed 429 checks before
+  pinning and 493 checks after pinning exact weight metadata, with exact FNV
+  digests: `kv=92463977ae7f1b2e`,
+  `raw_cache_row=bc56a173f5dd62cf`, `heads=4676767a2ee68e0c`,
+  `attn_low=22e1bbf2f9236b99`, `attn_out=21c920ca48b6c7c3`, and
+  `after_attn_hc=ad09657ac6584898`.
+- M10.5c4c2b2b2b2b1 validation passed `python3
+  ds4-parity/compare_decode_layer0_attn_output.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer0_attn_output.py`, `python3 -m py_compile
+  ds4-parity/compare_decode_layer0_attn_output.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer0-attn-output-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer0-attn-output`, B300 current-C oracle plus Rust candidate
+  paired validation, pinned B300 artifact rerun, B300 c2b2b2b2a layer-0
+  QKV/RoPE rerun, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles`, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, touched-file NUL scan, and
+  non-interactive Claude review with no blockers.
 - M10.5c4c2b2b2b2a split the remaining one-token scheduler item into a
   layer-0 QKV/RoPE execution bridge and the next active full scheduler slice
   M10.5c4c2b2b2b2b.
