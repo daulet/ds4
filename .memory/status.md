@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.6c3 Model-Backed Streaming Tool-Call Replay
-- Last validated source commit: M9.6c2 incremental DSML tool-call stream
-  translator in this commit; prior pushed source commit
-  `ae0b44d0fece5ca5fc99059e95b673e8e13aa54a`
+- Active item: M9.6d Tool-Call Quality Parity Hook
+- Last validated source commit: M9.6c3 model-backed streaming tool-call
+  replay in this commit; prior pushed source commit
+  `81f64cb9200896f268c2a47cefe50e5a137bf79b`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,48 @@
 
 ## Last Evidence
 
+- M9.6c3 routes supported streaming OpenAI tool chat requests through the Rust
+  server runtime instead of rejecting them, while keeping non-tool streaming on
+  the existing `OpenAiChatStream` path and preserving thinking/stop-list
+  unsupported boundaries.
+- M9.6c3 feeds runtime `token_texts` through
+  `OpenAiToolCallStreamTranslator`, falls back to full parsed tool-call deltas
+  when no live events are emitted, emits parsed assistant content before tool
+  deltas when present, and uses `format_openai_chat_tool_stream_http` for role,
+  tool start, argument fragments, finish, optional usage, and `[DONE]`.
+- M9.6c3 extends the tool-stream formatter with a `Content` event and reuses
+  the existing content chunk JSON helper so non-tool streaming remains
+  byte-compatible with the prior M9.5 path.
+- M9.6c3 local checks passed for targeted
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  targeted `cargo test -p ds4-gguf server_response -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check`.
+- M9.6c3 B300 checks used pod `ds4-rust-port-b300` in `hou2-prod1`, snapshot
+  `/workspace/ds4-m96c3`, and model `/workspace/ds4/ds4flash.gguf`; targeted
+  runtime and formatter tests passed in the pod, then
+  `cargo build -p ds4-engine --bin ds4-server-runtime-rs` produced the live
+  runtime binary.
+- M9.6c3 B300 live replay used the raw M9.6b `chat_tool_call` request with
+  `"stream":true` and `include_usage`; SSE artifacts
+  `/tmp/ds4-m96c3-chat_tool_call_stream.sse` and
+  `/tmp/ds4-m96c3-chat_tool_call_stream.headers` parsed as role assistant,
+  tool start for `list_files`, argument fragments reassembling to
+  `{"path":"."}`, finish `tool_calls`, usage `394/42/436` with cache `0/394`,
+  and `[DONE]`.
+- M9.6c3 B300 trace `/tmp/ds4-m96c3-server.trace` recorded `stream: 1`,
+  `tools: 1`, `stream_include_usage: 1`, `prompt_tokens: 394`,
+  `generated_tokens: 42`, `finish: tool_calls`, `dsml_start: 1`,
+  `dsml_end: 1`, and parsed `tool_call[0]` name `list_files` with arguments
+  `{"path": "."}`; stderr/stdout artifacts remain at
+  `/tmp/ds4-m96c3-server.stderr` and `/tmp/ds4-m96c3-server.stdout`.
+- M9.6c3 B300 runtime process was stopped after replay; `pgrep -af
+  ds4-server-runtime-rs` found no leftover runtime process beyond the check
+  shell.
+- M9.6c3 Claude review returned no blockers after checking runtime routing,
+  unsupported-route boundaries, SSE shape and ordering, fallback IDs,
+  content-before-tool ordering, translator input fallback, unit coverage, and
+  the B300 replay evidence.
 - M9.6c2 added a model-free `OpenAiToolCallStreamTranslator` that consumes
   generated DSML byte chunks and emits owned M9.6c1 tool-call stream events
   without model/runtime routing or SSE framing policy.

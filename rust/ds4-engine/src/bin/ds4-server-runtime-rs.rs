@@ -5,11 +5,13 @@ use ds4_engine::{
 use ds4_gguf::{
     format_http_error, format_http_response, format_openai_chat_completion_http,
     format_openai_chat_stream_http, format_openai_chat_tool_completion_http,
-    openai_context_length_error_body, parse_generated_message_for_response, parse_http_request,
-    parse_openai_chat_request, request_exceeds_context,
-    route_no_model_server_request_with_generation_message, utf8_stream_safe_len, DsmlJsonCall,
-    HttpRequest, HttpRequestParseError, NoModelRouteConfig, OpenAiChatCompletion,
-    OpenAiChatRequest, OpenAiChatStream, OpenAiUsage,
+    format_openai_chat_tool_stream_http, openai_context_length_error_body,
+    parse_generated_message_for_response, parse_http_request, parse_openai_chat_request,
+    request_exceeds_context, route_no_model_server_request_with_generation_message,
+    utf8_stream_safe_len, DsmlJsonCall, HttpRequest, HttpRequestParseError, NoModelRouteConfig,
+    OpenAiChatCompletion, OpenAiChatRequest, OpenAiChatStream, OpenAiChatToolStream,
+    OpenAiToolCallStreamEvent, OpenAiToolCallStreamEventOwned, OpenAiToolCallStreamTranslator,
+    OpenAiUsage,
 };
 use std::env;
 use std::fs::File;
@@ -252,26 +254,42 @@ fn route_chat_completions(
         generated.cache_write_tokens,
     );
     if parsed.stream {
-        let delta_strings = match stream_delta_strings(&generated) {
-            Ok(delta_strings) => delta_strings,
-            Err(()) => return format_http_error(config.enable_cors, 500, "generation failed"),
-        };
-        let content_deltas = delta_strings.iter().map(String::as_str).collect::<Vec<_>>();
-        format_openai_chat_stream_http(
-            config.enable_cors,
-            &OpenAiChatStream {
-                id: &id,
+        if parsed.has_tools
+            && (parsed_generation.saw_tool_start || !parsed_generation.calls.is_empty())
+        {
+            format_streaming_tool_chat_http(
+                config.enable_cors,
+                &id,
                 created,
-                model: &parsed.model,
-                content_deltas: &content_deltas,
-                finish_reason: &parsed_generation.finish_reason,
-                usage: if parsed.stream_include_usage {
-                    Some(usage)
-                } else {
-                    None
+                &parsed.model,
+                parsed.stream_include_usage,
+                usage,
+                &generated,
+                state.sequence,
+                &parsed_generation,
+            )
+        } else {
+            let delta_strings = match stream_delta_strings(&generated) {
+                Ok(delta_strings) => delta_strings,
+                Err(()) => return format_http_error(config.enable_cors, 500, "generation failed"),
+            };
+            let content_deltas = delta_strings.iter().map(String::as_str).collect::<Vec<_>>();
+            format_openai_chat_stream_http(
+                config.enable_cors,
+                &OpenAiChatStream {
+                    id: &id,
+                    created,
+                    model: &parsed.model,
+                    content_deltas: &content_deltas,
+                    finish_reason: &parsed_generation.finish_reason,
+                    usage: if parsed.stream_include_usage {
+                        Some(usage)
+                    } else {
+                        None
+                    },
                 },
-            },
-        )
+            )
+        }
     } else if !parsed_generation.calls.is_empty() {
         format_openai_chat_tool_completion_http(
             config.enable_cors,
@@ -303,9 +321,7 @@ fn route_chat_completions(
 }
 
 fn unsupported_chat_generation_message(parsed: &OpenAiChatRequest) -> Option<&'static str> {
-    if parsed.has_tools && parsed.stream {
-        Some("tool chat streaming is not implemented yet")
-    } else if map_think_mode(parsed.think_mode).enabled() {
+    if map_think_mode(parsed.think_mode).enabled() {
         Some("thinking chat generation is not implemented yet")
     } else if !parsed.stops.is_empty() {
         Some("stop sequences are not implemented yet")
@@ -391,6 +407,76 @@ fn stream_delta_strings(generated: &ds4_engine::ServerGenerationResult) -> Resul
         }
     }
     Ok(deltas)
+}
+
+struct ToolStreamTranslation {
+    events: Vec<OpenAiToolCallStreamEventOwned>,
+    emitted_any: bool,
+}
+
+fn translate_tool_stream_events(
+    generated: &ds4_engine::ServerGenerationResult,
+    sequence: u64,
+) -> ToolStreamTranslation {
+    let mut translator = OpenAiToolCallStreamTranslator::new(format!("call_{sequence:016x}"));
+    let mut events = Vec::new();
+    if generated.token_texts.is_empty() {
+        events.extend(translator.feed(&generated.text));
+    } else {
+        for token_text in &generated.token_texts {
+            events.extend(translator.feed(token_text));
+        }
+    }
+    ToolStreamTranslation {
+        events,
+        emitted_any: translator.emitted_any(),
+    }
+}
+
+fn format_streaming_tool_chat_http(
+    enable_cors: bool,
+    id: &str,
+    created: i64,
+    model: &str,
+    stream_include_usage: bool,
+    usage: OpenAiUsage,
+    generated: &ds4_engine::ServerGenerationResult,
+    sequence: u64,
+    parsed_generation: &ParsedChatGeneration,
+) -> String {
+    let translation = translate_tool_stream_events(generated, sequence);
+    let mut events = Vec::new();
+    if !parsed_generation.content.is_empty() {
+        events.push(OpenAiToolCallStreamEvent::Content {
+            delta: &parsed_generation.content,
+        });
+    }
+    events.extend(
+        translation
+            .events
+            .iter()
+            .map(OpenAiToolCallStreamEventOwned::as_borrowed),
+    );
+    if !translation.emitted_any && !parsed_generation.calls.is_empty() {
+        events.push(OpenAiToolCallStreamEvent::FullCalls {
+            calls: &parsed_generation.calls,
+        });
+    }
+    format_openai_chat_tool_stream_http(
+        enable_cors,
+        &OpenAiChatToolStream {
+            id,
+            created,
+            model,
+            events: &events,
+            finish_reason: &parsed_generation.finish_reason,
+            usage: if stream_include_usage {
+                Some(usage)
+            } else {
+                None
+            },
+        },
+    )
 }
 
 fn write_chat_trace<W: Write>(
@@ -986,11 +1072,13 @@ mod tests {
             unsupported_chat_generation_message(&parse_chat(CHAT_TOOL_CALL)),
             None
         );
+        let streaming_tool_call = CHAT_TOOL_CALL.replace(
+            "\"stream\": false",
+            "\"stream\": true,\n  \"stream_options\": {\"include_usage\": true}",
+        );
         assert_eq!(
-            unsupported_chat_generation_message(&parse_chat(
-                r#"{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{}}}}],"stream":true,"think":false}"#
-            )),
-            Some("tool chat streaming is not implemented yet")
+            unsupported_chat_generation_message(&parse_chat(&streaming_tool_call)),
+            None
         );
         assert_eq!(
             unsupported_chat_generation_message(&parse_chat(
@@ -1038,6 +1126,76 @@ mod tests {
             ..generated
         };
         assert!(stream_delta_strings(&invalid).is_err());
+    }
+
+    #[test]
+    fn m96c3_formats_streaming_tool_chat_replay() {
+        let streaming_tool_call = CHAT_TOOL_CALL.replace(
+            "\"stream\": false",
+            "\"stream\": true,\n  \"stream_options\": {\"include_usage\": true}",
+        );
+        let parsed = parse_chat(&streaming_tool_call);
+        let generated = ds4_engine::ServerGenerationResult {
+            exit_code: 0,
+            text: GENERATED_TOOL_CALL.as_bytes().to_vec(),
+            token_texts: vec![
+                "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"list_files\">\n"
+                    .as_bytes()
+                    .to_vec(),
+                "<｜DSML｜parameter name=\"path\" string=\"true\">.</｜DSML｜parameter>\n"
+                    .as_bytes()
+                    .to_vec(),
+                "</｜DSML｜invoke>\n</｜DSML｜tool_calls>"
+                    .as_bytes()
+                    .to_vec(),
+            ],
+            prompt_tokens: 394,
+            cache_read_tokens: 0,
+            cache_write_tokens: 394,
+            live_tokens_before: 0,
+            live_prompt_common: 0,
+            completion_tokens: 42,
+            finish_reason: "stop",
+        };
+        let parsed_generation = parse_chat_generation(&parsed, &generated, GENERATED_TOOL_CALL, 3);
+        let response = format_streaming_tool_chat_http(
+            false,
+            "chatcmpl-3",
+            1_779_416_175,
+            &parsed.model,
+            parsed.stream_include_usage,
+            OpenAiUsage::new(394, 42, 0, 394),
+            &generated,
+            3,
+            &parsed_generation,
+        );
+        let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
+        assert_eq!(
+            headers.replace("\r\n", "\n") + "\n",
+            "HTTP/1.1 200 OK\nContent-Type: text/event-stream\nCache-Control: no-cache\nConnection: close\n"
+        );
+        let role = body.find("\"role\":\"assistant\"").unwrap();
+        let start = body
+            .find("\"tool_calls\":[{\"index\":0,\"id\":\"call_00000000000000030000000000000000\",\"type\":\"function\",\"function\":{\"name\":\"list_files\",\"arguments\":\"\"}}]")
+            .unwrap();
+        let object_open = body.find("\"arguments\":\"{\"").unwrap();
+        let path_prefix = body.find("\\\"path\\\":\\\"").unwrap();
+        let path_value = body.find("\"arguments\":\".\"").unwrap();
+        let string_close = body.rfind("\"arguments\":\"\\\"\"").unwrap();
+        let object_close = body.rfind("\"arguments\":\"}\"").unwrap();
+        let finish = body.find("\"finish_reason\":\"tool_calls\"").unwrap();
+        let usage = body.find("\"prompt_tokens\":394").unwrap();
+        let done = body.find("data: [DONE]\n").unwrap();
+        assert!(role < start);
+        assert!(start < object_open);
+        assert!(object_open < path_prefix);
+        assert!(path_prefix < path_value);
+        assert!(path_value < string_close);
+        assert!(string_close < object_close);
+        assert!(object_close < finish);
+        assert!(finish < usage);
+        assert!(usage < done);
+        assert!(body.ends_with("data: [DONE]\n"));
     }
 
     #[test]

@@ -2997,7 +2997,7 @@
 
 ### M9.6c3: Model-Backed Streaming Tool-Call Replay
 
-- Status: active
+- Status: complete
 - Goal: route supported streaming OpenAI tool chat requests through the Rust
   server runtime, feed per-token bytes through the M9.6c2 translator, and emit
   the M9.6c1 SSE response shape.
@@ -3022,15 +3022,23 @@
 - Review gate: ask Claude to review runtime routing, write/flush behavior,
   translator integration, unsupported-route boundaries, trace fields, and B300
   comparator normalization.
-- Validation needed: B300 streaming tool-call comparator, targeted runtime
-  tests, targeted stream-translator/SSE tests, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, and `git diff --check`.
+- Validation passed: B300 model-backed streaming tool-call replay on
+  `hou2-prod1` pod `ds4-rust-port-b300` with snapshot `/workspace/ds4-m96c3`
+  and model `/workspace/ds4/ds4flash.gguf`; SSE parsed as role, tool start for
+  `list_files`, argument fragments reassembling to `{"path":"."}`, finish
+  `tool_calls`, usage, and `[DONE]`; trace recorded streaming/tools enabled,
+  DSML start/end, `generated_tokens: 42`, and parsed tool call arguments.
+  Local checks passed for targeted
+  `cargo test -p ds4-engine --bin ds4-server-runtime-rs -- --nocapture`,
+  targeted `cargo test -p ds4-gguf server_response -- --nocapture`, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
 - Owner path: `rust/ds4-engine/src/bin/ds4-server-runtime-rs.rs`,
   `ds4-parity/`, `.memory/status.md`.
 
 ### M9.6d: Tool-Call Quality Parity Hook
 
-- Status: pending
+- Status: active
 - Goal: connect the Rust server/runtime tool-call path to the existing
   tool-call quality regression surface after non-streaming and streaming
   behavior is in place.

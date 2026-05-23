@@ -105,6 +105,9 @@ pub struct OpenAiChatToolStream<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenAiToolCallStreamEvent<'a> {
+    Content {
+        delta: &'a str,
+    },
     Start {
         index: usize,
         id: &'a str,
@@ -520,6 +523,17 @@ pub fn format_openai_chat_tool_stream_sse(response: &OpenAiChatToolStream<'_>) -
     append_openai_chat_stream_role_chunk(&mut out, response.id, response.created, response.model);
     for event in response.events {
         match event {
+            OpenAiToolCallStreamEvent::Content { delta } => {
+                if !delta.is_empty() {
+                    append_openai_chat_stream_content_fields_chunk(
+                        &mut out,
+                        response.id,
+                        response.created,
+                        response.model,
+                        delta,
+                    );
+                }
+            }
             OpenAiToolCallStreamEvent::Start { index, id, name } => {
                 append_openai_chat_tool_stream_start_chunk(&mut out, response, *index, id, name);
             }
@@ -609,7 +623,23 @@ fn append_openai_chat_stream_content_chunk(
     response: &OpenAiChatStream<'_>,
     delta: &str,
 ) {
-    append_openai_chat_stream_prefix(out, response.id, response.created, response.model);
+    append_openai_chat_stream_content_fields_chunk(
+        out,
+        response.id,
+        response.created,
+        response.model,
+        delta,
+    );
+}
+
+fn append_openai_chat_stream_content_fields_chunk(
+    out: &mut String,
+    id: &str,
+    created: i64,
+    model: &str,
+    delta: &str,
+) {
+    append_openai_chat_stream_prefix(out, id, created, model);
     out.push_str(",\"choices\":[{\"index\":0,\"delta\":{\"content\":");
     out.push_str(&json_escape_string(delta));
     out.push_str("},\"finish_reason\":null}]}\n\n");
@@ -1270,6 +1300,31 @@ mod tests {
         let (headers, body) = response.split_once("\r\n\r\n").expect("HTTP response");
         assert_eq!(headers.replace("\r\n", "\n") + "\n", CHAT_STREAM_HEADERS);
         assert_eq!(body, format_openai_chat_tool_stream_sse(&stream));
+    }
+
+    #[test]
+    fn tool_stream_can_emit_content_before_tool_deltas() {
+        let events = [
+            OpenAiToolCallStreamEvent::Content { delta: "Before." },
+            OpenAiToolCallStreamEvent::Start {
+                index: 0,
+                id: "call_stream_0",
+                name: "list_files",
+            },
+        ];
+        let body = format_openai_chat_tool_stream_sse(&OpenAiChatToolStream {
+            id: "chatcmpl-tool-stream",
+            created: 7,
+            model: "deepseek-chat",
+            events: &events,
+            finish_reason: "tool_calls",
+            usage: None,
+        });
+        let role = body.find("\"role\":\"assistant\"").unwrap();
+        let content = body.find("\"content\":\"Before.\"").unwrap();
+        let tool = body.find("\"tool_calls\"").unwrap();
+        assert!(role < content);
+        assert!(content < tool);
     }
 
     #[test]
