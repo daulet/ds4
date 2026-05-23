@@ -4461,12 +4461,74 @@
 
 ### M10.5c4c2b2b2b2b2b2b2b2: Rust One-Token Decode B300 Execution
 
+- Status: split
+- Split into M10.5c4c2b2b2b2b2b2b2b2a and
+  M10.5c4c2b2b2b2b2b2b2b2b so the first ratio-128 compressed layer is
+  compared after the layer-2 ratio-4 FFN-output boundary, before the repeated
+  remaining layers, output head, and final logits are introduced.
+
+### M10.5c4c2b2b2b2b2b2b2b2a: Rust Layer-3 Ratio-128 FFN Output B300 Execution
+
+- Status: completed
+- Goal: execute dense layers `0` and `1`, layer `2` through its validated
+  ratio-4 FFN-output boundary, then execute layer `3` as the first ratio-128
+  compressed layer through the full FFN tail and final layer-3 HC expansion on
+  B300. This slice extends coverage to the ratio-128 compressor path without
+  yet taking the remaining repeated layers, output head, or final logits.
+- Oracle: the current-C GPU path for token `0`, position `0`, layers `0` and
+  `1` through production decode-layer plus HC swaps, layer `2` through
+  production ratio-4 decode plus HC swap, followed by production layer `3`
+  ratio-128 decode. The oracle reads `after_layer2_hc`, the layer-3 raw cache
+  row, layer-3 attention compressor state, layer-3 attention output tensors,
+  layer-3 FFN HC-pre/norm/router/MoE/shared-expert tensors, and final
+  `layer3_after_ffn_hc`.
+- Fixture: B300 `ds4flash.gguf`, token `0`, position `0`, dense layers `0`
+  and `1`, ratio-4 layer `2`, ratio-128 layer `3`, `raw_row=0`, `n_raw=1`,
+  `raw_start=0`, `n_comp=0`, no selected compressed rows,
+  `emit_compressed_row=false`, and `layer_n_comp[3]=0`.
+- Comparator: B300 paired current-C oracle vs Rust candidate JSON with exact
+  full-buffer FNV digests for `after_layer2_hc`, layer-3 attention compressor
+  state, layer-3 attention/FFN tensors, router outputs, routed/shared expert
+  tensors, and `layer3_after_ffn_hc`, plus pinned layer-3 attention/FFN weight
+  metadata and exact raw/compressed counter fields.
+- Acceptance: Rust launches the validated dense layer `0`/`1` prefix and
+  layer-2 FFN-output prefix, swaps the layer-2 HC output into `cur_hc`, then
+  runs layer `3` ratio-128 `matmul_f16_pair`, `compressor_update`,
+  raw-only `attention_decode_heads`, attention output HC expansion,
+  `hc_split_weighted_sum_norm`, `router_select`, `routed_moe_one`,
+  `shared_gate_up_swiglu_q8_0`, and `shared_down_hc_expand_q8_0` through the
+  safe facade, matching the current-C GPU oracle on B300.
+- Drift policy: layer id, compression ratio, `n_raw`, `raw_start`, `n_comp`,
+  tensor byte sizes, selected expert ids, and FNV digests are exact; selected
+  f32 samples may differ only by JSON formatting and must stay within `1e-6`
+  relative or absolute tolerance.
+- Review gate: ask Claude to review layer-3 ratio-128 counter selection,
+  compressor state sizing, absence of indexer state, router hash/bias options,
+  routed expert byte-strides, shared expert dimensions, and HC expansion input
+  selection.
+- Validation passed: layer-3 FFN-output comparator with negative test, local
+  comparator self-check, paired `/tmp/ds4-layer3-oracle.json` vs
+  `/tmp/ds4-layer3-rust.json` validation with 1,261 checks, B300 current-C
+  oracle plus Rust candidate paired validation with
+  `oracle=932b669ec3b4fdee0369b745968f92dc7ebc3c97e9b063b012bd380118dde9df`
+  and
+  `rust=3153600948c0e41e4b2fa01075eb8f0d1d2824435a46b2b4d365569b70ef1797`,
+  local `arch -arm64 make ds4-layer3-ffn-output-oracle-dump`, local `cargo
+  check -p ds4-gpu --bin ds4-decode-layer3-ffn-output`, B300
+  c2b2b2b2b2b2b2b1 layer-2 FFN-output rerun with 1,383 checks, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with `NO BLOCKERS`.
+- Owner path: current-C layer-3 FFN-output oracle helper, Rust layer-3
+  FFN-output JSON, paired comparator, `.memory/status.md`.
+
+### M10.5c4c2b2b2b2b2b2b2b2b: Rust Remaining One-Token Decode B300 Execution
+
 - Status: active
 - Goal: execute the default one-token decode trace through the M10.5c3 facade
-  on B300 after the layer-2 FFN-output boundary, the layer-2 raw-only
-  attention-output boundary, the first ratio-4 compressor/indexer state
-  mutation, two dense decode layers, layer-0 FFN output, and output-head kernels
-  are independently compared.
+  on B300 after the layer-3 ratio-128 FFN-output boundary, the layer-2
+  FFN-output boundary, the layer-2 raw-only attention-output boundary, the
+  first ratio-4 compressor/indexer state mutation, two dense decode layers,
+  layer-0 FFN output, and output-head kernels are independently compared.
 - Oracle: M10.4 decode checkpoints, the M10.5c4a trace for exact call order
   and counter transitions, the M10.5c4b runtime state bridge, and the
   M10.5c4c1 B300 Rust CUDA backend smoke plus M10.5c4c2a model-map bridge,
@@ -4480,7 +4542,8 @@
   M10.5c4c2b2b2b2b2b2a two-dense-layer output-head comparator,
   M10.5c4c2b2b2b2b2b2b1 layer-2 ratio-4 compressor-state comparator, and
   M10.5c4c2b2b2b2b2b2b2a layer-2 attention-output comparator, and
-  M10.5c4c2b2b2b2b2b2b2b1 layer-2 FFN-output comparator.
+  M10.5c4c2b2b2b2b2b2b2b1 layer-2 FFN-output comparator, and
+  M10.5c4c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output comparator.
 - Fixture: official-vector first-token and continuation-token layer-coverage
   cases covering raw SWA, ratio-4 compressed/indexer layers, and ratio-128
   compressed layers. Continuation-state reuse is deferred to M10.5c4d.
@@ -4501,9 +4564,10 @@
   c2b2b2b2b2b2a two-dense-layer output-head rerun,
   c2b2b2b2b2b2b1 layer-2 compressor-state rerun,
   c2b2b2b2b2b2b2a layer-2 attention-output rerun,
-  c2b2b2b2b2b2b2b1 layer-2 FFN-output rerun, `cargo test --workspace`, `cargo
-  fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
-  with no blockers.
+  c2b2b2b2b2b2b2b1 layer-2 FFN-output rerun,
+  c2b2b2b2b2b2b2b2a layer-3 ratio-128 FFN-output rerun, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 

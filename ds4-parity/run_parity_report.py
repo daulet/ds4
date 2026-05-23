@@ -325,6 +325,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.5c4c2b2b2b2b2b2b2b2a Rust layer-3 ratio-128 FFN-output comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_decode_layer3_ffn_output.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -603,6 +611,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "and feature-gated Rust CUDA backend linkage"
             ),
             rerun_command=b300_layer2_ffn_output_oracle_command(),
+        ),
+        ReportItem(
+            name="M10.5c4c2b2b2b2b2b2b2b2a B300 layer-3 ratio-128 FFN-output oracle rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Layer-3 ratio-128 FFN-output current-C oracle comparison requires "
+                "the B300 pod, the real q2-imatrix GGUF, the current-C helper, "
+                "and feature-gated Rust CUDA backend linkage"
+            ),
+            rerun_command=b300_layer3_ffn_output_oracle_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1117,6 +1136,35 @@ def b300_layer2_ffn_output_oracle_command() -> str:
         "python3 ds4-parity/compare_decode_layer2_ffn_output.py "
         "--oracle /tmp/ds4-c2b2b2b2b2b2b2b1-layer2-ffn-output-oracle.json "
         "--candidate /tmp/ds4-c2b2b2b2b2b2b2b1-layer2-ffn-output-rust.json"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_layer3_ffn_output_oracle_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    smoke = b300_exec(
+        "make ds4-layer3-ffn-output-oracle-dump CUDA_ARCH=native && "
+        f"./ds4-layer3-ffn-output-oracle-dump -m {B300_MODEL} --token 0 "
+        "-o /tmp/ds4-c2b2b2b2b2b2b2b2a-layer3-ffn-output-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-decode-layer3-ffn-output --quiet -- "
+        f"--model {B300_MODEL} "
+        "> /tmp/ds4-c2b2b2b2b2b2b2b2a-layer3-ffn-output-rust.json && "
+        "python3 ds4-parity/compare_decode_layer3_ffn_output.py "
+        "--oracle /tmp/ds4-c2b2b2b2b2b2b2b2a-layer3-ffn-output-oracle.json "
+        "--candidate /tmp/ds4-c2b2b2b2b2b2b2b2a-layer3-ffn-output-rust.json"
     )
     return f"{source_refresh} && {smoke}"
 

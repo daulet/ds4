@@ -3,12 +3,12 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4c2b2b2b2b2b2b2b2 Rust One-Token Decode B300 Execution
-- Last validated source commit before the current stage:
-  M10.5c4c2b2b2b2b2b2b2b1 validation is recorded below; its commit SHA will
-  be available after this staged change lands. Last committed predecessor:
-  `d18217b087bd11485872099c3093a31eeb40c186` (M10.5c4c2b2b2b2b2b2b2a Rust
-  layer-2 attention-output execution).
+- Active item: M10.5c4c2b2b2b2b2b2b2b2b Rust Remaining One-Token Decode B300 Execution
+- Last validated source before the active item: M10.5c4c2b2b2b2b2b2b2b2a
+  validation is recorded below in this status update. Last committed
+  predecessor:
+  `379751149ea6da4c3a605be9839512885fb015b1` (M10.5c4c2b2b2b2b2b2b2b1 Rust
+  layer-2 FFN-output execution).
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -28,6 +28,62 @@
 
 ## Last Evidence
 
+- M10.5c4c2b2b2b2b2b2b2b2 splits the remaining one-token scheduler item into
+  a layer-3 ratio-128 FFN-output execution bridge and the next full
+  all-layer/output-head/logits slice M10.5c4c2b2b2b2b2b2b2b2b. The split keeps
+  the next commit comparable at the first ratio-128 compressed layer boundary
+  before the repeated remaining layers and final logits are introduced.
+- M10.5c4c2b2b2b2b2b2b2b2a adds
+  `ds4-layer3-ffn-output-oracle-dump` and
+  `ds4_dump_layer3_ffn_output_oracle_json`, which emit
+  `ds4.layer3_ffn_output_oracle.v1` for token `0`, position `0`, dense
+  layers `0` and `1` through production current-C decode-layer execution and
+  HC swaps, layer `2` through production ratio-4 decode plus HC swap, then
+  layer `3` through the first ratio-128 compressed layer with no indexer state.
+- M10.5c4c2b2b2b2b2b2b2b2a adds
+  `ds4-decode-layer3-ffn-output`, which maps the real GGUF on B300, runs the
+  validated dense layer `0`/`1` and layer-2 FFN-output prefix, swaps the
+  layer-2 HC output into `cur_hc`, then runs layer `3` ratio-128
+  `matmul_f16_pair`, `compressor_update`, raw-only `attention_decode_heads`,
+  attention output HC expansion, router selection, routed MoE, shared expert,
+  and final FFN HC expansion through the safe Rust facade.
+- The B300 paired layer-3 ratio-128 FFN-output validator passed 1,261 pinned
+  checks with `compression_ratio=128`, `compressor_coefficient=1`,
+  `has_indexer=false`, `attn_state_dim=65536`, router bias enabled, and router
+  hash disabled. Full-buffer FNV digests are
+  `after_layer2_hc=26babcdeac41b377`,
+  `layer3_raw_cache_row=d20115e20ce6b227`,
+  `layer3_attn_state_kv=cff54fc174994e78`,
+  `layer3_attn_state_score=cf72b4d7a2540261`,
+  `layer3_heads=2873c18505f20162`,
+  `layer3_attn_low=56cc1933165cb906`,
+  `layer3_attn_out=77d0e59ceb43ba15`,
+  `layer3_after_attn_hc=e97f76051b8b0abc`,
+  `layer3_ffn_cur=ac1b6cf1006a1af6`,
+  `layer3_ffn_norm=df3fa50fae679d17`,
+  `layer3_router_logits=4fc7b21579345fe0`,
+  `layer3_router_probs=84d328bf4409ed88`,
+  `layer3_router_selected=75eb5975465f7fea`,
+  `layer3_router_weights=8d1d5f3cd181558d`,
+  `layer3_routed_mid=349df5a076aa05b5`,
+  `layer3_routed_out=006bf65de34acf9e`,
+  `layer3_shared_mid=cf125b8f97a3ea96`,
+  `layer3_shared_out=f8a526b184ed7bcb`, and
+  `layer3_after_ffn_hc=734775286457caef`.
+- M10.5c4c2b2b2b2b2b2b2b2a validation passed `python3
+  ds4-parity/compare_decode_layer3_ffn_output.py --negative-test`, `python3
+  ds4-parity/compare_decode_layer3_ffn_output.py`, `python3 -m py_compile
+  ds4-parity/compare_decode_layer3_ffn_output.py
+  ds4-parity/run_parity_report.py`, local `arch -arm64 make
+  ds4-layer3-ffn-output-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-layer3-ffn-output`, B300 current-C oracle plus Rust candidate
+  paired validation with artifact SHA256
+  `oracle=932b669ec3b4fdee0369b745968f92dc7ebc3c97e9b063b012bd380118dde9df`
+  and
+  `rust=3153600948c0e41e4b2fa01075eb8f0d1d2824435a46b2b4d365569b70ef1797`,
+  B300 c2b2b2b2b2b2b2b1 layer-2 FFN-output rerun with 1,383 checks, local
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with `NO BLOCKERS`.
 - M10.5c4c2b2b2b2b2b2b2b splits the remaining one-token scheduler item into a
   layer-2 FFN-output execution bridge and the next full scheduler/logits slice
   M10.5c4c2b2b2b2b2b2b2b2. The split keeps the next commit comparable at the
