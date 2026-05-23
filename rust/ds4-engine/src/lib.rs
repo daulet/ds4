@@ -5,6 +5,8 @@ use std::ptr::NonNull;
 use std::slice;
 use std::time::Instant;
 
+pub mod interactive_cli;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Backend {
     Metal,

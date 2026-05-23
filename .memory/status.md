@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M8.15b Rust REPL Command State Surface
-- Last validated source commit: M8.15a Rust reusable interactive session
-  boundary in this commit; prior pushed source commit
-  `4cf6ce70e718cd46d7e57abaf1185cf120473c81`
+- Active item: M8.15c Rust Interactive PTY Transcript Surface
+- Last validated source commit: M8.15b Rust REPL command-state surface in this
+  commit; prior pushed source commit
+  `65e8baf4acb7338e0d64c04e18ed2ef1d38efc9b`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -1343,3 +1343,16 @@
   ds4-engine`, full `cargo test --workspace`, `python3 -m py_compile
   ds4-parity/compare_cli_interactive_runtime.py
   ds4-parity/check_cli_interactive_dump.py`, and `git diff --check`.
+- M8.15b adds `rust/ds4-engine/src/interactive_cli.rs`, a model-free REPL
+  command-state surface covering empty input, `/help`, `/think`, `/think-max`,
+  `/nothink`, `/ctx`, `/read`, unknown slash commands, `/quit`, `/exit`,
+  normal prompt dispatch, and Ctrl+C-at-prompt recovery.
+- M8.15b exports the REPL command-state module from `ds4-engine` while leaving
+  PTY line editing and model-backed turn execution for M8.15c/M8.15a.
+- M8.15b command matching uses command-boundary checks so short or extended
+  slash commands such as `/c`, `/ctxx`, `/rea`, and `/readx` route to the C
+  CLI unknown-command category instead of matching or panicking.
+- M8.15b local validation passed for `cargo fmt --all -- --check`, `cargo test
+  -p ds4-engine interactive_cli -- --nocapture` (5 REPL command tests), `cargo
+  test -p ds4-engine` (11 tests), full `cargo test --workspace`, and `git diff
+  --check`.

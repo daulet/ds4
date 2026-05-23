@@ -1962,7 +1962,7 @@
 
 ### M8.15b: Rust REPL Command State Surface
 
-- Status: pending
+- Status: done
 - Goal: implement the Rust command-state layer for the M8.14 interactive
   commands before claiming PTY transcript parity.
 - Source evidence needed: `ds4_cli.c:run_repl`, M8.14 command transcript, and
@@ -1981,8 +1981,10 @@
   redraw is deferred to M8.15c.
 - Review gate: ask Claude to review command routing and state-machine edge
   cases.
-- Validation needed: targeted Rust command tests, `cargo test --workspace`, and
-  `git diff --check`.
+- Validation passed: local `cargo fmt --all -- --check`; local `cargo test -p
+  ds4-engine interactive_cli -- --nocapture` (5 REPL command tests); local
+  `cargo test -p ds4-engine` (11 tests); local full `cargo test --workspace`;
+  and local `git diff --check`.
 - Owner path: Rust CLI interactive state, `.memory/status.md`.
 
 ### M8.15c: Rust Interactive PTY Transcript Surface
