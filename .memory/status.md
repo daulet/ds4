@@ -3,10 +3,10 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M9.9 Server Parity Report Integration
-- Last validated source commit: M9.8f5 runtime cache/KV replay comparator
-  closure in this commit; prior pushed source commit
-  `b3078f6c0b3389073050dd450cda6ec7325c146b`
+- Active item: M10.1 Runtime Graph Work Item Breakdown
+- Last validated source commit: M9.9 server parity report integration in this
+  commit; prior pushed source commit
+  `3b5532db0872e381a85c7fe21abef3c1eb291e9c`
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
 - B300 namespace: `default`
@@ -26,6 +26,32 @@
 
 ## Last Evidence
 
+- M9.9 adds `ds4-parity/run_server_parity_report.py`, wires it into
+  `ds4-parity/run_parity_report.py`, documents it in `ds4-parity/README.md`,
+  and adds `ds4-parity/check_runtime_kv_replay_summary.py` so the M9.8f5 B300
+  runtime replay summary is checked structurally rather than only as JSON.
+- M9.9 local report coverage includes Rust runtime route/cache tests,
+  `server_chat`, `server_response`, `server_http`, `server_no_model`, the
+  `no_model_server` socket replay, `compare_server_kv.py`, the
+  `compare_server_kv.py --negative-test` mutation checks,
+  `compare_kv_replay.py --negative-test`, and the structural M9.8f5 KV replay
+  summary checker. Model-backed B300 rows remain SKIP, but include explicit
+  temp-kubeconfig/context rerun commands for M0.4 server replay, M0.5
+  three-lifetime KV replay, and `ds4_test --server`.
+- M9.9 guards filtered cargo-test rows against false positives by parsing the
+  `test result: ok. N passed` line and failing any model-free row that matches
+  zero tests or has no parseable pass count. The B300 M0.4/M0.5 rerun commands
+  install cleanup traps after spawning servers and avoid top-level `|| true`
+  fallthrough around replay failures.
+- M9.9 validation passed `python3
+  ds4-parity/check_runtime_kv_replay_summary.py`, a direct pass-count parser
+  smoke, `python3 ds4-parity/run_server_parity_report.py` with `10 passed, 3
+  skipped, 0 failed`, `python3 ds4-parity/run_server_parity_report.py --json`
+  with `ok=true`, `python3 ds4-parity/run_parity_report.py` with `15 passed, 5
+  skipped, 0 failed`, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, Python syntax checks, NUL scan over touched files,
+  cleanup of generated `ds4-session-payload-dump`, and non-interactive Claude
+  review with `NO BLOCKERS`.
 - M9.8f5 closes the M9.8 runtime cache/KV path against the committed M0.5
   current-C artifacts with an exact three-lifetime Rust runtime replay on B300.
   Evidence is recorded in

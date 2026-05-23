@@ -50,6 +50,13 @@ copies and requires comparison failure:
 python3 ds4-parity/compare_server_kv.py --negative-test
 ```
 
+Run the Milestone 9 server/runtime report, which bundles the model-free Rust
+server tests, server/KV artifact comparators, and exact B300 refresh skips:
+
+```sh
+python3 ds4-parity/run_server_parity_report.py
+```
+
 Compare the committed official-vector logprob fixture and M0.3 run evidence:
 
 ```sh

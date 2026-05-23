@@ -3476,7 +3476,7 @@
 
 ### M9.9: Server Parity Report Integration
 
-- Status: active
+- Status: done
 - Goal: add a Milestone 9 server parity report and wire it into the unified
   parity report.
 - Oracle: M9.2 through M9.8 comparators, M0.4/M0.5 refresh commands, and
@@ -3494,7 +3494,41 @@
 - Validation needed: server report, unified report, `./ds4_test --server`
   through the Rust path or documented B300 skip, `cargo test --workspace`, and
   `git diff --check`.
+- Validation passed: `python3
+  ds4-parity/check_runtime_kv_replay_summary.py`, direct pass-count parser
+  smoke, `python3 ds4-parity/run_server_parity_report.py`, `python3
+  ds4-parity/run_server_parity_report.py --json`, `python3
+  ds4-parity/run_parity_report.py`, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, Python syntax checks, NUL scan over
+  touched files, generated helper cleanup, and non-interactive Claude review
+  with no blockers.
 - Owner path: `ds4-parity/`, Rust server report paths, `.memory/status.md`.
+
+### M10.1: Runtime Graph Work Item Breakdown
+
+- Status: active
+- Goal: split Milestone 10 runtime graph orchestration parity into comparable
+  implementation and oracle-capture work items.
+- Oracle: current C graph orchestration, `ds4_gpu.h` dispatch boundaries, and
+  the Milestone 10 section of `RUST_PORT_ROADMAP.md`.
+- Fixture: official-vector cases, long-context prompts, tool-call-quality
+  prompts, benchmark-frontier snapshots, and selected intermediate tensor
+  checkpoint points to be named by the split.
+- Comparator: per-subitem oracle/comparator/acceptance fields covering
+  intermediate tensor diffs, Rust-runtime `ds4_test` paths, and same-backend
+  benchmark comparisons.
+- Acceptance: `.memory/TODO.md` and, if needed, `RUST_PORT_ROADMAP.md` contain
+  tangible M10 subitems with explicit oracle, fixture, comparator, acceptance,
+  drift policy, review gate, validation gate, and owner path before any runtime
+  graph implementation begins.
+- Drift policy: no runtime behavior changes; this item only defines measurable
+  boundaries and required evidence.
+- Review gate: ask Claude to review whether the split is comparable and avoids
+  unmeasurable graph-port steps.
+- Validation needed: roadmap/TODO diff inspection, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/TODO.md`,
+  `.memory/status.md`.
 
 ## Later Items
 
