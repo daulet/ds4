@@ -206,3 +206,14 @@ available directly from the repo.
 - Permanent rule: runtime-control refreshes can use the committed verbosity
   steering vector on B300, but MTP transcript coverage needs a support-model
   provisioning step before it can become an executed oracle case.
+
+## 2026-05-24: Split MTP Work By Current-C Execution Boundary
+
+- Symptom: the first M10.8 split isolated exact N=2 verification and frontier
+  mutation, but left MTP draft orchestration and suffix/microbatch verifier
+  orchestration to the final end-to-end item.
+- Root cause: the split followed broad behavior categories instead of every
+  current-C execution boundary called by `ds4_session_decode_speculative`.
+- Permanent rule: speculative decode port stages must give MTP draft,
+  exact-N=2 verifier, suffix verifier, frontier mutation, and end-to-end
+  stream parity their own validation surfaces before integration.

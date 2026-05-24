@@ -1133,6 +1133,32 @@ decision contract and M10.7d3b same-capture restored graph evidence, including
 KVC file names, headers, payload byte counts, payload digests, rendered text
 key bytes, skip decisions, restored frontier state, and graph counters.
 
+Validate the M10.8a model-free MTP state-machine contract:
+
+```sh
+python3 ds4-parity/check_mtp_state_machine_contract.py
+python3 ds4-parity/check_mtp_state_machine_contract.py --negative-test
+```
+
+Refresh the B300 MTP support-artifact availability check:
+
+```sh
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; ls -l /workspace/ds4/ds4flash.gguf; \
+  readlink -f /workspace/ds4/ds4flash.gguf; \
+  test ! -e /workspace/ds4/missing-mtp.gguf; \
+  candidates=$(find /workspace/ds4 -maxdepth 3 -type f \
+  \( -iname "*mtp*.gguf" -o -iname "*draft*.gguf" \) -print | sort); \
+  printf "mtp_candidates=%s\n" "$candidates"; test -z "$candidates"'
+```
+
+The checker pins the current-C MTP decision state machine against source
+anchors for draft execution, exact N=2 verification, suffix verification,
+frontier snapshot/restore/prefix1 commit, and sequential fallback. It also
+ties the MTP support-artifact blocker to the existing M8.12b CLI runtime
+baseline so later MTP-enabled B300 stages cannot pass as MTP-off silently.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

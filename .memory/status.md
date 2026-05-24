@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8a MTP State Machine Contract And Availability Check
-- Last validated source before the active item: M10.7d3c2 B300 Restored Payload
-  KVC File Smoke.
+- Active item: M10.8b Rust MTP Decision Planner
+- Last validated source before the active item: M10.8a MTP State Machine
+  Contract And Availability Check.
 - M10.8 Rust MTP Draft And Verifier Orchestration is split into M10.8a through
   M10.8g before implementation.
+- Earlier M10.8a MTP State Machine Contract And Availability Check.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
 - M10.7d3c Post-Restore KVC Write/Skip B300 Smoke is split into M10.7d3c1
@@ -53,6 +54,26 @@
 
 ## Last Evidence
 
+- M10.8a adds
+  `ds4-parity/baselines/graph/m10.8a/mtp-state-machine-contract.json` and
+  `ds4-parity/check_mtp_state_machine_contract.py`, a model-free current-C MTP
+  state-machine contract. It pins 12 decision rows across missing support,
+  MTP-disabled guard, first-draft miss, margin skip, exact N=2 verification,
+  suffix/microbatch verification, rollback/error handling, and sequential
+  fallback.
+- M10.8a ties B300 MTP support-artifact availability to the M8.12b CLI runtime
+  baseline and a live `hou2-prod1` probe: `/workspace/ds4/missing-mtp.gguf` is
+  absent and no `*mtp*.gguf` or `*draft*.gguf` candidates exist under
+  `/workspace/ds4` at depth 3, so later MTP-enabled live stages remain
+  explicitly blocked until a support GGUF is available.
+- M10.8a validation passed `python3
+  ds4-parity/check_mtp_state_machine_contract.py --negative-test`, JSON
+  syntax, Python syntax for the checker and unified report, `cargo fmt --all
+  -- --check`, `git diff --check`, the live B300 availability command, and
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 59
+  passed, 42 skipped, and 0 failed. Non-interactive Claude review returned
+  `NO BLOCKERS` after a hung first review was killed and a narrower blocker
+  review completed.
 - M10.8 is split before implementation into M10.8a state-machine contract and
   B300 MTP availability check, M10.8b Rust model-free decision planner,
   M10.8c Rust MTP draft kernel orchestration smoke, M10.8d exact-N=2 verifier

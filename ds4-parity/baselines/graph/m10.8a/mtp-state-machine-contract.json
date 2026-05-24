@@ -1,0 +1,410 @@
+{
+  "schema": "ds4.mtp_state_machine_contract.v1",
+  "milestone": "M10.8a",
+  "source": "current-c-model-free-mtp-state-machine-contract",
+  "source_files": [
+    "ds4.c",
+    "ds4.h",
+    "rust/ds4-gpu/src/graph_plan.rs",
+    "ds4-parity/baselines/cli/m8.12b/current-c.json"
+  ],
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "base_model_path": "/workspace/ds4/ds4flash.gguf",
+    "base_model_symlink_target": "/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+    "expected_mtp_path": "/workspace/ds4/missing-mtp.gguf",
+    "candidate_globs": [
+      "*mtp*.gguf",
+      "*draft*.gguf"
+    ],
+    "candidate_max_depth": 3,
+    "candidate_count": 0,
+    "checked_utc": "2026-05-24",
+    "availability": "blocked_missing_mtp_model"
+  },
+  "support_artifacts": {
+    "mtp": {
+      "path": "/workspace/ds4/missing-mtp.gguf",
+      "available": false,
+      "blocker": "no MTP GGUF is present in the B300 workspace",
+      "candidate_count": 0
+    }
+  },
+  "environment_gates": {
+    "spec_disable_callers": "DS4_MTP_SPEC_DISABLE",
+    "probe": "DS4_MTP_PROBE",
+    "strict": "DS4_MTP_STRICT",
+    "batch_verify_override": "DS4_MTP_BATCH_VERIFY",
+    "capture_prefix1": "DS4_MTP_CAPTURE_PREFIX1",
+    "exact_replay_debug": "DS4_MTP_EXACT_REPLAY",
+    "force_snapshot": "DS4_MTP_FORCE_SNAPSHOT",
+    "full_logits": "DS4_MTP_FULL_LOGITS",
+    "min_margin": "DS4_MTP_MIN_MARGIN",
+    "conf_log": "DS4_MTP_CONF_LOG",
+    "spec_log": "DS4_MTP_SPEC_LOG"
+  },
+  "state_fields": {
+    "checkpoint": "s->checkpoint.len and token contents",
+    "target_logits": "s->logits",
+    "draft_valid": "s->mtp_draft_valid",
+    "draft_token": "s->mtp_draft_token",
+    "draft_logits": "s->mtp_logits",
+    "mtp_raw_frontier": "s->graph.mtp_n_raw",
+    "compressed_frontier": "g->layer_n_comp and g->layer_n_index_comp",
+    "spec_frontier_tensors": "spec_attn/spec_index state copies",
+    "prefix1_frontier_tensors": "spec_prefix1 attn/index state copies"
+  },
+  "function_anchors": [
+    {
+      "name": "ds4_engine_has_mtp",
+      "file": "ds4.c",
+      "required_snippets": [
+        "bool ds4_engine_has_mtp(ds4_engine *e)",
+        "return e && e->backend != DS4_BACKEND_CPU && e->mtp_ready;"
+      ]
+    },
+    {
+      "name": "ds4_engine_mtp_draft_tokens",
+      "file": "ds4.c",
+      "required_snippets": [
+        "int ds4_engine_mtp_draft_tokens(ds4_engine *e)",
+        "e->backend != DS4_BACKEND_CPU && e->mtp_ready ? e->mtp_draft_tokens : 0"
+      ]
+    },
+    {
+      "name": "metal_graph_eval_mtp_draft_from_hc",
+      "file": "ds4.c",
+      "required_snippets": [
+        "static bool metal_graph_eval_mtp_draft_from_hc(",
+        "uint32_t n_raw = g->mtp_n_raw + 1u;",
+        "if (ok && g->mtp_n_raw < g->raw_window) g->mtp_n_raw++;"
+      ]
+    },
+    {
+      "name": "metal_graph_eval_mtp_draft",
+      "file": "ds4.c",
+      "required_snippets": [
+        "static bool metal_graph_eval_mtp_draft(",
+        "g->cur_hc,",
+        "g->mtp_state_hc,"
+      ]
+    },
+    {
+      "name": "metal_graph_verify_decode2_exact",
+      "file": "ds4.c",
+      "required_snippets": [
+        "static bool metal_graph_verify_decode2_exact(",
+        "g->spec_capture_prefix1 = true;",
+        "metal_graph_capture_prefix1_attn_state(g, il)",
+        "ok = ds4_gpu_tensor_read(g->logits"
+      ]
+    },
+    {
+      "name": "metal_graph_verify_suffix_tops",
+      "file": "ds4.c",
+      "required_snippets": [
+        "static bool metal_graph_verify_suffix_tops(",
+        "g->spec_capture_prefix1 = capture_prefix1 && n_tokens == 2;",
+        "metal_graph_encode_output_head_batch",
+        "ds4_gpu_tensor_read(g->comp_selected,"
+      ]
+    },
+    {
+      "name": "spec_frontier_snapshot",
+      "file": "ds4.c",
+      "required_snippets": [
+        "static bool spec_frontier_snapshot(ds4_spec_frontier *f, ds4_session *s)",
+        "f->mtp_n_raw = g->mtp_n_raw;",
+        "ds4_gpu_tensor_copy(g->spec_attn_state_kv[il]"
+      ]
+    },
+    {
+      "name": "spec_frontier_restore",
+      "file": "ds4.c",
+      "required_snippets": [
+        "static bool spec_frontier_restore(ds4_spec_frontier *f, ds4_session *s)",
+        "g->mtp_n_raw = f->mtp_n_raw;",
+        "ds4_gpu_tensor_copy(g->layer_attn_state_kv[il]"
+      ]
+    },
+    {
+      "name": "spec_frontier_commit_prefix1",
+      "file": "ds4.c",
+      "required_snippets": [
+        "static bool spec_frontier_commit_prefix1(ds4_session *s)",
+        "g->layer_n_comp[il] = g->spec_prefix1_n_comp[il];",
+        "g->layer_n_index_comp[il] = g->spec_prefix1_n_index_comp[il];"
+      ]
+    },
+    {
+      "name": "ds4_session_decode_speculative",
+      "file": "ds4.c",
+      "required_snippets": [
+        "int ds4_session_eval_speculative_argmax(",
+        "if (!e->mtp_ready || !s->mtp_draft_valid || e->mtp_draft_tokens <= 1) return n_accept;",
+        "const bool use_decode2_exact =",
+        "const bool capture_prefix1 =",
+        "DS4_MTP_KEEP_ACCEPTED"
+      ]
+    }
+  ],
+  "command_boundaries": [
+    "mtp_draft",
+    "mtp_suffix_tops",
+    "mtp_decode2_exact",
+    "spec_frontier_snapshot",
+    "spec_frontier_restore",
+    "spec_frontier_commit_prefix1"
+  ],
+  "decision_cases": [
+    {
+      "id": "b300_missing_mtp_support_model",
+      "path": "availability_blocker",
+      "conditions": [
+        "--mtp /workspace/ds4/missing-mtp.gguf",
+        "support_artifacts.mtp.available == false"
+      ],
+      "required_functions": [],
+      "frontier_ops": [],
+      "accepted_suffix": 0,
+      "checkpoint_action": "no session is created",
+      "logits_source": "none",
+      "mtp_n_raw_keep": 0,
+      "fallback": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "mtp_disabled_after_first_token",
+      "path": "guard",
+      "conditions": [
+        "!e->mtp_ready || !s->mtp_draft_valid || e->mtp_draft_tokens <= 1"
+      ],
+      "required_functions": [
+        "ds4_session_eval"
+      ],
+      "frontier_ops": [],
+      "accepted_suffix": 0,
+      "checkpoint_action": "first target token only",
+      "logits_source": "target first-token logits",
+      "mtp_n_raw_keep": 0,
+      "fallback": "return first-token accept"
+    },
+    {
+      "id": "first_draft_miss",
+      "path": "draft_miss",
+      "conditions": [
+        "sample_argmax(s->logits, DS4_N_VOCAB) != drafts[0]"
+      ],
+      "required_functions": [
+        "sample_argmax"
+      ],
+      "frontier_ops": [],
+      "accepted_suffix": 0,
+      "checkpoint_action": "first target token only",
+      "logits_source": "target first-token logits",
+      "mtp_n_raw_keep": 0,
+      "fallback": "skip speculative work"
+    },
+    {
+      "id": "margin_skip_single_target_replay",
+      "path": "margin_skip",
+      "conditions": [
+        "!strict_mtp",
+        "draft_n == 2",
+        "mtp_margin_threshold > 0.0",
+        "mtp_last_margin < mtp_margin_threshold"
+      ],
+      "required_functions": [
+        "metal_graph_eval_token_raw_swa"
+      ],
+      "frontier_ops": [
+        "keep_accepted"
+      ],
+      "accepted_suffix": 1,
+      "checkpoint_action": "push drafts[0] after one exact target decode",
+      "logits_source": "target decode logits for drafts[0]",
+      "mtp_n_raw_keep": 1,
+      "fallback": "margin-skip"
+    },
+    {
+      "id": "exact_decode2_full_accept",
+      "path": "exact_decode2",
+      "conditions": [
+        "draft_n == 2",
+        "strict_mtp",
+        "DS4_MTP_BATCH_VERIFY unset",
+        "row0_top == drafts[1]"
+      ],
+      "required_functions": [
+        "spec_frontier_snapshot",
+        "metal_graph_verify_decode2_exact"
+      ],
+      "frontier_ops": [
+        "snapshot",
+        "keep_accepted"
+      ],
+      "accepted_suffix": 2,
+      "checkpoint_action": "push drafts[0] and drafts[1]",
+      "logits_source": "decode2 logits1",
+      "mtp_n_raw_keep": 2,
+      "fallback": "none"
+    },
+    {
+      "id": "exact_decode2_prefix1_accept",
+      "path": "exact_decode2",
+      "conditions": [
+        "draft_n == 2",
+        "strict_mtp",
+        "DS4_MTP_BATCH_VERIFY unset",
+        "row0_top != drafts[1]",
+        "decode2 ok"
+      ],
+      "required_functions": [
+        "spec_frontier_snapshot",
+        "metal_graph_verify_decode2_exact",
+        "spec_frontier_commit_prefix1"
+      ],
+      "frontier_ops": [
+        "snapshot",
+        "commit_prefix1",
+        "keep_accepted"
+      ],
+      "accepted_suffix": 1,
+      "checkpoint_action": "reset to start then push drafts[0]",
+      "logits_source": "decode2 logits0",
+      "mtp_n_raw_keep": 1,
+      "fallback": "none"
+    },
+    {
+      "id": "exact_decode2_failure_restore_then_sequential",
+      "path": "exact_decode2_failure",
+      "conditions": [
+        "draft_n == 2",
+        "strict_mtp",
+        "DS4_MTP_BATCH_VERIFY unset",
+        "decode2 failed or prefix1 commit failed"
+      ],
+      "required_functions": [
+        "spec_frontier_snapshot",
+        "metal_graph_verify_decode2_exact",
+        "spec_frontier_restore"
+      ],
+      "frontier_ops": [
+        "snapshot",
+        "restore"
+      ],
+      "accepted_suffix": "verified_by_sequential_fallback",
+      "checkpoint_action": "reset to start before sequential fallback",
+      "logits_source": "sequential target decode",
+      "mtp_n_raw_keep": "verified_by_sequential_fallback",
+      "fallback": "sequential safety fallback"
+    },
+    {
+      "id": "suffix_full_accept",
+      "path": "suffix_verifier",
+      "conditions": [
+        "!use_decode2_exact",
+        "commit_drafts == draft_n"
+      ],
+      "required_functions": [
+        "metal_graph_verify_suffix_tops",
+        "metal_graph_read_spec_logits_row"
+      ],
+      "frontier_ops": [
+        "keep_accepted"
+      ],
+      "accepted_suffix": "draft_n",
+      "checkpoint_action": "checkpoint already contains all draft tokens",
+      "logits_source": "spec logits row draft_n - 1",
+      "mtp_n_raw_keep": "draft_n",
+      "fallback": "none"
+    },
+    {
+      "id": "suffix_prefix1_accept",
+      "path": "suffix_verifier",
+      "conditions": [
+        "draft_n == 2",
+        "commit_drafts == 1",
+        "capture_prefix1"
+      ],
+      "required_functions": [
+        "metal_graph_verify_suffix_tops",
+        "spec_frontier_commit_prefix1",
+        "metal_graph_read_spec_logits_row"
+      ],
+      "frontier_ops": [
+        "commit_prefix1",
+        "keep_accepted"
+      ],
+      "accepted_suffix": 1,
+      "checkpoint_action": "reset to start then push drafts[0]",
+      "logits_source": "spec logits row 0",
+      "mtp_n_raw_keep": 1,
+      "fallback": "none"
+    },
+    {
+      "id": "suffix_restore_replay_accept",
+      "path": "suffix_verifier_replay",
+      "conditions": [
+        "snapshot_required",
+        "commit_drafts < draft_n",
+        "!capture_prefix1 || exact_replay_debug"
+      ],
+      "required_functions": [
+        "spec_frontier_snapshot",
+        "metal_graph_verify_suffix_tops",
+        "spec_frontier_restore",
+        "metal_graph_eval_token_raw_swa"
+      ],
+      "frontier_ops": [
+        "snapshot",
+        "restore",
+        "keep_accepted"
+      ],
+      "accepted_suffix": "commit_drafts",
+      "checkpoint_action": "restore to start then replay accepted drafts",
+      "logits_source": "target replay logits",
+      "mtp_n_raw_keep": "commit_drafts",
+      "fallback": "target replay"
+    },
+    {
+      "id": "suffix_failure_restore_or_error",
+      "path": "suffix_verifier_failure",
+      "conditions": [
+        "metal_graph_verify_suffix_tops failed or logits read failed"
+      ],
+      "required_functions": [
+        "spec_frontier_restore"
+      ],
+      "frontier_ops": [
+        "restore_or_error"
+      ],
+      "accepted_suffix": "verified_by_sequential_fallback_or_error",
+      "checkpoint_action": "reset to start; restore if snapshot exists; otherwise error if verifier mutated",
+      "logits_source": "sequential target decode or none on hard error",
+      "mtp_n_raw_keep": "verified_by_sequential_fallback_or_zero",
+      "fallback": "sequential safety fallback or MTP verifier failed"
+    },
+    {
+      "id": "sequential_safety_fallback",
+      "path": "sequential_fallback",
+      "conditions": [
+        "fast verifier unavailable or restored after failure"
+      ],
+      "required_functions": [
+        "sample_argmax",
+        "metal_graph_eval_token_raw_swa_top"
+      ],
+      "frontier_ops": [
+        "keep_accepted"
+      ],
+      "accepted_suffix": "verified",
+      "checkpoint_action": "push each verified draft token in order",
+      "logits_source": "normal target decode logits",
+      "mtp_n_raw_keep": "verified",
+      "fallback": "target sequential verifier"
+    }
+  ]
+}

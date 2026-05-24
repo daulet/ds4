@@ -5661,7 +5661,7 @@
 
 ### M10.8a: MTP State Machine Contract And Availability Check
 
-- Status: active
+- Status: done
 - Goal: capture the current-C speculative decode decision contract and B300
   MTP support-artifact availability before any Rust MTP execution is trusted.
 - Oracle: `ds4_engine_has_mtp`, `ds4_engine_mtp_draft_tokens`,
@@ -5689,12 +5689,23 @@
 - Validation needed: contract checker with negative tests, Python/JSON syntax,
   `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
+- Evidence: added
+  `ds4-parity/baselines/graph/m10.8a/mtp-state-machine-contract.json` and
+  `ds4-parity/check_mtp_state_machine_contract.py`. The checker pins 12
+  current-C MTP decision rows, 10 source anchors, M10.2 command boundaries,
+  M8.12b missing-MTP support-artifact evidence, and seven negative mutations.
+  A live B300 availability check confirmed `/workspace/ds4/missing-mtp.gguf`
+  is absent and no `*mtp*.gguf` or `*draft*.gguf` candidate exists under
+  `/workspace/ds4` at depth 3. Validation passed the checker negative tests,
+  JSON/Python syntax, `cargo fmt --all -- --check`, `git diff --check`, the
+  live B300 availability command, unified parity with 59 passed, 42 skipped,
+  and 0 failed, and non-interactive Claude review with `NO BLOCKERS`.
 - Owner path: MTP contract baseline/checker, parity report,
   `.memory/status.md`.
 
 ### M10.8b: Rust MTP Decision Planner
 
-- Status: pending
+- Status: active
 - Goal: add Rust-owned model-free planning for MTP verifier selection,
   accepted-prefix decisions, fallback routing, and logits/frontier ownership
   without executing GPU kernels.

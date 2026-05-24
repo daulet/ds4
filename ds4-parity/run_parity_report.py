@@ -16,7 +16,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
   M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
-  M10.7d3a, M10.7d3b, M10.7d3c1, and M10.7d3c2.
+  M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, and M10.8a.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -514,6 +514,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.8a MTP state-machine contract",
+                [
+                    sys.executable,
+                    "ds4-parity/check_mtp_state_machine_contract.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -974,6 +982,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "hash-only and remain in /workspace/ds4"
             ),
             rerun_command=b300_rust_post_restore_kvc_smoke_command(),
+        ),
+        ReportItem(
+            name="M10.8a B300 MTP support-artifact availability rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "MTP-enabled smoke is blocked until a B300 MTP support GGUF "
+                "is present; this check verifies the expected missing support "
+                "artifact and candidate search result"
+            ),
+            rerun_command=b300_mtp_availability_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -2022,6 +2041,18 @@ def b300_rust_post_restore_kvc_smoke_command() -> str:
         ]
     )
     return f"{source_refresh} && {smoke} && {copy_back}"
+
+
+def b300_mtp_availability_command() -> str:
+    return b300_exec(
+        "ls -l /workspace/ds4/ds4flash.gguf; "
+        "readlink -f /workspace/ds4/ds4flash.gguf; "
+        "test ! -e /workspace/ds4/missing-mtp.gguf; "
+        "candidates=$(find /workspace/ds4 -maxdepth 3 -type f "
+        "\\( -iname '*mtp*.gguf' -o -iname '*draft*.gguf' \\) -print | sort); "
+        "printf 'mtp_candidates=%s\\n' \"$candidates\"; "
+        "test -z \"$candidates\""
+    )
 
 
 def b300_exec(script: str) -> str:
