@@ -5197,6 +5197,15 @@ restore boundary.
   tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, and non-interactive Claude review with no
   blockers.
+- Evidence: added a Rust model-free frontier mutation plan and comparator that
+  pin snapshot, restore, prefix1 commit, ratio-4 index handling, `mtp_n_raw`
+  save/restore, and invisible speculative-row policy against current-C anchors
+  and M10.7d3 restored-frontier evidence. Validation passed targeted Rust
+  frontier-plan tests, the comparator with 8 cases, 145 checks, and 8 negative
+  mutations, JSON output parsing, Python syntax, the live B300 missing-MTP
+  blocker command, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and unified parity with 64 passed, 42 skipped, and 0
+  failed. Non-interactive Claude review returned `NO BLOCKERS`.
 
 ##### M10.8g: Rust MTP End-To-End Stream Parity
 

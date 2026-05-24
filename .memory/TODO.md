@@ -5860,7 +5860,7 @@
 
 ### M10.8f: Rust Spec Frontier Snapshot Restore And Prefix1 Commit
 
-- Status: active
+- Status: done
 - Goal: move speculative frontier snapshot, restore, and prefix1 commit state
   mutation into Rust-owned orchestration.
 - Oracle: `spec_frontier_snapshot`, `spec_frontier_restore`,
@@ -5884,10 +5884,22 @@
   blockers.
 - Owner path: Rust frontier mutation orchestration, B300 comparator,
   `.memory/status.md`.
+- Evidence: added `rust/ds4-gpu/src/mtp_frontier_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-frontier-plan.rs`, and
+  `ds4-parity/compare_mtp_frontier_plan.py`, a Rust model-free frontier
+  mutation plan that pins snapshot, restore, prefix1 commit, ratio-4 index
+  handling, `mtp_n_raw` save/restore, invisible speculative-row policy, and
+  the B300 missing-MTP live blocker against current-C anchors and M10.7d3
+  restored-frontier evidence. Validation passed targeted Rust frontier-plan
+  tests, the comparator with 8 cases, 145 checks, and 8 negative mutations,
+  JSON output parsing, Python syntax, the live B300 missing-MTP blocker
+  command, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and unified parity with 64 passed, 42 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 
 ### M10.8g: Rust MTP End-To-End Stream Parity
 
-- Status: pending
+- Status: active
 - Goal: integrate Rust MTP draft/verifier/frontier orchestration into the
   runtime path and compare accepted tokens against current C.
 - Oracle: current-C speculative decode on the same B300 model/support-model

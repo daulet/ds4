@@ -17,6 +17,7 @@ pub mod graph_plan;
 pub mod graph_state;
 pub mod mtp_decode2_plan;
 pub mod mtp_draft_plan;
+pub mod mtp_frontier_plan;
 pub mod mtp_plan;
 pub mod mtp_suffix_plan;
 pub mod prefill_plan;

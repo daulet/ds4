@@ -17,7 +17,7 @@ The report has two jobs:
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
   M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
   M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, M10.8a, M10.8b, M10.8c,
-  M10.8d, and M10.8e.
+  M10.8d, M10.8e, and M10.8f.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -552,6 +552,14 @@ class ParityReport:
                 [
                     sys.executable,
                     "ds4-parity/compare_mtp_suffix_plan.py",
+                    "--negative-test",
+                ],
+            ),
+            (
+                "M10.8f Rust MTP frontier mutation plan comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_mtp_frontier_plan.py",
                     "--negative-test",
                 ],
             ),

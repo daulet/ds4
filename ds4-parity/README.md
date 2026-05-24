@@ -1213,6 +1213,19 @@ fallbacks, exact replay debug behavior, suffix verifier failure
 restore-or-error handling, and records the live B300 suffix smoke as blocked
 until an MTP support GGUF is present.
 
+Compare the M10.8f Rust MTP frontier mutation plan against current-C frontier
+anchors:
+
+```sh
+python3 ds4-parity/compare_mtp_frontier_plan.py
+python3 ds4-parity/compare_mtp_frontier_plan.py --negative-test
+```
+
+The comparator runs `ds4-mtp-frontier-plan`, checks snapshot and restore
+counter handling, `mtp_n_raw` save/restore, ratio-4 index frontier copies,
+prefix1 commit counter rewinds, invisible speculative-row policy, and ties the
+plan back to M10.7d3 restored-frontier evidence.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
