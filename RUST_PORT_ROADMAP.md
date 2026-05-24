@@ -4292,6 +4292,11 @@ prefill each have different C routing and failure boundaries.
 - Validation gate: targeted B300 comparator, `cargo test --workspace`, `cargo
   fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
   with no blockers.
+- Evidence: implemented a current-C whole-prefill oracle helper and Rust
+  `ds4-prefill-whole-short` candidate over the short Italian prompt; B300
+  current-C vs Rust comparator passed 780 pinned checks over final logits,
+  output row, layer-2/layer-42 raw and compressed rows, layer-5/layer-42
+  compressor states, prompt token count, and cache counters.
 
 ##### M10.6c: Rust Cold Chunked-Prefill Execution
 

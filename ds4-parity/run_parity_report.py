@@ -14,7 +14,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
-  M10.5c4d3, M10.5c4d4, and M10.6a.
+  M10.5c4d3, M10.5c4d4, M10.6a, and M10.6b.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -400,6 +400,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.6b Rust whole-prefill short comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_prefill_whole_short.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -769,6 +777,18 @@ def b300_skip_items() -> list[ReportItem]:
                 "feature-gated Rust CUDA backend linkage"
             ),
             rerun_command=b300_directional_steering_decode_oracle_command(),
+        ),
+        ReportItem(
+            name="M10.6b B300 whole-prefill short oracle rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Whole-prefill short-prompt current-C oracle comparison "
+                "requires the B300 pod, the real q2-imatrix GGUF, the current-C "
+                "helper, the short prompt fixture, and feature-gated Rust CUDA "
+                "backend linkage"
+            ),
+            rerun_command=b300_prefill_whole_short_oracle_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1523,6 +1543,37 @@ def b300_directional_steering_decode_oracle_command() -> str:
         "python3 ds4-parity/compare_decode_directional_steering.py "
         "--oracle /tmp/ds4-c4d4-directional-steering-oracle.json "
         "--candidate /tmp/ds4-c4d4-directional-steering-rust.json"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_prefill_whole_short_oracle_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    prompt = "tests/test-vectors/prompts/short_italian_fact.txt"
+    smoke = b300_exec(
+        "make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native && "
+        f"./ds4-prefill-whole-short-oracle-dump --model {B300_MODEL} "
+        f"--prompt {prompt} --backend cuda "
+        "--output /tmp/ds4-m106b-prefill-whole-short-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-prefill-whole-short --quiet -- "
+        f"--model {B300_MODEL} --prompt {prompt} "
+        "> /tmp/ds4-m106b-prefill-whole-short-rust.json && "
+        "python3 ds4-parity/compare_prefill_whole_short.py "
+        "--oracle /tmp/ds4-m106b-prefill-whole-short-oracle.json "
+        "--candidate /tmp/ds4-m106b-prefill-whole-short-rust.json"
     )
     return f"{source_refresh} && {smoke}"
 

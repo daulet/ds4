@@ -185,6 +185,76 @@ pub const DIRECTIONAL_STEERING_DECODE_FACADE_OPERATIONS: &[DecodeFacadeOperation
     },
 ];
 
+pub const PREFILL_FACADE_OPERATIONS: &[DecodeFacadeOperation] = &[
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_embed_tokens_hc_tensor",
+        method: "embed_tokens_hc",
+        tensor_args: &["out_hc", "tokens"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_rms_norm_plain_rows_tensor",
+        method: "rms_norm_plain_rows",
+        tensor_args: &["out", "x"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_rms_norm_weight_rows_tensor",
+        method: "rms_norm_weight_rows",
+        tensor_args: &["out", "x"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_store_raw_kv_batch_tensor",
+        method: "store_raw_kv_batch",
+        tensor_args: &["raw_cache", "kv"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_compressor_prefill_tensor",
+        method: "compressor_prefill",
+        tensor_args: &["comp_cache", "state_kv", "state_score", "kv", "sc"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_compressor_prefill_state_ratio4_tensor",
+        method: "compressor_prefill_state_ratio4",
+        tensor_args: &["state_kv", "state_score", "kv_tail", "sc_tail"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_attention_prefill_raw_heads_tensor",
+        method: "attention_prefill_raw_heads",
+        tensor_args: &["heads", "q", "raw_kv"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
+        method: "attention_prefill_static_mixed_heads",
+        tensor_args: &["heads", "q", "raw_kv", "comp_kv"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_router_select_batch_tensor",
+        method: "router_select_batch",
+        tensor_args: &["selected", "weights", "probs", "logits", "tokens"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_routed_moe_batch_tensor",
+        method: "routed_moe_batch",
+        tensor_args: &[
+            "out", "gate", "up", "mid", "experts", "selected", "weights", "x",
+        ],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_swiglu_tensor",
+        method: "swiglu",
+        tensor_args: &["out", "gate", "up"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_hc_split_weighted_sum_tensor",
+        method: "hc_split_weighted_sum",
+        tensor_args: &["out", "split", "mix", "residual_hc"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_hc_expand_add_split_tensor",
+        method: "hc_expand_add_split",
+        tensor_args: &["out_hc", "block_out", "block_add", "residual_hc", "split"],
+    },
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExistingDecodeOperation {
     pub operation: &'static str,
@@ -419,6 +489,32 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    pub fn embed_tokens_hc(
+        self,
+        out_hc: TensorMut<'_>,
+        tokens: TensorRef<'_>,
+        weight_offset: u64,
+        n_vocab: u32,
+        n_tokens: u32,
+        n_embd: u32,
+        n_hc: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_embed_tokens_hc_tensor(
+                out_hc.raw(),
+                tokens.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                weight_offset,
+                n_vocab,
+                n_tokens,
+                n_embd,
+                n_hc,
+            ))
+            .into_result()
+        }
+    }
+
     pub fn rms_norm_plain(
         self,
         out: TensorMut<'_>,
@@ -431,6 +527,26 @@ impl<'a> DecodeBackend<'a> {
                 out.raw(),
                 x.raw(),
                 n,
+                eps,
+            ))
+            .into_result()
+        }
+    }
+
+    pub fn rms_norm_plain_rows(
+        self,
+        out: TensorMut<'_>,
+        x: TensorRef<'_>,
+        n: u32,
+        rows: u32,
+        eps: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_rms_norm_plain_rows_tensor(
+                out.raw(),
+                x.raw(),
+                n,
+                rows,
                 eps,
             ))
             .into_result()
@@ -515,6 +631,30 @@ impl<'a> DecodeBackend<'a> {
                 self.model.size(),
                 weight_offset,
                 n,
+                eps,
+            ))
+            .into_result()
+        }
+    }
+
+    pub fn rms_norm_weight_rows(
+        self,
+        out: TensorMut<'_>,
+        x: TensorRef<'_>,
+        weight_offset: u64,
+        n: u32,
+        rows: u32,
+        eps: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_rms_norm_weight_rows_tensor(
+                out.raw(),
+                x.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                weight_offset,
+                n,
+                rows,
                 eps,
             ))
             .into_result()
@@ -658,6 +798,28 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    pub fn store_raw_kv_batch(
+        self,
+        raw_cache: TensorMut<'_>,
+        kv: TensorRef<'_>,
+        raw_cap: u32,
+        pos0: u32,
+        n_tokens: u32,
+        head_dim: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_store_raw_kv_batch_tensor(
+                raw_cache.raw(),
+                kv.raw(),
+                raw_cap,
+                pos0,
+                n_tokens,
+                head_dim,
+            ))
+            .into_result()
+        }
+    }
+
     pub fn matmul_f16_pair(
         self,
         out_a: TensorMut<'_>,
@@ -738,6 +900,93 @@ impl<'a> DecodeBackend<'a> {
                 beta_fast,
                 beta_slow,
                 rms_eps,
+            ))
+            .into_result()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn compressor_prefill(
+        self,
+        comp_cache: TensorMut<'_>,
+        state_kv: TensorMut<'_>,
+        state_score: TensorMut<'_>,
+        kv: TensorRef<'_>,
+        sc: TensorRef<'_>,
+        ape_offset: u64,
+        ape_type: u32,
+        norm_offset: u64,
+        norm_type: u32,
+        head_dim: u32,
+        ratio: u32,
+        pos0: u32,
+        n_tokens: u32,
+        n_rot: u32,
+        n_ctx_orig: u32,
+        quantize_fp8: bool,
+        freq_base: f32,
+        freq_scale: f32,
+        ext_factor: f32,
+        attn_factor: f32,
+        beta_fast: f32,
+        beta_slow: f32,
+        rms_eps: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_compressor_prefill_tensor(
+                comp_cache.raw(),
+                state_kv.raw(),
+                state_score.raw(),
+                kv.raw(),
+                sc.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                ape_offset,
+                ape_type,
+                norm_offset,
+                norm_type,
+                head_dim,
+                ratio,
+                pos0,
+                n_tokens,
+                n_rot,
+                n_ctx_orig,
+                quantize_fp8,
+                freq_base,
+                freq_scale,
+                ext_factor,
+                attn_factor,
+                beta_fast,
+                beta_slow,
+                rms_eps,
+            ))
+            .into_result()
+        }
+    }
+
+    pub fn compressor_prefill_state_ratio4(
+        self,
+        state_kv: TensorMut<'_>,
+        state_score: TensorMut<'_>,
+        kv_tail: TensorRef<'_>,
+        sc_tail: TensorRef<'_>,
+        ape_offset: u64,
+        ape_type: u32,
+        head_dim: u32,
+        pos0: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_compressor_prefill_state_ratio4_tensor(
+                state_kv.raw(),
+                state_score.raw(),
+                kv_tail.raw(),
+                sc_tail.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                ape_offset,
+                ape_type,
+                head_dim,
+                pos0,
             ))
             .into_result()
         }
@@ -911,6 +1160,69 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    pub fn attention_prefill_raw_heads(
+        self,
+        heads: TensorMut<'_>,
+        sinks_offset: u64,
+        q: TensorRef<'_>,
+        raw_kv: TensorRef<'_>,
+        n_tokens: u32,
+        window: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_attention_prefill_raw_heads_tensor(
+                heads.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                sinks_offset,
+                q.raw(),
+                raw_kv.raw(),
+                n_tokens,
+                window,
+                n_head,
+                head_dim,
+            ))
+            .into_result()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn attention_prefill_static_mixed_heads(
+        self,
+        heads: TensorMut<'_>,
+        sinks_offset: u64,
+        q: TensorRef<'_>,
+        raw_kv: TensorRef<'_>,
+        comp_kv: TensorRef<'_>,
+        n_tokens: u32,
+        n_comp: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_attention_prefill_static_mixed_heads_tensor(
+                heads.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                sinks_offset,
+                q.raw(),
+                raw_kv.raw(),
+                comp_kv.raw(),
+                n_tokens,
+                n_comp,
+                window,
+                ratio,
+                n_head,
+                head_dim,
+            ))
+            .into_result()
+        }
+    }
+
     pub fn attention_output_low_q8(
         self,
         low: TensorMut<'_>,
@@ -1026,6 +1338,62 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    pub fn hc_split_weighted_sum(
+        self,
+        out: TensorMut<'_>,
+        split: TensorMut<'_>,
+        mix: TensorRef<'_>,
+        residual_hc: TensorRef<'_>,
+        scale_offset: u64,
+        base_offset: u64,
+        n_embd: u32,
+        n_hc: u32,
+        sinkhorn_iters: u32,
+        eps: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_hc_split_weighted_sum_tensor(
+                out.raw(),
+                split.raw(),
+                mix.raw(),
+                residual_hc.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                scale_offset,
+                base_offset,
+                n_embd,
+                n_hc,
+                sinkhorn_iters,
+                eps,
+            ))
+            .into_result()
+        }
+    }
+
+    pub fn hc_expand_add_split(
+        self,
+        out_hc: TensorMut<'_>,
+        block_out: TensorRef<'_>,
+        block_add: TensorRef<'_>,
+        residual_hc: TensorRef<'_>,
+        split: TensorRef<'_>,
+        n_embd: u32,
+        n_hc: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_hc_expand_add_split_tensor(
+                out_hc.raw(),
+                block_out.raw(),
+                block_add.raw(),
+                residual_hc.raw(),
+                split.raw(),
+                n_embd,
+                n_hc,
+            ))
+            .into_result()
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn router_select(
         self,
@@ -1058,6 +1426,45 @@ impl<'a> DecodeBackend<'a> {
                 has_bias,
                 hash_mode,
                 logits.raw(),
+            ))
+            .into_result()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn router_select_batch(
+        self,
+        selected: TensorMut<'_>,
+        weights: TensorMut<'_>,
+        probs: TensorMut<'_>,
+        bias_offset: u64,
+        hash_offset: u64,
+        hash_rows: u32,
+        n_expert_groups: u32,
+        n_group_used: u32,
+        has_bias: bool,
+        hash_mode: bool,
+        logits: TensorRef<'_>,
+        tokens: TensorRef<'_>,
+        n_tokens: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_router_select_batch_tensor(
+                selected.raw(),
+                weights.raw(),
+                probs.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                bias_offset,
+                hash_offset,
+                hash_rows,
+                n_expert_groups,
+                n_group_used,
+                has_bias,
+                hash_mode,
+                logits.raw(),
+                tokens.raw(),
+                n_tokens,
             ))
             .into_result()
         }
@@ -1120,6 +1527,67 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn routed_moe_batch(
+        self,
+        out: TensorMut<'_>,
+        gate: TensorMut<'_>,
+        up: TensorMut<'_>,
+        mid: TensorMut<'_>,
+        experts: TensorMut<'_>,
+        gate_offset: u64,
+        up_offset: u64,
+        down_offset: u64,
+        gate_type: u32,
+        down_type: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        expert_in_dim: u32,
+        expert_mid_dim: u32,
+        out_dim: u32,
+        selected: TensorRef<'_>,
+        weights: TensorRef<'_>,
+        n_expert: u32,
+        clamp: f32,
+        x: TensorRef<'_>,
+        n_tokens: u32,
+        mid_is_f16: &mut bool,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_routed_moe_batch_tensor(
+                out.raw(),
+                gate.raw(),
+                up.raw(),
+                mid.raw(),
+                experts.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                gate_offset,
+                up_offset,
+                down_offset,
+                gate_type,
+                down_type,
+                gate_expert_bytes,
+                gate_row_bytes,
+                down_expert_bytes,
+                down_row_bytes,
+                expert_in_dim,
+                expert_mid_dim,
+                out_dim,
+                selected.raw(),
+                weights.raw(),
+                n_expert,
+                clamp,
+                x.raw(),
+                n_tokens,
+                mid_is_f16 as *mut bool,
+            ))
+            .into_result()
+        }
+    }
+
     pub fn add(
         self,
         out: TensorMut<'_>,
@@ -1150,6 +1618,28 @@ impl<'a> DecodeBackend<'a> {
                 width,
                 rows,
                 scale,
+            ))
+            .into_result()
+        }
+    }
+
+    pub fn swiglu(
+        self,
+        out: TensorMut<'_>,
+        gate: TensorRef<'_>,
+        up: TensorRef<'_>,
+        n: u32,
+        clamp: f32,
+        weight: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_swiglu_tensor(
+                out.raw(),
+                gate.raw(),
+                up.raw(),
+                n,
+                clamp,
+                weight,
             ))
             .into_result()
         }
@@ -1316,6 +1806,22 @@ mod tests {
         "ds4_gpu_hc_expand_split_tensor",
     ];
 
+    const EXPECTED_PREFILL_OPS: &[&str] = &[
+        "ds4_gpu_embed_tokens_hc_tensor",
+        "ds4_gpu_rms_norm_plain_rows_tensor",
+        "ds4_gpu_rms_norm_weight_rows_tensor",
+        "ds4_gpu_store_raw_kv_batch_tensor",
+        "ds4_gpu_compressor_prefill_tensor",
+        "ds4_gpu_compressor_prefill_state_ratio4_tensor",
+        "ds4_gpu_attention_prefill_raw_heads_tensor",
+        "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
+        "ds4_gpu_router_select_batch_tensor",
+        "ds4_gpu_routed_moe_batch_tensor",
+        "ds4_gpu_swiglu_tensor",
+        "ds4_gpu_hc_split_weighted_sum_tensor",
+        "ds4_gpu_hc_expand_add_split_tensor",
+    ];
+
     #[test]
     fn default_decode_facade_operations_are_pinned() {
         assert_eq!(DEFAULT_DECODE_FACADE_OPERATIONS.len(), 26);
@@ -1346,6 +1852,16 @@ mod tests {
             .iter()
             .zip(EXPECTED_DIRECTIONAL_STEERING_OPS)
         {
+            assert_eq!(spec.operation, *expected);
+            assert!(!spec.method.is_empty());
+            assert!(!spec.tensor_args.is_empty());
+        }
+    }
+
+    #[test]
+    fn prefill_facade_operations_are_pinned() {
+        assert_eq!(PREFILL_FACADE_OPERATIONS.len(), 13);
+        for (spec, expected) in PREFILL_FACADE_OPERATIONS.iter().zip(EXPECTED_PREFILL_OPS) {
             assert_eq!(spec.operation, *expected);
             assert!(!spec.method.is_empty());
             assert!(!spec.tensor_args.is_empty());

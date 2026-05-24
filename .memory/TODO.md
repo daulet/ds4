@@ -4930,7 +4930,7 @@
 
 ### M10.6b: Rust Whole-Prefill Short Execution
 
-- Status: active
+- Status: done
 - Goal: execute a short whole-prompt layer-major prefill through the Rust safe
   facade.
 - Oracle: C `metal_graph_prefill_layer_major` on B300 for a short prompt that
@@ -4944,11 +4944,18 @@
   tensor digest set are exact.
 - Review gate: ask Claude to review layer-major command ordering and output-row
   selection.
-- Validation needed: targeted B300 comparator, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
-  review with no blockers.
-- Owner path: Rust graph prefill modules, B300 comparator,
-  `.memory/status.md`.
+- Validation passed: B300 `ds4-rust-port-b300` current-C oracle vs Rust
+  candidate comparator passed 780 checks for
+  `short_italian_fact_whole_prefill`; local static comparator passed 60
+  checks; negative tests rejected 15 mutations; unified parity report with
+  local oracles skipped reported 45 passed, 34 skipped, and 0 failed;
+  `arch -arm64 make ds4_prefill_whole_short_oracle_dump_cpu.o`;
+  `arch -arm64 make ds4-prefill-whole-short-oracle-dump`; full
+  `cargo test --workspace`; `cargo fmt --all -- --check`; `git diff --check`;
+  and non-interactive Claude review passed with no blockers.
+- Owner path: `ds4_prefill_whole_short_oracle_dump.c`,
+  `rust/ds4-gpu/src/bin/ds4-prefill-whole-short.rs`,
+  `rust/ds4-gpu/src/decode_backend.rs`, `ds4-parity/`.
 
 ### M10.6c: Rust Cold Chunked-Prefill Execution
 

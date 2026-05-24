@@ -25523,11 +25523,264 @@ done:
     ds4_engine_close(e);
     return ok && !ferror(fp) ? 0 : 1;
 }
+
+int ds4_dump_prefill_whole_short_oracle_json(
+        const char *model_path,
+        const char *prompt_path,
+        ds4_backend backend,
+        FILE *fp) {
+    if (!model_path || !prompt_path || !fp) return 1;
+    if (!ds4_backend_uses_graph(backend)) {
+        fprintf(stderr, "ds4: whole-prefill short oracle requires a graph backend\n");
+        return 1;
+    }
+
+    ds4_engine *e = NULL;
+    ds4_engine_options eopt = {
+        .model_path = model_path,
+        .backend = backend,
+        .quality = false,
+    };
+    if (ds4_engine_open(&e, &eopt) != 0 || !e) return 1;
+
+    const int ctx_size = 32768;
+    token_vec prompt = {0};
+    ds4_session *s = NULL;
+    char err[256];
+    bool ok = graph_checkpoint_prompt_tokens(e, prompt_path, &prompt);
+    if (!ok || prompt.len <= 0) {
+        fprintf(stderr, "ds4: failed to tokenize whole-prefill short prompt\n");
+        ok = false;
+        goto done;
+    }
+    if (ds4_session_create(&s, e, ctx_size) != 0 || !s) {
+        ok = false;
+        goto done;
+    }
+    ok = ds4_session_sync(s, &prompt, err, sizeof(err)) == 0;
+    if (!ok) {
+        fprintf(stderr, "ds4: whole-prefill short prefill failed: %s\n", err);
+        goto done;
+    }
+    const char *boundary =
+        prompt.len > (int)s->prefill_cap ? "metal_graph_prefill_chunked_range" : "metal_graph_prefill_layer_major";
+    if (strcmp(boundary, "metal_graph_prefill_layer_major") != 0) {
+        fprintf(stderr, "ds4: whole-prefill short prompt unexpectedly crossed prefill cap\n");
+        ok = false;
+        goto done;
+    }
+
+    const uint32_t prompt_tokens = (uint32_t)prompt.len;
+    const uint32_t output_row = prompt_tokens - 1u;
+    const uint32_t raw_row = output_row % s->graph.raw_cap;
+    const uint32_t n_raw = prompt_tokens < s->graph.raw_window ? prompt_tokens : s->graph.raw_window;
+    const uint32_t raw_start = 0;
+    const uint32_t layer2 = 2;
+    const uint32_t layer5 = 5;
+    const uint32_t layer42 = 42;
+    const uint32_t layer2_comp_row = s->graph.layer_n_comp[layer2] ? s->graph.layer_n_comp[layer2] - 1u : 0u;
+    const uint32_t layer42_comp_row = s->graph.layer_n_comp[layer42] ? s->graph.layer_n_comp[layer42] - 1u : 0u;
+    const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
+    const uint64_t vocab_dim = e->weights.output->dim[1];
+    const uint64_t raw_row_dim = DS4_N_HEAD_DIM;
+    const uint64_t index_row_dim = DS4_N_INDEXER_HEAD_DIM;
+    const uint64_t layer5_state_dim = (uint64_t)DS4_N_HEAD_DIM * 128u;
+    const uint64_t layer42_attn_state_dim = (uint64_t)(2u * DS4_N_HEAD_DIM) * 8u;
+    const uint64_t layer42_index_state_dim = (uint64_t)(2u * DS4_N_INDEXER_HEAD_DIM) * 8u;
+
+    float *after_layer42_hc = xmalloc((size_t)hc_dim * sizeof(after_layer42_hc[0]));
+    float *output_pre = xmalloc((size_t)DS4_N_HC * sizeof(output_pre[0]));
+    float *output_weights = xmalloc((size_t)DS4_N_HC * sizeof(output_weights[0]));
+    float *output_embd = xmalloc((size_t)DS4_N_EMBD * sizeof(output_embd[0]));
+    float *output_norm = xmalloc((size_t)DS4_N_EMBD * sizeof(output_norm[0]));
+    float *logits = xmalloc((size_t)vocab_dim * sizeof(logits[0]));
+    float *layer2_raw_cache_row = xmalloc((size_t)raw_row_dim * sizeof(layer2_raw_cache_row[0]));
+    float *layer2_attn_comp_row_data = xmalloc((size_t)raw_row_dim * sizeof(layer2_attn_comp_row_data[0]));
+    float *layer2_index_comp_row_data = xmalloc((size_t)index_row_dim * sizeof(layer2_index_comp_row_data[0]));
+    float *layer5_attn_state_kv = xmalloc((size_t)layer5_state_dim * sizeof(layer5_attn_state_kv[0]));
+    float *layer5_attn_state_score = xmalloc((size_t)layer5_state_dim * sizeof(layer5_attn_state_score[0]));
+    float *layer42_raw_cache_row = xmalloc((size_t)raw_row_dim * sizeof(layer42_raw_cache_row[0]));
+    float *layer42_attn_comp_row_data = xmalloc((size_t)raw_row_dim * sizeof(layer42_attn_comp_row_data[0]));
+    float *layer42_index_comp_row_data = xmalloc((size_t)index_row_dim * sizeof(layer42_index_comp_row_data[0]));
+    float *layer42_attn_state_kv = xmalloc((size_t)layer42_attn_state_dim * sizeof(layer42_attn_state_kv[0]));
+    float *layer42_index_state_kv = xmalloc((size_t)layer42_index_state_dim * sizeof(layer42_index_state_kv[0]));
+
+    ok = ds4_gpu_tensor_read(s->graph.batch_cur_hc,
+                             (uint64_t)output_row * hc_dim * sizeof(float),
+                             after_layer42_hc,
+                             hc_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.output_pre, 0, output_pre, (uint64_t)DS4_N_HC * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.output_weights, 0, output_weights, (uint64_t)DS4_N_HC * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.output_embd, 0, output_embd, (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.output_norm, 0, output_norm, (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.logits, 0, logits, vocab_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_raw_cache[layer2],
+                             (uint64_t)raw_row * DS4_N_HEAD_DIM * sizeof(float),
+                             layer2_raw_cache_row,
+                             raw_row_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_attn_comp_cache[layer2],
+                             (uint64_t)layer2_comp_row * DS4_N_HEAD_DIM * sizeof(float),
+                             layer2_attn_comp_row_data,
+                             raw_row_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_index_comp_cache[layer2],
+                             (uint64_t)layer2_comp_row * DS4_N_INDEXER_HEAD_DIM * sizeof(float),
+                             layer2_index_comp_row_data,
+                             index_row_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_attn_state_kv[layer5],
+                             0,
+                             layer5_attn_state_kv,
+                             layer5_state_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_attn_state_score[layer5],
+                             0,
+                             layer5_attn_state_score,
+                             layer5_state_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_raw_cache[layer42],
+                             (uint64_t)raw_row * DS4_N_HEAD_DIM * sizeof(float),
+                             layer42_raw_cache_row,
+                             raw_row_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_attn_comp_cache[layer42],
+                             (uint64_t)layer42_comp_row * DS4_N_HEAD_DIM * sizeof(float),
+                             layer42_attn_comp_row_data,
+                             raw_row_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_index_comp_cache[layer42],
+                             (uint64_t)layer42_comp_row * DS4_N_INDEXER_HEAD_DIM * sizeof(float),
+                             layer42_index_comp_row_data,
+                             index_row_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_attn_state_kv[layer42],
+                             0,
+                             layer42_attn_state_kv,
+                             layer42_attn_state_dim * sizeof(float)) != 0 &&
+         ds4_gpu_tensor_read(s->graph.layer_index_state_kv[layer42],
+                             0,
+                             layer42_index_state_kv,
+                             layer42_index_state_dim * sizeof(float)) != 0;
+    if (!ok) {
+        fprintf(stderr, "ds4: failed to read whole-prefill short oracle tensors\n");
+        goto cleanup_buffers;
+    }
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.prefill_whole_short_oracle.v1\",\n", fp);
+    fputs("  \"case\": \"short_italian_fact_whole_prefill\",\n", fp);
+    fputs("  \"source\": \"current-c\",\n", fp);
+    fputs("  \"model\": {\n", fp);
+    fprintf(fp, "    \"mapped_size\": %" PRIu64 ",\n", e->model.size);
+    fprintf(fp, "    \"tensor_count\": %" PRIu64 ",\n", e->model.n_tensors);
+    fprintf(fp, "    \"tensor_data_offset\": %" PRIu64 ",\n", e->model.tensor_data_pos);
+    fputs("    \"bound_layers\": 43\n", fp);
+    fputs("  },\n", fp);
+    fputs("  \"operation\": {\n", fp);
+    fputs("    \"name\": \"current_c_gpu_prefill_whole_short\",\n", fp);
+    fputs("    \"method\": \"metal_graph_prefill_layer_major+metal_graph_encode_layer_batch_x43+final_row_output_head\",\n", fp);
+    fputs("    \"boundary\": \"whole_prefill\",\n", fp);
+    fputs("    \"fixture\": \"short_italian_fact\",\n", fp);
+    fprintf(fp, "    \"prompt_tokens\": %u,\n", prompt_tokens);
+    fprintf(fp, "    \"output_row\": %u,\n", output_row);
+    fputs("    \"first_layer\": 0,\n", fp);
+    fputs("    \"last_layer\": 42,\n", fp);
+    fputs("    \"prefill_layer_calls\": 43,\n", fp);
+    fputs("    \"dense_layers\": 2,\n", fp);
+    fputs("    \"ratio4_layers\": 21,\n", fp);
+    fputs("    \"ratio128_layers\": 20,\n", fp);
+    fprintf(fp, "    \"ctx_size\": %d,\n", ctx_size);
+    fprintf(fp, "    \"plan_prompt_len\": %d,\n", ctx_size);
+    fprintf(fp, "    \"prefill_cap\": %u,\n", s->graph.prefill_cap);
+    fprintf(fp, "    \"raw_cap\": %u,\n", s->graph.raw_cap);
+    fprintf(fp, "    \"raw_window\": %u,\n", s->graph.raw_window);
+    fprintf(fp, "    \"raw_row\": %u,\n", raw_row);
+    fprintf(fp, "    \"raw_start\": %u,\n", raw_start);
+    fprintf(fp, "    \"n_raw\": %u,\n", n_raw);
+    fprintf(fp, "    \"n_vocab\": %u,\n", (unsigned)DS4_N_VOCAB);
+    fprintf(fp, "    \"vocab_dim\": %" PRIu64 ",\n", vocab_dim);
+    fprintf(fp, "    \"n_embd\": %u,\n", (unsigned)DS4_N_EMBD);
+    fprintf(fp, "    \"n_hc\": %u,\n", (unsigned)DS4_N_HC);
+    fprintf(fp, "    \"hc_dim\": %" PRIu64 ",\n", hc_dim);
+    fprintf(fp, "    \"output_pre_dim\": %u,\n", (unsigned)DS4_N_HC);
+    fprintf(fp, "    \"output_embd_dim\": %u,\n", (unsigned)DS4_N_EMBD);
+    fprintf(fp, "    \"head_dim\": %u,\n", (unsigned)DS4_N_HEAD_DIM);
+    fprintf(fp, "    \"indexer_head_dim\": %u,\n", (unsigned)DS4_N_INDEXER_HEAD_DIM);
+    fprintf(fp, "    \"layer2_comp_cap\": %u,\n", s->graph.layer_comp_cap[layer2]);
+    fprintf(fp, "    \"layer2_n_comp\": %u,\n", s->graph.layer_n_comp[layer2]);
+    fprintf(fp, "    \"layer2_n_index_comp\": %u,\n", s->graph.layer_n_index_comp[layer2]);
+    fprintf(fp, "    \"layer5_comp_cap\": %u,\n", s->graph.layer_comp_cap[layer5]);
+    fprintf(fp, "    \"layer5_n_comp\": %u,\n", s->graph.layer_n_comp[layer5]);
+    fprintf(fp, "    \"layer42_comp_cap\": %u,\n", s->graph.layer_comp_cap[layer42]);
+    fprintf(fp, "    \"layer42_n_comp\": %u,\n", s->graph.layer_n_comp[layer42]);
+    fprintf(fp, "    \"layer42_n_index_comp\": %u,\n", s->graph.layer_n_index_comp[layer42]);
+    fprintf(fp, "    \"rms_eps\": %.9g,\n", (double)DS4_RMS_EPS);
+    fprintf(fp, "    \"hc_eps\": %.9g\n", (double)DS4_HC_EPS);
+    fputs("  },\n", fp);
+    fputs("  \"weights\": {\n", fp);
+    layer0_attn_oracle_write_weight(fp, "token_embd", "base.token_embd", e->weights.token_embd, true);
+    layer0_attn_oracle_write_weight(fp, "output_hc_fn", "base.output_hc_fn", e->weights.output_hc_fn, true);
+    layer0_attn_oracle_write_weight(fp, "output_hc_scale", "base.output_hc_scale", e->weights.output_hc_scale, true);
+    layer0_attn_oracle_write_weight(fp, "output_hc_base", "base.output_hc_base", e->weights.output_hc_base, true);
+    layer0_attn_oracle_write_weight(fp, "output_norm", "base.output_norm", e->weights.output_norm, true);
+    layer0_attn_oracle_write_weight(fp, "output", "base.output", e->weights.output, false);
+    fputs("  },\n", fp);
+    fputs("  \"outputs\": {\n", fp);
+    layer0_attn_oracle_write_output(fp, "after_layer42_hc", after_layer42_hc, hc_dim, true);
+    layer0_attn_oracle_write_output(fp, "output_pre", output_pre, DS4_N_HC, true);
+    layer0_attn_oracle_write_output(fp, "output_weights", output_weights, DS4_N_HC, true);
+    layer0_attn_oracle_write_output(fp, "output_embd", output_embd, DS4_N_EMBD, true);
+    layer0_attn_oracle_write_output(fp, "output_norm", output_norm, DS4_N_EMBD, true);
+    layer0_attn_oracle_write_output(fp, "logits", logits, vocab_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_raw_cache_row", layer2_raw_cache_row, raw_row_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_attn_comp_row4", layer2_attn_comp_row_data, raw_row_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer2_index_comp_row4", layer2_index_comp_row_data, index_row_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer5_attn_state_kv", layer5_attn_state_kv, layer5_state_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer5_attn_state_score", layer5_attn_state_score, layer5_state_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer42_raw_cache_row", layer42_raw_cache_row, raw_row_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer42_attn_comp_row4", layer42_attn_comp_row_data, raw_row_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer42_index_comp_row4", layer42_index_comp_row_data, index_row_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer42_attn_state_kv", layer42_attn_state_kv, layer42_attn_state_dim, true);
+    layer0_attn_oracle_write_output(fp, "layer42_index_state_kv", layer42_index_state_kv, layer42_index_state_dim, false);
+    fputs("  }\n", fp);
+    fputs("}\n", fp);
+    ok = !ferror(fp);
+
+cleanup_buffers:
+    free(layer42_index_state_kv);
+    free(layer42_attn_state_kv);
+    free(layer42_index_comp_row_data);
+    free(layer42_attn_comp_row_data);
+    free(layer42_raw_cache_row);
+    free(layer5_attn_state_score);
+    free(layer5_attn_state_kv);
+    free(layer2_index_comp_row_data);
+    free(layer2_attn_comp_row_data);
+    free(layer2_raw_cache_row);
+    free(logits);
+    free(output_norm);
+    free(output_embd);
+    free(output_weights);
+    free(output_pre);
+    free(after_layer42_hc);
+
+done:
+    if (s) ds4_session_free(s);
+    token_vec_free(&prompt);
+    ds4_engine_close(e);
+    return ok ? 0 : 1;
+}
 #else
 int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *opt, FILE *fp) {
     (void)opt;
     (void)fp;
     fprintf(stderr, "ds4: graph checkpoint oracle requires a graph backend build\n");
+    return 1;
+}
+
+int ds4_dump_prefill_whole_short_oracle_json(
+        const char *model_path,
+        const char *prompt_path,
+        ds4_backend backend,
+        FILE *fp) {
+    (void)model_path;
+    (void)prompt_path;
+    (void)backend;
+    (void)fp;
+    fprintf(stderr, "ds4: whole-prefill short oracle requires a graph backend build\n");
     return 1;
 }
 #endif

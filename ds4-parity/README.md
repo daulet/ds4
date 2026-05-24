@@ -746,6 +746,31 @@ whole-vs-chunked routing, resumed-suffix threshold, absolute prefill-cap chunk
 alignment, final output batch row, progress points, and layer-batch call counts
 for the M10.6a fixtures.
 
+Compare the M10.6b Rust whole-prefill short-prompt execution against the
+current-C layer-major prefill oracle:
+
+```sh
+python3 ds4-parity/compare_prefill_whole_short.py
+python3 ds4-parity/compare_prefill_whole_short.py --negative-test
+make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native
+./ds4-prefill-whole-short-oracle-dump --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/short_italian_fact.txt \
+  --backend cuda \
+  --output /tmp/ds4-m106b-prefill-whole-short-oracle.json
+CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend \
+  --bin ds4-prefill-whole-short --quiet -- \
+  --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/short_italian_fact.txt \
+  > /tmp/ds4-m106b-prefill-whole-short-rust.json
+python3 ds4-parity/compare_prefill_whole_short.py \
+  --oracle /tmp/ds4-m106b-prefill-whole-short-oracle.json \
+  --candidate /tmp/ds4-m106b-prefill-whole-short-rust.json
+```
+
+The comparator checks that Rust uses the same rendered chat prompt tokens,
+2048-row prefill-cap graph plan, 21 active prompt rows, final-row output head,
+and layer-major raw/compressed cache counters as current C.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

@@ -3560,3 +3560,18 @@
   covers Responses and Anthropic request parsing/rendering inputs; later M9.6
   and M9.7 remain responsible for model-backed tool/protocol response behavior.
 - M9.2 split validation passed with roadmap/board diff and `git diff --check`.
+- M10.6b adds a current-C whole-prefill short-prompt oracle helper,
+  `ds4-prefill-whole-short`, the Rust prefill safe-facade operation wrappers,
+  and `compare_prefill_whole_short.py` with pinned B300 output digests for
+  `short_italian_fact_whole_prefill`.
+- M10.6b B300 validation used pod `ds4-rust-port-b300` in `hou2-prod1` with
+  `/workspace/ds4/ds4flash.gguf`; current-C
+  `metal_graph_prefill_layer_major` and Rust whole-prefill candidate matched in
+  `compare_prefill_whole_short.py --oracle
+  /tmp/ds4-m106b-prefill-whole-short-oracle.json --candidate
+  /tmp/ds4-m106b-prefill-whole-short-rust.json`, reporting 780 checks.
+- M10.6b local validation passed static comparator 60 checks, negative tests
+  rejected 15 mutations, unified report `--skip-local-oracles` reported 45
+  passed, 34 skipped, and 0 failed, `arch -arm64` C helper builds, full
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.

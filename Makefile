@@ -136,6 +136,9 @@ ds4-directional-steering-oracle-dump: ds4_directional_steering_oracle_dump.o $(C
 ds4-short-continuation-output-head-oracle-dump: ds4_short_continuation_output_head_oracle_dump.o $(CORE_OBJS)
 	$(CC) $(CFLAGS) -o $@ ds4_short_continuation_output_head_oracle_dump.o $(CORE_OBJS) $(METAL_LDLIBS)
 
+ds4-prefill-whole-short-oracle-dump: ds4_prefill_whole_short_oracle_dump.o $(CORE_OBJS)
+	$(CC) $(CFLAGS) -o $@ ds4_prefill_whole_short_oracle_dump.o $(CORE_OBJS) $(METAL_LDLIBS)
+
 ds4-ratio-boundary-output-head-oracle-dump: ds4_ratio_boundary_output_head_oracle_dump.o $(CORE_OBJS)
 	$(CC) $(CFLAGS) -o $@ ds4_ratio_boundary_output_head_oracle_dump.o $(CORE_OBJS) $(METAL_LDLIBS)
 
@@ -299,6 +302,9 @@ ds4-directional-steering-oracle-dump: ds4_directional_steering_oracle_dump.o $(C
 ds4-short-continuation-output-head-oracle-dump: ds4_short_continuation_output_head_oracle_dump.o $(CORE_OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
 
+ds4-prefill-whole-short-oracle-dump: ds4_prefill_whole_short_oracle_dump.o $(CORE_OBJS)
+	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
+
 ds4-ratio-boundary-output-head-oracle-dump: ds4_ratio_boundary_output_head_oracle_dump.o $(CORE_OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(CUDA_LDLIBS)
 
@@ -439,6 +445,9 @@ ds4_directional_steering_oracle_dump.o: ds4_directional_steering_oracle_dump.c d
 ds4_short_continuation_output_head_oracle_dump.o: ds4_short_continuation_output_head_oracle_dump.c ds4.h
 	$(CC) $(CFLAGS) -c -o $@ ds4_short_continuation_output_head_oracle_dump.c
 
+ds4_prefill_whole_short_oracle_dump.o: ds4_prefill_whole_short_oracle_dump.c ds4.h
+	$(CC) $(CFLAGS) -c -o $@ ds4_prefill_whole_short_oracle_dump.c
+
 ds4_ratio_boundary_output_head_oracle_dump.o: ds4_ratio_boundary_output_head_oracle_dump.c ds4.h
 	$(CC) $(CFLAGS) -c -o $@ ds4_ratio_boundary_output_head_oracle_dump.c
 
@@ -555,6 +564,9 @@ ds4_directional_steering_oracle_dump_cpu.o: ds4_directional_steering_oracle_dump
 
 ds4_short_continuation_output_head_oracle_dump_cpu.o: ds4_short_continuation_output_head_oracle_dump.c ds4.h
 	$(CC) $(CFLAGS) -DDS4_NO_GPU -c -o $@ ds4_short_continuation_output_head_oracle_dump.c
+
+ds4_prefill_whole_short_oracle_dump_cpu.o: ds4_prefill_whole_short_oracle_dump.c ds4.h
+	$(CC) $(CFLAGS) -DDS4_NO_GPU -c -o $@ ds4_prefill_whole_short_oracle_dump.c
 
 ds4_ratio_boundary_output_head_oracle_dump_cpu.o: ds4_ratio_boundary_output_head_oracle_dump.c ds4.h
 	$(CC) $(CFLAGS) -DDS4_NO_GPU -c -o $@ ds4_ratio_boundary_output_head_oracle_dump.c
