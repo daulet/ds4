@@ -208,6 +208,36 @@ target-stream, disabled-route, invalid-selector, and unsupported graph-route
 outcomes, and verifies unsupported graph selection fails before model open,
 stream output, checkpoint/cache mutation, or server KVC directory creation.
 
+Validate the M10.9c Runtime graph official-vector gate:
+
+```sh
+python3 ds4-parity/run_runtime_graph_official_vectors.py
+python3 ds4-parity/run_runtime_graph_official_vectors.py --negative-test
+```
+
+Refresh the live B300 Rust runtime official-vector summary:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; CUDA_ARCH=native \
+  python3 ds4-parity/run_runtime_graph_official_vectors.py \
+    --workdir /workspace/ds4 --model /workspace/ds4/ds4flash.gguf \
+    --write-summary /tmp/ds4-m109c-official-vectors.json --negative-test'
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m109c-official-vectors.json \
+  ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json
+```
+
+The M10.9c comparator checks the Rust `ds4-runtime-official-vectors-rs`
+capture against the M0.3 official-vector contract on B300: route `graph`,
+backend `cuda`, q2-imatrix model hash, fixture hash, selected token bytes,
+top-logprob shape, official-top presence, M6 logprob tolerance, and the
+current-C `long_memory_archive` skip reason.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

@@ -327,6 +327,14 @@ pub struct ServerGenerationResult {
     pub finish_reason: &'static str,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TopLogprobScore {
+    pub id: i32,
+    pub bytes: Vec<u8>,
+    pub logit: f32,
+    pub logprob: f32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InteractiveTurnOptions {
     pub n_predict: i32,
@@ -735,6 +743,10 @@ impl Engine {
     fn token_eos(&self) -> i32 {
         unsafe { ds4_token_eos(self.raw.as_ptr()) as i32 }
     }
+
+    pub fn token_text(&self, token: i32) -> Vec<u8> {
+        unsafe { token_text_bytes(self.raw.as_ptr(), token as c_int) }
+    }
 }
 
 impl ChatSession<'_> {
@@ -889,6 +901,55 @@ impl ChatSession<'_> {
 impl ServerSession<'_> {
     pub fn position(&self) -> i32 {
         self.session.pos()
+    }
+
+    pub fn argmax(&self) -> i32 {
+        unsafe { ds4_session_argmax(self.session.raw.as_ptr()) as i32 }
+    }
+
+    pub fn top_logprobs(&self, k: i32) -> Vec<TopLogprobScore> {
+        if k <= 0 {
+            return Vec::new();
+        }
+        let mut raw = vec![
+            RawTokenScore {
+                id: -1,
+                logit: f32::NEG_INFINITY,
+                logprob: f32::NEG_INFINITY,
+            };
+            k as usize
+        ];
+        let count = unsafe {
+            ds4_session_top_logprobs(self.session.raw.as_ptr(), raw.as_mut_ptr(), k as c_int)
+        };
+        let count = count.clamp(0, k) as usize;
+        raw.into_iter()
+            .take(count)
+            .filter(|score| score.id >= 0)
+            .map(|score| TopLogprobScore {
+                id: score.id,
+                bytes: self.engine.token_text(score.id),
+                logit: score.logit,
+                logprob: score.logprob,
+            })
+            .collect()
+    }
+
+    pub fn eval_token(&mut self, token: i32) -> Result<(), EngineError> {
+        let mut err = [0 as c_char; 160];
+        let rc = unsafe {
+            ds4_session_eval(
+                self.session.raw.as_ptr(),
+                token as c_int,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(EngineError::message(c_error(&err)))
+        }
     }
 
     pub fn cache_probe(&self, prompt: &Tokens) -> ServerCacheProbe {
@@ -1766,6 +1827,14 @@ struct RawContextMemory {
     comp_cap: u32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RawTokenScore {
+    id: c_int,
+    logit: c_float,
+    logprob: c_float,
+}
+
 unsafe extern "C" {
     fn ds4_engine_open(out: *mut *mut RawEngine, opt: *const RawEngineOptions) -> c_int;
     fn ds4_engine_close(engine: *mut RawEngine);
@@ -1828,6 +1897,12 @@ unsafe extern "C" {
         prompt: *const RawTokens,
         err: *mut c_char,
         errlen: usize,
+    ) -> c_int;
+    fn ds4_session_argmax(session: *mut RawSession) -> c_int;
+    fn ds4_session_top_logprobs(
+        session: *mut RawSession,
+        out: *mut RawTokenScore,
+        k: c_int,
     ) -> c_int;
     fn ds4_session_sample(
         session: *mut RawSession,

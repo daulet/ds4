@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.9c B300 Official-Vector Rust Runtime Gate
-- Last validated source before the active item: M10.9b Rust Runtime Graph
-  Route Switch And Preflight.
+- Active item: M10.9d B300 Long-Context Rust Runtime Gate
+- Last validated source before the active item: M10.9c B300 Official-Vector
+  Rust Runtime Gate.
+- Earlier M10.9c B300 Official-Vector Rust Runtime Gate.
 - Earlier M10.9b Rust Runtime Graph Route Switch And Preflight.
 - Earlier M10.9a Runtime Graph Closure Matrix And Rerun Contract.
 - Earlier M10.9 Runtime Graph End-To-End And Benchmark Closure split into
@@ -79,6 +80,31 @@
 
 ## Last Evidence
 
+- M10.9c adds the Rust `ds4-runtime-official-vectors-rs` capture binary,
+  exposes Rust session argmax/top-logprob/eval APIs, adds
+  `ds4-parity/run_runtime_graph_official_vectors.py`, wires the comparator into
+  the unified report, and records
+  `ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json` from the
+  B300 pod. The artifact records route `graph`, backend `cuda`, q2-imatrix
+  model hash
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`,
+  `official.vec` hash
+  `0223bbe1eaa3b626be87849df389af91c3f3f6e6b0d4436baf2dbb6ed624b1ac`,
+  raw Rust stdout/stderr, selected-token matches, top-logprob rows,
+  official-top deltas, and the current-C `long_memory_archive` skip reason.
+- M10.9c validation passed the live B300 Rust runtime official-vector capture
+  with 1,958 checks, max official-logprob delta 0.678254604, and 8 negative
+  mutations; `python3 ds4-parity/run_runtime_graph_official_vectors.py
+  --negative-test`; `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test`; `python3
+  ds4-parity/check_runtime_graph_route_preflight.py --negative-test`; Python
+  syntax checks; `cargo test -p ds4-engine --bin
+  ds4-runtime-official-vectors-rs`; `cargo test --workspace`; `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed; `cargo fmt --all -- --check`; `git diff --check`; and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 74 passed, 47
+  skipped, and 0 failed. Non-interactive Claude review returned `NO
+  BLOCKERS`.
 - M10.9b adds shared Rust `RuntimeGraphRoute` selector support, wires
   `--runtime-graph`/`--runtime-graph-route` through one-shot, interactive, and
   server runtime binaries, and records

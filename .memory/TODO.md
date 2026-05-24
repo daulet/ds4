@@ -6434,7 +6434,7 @@
 
 #### M10.9c: B300 Official-Vector Rust Runtime Gate
 
-- Status: active
+- Status: complete
 - Goal: run official-vector logprob cases through the Rust graph runtime path on
   B300 and compare against the current-C M0.3 baseline.
 - Oracle: current-C `./ds4_test --logprob-vectors` B300 baseline, M6 numeric
@@ -6451,16 +6451,26 @@
   reasons are exact; score tolerances follow the M6 policy.
 - Review gate: ask Claude to review official-vector comparison scope and skip
   handling.
-- Validation needed: live B300 Rust runtime official-vector run, comparator with
-  negative tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
-  diff --check`, unified parity report, and non-interactive Claude review with
-  no blockers.
+- Evidence: added `ds4-runtime-official-vectors-rs`, exposed Rust session
+  argmax/top-logprob/eval APIs, added
+  `ds4-parity/run_runtime_graph_official_vectors.py`, and captured
+  `ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json` from the
+  B300 pod. The artifact records route `graph`, backend `cuda`, q2-imatrix
+  model hash, `official.vec` hash, raw Rust stdout/stderr, selected-token
+  matches, top-logprob rows, official-top deltas, and the current-C
+  `long_memory_archive` skip reason.
+- Validation: live B300 Rust runtime official-vector capture passed with 1,958
+  checks, max official-logprob delta 0.678254604, and 8 negative mutations.
+  Local comparator, closure matrix, route preflight, Rust binary tests,
+  `cargo test --workspace`, server parity report, formatter check, diff check,
+  and unified parity report passed; non-interactive Claude review returned `NO
+  BLOCKERS`. Exact command evidence is recorded in `.memory/status.md`.
 - Owner path: B300 official-vector Rust runtime artifact, comparator,
   `.memory/status.md`.
 
 #### M10.9d: B300 Long-Context Rust Runtime Gate
 
-- Status: pending
+- Status: active
 - Goal: run the long-context quality gate through the Rust graph runtime path
   and keep nondeterministic score surfaces out of exact comparisons.
 - Oracle: current-C `./ds4_test --long-context` baseline behavior, M7/M10

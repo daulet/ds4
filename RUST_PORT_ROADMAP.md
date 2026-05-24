@@ -5741,6 +5741,20 @@ restore boundary.
   negative tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
   diff --check`, unified parity report, and non-interactive Claude review with
   no blockers.
+- Evidence: added the Rust `ds4-runtime-official-vectors-rs` capture binary
+  and `ds4-parity/run_runtime_graph_official_vectors.py`; captured
+  `ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json` on
+  B300. The artifact records route `graph`, backend `cuda`, exact q2-imatrix
+  model hash, `official.vec` hash, raw Rust stdout/stderr, selected-token
+  matches, top-logprob rows, official-top deltas, and the current-C
+  `long_memory_archive` skip reason.
+- Validation evidence: live B300 Rust runtime official-vector capture passed
+  with 1,958 checks, max official-logprob delta 0.678254604, and 8 negative
+  mutations. Local comparator, closure matrix, route preflight, Rust binary
+  tests, `cargo test --workspace`, server parity report, formatter check, diff
+  check, and unified parity report passed; non-interactive Claude review
+  returned `NO BLOCKERS`. Exact command evidence is recorded in
+  `.memory/status.md`.
 
 ##### M10.9d: B300 Long-Context Rust Runtime Gate
 
