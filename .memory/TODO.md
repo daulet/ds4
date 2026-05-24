@@ -5780,7 +5780,7 @@
 
 ### M10.8d: Rust Exact N=2 Verifier Orchestration Smoke
 
-- Status: active
+- Status: done
 - Goal: move the exact N=2 verifier command orchestration into Rust while
   preserving the target decode kernel order and row-logits contract.
 - Oracle: `metal_graph_verify_decode2_exact`, M10.2 command boundaries, M10.4
@@ -5802,12 +5802,23 @@
   comparator with negative tests, targeted Rust tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Evidence: added `rust/ds4-gpu/src/mtp_decode2_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-decode2-plan.rs`, and
+  `ds4-parity/compare_mtp_decode2_plan.py`. The Rust exact-N=2 verifier plan
+  pins target token order, decode-layer command steps, prefix1 frontier capture,
+  top0/logits0/logits1 readbacks, full-accept and prefix1 logits source,
+  failure restore, and the explicit missing-MTP live blocker. Validation passed
+  targeted Rust decode2-plan tests, the comparator with 4 cases, 148 checks,
+  and 7 negative mutations, JSON output parsing, Python syntax, the live B300
+  missing-MTP blocker command, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, unified parity with 62 passed, 42 skipped, and
+  0 failed, and non-interactive Claude review with `NO BLOCKERS`.
 - Owner path: Rust exact-N=2 orchestration, B300 comparator,
   `.memory/status.md`.
 
 ### M10.8e: Rust Suffix Verifier Orchestration Smoke
 
-- Status: pending
+- Status: active
 - Goal: move Rust-owned orchestration for the suffix/microbatch verifier path
   while preserving current-C full-accept, prefix1-accept, replay, and rollback
   decisions.

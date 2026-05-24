@@ -1185,6 +1185,20 @@ top-id/logits readback roles, `mtp_n_raw` transition, and failure restoration
 behavior, and records the live B300 MTP draft smoke as blocked until an MTP
 support GGUF is present.
 
+Compare the M10.8d Rust MTP exact-N=2 verifier orchestration plan against
+current-C verifier anchors:
+
+```sh
+python3 ds4-parity/compare_mtp_decode2_plan.py
+python3 ds4-parity/compare_mtp_decode2_plan.py --negative-test
+```
+
+The comparator runs `ds4-mtp-decode2-plan`, checks exact target token order,
+the `metal_graph_verify_decode2_exact` command sequence, top0/logits0/logits1
+readback roles, full-accept versus prefix1 logits source, prefix1 frontier
+commit, failure restore behavior, and records the live B300 exact-N=2 smoke as
+blocked until an MTP support GGUF is present.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
