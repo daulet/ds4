@@ -1,0 +1,18 @@
+{
+  "schema": "ds4.agent_trace_replay_baseline.v1",
+  "milestone": "M11.1",
+  "dumps": {
+    "current_c": {
+      "path": "current-c.json",
+      "size_bytes": 3140,
+      "sha256": "fb62ec8be6cd6568b5a64a0915ac98f966709ca861d4789038a4e87b14deed31",
+      "producer": "current-c-agent-trace-oracle",
+      "command": "./ds4-agent --dump-agent-trace-oracle ds4-parity/baselines/agent/m11.1/current-c.json"
+    }
+  },
+  "validation": [
+    "arch -arm64 make ds4-agent",
+    "./ds4-agent --dump-agent-trace-oracle ds4-parity/baselines/agent/m11.1/current-c.json",
+    "python3 ds4-parity/compare_agent_trace_replay.py --negative-test"
+  ]
+}

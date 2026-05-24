@@ -336,6 +336,23 @@ throughput threshold, M10.9a through M10.9e gate status, and the explicit
 claim boundary that this closes Milestone 10 without claiming a general
 backend replacement.
 
+Validate the M11.1 Agent trace replay oracle:
+
+```sh
+arch -arm64 make ds4-agent
+./ds4-agent --dump-agent-trace-oracle \
+  ds4-parity/baselines/agent/m11.1/current-c.json
+python3 ds4-parity/compare_agent_trace_replay.py --negative-test
+```
+
+The M11.1 comparator checks the no-model current-C agent replay fixture
+against the Rust `ds4-agent-trace-replay-rs` emitter: normalized workspace and
+session identifiers, scripted model events, parsed DSML tool sequence,
+deterministic tool-output stubs, transcript role boundaries, session
+save/list/switch/history/new operations, final visible output, and manifest
+hashes. This is the first M11 gate; it defines replay fixtures before claiming
+Rust ownership of the live agent loop.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

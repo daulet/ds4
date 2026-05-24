@@ -3,9 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M11 Agent Trace Replay
-- Last validated source before the active item: M10.9f Benchmark Comparator
-  And Milestone 10 Closure.
+- Active item: M11.2 Rust Agent Rendered Context Replay
+- Last validated source before the active item: M11.1 Agent Trace Replay
+  Oracle And Fixture Contract.
+- Earlier M11 Agent Trace Replay split into M11.1 through M11.4 before
+  implementation.
+- Earlier M11.1 Agent Trace Replay Oracle And Fixture Contract.
 - Earlier M10.9f Benchmark Comparator And Milestone 10 Closure.
 - Earlier M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate.
 - Earlier M10.9d B300 Long-Context Rust Runtime Gate.
@@ -83,6 +86,26 @@
 
 ## Last Evidence
 
+- M11.1 adds a no-model current-C `./ds4-agent --dump-agent-trace-oracle`
+  replay oracle, records
+  `ds4-parity/baselines/agent/m11.1/current-c.json`, adds the Rust
+  `ds4-agent-trace-replay-rs` emitter, and wires
+  `ds4-parity/compare_agent_trace_replay.py --negative-test` into the unified
+  parity report and README. The fixture normalizes workspace/session markers,
+  pins a scripted DSML `list` tool round with deterministic tool output, and
+  pins save/list/switch/history/new session-command flow before any live Rust
+  agent-loop claim.
+- M11.1 validation passed `arch -arm64 make ds4-agent`;
+  `./ds4-agent --dump-agent-trace-oracle
+  ds4-parity/baselines/agent/m11.1/current-c.json`; and `python3
+  ds4-parity/compare_agent_trace_replay.py --negative-test` with 225 checks.
+  Follow-up gates also passed: Python syntax checks; `cargo test -p ds4-gguf
+  agent_trace_replay`; `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test`; `cargo
+  fmt --all -- --check`; `cargo test --workspace`; `python3
+  ds4-parity/run_server_parity_report.py`; and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 78 passed, 50
+  skipped, 0 failed.
 - M10.9f adds the Rust `ds4-runtime-graph-bench-rs` benchmark capture binary,
   exposes Rust session snapshot and EOS-excluding argmax helpers needed to
   mirror `ds4-bench`, adds `ds4-parity/run_runtime_graph_bench.py`, wires the

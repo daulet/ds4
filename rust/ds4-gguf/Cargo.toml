@@ -20,6 +20,10 @@ name = "ds4-agent-dsml-dump"
 path = "src/bin/ds4-agent-dsml-dump.rs"
 
 [[bin]]
+name = "ds4-agent-trace-replay-rs"
+path = "src/bin/ds4-agent-trace-replay-rs.rs"
+
+[[bin]]
 name = "ds4-sampling-dump-rs"
 path = "src/bin/ds4-sampling-dump-rs.rs"
 

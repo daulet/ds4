@@ -1,0 +1,66 @@
+{
+  "schema": "ds4.agent_trace_replay_oracle.v1",
+  "milestone": "M11.1",
+  "source": "current-c-agent-trace-oracle",
+  "normalization": {
+    "path_root": "<WORKSPACE>",
+    "fields": ["timestamp", "cwd", "duration_ms", "pid", "session_sha"],
+    "rules": [
+      "absolute workspace paths are replaced with <WORKSPACE>",
+      "command durations and process ids are omitted",
+      "saved session digests are normalized to <SESSION:...>"
+    ]
+  },
+  "cases": [
+    {
+      "id": "single_tool_round",
+      "description": "one user turn, one DSML tool call, deterministic tool result, final answer",
+      "fixture": {"kind": "scripted_model", "cwd": "<WORKSPACE>", "ctx_size": 8192, "think_mode": "none"},
+      "inputs": [
+        {"type": "user", "text": "List the root files, then answer with the two names you used."}
+      ],
+      "model_events": [
+        {"round": 0, "text": "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"list\">\n<｜DSML｜parameter name=\"path\" string=\"true\">.</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>"},
+        {"round": 1, "text": "README.md and ds4_agent.c are visible."}
+      ],
+      "tool_stubs": [
+        {"round": 0, "name": "list", "args": [{"name": "path", "value": ".", "is_string": true}], "output": "Tool result for list path=\".\":\nREADME.md\nds4_agent.c\n"}
+      ],
+      "expected": {
+        "tool_sequence": [{"round": 0, "name": "list", "args": [{"name": "path", "value": ".", "is_string": true}]}],
+        "transcript_roles": ["system", "user", "assistant", "tool", "assistant"],
+        "session_operations": [],
+        "final_visible_output": "README.md and ds4_agent.c are visible."
+      }
+    },
+    {
+      "id": "session_switching_commands",
+      "description": "save, list, switch, history, and new-session control flow without live model sampling",
+      "fixture": {"kind": "session_commands", "cwd": "<WORKSPACE>", "ctx_size": 8192, "think_mode": "none"},
+      "inputs": [
+        {"type": "user", "text": "Remember that alpha was inspected."},
+        {"type": "command", "text": "/save"},
+        {"type": "command", "text": "/list"},
+        {"type": "command", "text": "/switch <SESSION:alpha>"},
+        {"type": "command", "text": "/history 2"},
+        {"type": "command", "text": "/new"}
+      ],
+      "model_events": [
+        {"round": 0, "text": "Noted: alpha was inspected."}
+      ],
+      "tool_stubs": [],
+      "expected": {
+        "tool_sequence": [],
+        "transcript_roles": ["system", "user", "assistant"],
+        "session_operations": [
+          {"command": "save", "session": "<SESSION:alpha>", "visible": "saved session <SESSION:alpha> (3 turns)"},
+          {"command": "list", "sessions": ["<SESSION:alpha>"]},
+          {"command": "switch", "session": "<SESSION:alpha>", "visible": "switched to <SESSION:alpha>"},
+          {"command": "history", "turns": 2, "visible": "user: Remember that alpha was inspected."},
+          {"command": "new", "visible": "new session started from system prompt"}
+        ],
+        "final_visible_output": "new session started from system prompt"
+      }
+    }
+  ]
+}

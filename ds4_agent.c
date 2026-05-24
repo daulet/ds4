@@ -61,6 +61,7 @@ typedef struct {
     ds4_engine_options engine;
     agent_generation_options gen;
     const char *agent_dsml_oracle_output_path;
+    const char *agent_trace_oracle_output_path;
 } agent_config;
 
 typedef enum {
@@ -388,6 +389,8 @@ static void usage(FILE *fp) {
         "  --trace FILE           Write prompt, token, and DSML debug trace.\n"
         "  --dump-agent-dsml-oracle FILE\n"
         "                          Dump no-model agent DSML streaming parser oracle JSON, then exit.\n"
+        "  --dump-agent-trace-oracle FILE\n"
+        "                          Dump no-model agent trace replay oracle JSON, then exit.\n"
         "  --temp F               Sampling temperature. Default: 1\n"
         "  --top-p F              Nucleus sampling probability. Default: 1\n"
         "  --min-p F              Min-p sampling threshold. Default: 0.05\n"
@@ -458,6 +461,8 @@ static agent_config parse_options(int argc, char **argv) {
             c.gen.trace_path = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--dump-agent-dsml-oracle")) {
             c.agent_dsml_oracle_output_path = need_arg(&i, argc, argv, arg);
+        } else if (!strcmp(arg, "--dump-agent-trace-oracle")) {
+            c.agent_trace_oracle_output_path = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "-m") || !strcmp(arg, "--model")) {
             c.engine.model_path = need_arg(&i, argc, argv, arg);
         } else if (!strcmp(arg, "--mtp")) {
@@ -1393,6 +1398,98 @@ static int agent_dsml_oracle_dump_json(FILE *fp) {
         fputs("\n      ]}", fp);
     }
     fputs("\n  ]\n", fp);
+    fputs("}\n", fp);
+    return ferror(fp) ? 1 : 0;
+}
+
+static int agent_trace_oracle_dump_json(FILE *fp) {
+    const char *tool_dsml =
+        "<｜DSML｜tool_calls>\n"
+        "<｜DSML｜invoke name=\"list\">\n"
+        "<｜DSML｜parameter name=\"path\" string=\"true\">.</｜DSML｜parameter>\n"
+        "</｜DSML｜invoke>\n"
+        "</｜DSML｜tool_calls>";
+    const char *tool_output =
+        "Tool result for list path=\".\":\n"
+        "README.md\n"
+        "ds4_agent.c\n";
+    const char *final_answer = "README.md and ds4_agent.c are visible.";
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.agent_trace_replay_oracle.v1\",\n", fp);
+    fputs("  \"milestone\": \"M11.1\",\n", fp);
+    fputs("  \"source\": \"current-c-agent-trace-oracle\",\n", fp);
+    fputs("  \"normalization\": {\n", fp);
+    fputs("    \"path_root\": \"<WORKSPACE>\",\n", fp);
+    fputs("    \"fields\": [\"timestamp\", \"cwd\", \"duration_ms\", \"pid\", \"session_sha\"],\n", fp);
+    fputs("    \"rules\": [\n", fp);
+    fputs("      \"absolute workspace paths are replaced with <WORKSPACE>\",\n", fp);
+    fputs("      \"command durations and process ids are omitted\",\n", fp);
+    fputs("      \"saved session digests are normalized to <SESSION:...>\"\n", fp);
+    fputs("    ]\n", fp);
+    fputs("  },\n", fp);
+    fputs("  \"cases\": [\n", fp);
+
+    fputs("    {\n", fp);
+    fputs("      \"id\": \"single_tool_round\",\n", fp);
+    fputs("      \"description\": \"one user turn, one DSML tool call, deterministic tool result, final answer\",\n", fp);
+    fputs("      \"fixture\": {\"kind\": \"scripted_model\", \"cwd\": \"<WORKSPACE>\", \"ctx_size\": 8192, \"think_mode\": \"none\"},\n", fp);
+    fputs("      \"inputs\": [\n", fp);
+    fputs("        {\"type\": \"user\", \"text\": \"List the root files, then answer with the two names you used.\"}\n", fp);
+    fputs("      ],\n", fp);
+    fputs("      \"model_events\": [\n", fp);
+    fputs("        {\"round\": 0, \"text\": ", fp);
+    agent_dsml_oracle_json_string(fp, tool_dsml);
+    fputs("},\n", fp);
+    fputs("        {\"round\": 1, \"text\": ", fp);
+    agent_dsml_oracle_json_string(fp, final_answer);
+    fputs("}\n", fp);
+    fputs("      ],\n", fp);
+    fputs("      \"tool_stubs\": [\n", fp);
+    fputs("        {\"round\": 0, \"name\": \"list\", \"args\": [{\"name\": \"path\", \"value\": \".\", \"is_string\": true}], \"output\": ", fp);
+    agent_dsml_oracle_json_string(fp, tool_output);
+    fputs("}\n", fp);
+    fputs("      ],\n", fp);
+    fputs("      \"expected\": {\n", fp);
+    fputs("        \"tool_sequence\": [{\"round\": 0, \"name\": \"list\", \"args\": [{\"name\": \"path\", \"value\": \".\", \"is_string\": true}]}],\n", fp);
+    fputs("        \"transcript_roles\": [\"system\", \"user\", \"assistant\", \"tool\", \"assistant\"],\n", fp);
+    fputs("        \"session_operations\": [],\n", fp);
+    fputs("        \"final_visible_output\": ", fp);
+    agent_dsml_oracle_json_string(fp, final_answer);
+    fputs("\n", fp);
+    fputs("      }\n", fp);
+    fputs("    },\n", fp);
+
+    fputs("    {\n", fp);
+    fputs("      \"id\": \"session_switching_commands\",\n", fp);
+    fputs("      \"description\": \"save, list, switch, history, and new-session control flow without live model sampling\",\n", fp);
+    fputs("      \"fixture\": {\"kind\": \"session_commands\", \"cwd\": \"<WORKSPACE>\", \"ctx_size\": 8192, \"think_mode\": \"none\"},\n", fp);
+    fputs("      \"inputs\": [\n", fp);
+    fputs("        {\"type\": \"user\", \"text\": \"Remember that alpha was inspected.\"},\n", fp);
+    fputs("        {\"type\": \"command\", \"text\": \"/save\"},\n", fp);
+    fputs("        {\"type\": \"command\", \"text\": \"/list\"},\n", fp);
+    fputs("        {\"type\": \"command\", \"text\": \"/switch <SESSION:alpha>\"},\n", fp);
+    fputs("        {\"type\": \"command\", \"text\": \"/history 2\"},\n", fp);
+    fputs("        {\"type\": \"command\", \"text\": \"/new\"}\n", fp);
+    fputs("      ],\n", fp);
+    fputs("      \"model_events\": [\n", fp);
+    fputs("        {\"round\": 0, \"text\": \"Noted: alpha was inspected.\"}\n", fp);
+    fputs("      ],\n", fp);
+    fputs("      \"tool_stubs\": [],\n", fp);
+    fputs("      \"expected\": {\n", fp);
+    fputs("        \"tool_sequence\": [],\n", fp);
+    fputs("        \"transcript_roles\": [\"system\", \"user\", \"assistant\"],\n", fp);
+    fputs("        \"session_operations\": [\n", fp);
+    fputs("          {\"command\": \"save\", \"session\": \"<SESSION:alpha>\", \"visible\": \"saved session <SESSION:alpha> (3 turns)\"},\n", fp);
+    fputs("          {\"command\": \"list\", \"sessions\": [\"<SESSION:alpha>\"]},\n", fp);
+    fputs("          {\"command\": \"switch\", \"session\": \"<SESSION:alpha>\", \"visible\": \"switched to <SESSION:alpha>\"},\n", fp);
+    fputs("          {\"command\": \"history\", \"turns\": 2, \"visible\": \"user: Remember that alpha was inspected.\"},\n", fp);
+    fputs("          {\"command\": \"new\", \"visible\": \"new session started from system prompt\"}\n", fp);
+    fputs("        ],\n", fp);
+    fputs("        \"final_visible_output\": \"new session started from system prompt\"\n", fp);
+    fputs("      }\n", fp);
+    fputs("    }\n", fp);
+    fputs("  ]\n", fp);
     fputs("}\n", fp);
     return ferror(fp) ? 1 : 0;
 }
@@ -7515,6 +7612,21 @@ int main(int argc, char **argv) {
         if (fclose(fp) != 0 && rc == 0) {
             fprintf(stderr, "ds4-agent: failed to close agent DSML oracle output %s: %s\n",
                     cfg.agent_dsml_oracle_output_path, strerror(errno));
+            rc = 1;
+        }
+        return rc;
+    }
+    if (cfg.agent_trace_oracle_output_path) {
+        FILE *fp = fopen(cfg.agent_trace_oracle_output_path, "wb");
+        if (!fp) {
+            fprintf(stderr, "ds4-agent: failed to open agent trace oracle output %s: %s\n",
+                    cfg.agent_trace_oracle_output_path, strerror(errno));
+            return 1;
+        }
+        int rc = agent_trace_oracle_dump_json(fp);
+        if (fclose(fp) != 0 && rc == 0) {
+            fprintf(stderr, "ds4-agent: failed to close agent trace oracle output %s: %s\n",
+                    cfg.agent_trace_oracle_output_path, strerror(errno));
             rc = 1;
         }
         return rc;

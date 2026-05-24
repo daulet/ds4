@@ -6587,7 +6587,7 @@
 
 #### M11: Agent Trace Replay
 
-- Status: active
+- Status: split before implementation into M11.1 through M11.4
 - Goal: port the integrated coding agent only after runtime and server parity
   are stable.
 - Oracle: current `ds4-agent` traces and deterministic replay fixtures.
@@ -6598,8 +6598,48 @@
 - Acceptance: tool-call sequence, rendered context, session switching, and
   final visible outputs match fixture expectations; live manual sessions remain
   a final smoke test, not the primary comparator.
-- Validation needed: split Milestone 11 into tangible replay/comparator work
-  items before implementing Rust agent-loop behavior.
+- Split:
+  - M11.1 Agent Trace Replay Oracle And Fixture Contract.
+  - M11.2 Rust Agent Rendered Context Replay.
+  - M11.3 Deterministic Tool Stub And Session Command Replay.
+  - M11.4 Rust Agent Loop And Manual Smoke.
+- Validation: each substage must add or extend replay fixtures before claiming
+  live Rust agent-loop behavior.
+
+#### M11.1: Agent Trace Replay Oracle And Fixture Contract
+
+- Status: complete.
+- Goal: establish the no-model current-C replay fixture before porting the live
+  Rust agent loop.
+- Oracle: `./ds4-agent --dump-agent-trace-oracle`.
+- Fixture: `ds4-parity/baselines/agent/m11.1/current-c.json` plus
+  `manifest.json`.
+- Comparator: `ds4-parity/compare_agent_trace_replay.py --negative-test`.
+- Acceptance: Rust `ds4-agent-trace-replay-rs` emits the same normalized replay
+  fixture; parsed DSML tool sequence, deterministic tool stubs, transcript
+  roles, session save/list/switch/history/new operations, final visible output,
+  and manifest hash checks pass.
+- Evidence:
+  - Added current-C `--dump-agent-trace-oracle` no-model dump path.
+  - Added Rust `ds4-agent-trace-replay-rs` emitter.
+  - Added unified parity report item `M11.1 Agent trace replay oracle`.
+- Validation passed:
+  - `arch -arm64 make ds4-agent`
+  - `./ds4-agent --dump-agent-trace-oracle ds4-parity/baselines/agent/m11.1/current-c.json`
+  - `python3 ds4-parity/compare_agent_trace_replay.py --negative-test`
+    (`225 checks`)
+
+#### M11.2: Rust Agent Rendered Context Replay
+
+- Status: active.
+- Goal: replay the scripted M11.1 events into Rust prompt/context rendering
+  before adding deterministic tool execution or the live agent loop.
+- Oracle: M11.1 current-C replay fixture and existing prompt/DSML contracts.
+- Fixture: M11.1 `single_tool_round` and `session_switching_commands` events.
+- Comparator: rendered-context replay with normalized workspace/session markers.
+- Acceptance: system/user/assistant/tool/assistant boundaries, assistant EOS
+  insertion, final visible output, and no-live-model behavior match fixture
+  expectations.
 - Owner path: agent trace fixtures, replay comparator, Rust agent loop,
   `.memory/status.md`.
 

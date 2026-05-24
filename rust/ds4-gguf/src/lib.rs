@@ -2,6 +2,7 @@ use std::fmt;
 use std::str;
 
 pub mod agent_dsml;
+pub mod agent_trace_replay;
 pub mod cli_parse;
 pub mod cli_token_dump;
 pub mod decode_policy;
@@ -20,6 +21,7 @@ pub mod tool_memory;
 pub use agent_dsml::{
     hex as agent_dsml_hex, AgentDsmlParser, AgentDsmlState, AgentToolArg, AgentToolCall,
 };
+pub use agent_trace_replay::write_agent_trace_replay_oracle;
 pub use decode_policy::{
     find_stop_from, policy_cases, run_policy_case, stop_list_stream_safe_len, utf8_stream_safe_len,
     ApiFinish, ApiStyle, PolicyCase, PolicyKind, PolicyPiece, PolicyRequest, PolicyResult,
