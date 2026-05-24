@@ -5590,7 +5590,7 @@
 
 ### M10.7d3c2: B300 Restored Payload KVC File Smoke
 
-- Status: active
+- Status: done
 - Goal: run a B300 Rust smoke that wraps restored graph payload bodies in KVC
   files and records the matching post-restore skip decisions.
 - Oracle: M10.7d3c1 post-restore KVC decision contract, M10.7d3b
@@ -5614,12 +5614,21 @@
   tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
+- Evidence: added `ds4-post-restore-kvc-smoke`,
+  `ds4-parity/compare_post_restore_kvc_smoke.py`, and
+  `ds4-parity/baselines/kv/m10.7d3/rust-b300-post-restore-kvc.json`. The live
+  B300 run passed 536 comparator checks and seven negative mutations while
+  proving the four restored graph payload bodies can be wrapped in shutdown
+  KVC files whose headers, file sizes, payload digests, rendered text keys,
+  skip decisions, restored frontiers, and graph counters match the M10.7d3c1
+  contract and M10.7d3b evidence. Non-interactive Claude review returned
+  `NO BLOCKERS`.
 - Owner path: Rust graph restore KVC smoke, B300 comparator,
   `.memory/status.md`.
 
 ### M10.8: Rust MTP Draft And Verifier Orchestration
 
-- Status: pending
+- Status: active
 - Goal: move MTP draft, exact N=2 verifier, prefix-1 commit, and speculative
   frontier restore/rollback orchestration into Rust.
 - Oracle: C `metal_graph_eval_mtp_draft`,

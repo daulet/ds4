@@ -3,14 +3,15 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d3c2 B300 Restored Payload KVC File Smoke
-- Last validated source before the active item: M10.7d3c1 Post-Restore KVC
-  Decision Contract.
+- Active item: M10.8 Rust MTP Draft And Verifier Orchestration
+- Last validated source before the active item: M10.7d3c2 B300 Restored Payload
+  KVC File Smoke.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
 - M10.7d3c Post-Restore KVC Write/Skip B300 Smoke is split into M10.7d3c1
   model-free post-restore KVC decision contract and M10.7d3c2 B300 restored
   payload KVC file smoke.
+- Earlier M10.7d3c2 B300 Restored Payload KVC File Smoke.
 - Earlier M10.7d3c1 Post-Restore KVC Decision Contract.
 - Earlier M10.7d3b B300 Restored-Graph Frontier Projection.
 - Earlier M10.7d3a Graph Restore Frontier Contract.
@@ -50,6 +51,24 @@
 
 ## Last Evidence
 
+- M10.7d3c2 adds `ds4-post-restore-kvc-smoke`,
+  `ds4-parity/compare_post_restore_kvc_smoke.py`, and
+  `ds4-parity/baselines/kv/m10.7d3/rust-b300-post-restore-kvc.json`, a live
+  B300 smoke plus offline comparator for wrapping restored graph payload bodies
+  in deterministic shutdown KVC files.
+- M10.7d3c2 live B300 validation on `hou2-prod1` ran
+  `python3 ds4-parity/compare_post_restore_kvc_smoke.py --live --workdir
+  /workspace/ds4 --output-dir /tmp/ds4-m107d3c2-kvc --write-summary
+  /tmp/ds4-m107d3c2-post-restore-kvc.json --negative-test`; it passed 536
+  exact checks and seven negative mutations across `disk_seed_payload`,
+  `snapshot_seed`, `disk_continuation_payload`, and `snapshot_continuation`.
+- M10.7d3c2 pins KVC file names, deterministic shutdown headers, file sizes,
+  rendered text key bytes, payload FNV/SHA256 digests, restored token/frontier
+  decisions, and graph counters against the M10.7d3c1 contract and M10.7d3b
+  same-capture restored graph evidence.
+- M10.7d3c2 non-interactive Claude review returned `NO BLOCKERS` after
+  checking B300 command fidelity, KVC header/payload invariants, comparator
+  coverage, and evidence consistency.
 - M10.7d3c1 adds
   `ds4-parity/baselines/kv/m10.7d3/post-restore-kvc-decision-contract.json`
   and `ds4-parity/check_post_restore_kvc_decision_contract.py`, a model-free

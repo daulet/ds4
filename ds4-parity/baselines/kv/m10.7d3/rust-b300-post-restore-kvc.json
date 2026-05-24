@@ -1,0 +1,504 @@
+{
+  "schema": "ds4.rust_post_restore_kvc_smoke_summary.v1",
+  "source": "rust-b300-post-restore-kvc-smoke",
+  "contract_path": "ds4-parity/baselines/kv/m10.7d3/post-restore-kvc-decision-contract.json",
+  "restore_summary_path": "ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json",
+  "raw_body_policy": "hash-only raw graph payload bodies remain on the B300; committed summary stores payload digests and KVC wrapper metadata",
+  "text_key_policy": "rendered cache-key text files are committed M0.5 current-C artifacts selected by prompt family",
+  "b300": {
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4"
+  },
+  "rust_smoke": {
+    "schema": "ds4.rust_post_restore_kvc_smoke.v1",
+    "source": "rust-post-restore-kvc-smoke",
+    "runtime": {
+      "ctx": 32768,
+      "kind": "default-graph-payload",
+      "kvc_writer": "ds4_gguf::kv_policy"
+    }
+  },
+  "cases": [
+    {
+      "id": "disk_seed_payload",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
+      "raw_sha256": "31844af09837eec7428df62eeff8cf3a851041f8bb6ad65fb71ae94e5d19be22",
+      "text_key": {
+        "path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/0ab2314538b11686a11e296b7f697651fbd17e60.txt",
+        "source": "m0.5 seed rendered cache key",
+        "sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+        "sha256": "73adfe87d8950dde4b5a33d45b2fadb717c0370421ca05b3c4257360a8bbd1f1",
+        "bytes": 2520
+      },
+      "rust": {
+        "id": "disk_seed_payload",
+        "payload_path": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
+        "text_path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/0ab2314538b11686a11e296b7f697651fbd17e60.txt",
+        "parsed": {
+          "token_count": 550,
+          "raw_first_pos": 422,
+          "raw_last_pos": 549,
+          "raw_first_phys": 422,
+          "raw_last_phys": 549,
+          "payload_bytes": 31526948,
+          "ratio4_rows": 137,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 137,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2200,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6055936,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1473024,
+            "indexer_state": 344064
+          }
+        },
+        "text": {
+          "bytes": 2520,
+          "sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+          "fnv1a64": "455f266bce67f9db"
+        },
+        "decisions": {
+          "loaded_frontier": 550,
+          "current_live_skip": {
+            "live_tokens": 550,
+            "target": 0,
+            "reason": "restored-position-unaligned"
+          },
+          "next_continued_store": {
+            "frontier_before": 550,
+            "live_tokens": 10240,
+            "target": 10240,
+            "reason_name": "continued",
+            "reason": 2
+          },
+          "already_stored_boundary": {
+            "frontier_before": 10240,
+            "live_tokens": 10240,
+            "target": 0
+          },
+          "shutdown_write_header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 550,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31526948
+          }
+        },
+        "kvc": {
+          "file_name": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+          "output_path": "/tmp/ds4-m107d3c2-kvc/0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+          "file_size": 31529520,
+          "file_fnv1a64": "96181059e8689240",
+          "header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 550,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31526948
+          },
+          "text_bytes": 2520,
+          "text_sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+          "payload_bytes": 31526948,
+          "payload_fnv1a64": "3c9be869fd659a1c",
+          "trailer_bytes": 0,
+          "readback": {
+            "file_size": 31529520,
+            "header": {
+              "quant_bits": 2,
+              "reason_name": "shutdown",
+              "reason": 4,
+              "ext_flags": 0,
+              "tokens": 550,
+              "hits": 0,
+              "ctx_size": 32768,
+              "created_at": 0,
+              "last_used": 0,
+              "payload_bytes": 31526948
+            },
+            "text_bytes": 2520,
+            "text_sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+            "payload_bytes": 31526948,
+            "payload_fnv1a64": "3c9be869fd659a1c",
+            "trailer_bytes": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "snapshot_seed",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
+      "raw_sha256": "b4acecd4a25daef98161a032d03fc76e31a2218c9572c7851ac8a5af36b9cbef",
+      "text_key": {
+        "path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/0ab2314538b11686a11e296b7f697651fbd17e60.txt",
+        "source": "m0.5 seed rendered cache key",
+        "sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+        "sha256": "73adfe87d8950dde4b5a33d45b2fadb717c0370421ca05b3c4257360a8bbd1f1",
+        "bytes": 2520
+      },
+      "rust": {
+        "id": "snapshot_seed",
+        "payload_path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
+        "text_path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/0ab2314538b11686a11e296b7f697651fbd17e60.txt",
+        "parsed": {
+          "token_count": 550,
+          "raw_first_pos": 422,
+          "raw_last_pos": 549,
+          "raw_first_phys": 422,
+          "raw_last_phys": 549,
+          "payload_bytes": 31526948,
+          "ratio4_rows": 137,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 137,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2200,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6055936,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1473024,
+            "indexer_state": 344064
+          }
+        },
+        "text": {
+          "bytes": 2520,
+          "sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+          "fnv1a64": "455f266bce67f9db"
+        },
+        "decisions": {
+          "loaded_frontier": 550,
+          "current_live_skip": {
+            "live_tokens": 550,
+            "target": 0,
+            "reason": "restored-position-unaligned"
+          },
+          "next_continued_store": {
+            "frontier_before": 550,
+            "live_tokens": 10240,
+            "target": 10240,
+            "reason_name": "continued",
+            "reason": 2
+          },
+          "already_stored_boundary": {
+            "frontier_before": 10240,
+            "live_tokens": 10240,
+            "target": 0
+          },
+          "shutdown_write_header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 550,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31526948
+          }
+        },
+        "kvc": {
+          "file_name": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+          "output_path": "/tmp/ds4-m107d3c2-kvc/0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+          "file_size": 31529520,
+          "file_fnv1a64": "77df51aa0de403c6",
+          "header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 550,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31526948
+          },
+          "text_bytes": 2520,
+          "text_sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+          "payload_bytes": 31526948,
+          "payload_fnv1a64": "90511f05e395ec5a",
+          "trailer_bytes": 0,
+          "readback": {
+            "file_size": 31529520,
+            "header": {
+              "quant_bits": 2,
+              "reason_name": "shutdown",
+              "reason": 4,
+              "ext_flags": 0,
+              "tokens": 550,
+              "hits": 0,
+              "ctx_size": 32768,
+              "created_at": 0,
+              "last_used": 0,
+              "payload_bytes": 31526948
+            },
+            "text_bytes": 2520,
+            "text_sha1": "0ab2314538b11686a11e296b7f697651fbd17e60",
+            "payload_bytes": 31526948,
+            "payload_fnv1a64": "90511f05e395ec5a",
+            "trailer_bytes": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "disk_continuation_payload",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
+      "raw_sha256": "876aa3af44453bc706baa2c5260e0cbc20f345e80a93cb26668886c079e68a4c",
+      "text_key": {
+        "path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.txt",
+        "source": "m0.5 continuation shutdown rendered cache key",
+        "sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+        "sha256": "9c100a54db2292a9324ae7e33e0a949a02d9aa29933e7b4fe8f701a57fb312a3",
+        "bytes": 2632
+      },
+      "rust": {
+        "id": "disk_continuation_payload",
+        "payload_path": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
+        "text_path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.txt",
+        "parsed": {
+          "token_count": 561,
+          "raw_first_pos": 433,
+          "raw_last_pos": 560,
+          "raw_first_phys": 433,
+          "raw_last_phys": 560,
+          "payload_bytes": 31688272,
+          "ratio4_rows": 140,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 140,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2244,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6184960,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1505280,
+            "indexer_state": 344064
+          }
+        },
+        "text": {
+          "bytes": 2632,
+          "sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+          "fnv1a64": "fc7492a86296c7b9"
+        },
+        "decisions": {
+          "loaded_frontier": 561,
+          "current_live_skip": {
+            "live_tokens": 561,
+            "target": 0,
+            "reason": "restored-position-unaligned"
+          },
+          "next_continued_store": {
+            "frontier_before": 561,
+            "live_tokens": 10240,
+            "target": 10240,
+            "reason_name": "continued",
+            "reason": 2
+          },
+          "already_stored_boundary": {
+            "frontier_before": 10240,
+            "live_tokens": 10240,
+            "target": 0
+          },
+          "shutdown_write_header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 561,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31688272
+          }
+        },
+        "kvc": {
+          "file_name": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.kv",
+          "output_path": "/tmp/ds4-m107d3c2-kvc/4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.kv",
+          "file_size": 31690956,
+          "file_fnv1a64": "94f2a9a06db60daa",
+          "header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 561,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31688272
+          },
+          "text_bytes": 2632,
+          "text_sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+          "payload_bytes": 31688272,
+          "payload_fnv1a64": "2b8530b1fd45ad16",
+          "trailer_bytes": 0,
+          "readback": {
+            "file_size": 31690956,
+            "header": {
+              "quant_bits": 2,
+              "reason_name": "shutdown",
+              "reason": 4,
+              "ext_flags": 0,
+              "tokens": 561,
+              "hits": 0,
+              "ctx_size": 32768,
+              "created_at": 0,
+              "last_used": 0,
+              "payload_bytes": 31688272
+            },
+            "text_bytes": 2632,
+            "text_sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+            "payload_bytes": 31688272,
+            "payload_fnv1a64": "2b8530b1fd45ad16",
+            "trailer_bytes": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "snapshot_continuation",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
+      "raw_sha256": "ac5390ae626222ee53b4d7a77c66f7fe70f563abd6a7b896ed5a928fa4c03772",
+      "text_key": {
+        "path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.txt",
+        "source": "m0.5 continuation shutdown rendered cache key",
+        "sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+        "sha256": "9c100a54db2292a9324ae7e33e0a949a02d9aa29933e7b4fe8f701a57fb312a3",
+        "bytes": 2632
+      },
+      "rust": {
+        "id": "snapshot_continuation",
+        "payload_path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
+        "text_path": "ds4-parity/baselines/kv-artifacts/m0.5/rendered-text/4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.txt",
+        "parsed": {
+          "token_count": 561,
+          "raw_first_pos": 433,
+          "raw_last_pos": 560,
+          "raw_first_phys": 433,
+          "raw_last_phys": 560,
+          "payload_bytes": 31688272,
+          "ratio4_rows": 140,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 140,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2244,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6184960,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1505280,
+            "indexer_state": 344064
+          }
+        },
+        "text": {
+          "bytes": 2632,
+          "sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+          "fnv1a64": "fc7492a86296c7b9"
+        },
+        "decisions": {
+          "loaded_frontier": 561,
+          "current_live_skip": {
+            "live_tokens": 561,
+            "target": 0,
+            "reason": "restored-position-unaligned"
+          },
+          "next_continued_store": {
+            "frontier_before": 561,
+            "live_tokens": 10240,
+            "target": 10240,
+            "reason_name": "continued",
+            "reason": 2
+          },
+          "already_stored_boundary": {
+            "frontier_before": 10240,
+            "live_tokens": 10240,
+            "target": 0
+          },
+          "shutdown_write_header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 561,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31688272
+          }
+        },
+        "kvc": {
+          "file_name": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.kv",
+          "output_path": "/tmp/ds4-m107d3c2-kvc/4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.kv",
+          "file_size": 31690956,
+          "file_fnv1a64": "401f4707f38b5cc5",
+          "header": {
+            "quant_bits": 2,
+            "reason_name": "shutdown",
+            "reason": 4,
+            "ext_flags": 0,
+            "tokens": 561,
+            "hits": 0,
+            "ctx_size": 32768,
+            "created_at": 0,
+            "last_used": 0,
+            "payload_bytes": 31688272
+          },
+          "text_bytes": 2632,
+          "text_sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+          "payload_bytes": 31688272,
+          "payload_fnv1a64": "153476badb47bab1",
+          "trailer_bytes": 0,
+          "readback": {
+            "file_size": 31690956,
+            "header": {
+              "quant_bits": 2,
+              "reason_name": "shutdown",
+              "reason": 4,
+              "ext_flags": 0,
+              "tokens": 561,
+              "hits": 0,
+              "ctx_size": 32768,
+              "created_at": 0,
+              "last_used": 0,
+              "payload_bytes": 31688272
+            },
+            "text_bytes": 2632,
+            "text_sha1": "4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf",
+            "payload_bytes": 31688272,
+            "payload_fnv1a64": "153476badb47bab1",
+            "trailer_bytes": 0
+          }
+        }
+      }
+    }
+  ]
+}

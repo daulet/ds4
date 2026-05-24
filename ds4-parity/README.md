@@ -1111,6 +1111,28 @@ layout oracle. It pins unaligned continued-store skips, re-enabled next
 continued targets, already-stored boundary skips, and shutdown-write header
 expectations before the B300 KVC file-writing smoke.
 
+Validate the M10.7d3c2 post-restore KVC file smoke summary:
+
+```sh
+python3 ds4-parity/compare_post_restore_kvc_smoke.py
+python3 ds4-parity/compare_post_restore_kvc_smoke.py --negative-test
+```
+
+Refresh the B300 summary from the raw graph payload bodies:
+
+```sh
+python3 ds4-parity/compare_post_restore_kvc_smoke.py --live \
+  --workdir /workspace/ds4 \
+  --output-dir /tmp/ds4-m107d3c2-kvc \
+  --write-summary /tmp/ds4-m107d3c2-post-restore-kvc.json \
+  --negative-test
+```
+
+The comparator checks the Rust KVC wrapper smoke against the M10.7d3c1
+decision contract and M10.7d3b same-capture restored graph evidence, including
+KVC file names, headers, payload byte counts, payload digests, rendered text
+key bytes, skip decisions, restored frontier state, and graph counters.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

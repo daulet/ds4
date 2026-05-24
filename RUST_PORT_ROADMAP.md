@@ -4954,6 +4954,13 @@ restore boundary.
   tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
+- Evidence: added `ds4-post-restore-kvc-smoke`,
+  `ds4-parity/compare_post_restore_kvc_smoke.py`, and
+  `ds4-parity/baselines/kv/m10.7d3/rust-b300-post-restore-kvc.json`. The live
+  `hou2-prod1` B300 run wrapped the four restored raw graph payload bodies in
+  deterministic shutdown KVC files, recorded rendered text key metadata,
+  restored frontier decisions, graph counters, KVC headers, file sizes, and
+  payload digests, then passed 536 exact checks plus seven negative mutations.
 
 #### M10.8: Rust MTP Draft And Verifier Orchestration
 

@@ -52,6 +52,10 @@ name = "ds4-kv-replay-dump-rs"
 path = "src/bin/ds4-kv-replay-dump-rs.rs"
 
 [[bin]]
+name = "ds4-post-restore-kvc-smoke"
+path = "src/bin/ds4-post-restore-kvc-smoke.rs"
+
+[[bin]]
 name = "ds4-cli-parse-rs"
 path = "src/bin/ds4-cli-parse-rs.rs"
 
