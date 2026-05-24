@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M12.3 Rust Backend Facade Parity Harness
-- Last validated source before the active item: M12.2 Operation Tensor Fixture
-  Capture.
+- Active item: M12.4 First Backend Replacement Slice
+- Last validated source before the active item: M12.3 Rust Backend Facade
+  Parity Harness.
+- Earlier M12.3 Rust Backend Facade Parity Harness.
 - Earlier M12.2 Operation Tensor Fixture Capture.
 - Earlier M12.1 Backend Boundary Inventory And Claim Matrix.
 - Earlier M12 Backend Replacement Parity split into M12.1 through M12.6 before
@@ -93,6 +94,18 @@
 
 ## Last Evidence
 
+- M12.3 adds `ds4-parity/baselines/backend/m12.3/facade-replay.json` and
+  `ds4-parity/check_backend_facade_replay.py --negative-test`, wiring the
+  checker into the unified parity report and README. The replay artifact maps
+  each selected M12.2 fixture to ordered `DecodeBackend` calls, tensor
+  bindings, synchronized candidate evidence, and current facade error
+  propagation while preserving no backend replacement and no runtime route
+  change claims. Validation passed Python syntax, JSON formatting, the M12.3
+  checker with 769 checks and negative tests, the M12.2 checker with 576
+  checks and negative tests, the runtime graph closure matrix with negative
+  tests, `cargo fmt --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 84 passed, 50
+  skipped, 0 failed. M12.4 First Backend Replacement Slice is active.
 - M12.2 captured live B300 current-C oracle JSON and Rust facade candidate JSON
   under `ds4-parity/baselines/backend/m12.2/captures/`, adds
   `ds4-parity/baselines/backend/m12.2/manifest.json`, and adds
@@ -100,12 +113,12 @@
   covers first-kernel embedding, layer-0 QKV/RoPE, layer-0 attention output,
   layer-0 FFN/router/MoE, and full output-head/logits without changing runtime
   routes or claiming backend replacement. Live B300 capture passed the existing
-  pair comparators with 103, 426, 493, 885, and 440 checks respectively. M12.3
+  pair comparators with 103, 426, 493, 885, and 440 checks respectively.
   Validation passed Python syntax, JSON formatting, the M12.2 checker with 576
   checks and negative tests, the runtime graph closure matrix with negative
   tests, `cargo fmt --all -- --check`, `git diff --check`, and `python3
   ds4-parity/run_parity_report.py --skip-local-oracles` with 83 passed, 50
-  skipped, 0 failed. M12.3 Rust Backend Facade Parity Harness is active.
+  skipped, 0 failed. M12.3 Rust Backend Facade Parity Harness became active.
 - M12.1 adds
   `ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json` and
   `ds4-parity/check_backend_boundary_inventory.py --negative-test`, wiring the

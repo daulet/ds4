@@ -371,8 +371,9 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
         "status missing M12.2 completion",
     )
     report.check(
-        "Active item: M12.3 Rust Backend Facade Parity Harness" in texts["status"],
-        "status active item must advance to M12.3",
+        "Active item: M12.3 Rust Backend Facade Parity Harness" in texts["status"]
+        or "Active item: M12.4 First Backend Replacement Slice" in texts["status"],
+        "status active item must advance to M12.3 or later",
     )
 
 

@@ -1,0 +1,921 @@
+{
+  "schema": "ds4.backend_facade_replay.v1",
+  "source": "m12.3-rust-backend-facade-parity-harness",
+  "milestone": "M12.3",
+  "parent": "M12",
+  "previous_stage": "M12.2",
+  "next_stage": "M12.4",
+  "status": "facade-replay-harness",
+  "oracle": {
+    "operation_fixture_manifest": "ds4-parity/baselines/backend/m12.2/manifest.json",
+    "backend_boundary_inventory": "ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json",
+    "rust_facade_source": "rust/ds4-gpu/src/decode_backend.rs",
+    "facade_contract_comparator": "ds4-parity/compare_decode_backend_facade.py",
+    "runtime_bridge_comparator": "ds4-parity/compare_decode_runtime_bridge.py"
+  },
+  "claim_policy": {
+    "backend_replacement": "not_claimed",
+    "kernel_replacement": "not_claimed",
+    "runtime_route_change": false,
+    "implementation_owner": "current backend through Rust-owned facade calls",
+    "route_gate": "blocked_until_m12.6",
+    "next_required_gate": "M12.4 First Backend Replacement Slice"
+  },
+  "error_policy": {
+    "return_type": "Result<(), GpuError>",
+    "backend_status_mapping": "GpuStatus::from_raw(...).into_result()",
+    "accepted_error_kinds": [
+      "BackendStatus",
+      "NullTensor"
+    ],
+    "panic_policy": "no panic path in selected facade wrappers"
+  },
+  "comparison_policy": {
+    "call_order": "selected facade method sequence must be a subsequence of the candidate source",
+    "operation_set": "first occurrence of selected operations must match the M12.2 fixture operation order",
+    "tensor_bindings": "every facade tensor argument has a named state binding",
+    "output_comparison": "delegate numeric output comparison to the M12.2 pair comparators",
+    "synchronization": "selected candidate operation JSON must report command_batch and synchronized"
+  },
+  "replays": [
+    {
+      "fixture_id": "first_kernel_embed_token_hc",
+      "operation_family": "embedding_and_indexer",
+      "case": "embed_token_hc_token0",
+      "candidate_binary": "ds4-decode-first-kernel",
+      "candidate_source": "rust/ds4-gpu/src/bin/ds4-decode-first-kernel.rs",
+      "comparator": "ds4-parity/compare_decode_first_kernel_oracle.py",
+      "output_fields": [
+        "cur_hc"
+      ],
+      "synchronization": {
+        "command_batch": true,
+        "synchronized": true,
+        "sync_point": "after facade replay before JSON readback"
+      },
+      "calls": [
+        {
+          "ordinal": 1,
+          "operation": "ds4_gpu_embed_token_hc_tensor",
+          "method": "embed_token_hc",
+          "tensor_args": [
+            "out_hc"
+          ],
+          "bindings": {
+            "out_hc": {
+              "source": "state",
+              "name": "cur_hc",
+              "mode": "mut"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        }
+      ]
+    },
+    {
+      "fixture_id": "layer0_qkv_rope",
+      "operation_family": "dense_norm_rope_kv",
+      "case": "token0_layer0_qkv_rope",
+      "candidate_binary": "ds4-decode-layer0-qkv-rope",
+      "candidate_source": "rust/ds4-gpu/src/bin/ds4-decode-layer0-qkv-rope.rs",
+      "comparator": "ds4-parity/compare_decode_layer0_qkv_rope.py",
+      "output_fields": [
+        "attn_norm",
+        "qr",
+        "kv_raw",
+        "qr_norm",
+        "q",
+        "kv"
+      ],
+      "synchronization": {
+        "command_batch": true,
+        "synchronized": true,
+        "sync_point": "after Q/KV RoPE replay before JSON readback"
+      },
+      "calls": [
+        {
+          "ordinal": 1,
+          "operation": "ds4_gpu_embed_token_hc_tensor",
+          "method": "embed_token_hc",
+          "tensor_args": [
+            "out_hc"
+          ],
+          "bindings": {
+            "out_hc": {
+              "source": "state",
+              "name": "cur_hc",
+              "mode": "mut"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "operation": "ds4_gpu_rms_norm_plain_tensor",
+          "method": "rms_norm_plain",
+          "tensor_args": [
+            "out",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "attn_norm",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "cur_hc",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "operation": "ds4_gpu_matmul_f16_tensor",
+          "method": "matmul_f16",
+          "tensor_args": [
+            "out",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "attn_q_a",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "attn_norm",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "operation": "ds4_gpu_hc_split_weighted_sum_norm_tensor",
+          "method": "hc_split_weighted_sum_norm",
+          "tensor_args": [
+            "out",
+            "norm_out",
+            "split",
+            "mix",
+            "residual_hc"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "qr",
+              "mode": "mut"
+            },
+            "norm_out": {
+              "source": "state",
+              "name": "qr_norm",
+              "mode": "mut"
+            },
+            "split": {
+              "source": "state",
+              "name": "hc_split",
+              "mode": "mut"
+            },
+            "mix": {
+              "source": "state",
+              "name": "attn_q_a",
+              "mode": "ref"
+            },
+            "residual_hc": {
+              "source": "state",
+              "name": "cur_hc",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 5,
+          "operation": "ds4_gpu_matmul_q8_0_tensor",
+          "method": "matmul_q8_0",
+          "tensor_args": [
+            "out",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "q_proj",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "qr_norm",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 6,
+          "operation": "ds4_gpu_matmul_q8_0_tensor",
+          "method": "matmul_q8_0",
+          "tensor_args": [
+            "out",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "kv_raw",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "attn_norm",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 7,
+          "operation": "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
+          "method": "dsv4_qkv_rms_norm_rows",
+          "tensor_args": [
+            "q_out",
+            "q",
+            "kv_out",
+            "kv"
+          ],
+          "bindings": {
+            "q_out": {
+              "source": "state",
+              "name": "q",
+              "mode": "mut"
+            },
+            "q": {
+              "source": "state",
+              "name": "q_proj",
+              "mode": "ref"
+            },
+            "kv_out": {
+              "source": "state",
+              "name": "kv",
+              "mode": "mut"
+            },
+            "kv": {
+              "source": "state",
+              "name": "kv_raw",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 8,
+          "operation": "ds4_gpu_matmul_q8_0_tensor",
+          "method": "matmul_q8_0",
+          "tensor_args": [
+            "out",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "q",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "q",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 9,
+          "operation": "ds4_gpu_head_rms_norm_tensor",
+          "method": "head_rms_norm",
+          "tensor_args": [
+            "x"
+          ],
+          "bindings": {
+            "x": {
+              "source": "state",
+              "name": "q",
+              "mode": "mut"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 10,
+          "operation": "ds4_gpu_rope_tail_tensor",
+          "method": "rope_tail",
+          "tensor_args": [
+            "x"
+          ],
+          "bindings": {
+            "x": {
+              "source": "state",
+              "name": "q",
+              "mode": "mut"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 11,
+          "operation": "ds4_gpu_rope_tail_tensor",
+          "method": "rope_tail",
+          "tensor_args": [
+            "x"
+          ],
+          "bindings": {
+            "x": {
+              "source": "state",
+              "name": "kv",
+              "mode": "mut"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        }
+      ]
+    },
+    {
+      "fixture_id": "layer0_attention_output",
+      "operation_family": "compressor_attention",
+      "case": "token0_layer0_attn_output",
+      "candidate_binary": "ds4-decode-layer0-attn-output",
+      "candidate_source": "rust/ds4-gpu/src/bin/ds4-decode-layer0-attn-output.rs",
+      "comparator": "ds4-parity/compare_decode_layer0_attn_output.py",
+      "output_fields": [
+        "kv",
+        "raw_cache_row",
+        "heads",
+        "attn_low",
+        "attn_out",
+        "after_attn_hc"
+      ],
+      "synchronization": {
+        "command_batch": true,
+        "synchronized": true,
+        "sync_point": "after attention output replay before JSON readback"
+      },
+      "calls": [
+        {
+          "ordinal": 1,
+          "operation": "ds4_gpu_kv_fp8_store_raw_tensor",
+          "method": "kv_fp8_store_raw",
+          "tensor_args": [
+            "kv",
+            "raw_cache"
+          ],
+          "bindings": {
+            "kv": {
+              "source": "state",
+              "name": "kv",
+              "mode": "mut"
+            },
+            "raw_cache": {
+              "source": "state",
+              "name": "raw_cache",
+              "mode": "mut"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "operation": "ds4_gpu_attention_decode_heads_tensor",
+          "method": "attention_decode_heads",
+          "tensor_args": [
+            "heads",
+            "q",
+            "raw_kv",
+            "comp_kv",
+            "comp_mask"
+          ],
+          "bindings": {
+            "heads": {
+              "source": "state",
+              "name": "heads",
+              "mode": "mut"
+            },
+            "q": {
+              "source": "state",
+              "name": "q",
+              "mode": "ref"
+            },
+            "raw_kv": {
+              "source": "state",
+              "name": "raw_cache",
+              "mode": "ref"
+            },
+            "comp_kv": {
+              "source": "state",
+              "name": "comp_cache",
+              "mode": "optional_ref"
+            },
+            "comp_mask": {
+              "source": "state",
+              "name": "comp_mask",
+              "mode": "optional_ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus",
+            "NullTensor"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "operation": "ds4_gpu_rope_tail_tensor",
+          "method": "rope_tail",
+          "tensor_args": [
+            "x"
+          ],
+          "bindings": {
+            "x": {
+              "source": "state",
+              "name": "heads",
+              "mode": "mut"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "operation": "ds4_gpu_attention_output_low_q8_tensor",
+          "method": "attention_output_low_q8",
+          "tensor_args": [
+            "low",
+            "heads"
+          ],
+          "bindings": {
+            "low": {
+              "source": "state",
+              "name": "attn_low",
+              "mode": "mut"
+            },
+            "heads": {
+              "source": "state",
+              "name": "heads",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 5,
+          "operation": "ds4_gpu_matmul_q8_0_hc_expand_tensor",
+          "method": "matmul_q8_0_hc_expand",
+          "tensor_args": [
+            "out_hc",
+            "block_out",
+            "x",
+            "residual_hc",
+            "split"
+          ],
+          "bindings": {
+            "out_hc": {
+              "source": "state",
+              "name": "after_attn_hc",
+              "mode": "mut"
+            },
+            "block_out": {
+              "source": "state",
+              "name": "attn_out",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "attn_low",
+              "mode": "ref"
+            },
+            "residual_hc": {
+              "source": "state",
+              "name": "cur_hc",
+              "mode": "ref"
+            },
+            "split": {
+              "source": "state",
+              "name": "hc_split",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        }
+      ]
+    },
+    {
+      "fixture_id": "layer0_ffn_router_moe",
+      "operation_family": "routing_moe",
+      "case": "token0_layer0_ffn_output",
+      "candidate_binary": "ds4-decode-layer0-ffn-output",
+      "candidate_source": "rust/ds4-gpu/src/bin/ds4-decode-layer0-ffn-output.rs",
+      "comparator": "ds4-parity/compare_decode_layer0_ffn_output.py",
+      "output_fields": [
+        "after_attn_hc",
+        "ffn_cur",
+        "ffn_norm",
+        "router_logits",
+        "router_probs",
+        "router_selected",
+        "router_weights",
+        "routed_mid",
+        "routed_out",
+        "shared_mid",
+        "shared_out",
+        "after_ffn_hc"
+      ],
+      "synchronization": {
+        "command_batch": true,
+        "synchronized": true,
+        "sync_point": "after FFN/router/MoE replay before JSON readback"
+      },
+      "calls": [
+        {
+          "ordinal": 1,
+          "operation": "ds4_gpu_hc_split_weighted_sum_norm_tensor",
+          "method": "hc_split_weighted_sum_norm",
+          "tensor_args": [
+            "out",
+            "norm_out",
+            "split",
+            "mix",
+            "residual_hc"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "ffn_cur",
+              "mode": "mut"
+            },
+            "norm_out": {
+              "source": "state",
+              "name": "ffn_norm",
+              "mode": "mut"
+            },
+            "split": {
+              "source": "state",
+              "name": "hc_split",
+              "mode": "mut"
+            },
+            "mix": {
+              "source": "state",
+              "name": "after_attn_hc",
+              "mode": "ref"
+            },
+            "residual_hc": {
+              "source": "state",
+              "name": "after_attn_hc",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "operation": "ds4_gpu_router_select_tensor",
+          "method": "router_select",
+          "tensor_args": [
+            "selected",
+            "weights",
+            "probs",
+            "logits"
+          ],
+          "bindings": {
+            "selected": {
+              "source": "state",
+              "name": "router_selected",
+              "mode": "mut"
+            },
+            "weights": {
+              "source": "state",
+              "name": "router_weights",
+              "mode": "mut"
+            },
+            "probs": {
+              "source": "state",
+              "name": "router_probs",
+              "mode": "mut"
+            },
+            "logits": {
+              "source": "state",
+              "name": "router_logits",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "operation": "ds4_gpu_routed_moe_one_tensor",
+          "method": "routed_moe_one",
+          "tensor_args": [
+            "out",
+            "gate",
+            "up",
+            "mid",
+            "experts",
+            "selected",
+            "weights",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "routed_out",
+              "mode": "mut"
+            },
+            "gate": {
+              "source": "state",
+              "name": "routed_gate",
+              "mode": "mut"
+            },
+            "up": {
+              "source": "state",
+              "name": "routed_up",
+              "mode": "mut"
+            },
+            "mid": {
+              "source": "state",
+              "name": "routed_mid",
+              "mode": "mut"
+            },
+            "experts": {
+              "source": "state",
+              "name": "routed_down",
+              "mode": "mut"
+            },
+            "selected": {
+              "source": "state",
+              "name": "router_selected",
+              "mode": "ref"
+            },
+            "weights": {
+              "source": "state",
+              "name": "router_weights",
+              "mode": "ref"
+            },
+            "x": {
+              "source": "state",
+              "name": "ffn_norm",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "operation": "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
+          "method": "shared_gate_up_swiglu_q8_0",
+          "tensor_args": [
+            "gate",
+            "up",
+            "mid",
+            "x"
+          ],
+          "bindings": {
+            "gate": {
+              "source": "state",
+              "name": "shared_gate",
+              "mode": "mut"
+            },
+            "up": {
+              "source": "state",
+              "name": "shared_up",
+              "mode": "mut"
+            },
+            "mid": {
+              "source": "state",
+              "name": "shared_mid",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "ffn_norm",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 5,
+          "operation": "ds4_gpu_shared_down_hc_expand_q8_0_tensor",
+          "method": "shared_down_hc_expand_q8_0",
+          "tensor_args": [
+            "out_hc",
+            "shared_out",
+            "shared_mid",
+            "routed_out",
+            "residual_hc",
+            "split"
+          ],
+          "bindings": {
+            "out_hc": {
+              "source": "state",
+              "name": "after_ffn_hc",
+              "mode": "mut"
+            },
+            "shared_out": {
+              "source": "state",
+              "name": "shared_out",
+              "mode": "mut"
+            },
+            "shared_mid": {
+              "source": "state",
+              "name": "shared_mid",
+              "mode": "ref"
+            },
+            "routed_out": {
+              "source": "state",
+              "name": "routed_out",
+              "mode": "ref"
+            },
+            "residual_hc": {
+              "source": "state",
+              "name": "after_attn_hc",
+              "mode": "ref"
+            },
+            "split": {
+              "source": "state",
+              "name": "hc_split",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        }
+      ]
+    },
+    {
+      "fixture_id": "full_output_head_logits",
+      "operation_family": "hc_output",
+      "case": "token0_full_output_head",
+      "candidate_binary": "ds4-decode-full-output-head",
+      "candidate_source": "rust/ds4-gpu/src/bin/ds4-decode-full-output-head.rs",
+      "comparator": "ds4-parity/compare_decode_full_output_head.py",
+      "output_fields": [
+        "after_layer42_hc",
+        "output_pre",
+        "output_weights",
+        "output_embd",
+        "output_norm",
+        "logits"
+      ],
+      "synchronization": {
+        "command_batch": true,
+        "synchronized": true,
+        "sync_point": "after output-head replay before JSON readback"
+      },
+      "calls": [
+        {
+          "ordinal": 1,
+          "operation": "ds4_gpu_output_hc_weights_tensor",
+          "method": "output_hc_weights",
+          "tensor_args": [
+            "out",
+            "pre"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "output_weights",
+              "mode": "mut"
+            },
+            "pre": {
+              "source": "state",
+              "name": "output_pre",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "operation": "ds4_gpu_hc_weighted_sum_tensor",
+          "method": "hc_weighted_sum",
+          "tensor_args": [
+            "out",
+            "residual_hc",
+            "weights"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "output_embd",
+              "mode": "mut"
+            },
+            "residual_hc": {
+              "source": "state",
+              "name": "after_layer42_hc",
+              "mode": "ref"
+            },
+            "weights": {
+              "source": "state",
+              "name": "output_weights",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 3,
+          "operation": "ds4_gpu_rms_norm_weight_tensor",
+          "method": "rms_norm_weight",
+          "tensor_args": [
+            "out",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "output_norm",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "output_embd",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        },
+        {
+          "ordinal": 4,
+          "operation": "ds4_gpu_matmul_q8_0_tensor",
+          "method": "matmul_q8_0",
+          "tensor_args": [
+            "out",
+            "x"
+          ],
+          "bindings": {
+            "out": {
+              "source": "state",
+              "name": "logits",
+              "mode": "mut"
+            },
+            "x": {
+              "source": "state",
+              "name": "output_norm",
+              "mode": "ref"
+            }
+          },
+          "error_kinds": [
+            "BackendStatus"
+          ]
+        }
+      ]
+    }
+  ]
+}

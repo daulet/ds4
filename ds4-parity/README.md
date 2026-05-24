@@ -424,6 +424,20 @@ pair comparators, checks committed hashes/sizes, and keeps runtime routing and
 backend replacement claims unchanged. The current fixture bundle passes with
 576 checker assertions.
 
+Validate the M12.3 Backend facade replay harness:
+
+```sh
+python3 ds4-parity/check_backend_facade_replay.py --negative-test
+```
+
+The M12.3 checker validates `baselines/backend/m12.3/facade-replay.json`
+against the M12.2 fixture manifest, the M12.1 backend boundary inventory, the
+Rust `DecodeBackend` facade operation table, and the selected candidate source
+call order. It checks tensor bindings, synchronized command-batch evidence,
+error propagation through `GpuStatus::from_raw(...).into_result()`, delegated
+M12.2 output comparators, and the no-route-change/no-backend-replacement claim
+policy. The current replay harness passes with 769 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

@@ -6119,7 +6119,7 @@ kernel execution, runtime route selection, and final removal decisions:
 
 #### M12.3: Rust Backend Facade Parity Harness
 
-- Status: active.
+- Status: complete.
 - Goal: route selected backend operations through a Rust-owned facade while
   still allowing the current backend implementation to serve as the oracle.
 - Oracle: M12.2 tensor fixtures plus existing M10.5 backend ABI/facade
@@ -6134,10 +6134,27 @@ kernel execution, runtime route selection, and final removal decisions:
 - Drift policy: any facade signature or operation-order change must update the
   replay artifact and keep old/current backend comparison available until the
   route gate passes.
+- Evidence:
+  - Added `ds4-parity/baselines/backend/m12.3/facade-replay.json`.
+  - Added `ds4-parity/check_backend_facade_replay.py --negative-test`.
+  - Unified parity wiring includes `M12.3 Backend facade replay harness`.
+  - The replay artifact maps each selected M12.2 fixture to ordered
+    `DecodeBackend` calls, tensor bindings, synchronized candidate evidence,
+    and current facade error propagation without changing runtime routes or
+    claiming backend replacement.
+- Validation:
+  - `python3 ds4-parity/check_backend_facade_replay.py --negative-test`
+    passed with 769 checks.
+  - `python3 ds4-parity/check_backend_operation_fixtures.py --negative-test`
+    passed with 576 checks after allowing M12.4 as the next active item.
+  - `python3 ds4-parity/check_runtime_graph_closure_matrix.py
+    --negative-test`, `cargo fmt --all -- --check`, `git diff --check`, and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles` passed
+    with 84 passed, 50 skipped, 0 failed.
 
 #### M12.4: First Backend Replacement Slice
 
-- Status: planned.
+- Status: active.
 - Goal: replace one bounded backend operation family in Rust or a Rust-owned
   backend module while leaving broader runtime routing unchanged.
 - Oracle: M12.2 current-backend tensor fixtures and M12.3 facade replay.
