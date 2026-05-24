@@ -509,6 +509,21 @@ anchors, comparator paths, route-candidate stages, fixture-gap rows, and the
 no-route-change/no-removal claim policy for every remaining embedding/indexer
 operation. The current M13.1 fixture passes with 186 checker assertions.
 
+Validate the M13.2 Batched embedding replacement slice:
+
+```sh
+python3 ds4-parity/check_backend_batched_embedding_slice.py --negative-test
+```
+
+The M13.2 checker validates
+`baselines/backend/m13.2/batched-embedding-replacement-slice.json` against the
+M13.1 matrix row for `ds4_gpu_embed_tokens_hc_tensor`, the Rust replacement
+slice registry, the `ds4-backend-replacement-slice` emitter, and the M10.6
+whole/chunked/resumed prefill comparators. It verifies the selected
+`cuda-b300` backend path, CPU/Metal/default-route fail-closed behavior, and
+keeps runtime routing, general backend replacement, and kernel replacement
+claims false. The committed M13.2 fixture passes with 96 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

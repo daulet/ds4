@@ -1,5 +1,6 @@
 use ds4_gpu::replacement_slice::{
-    ensure_supported_backend, first_backend_replacement_slice, ReplacementSliceSpec,
+    ensure_supported_backend, first_backend_replacement_slice, replacement_slice_by_id,
+    ReplacementSliceSpec,
 };
 use std::env;
 use std::io::{self, Write};
@@ -13,13 +14,10 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
-    let spec = first_backend_replacement_slice();
-    match args.as_slice() {
-        [] => {
-            print_summary(spec, None)?;
-            Ok(())
-        }
-        [flag, backend] if flag == "--backend" => match ensure_supported_backend(spec, backend) {
+    let (spec, backend) = parse_args(&args)?;
+    let spec = spec.unwrap_or_else(first_backend_replacement_slice);
+    match backend {
+        Some(backend) => match ensure_supported_backend(spec, backend) {
             Ok(()) => {
                 print_summary(spec, Some(("supported", backend)))?;
                 Ok(())
@@ -29,8 +27,47 @@ fn run() -> Result<(), String> {
                 std::process::exit(2);
             }
         },
-        _ => Err("usage: ds4-backend-replacement-slice [--backend NAME]".to_string()),
+        None => {
+            print_summary(spec, None)?;
+            Ok(())
+        }
     }
+}
+
+fn parse_args<'a>(
+    args: &'a [String],
+) -> Result<(Option<&'static ReplacementSliceSpec>, Option<&'a str>), String> {
+    let mut spec = None;
+    let mut backend = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--backend" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "missing value for --backend".to_string())?;
+                backend = Some(value.as_str());
+            }
+            "--slice" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "missing value for --slice".to_string())?;
+                spec = Some(
+                    replacement_slice_by_id(value)
+                        .ok_or_else(|| format!("unknown replacement slice: {value}"))?,
+                );
+            }
+            _ => return Err(usage()),
+        }
+        index += 1;
+    }
+    Ok((spec, backend))
+}
+
+fn usage() -> String {
+    "usage: ds4-backend-replacement-slice [--slice ID] [--backend NAME]".to_string()
 }
 
 fn print_summary(
@@ -41,7 +78,7 @@ fn print_summary(
     writeln!(out, "{{").map_err(|err| err.to_string())?;
     write_string(&mut out, "schema", spec.schema, true)?;
     write_string(&mut out, "milestone", spec.milestone, true)?;
-    write_string(&mut out, "status", "first-replacement-slice", true)?;
+    write_string(&mut out, "status", spec.status, true)?;
     write_string(&mut out, "id", spec.id, true)?;
     write_string(&mut out, "operation_family", spec.operation_family, true)?;
     write_string(&mut out, "fixture_id", spec.fixture_id, true)?;

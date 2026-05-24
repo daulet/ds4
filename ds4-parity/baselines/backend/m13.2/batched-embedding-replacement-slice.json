@@ -1,0 +1,31 @@
+{
+  "schema": "ds4.backend_replacement_slice.v1",
+  "milestone": "M13.2",
+  "status": "batched-embedding-replacement-slice",
+  "id": "m13.2-embedding-and-indexer-embed-tokens-hc",
+  "operation_family": "embedding_and_indexer",
+  "fixture_id": "m13.1-embed-tokens-hc",
+  "operation": "ds4_gpu_embed_tokens_hc_tensor",
+  "method": "embed_tokens_hc",
+  "rust_module": "rust/ds4-gpu/src/replacement_slice.rs",
+  "facade_replay": "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+  "tensor_fixture_manifest": "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+  "comparator": "ds4-parity/compare_prefill_whole_short.py",
+  "output_fields": [
+    "after_layer42_hc",
+    "logits"
+  ],
+  "supported_backends": [
+    "cuda-b300"
+  ],
+  "unsupported_backends": [
+    "cpu",
+    "metal",
+    "runtime-default-route"
+  ],
+  "runtime_route_change": false,
+  "general_backend_replacement": false,
+  "kernel_replacement": false,
+  "next_required_gate": "M13.3 Indexed Decode Selection Replacement Slice",
+  "backend_check": "not-requested"
+}

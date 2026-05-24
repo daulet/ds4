@@ -6376,22 +6376,43 @@ Drift policy:
 
 #### M13.2: Batched Embedding Replacement Slice
 
-- Status: active.
+- Status: complete.
 - Goal: add an opt-in replacement slice for
   `ds4_gpu_embed_tokens_hc_tensor`.
 - Oracle: current-C whole/chunked/resumed prefill output comparators.
-- Fixture: batched embedding replacement slice descriptor.
-- Comparator: batched embedding slice checker plus M10.6 prefill pair
-  comparators.
+- Fixture:
+  `ds4-parity/baselines/backend/m13.2/batched-embedding-replacement-slice.json`.
+- Comparator: `ds4-parity/check_backend_batched_embedding_slice.py
+  --negative-test` plus M10.6 prefill pair comparators.
 - Acceptance: batched embedding output fields match current-C fixtures within
   documented tolerance, unsupported backends fail closed, and default runtime
   routing is unchanged.
 - Drift policy: any output drift requires a same-B300 current-C oracle refresh
   and comparator rationale before the slice can remain active.
+- Evidence:
+  - Added the M13.2 Rust replacement slice descriptor to
+    `rust/ds4-gpu/src/replacement_slice.rs`.
+  - Extended `ds4-backend-replacement-slice` with explicit `--slice`
+    selection while preserving the M12.4 default output.
+  - Added
+    `ds4-parity/baselines/backend/m13.2/batched-embedding-replacement-slice.json`.
+  - Added `ds4-parity/check_backend_batched_embedding_slice.py
+    --negative-test`.
+  - The slice selects `ds4_gpu_embed_tokens_hc_tensor`, uses M13.1
+    pair-comparator-ready prefill coverage, fails closed for CPU, Metal, and
+    runtime-default-route, and keeps runtime route, general backend
+    replacement, and kernel replacement claims false.
+  - Validation passed:
+    `python3 ds4-parity/check_backend_batched_embedding_slice.py
+    --negative-test` (96 checks), `cargo test -p ds4-gpu replacement_slice`
+    (4 tests), `python3 ds4-parity/check_backend_replacement_slice.py
+    --negative-test` (85 checks), and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+    (90 passed, 50 skipped, 0 failed).
 
 #### M13.3: Indexed Decode Selection Replacement Slice
 
-- Status: pending.
+- Status: active.
 - Goal: add opt-in replacement slices for
   `ds4_gpu_indexer_score_one_tensor` and `ds4_gpu_indexer_topk_tensor`.
 - Oracle: current-C long indexed-attention decode comparator.
