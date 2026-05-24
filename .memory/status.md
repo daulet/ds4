@@ -3,7 +3,7 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d Rust Continued-Frontier Save And Restore Policy
+- Active item: M10.7d1 Continued-Frontier Policy Transition Matrix
 - Last validated source before the active item: M10.7c3d Rust Graph Tensor
   Restore Next-Token Smoke.
 - M10.7c3 Rust Graph Tensor Restore Next-Token Smoke is split into M10.7c3a
@@ -56,6 +56,11 @@
   --check`, `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
   with 55 passed, 40 skipped, and 0 failed, `cargo test --workspace`, and
   non-interactive Claude review with `NO BLOCKERS`.
+- M10.7d is split before implementation into M10.7d1 continued-frontier policy
+  transition matrix, M10.7d2 runtime continued-store replay decisions, and
+  M10.7d3 graph restore continued-frontier B300 smoke. M10.7d1 is the active
+  next item so the policy/reset/suppression state machine is comparator-closed
+  before runtime or graph restore changes.
 - M10.7c3c adds `ds4-graph-restore-readback`, a B300 Rust GPU smoke that reads
   the four M7.8 disk payload and memory snapshot raw bodies, writes graph
   sections into Rust-owned `ds4_gpu::Tensor` allocations, and reads the written

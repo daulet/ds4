@@ -5322,28 +5322,88 @@
 - Owner path: Rust graph restore runtime, B300 restore comparator,
   `.memory/status.md`.
 
-### M10.7d: Rust Continued-Frontier Save And Restore Policy
+### M10.7d1: Continued-Frontier Policy Transition Matrix
 
 - Status: active
-- Goal: port continued-frontier cache accounting around save suppression,
-  store targets, and restore decisions into the Rust graph runtime.
-- Oracle: M9.8 runtime KV replay artifacts, M7.7 KV replay comparator, and
-  current C continued-store policy.
-- Fixture: fresh miss, exact-prefix disk restore, continuation restore, already
-  stored frontier, suppressed frontier, and restored frontier re-enable cases.
-- Comparator: Rust-vs-C cache source, cached/write token counts, continued
-  store targets, suppression state, restored frontier state, and KVC reason
-  fields.
-- Acceptance: Rust makes the same store/restore decisions as current C while
-  using Rust-owned graph session state.
-- Drift policy: cache source, cached tokens, write tokens, reason fields,
-  continued targets, and suppression/restore transitions are exact.
-- Review gate: ask Claude to review cache/frontier invariants.
-- Validation needed: KV replay comparator, targeted Rust runtime tests, B300
-  restore smoke when graph restore changes, `cargo test --workspace`, `cargo
-  fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
-  with no blockers.
-- Owner path: Rust runtime cache/frontier policy, KV replay comparator,
+- Goal: make the Rust continued-frontier policy matrix cover C target
+  selection, note-store updates, cold-store suppression, failed-store restore,
+  already-stored skips, disabled policy, and reset-after-miss behavior before
+  touching graph tensors.
+- Oracle: current C `kv_cache_continued_store_target`,
+  `kv_cache_suppress_continued_store`,
+  `kv_cache_restore_suppressed_continued`, M7.2 policy baseline rows, and the
+  M9.8f4 runtime store invariants.
+- Fixture: no-model synthetic cases for fresh frontier, below-min, unaligned,
+  already stored, disabled, align-zero, no-interval, suppressed cold frontier,
+  restore-on-failure, ignore-non-suppressed restore, and reset-after-cache-miss.
+- Comparator: Rust-vs-C continued target, old frontier, new frontier,
+  suppression result, restore result, and reset state.
+- Acceptance: Rust policy helpers and runtime cache state expose the same
+  frontier transitions as current C without requiring a model or B300.
+- Drift policy: target tokens, old/new frontier tokens, skip reasons encoded by
+  case names, and reset/suppression/restore transitions are exact.
+- Review gate: ask Claude to review the policy matrix for missing C
+  transition cases.
+- Validation needed: policy comparator with negative tests, targeted Rust
+  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
+- Owner path: Rust KV policy dump/comparator, Rust runtime cache-state tests,
+  `.memory/status.md`.
+
+### M10.7d2: Runtime Continued-Store Replay Decisions
+
+- Status: pending
+- Goal: wire continued-frontier accounting through the Rust runtime request
+  path so fresh misses, memory hits, disk restores, continuation restores, cold
+  stores, and decode-time continued stores produce C-equivalent store decisions.
+- Oracle: M9.8 runtime KV replay artifacts, M7.7 KV replay comparator, current
+  C `generate_job` cache/store ordering, and M9.8f5 B300 replay summary.
+- Fixture: M0.5 seed miss, exact-prefix seed restore, continuation restore,
+  memory-token continuation, cold-store frontier suppression, and failed-store
+  re-enable cases.
+- Comparator: Rust-vs-C cache source, cached token count, cache write token
+  count, disk cached tokens, KVC reason fields, continued frontier before/after
+  each runtime decision, and store/skip outcomes.
+- Acceptance: Rust runtime cache decisions match current C while using
+  Rust-owned session/cache state and existing C KVC file operations.
+- Drift policy: cache source, cached tokens, write tokens, disk tokens, reason
+  names/codes, and frontier transitions are exact; paths, timestamps, and raw
+  payload hashes stay normalized.
+- Review gate: ask Claude to review runtime cache/store ordering and failure
+  rollback.
+- Validation needed: KV replay comparator, targeted Rust runtime tests,
+  `python3 ds4-parity/check_runtime_kv_replay_summary.py`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+- Owner path: Rust runtime cache/store path, KV replay comparator,
+  `.memory/status.md`.
+
+### M10.7d3: Graph Restore Continued-Frontier B300 Smoke
+
+- Status: pending
+- Goal: prove B300 Rust graph restore and continued-frontier accounting remain
+  compatible when a restored disk checkpoint is followed by further save/skip
+  decisions.
+- Oracle: current C graph restore, M10.7c3d same-capture restore
+  next-token oracle, M9.8f4 continued-store runtime behavior, and current C
+  KVC reason/header fields.
+- Fixture: B300 fresh miss, exact-prefix disk restore, continuation restore,
+  restored-frontier re-enable, already-stored frontier skip, and shutdown or
+  continued KVC write after restore.
+- Comparator: restored checkpoint/logits evidence, cache source, cached/write
+  token counts, continued frontier state, KVC reason fields, and graph counters.
+- Acceptance: Rust-restored graph sessions continue with the same cache
+  store/skip decisions as current C after restore.
+- Drift policy: restored token counts, selected token/top-logprob evidence,
+  frontier tokens, reason fields, and graph counters are exact within the
+  M10.7c3d same-capture policy.
+- Review gate: ask Claude to review B300 command fidelity and restore/frontier
+  invariants.
+- Validation needed: B300 graph restore smoke when graph restore behavior is
+  touched, runtime KV replay comparator, targeted Rust tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+- Owner path: Rust graph restore/runtime cache integration, B300 comparator,
   `.memory/status.md`.
 
 ### M10.8: Rust MTP Draft And Verifier Orchestration
