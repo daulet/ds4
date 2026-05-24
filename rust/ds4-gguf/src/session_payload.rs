@@ -873,4 +873,27 @@ mod tests {
             PayloadError::RawRingMismatch
         );
     }
+
+    #[test]
+    fn restore_header_contract_matches_m78_payload_sizes() {
+        let seed = graph_payload_plan(GraphPayloadFixture {
+            name: "disk_seed_payload",
+            ctx_size: 32_768,
+            token_count: 550,
+        });
+        assert_eq!(seed.header.raw_live_rows, 128);
+        assert_eq!(seed.ratio4_rows, 137);
+        assert_eq!(seed.ratio128_rows, 4);
+        assert_eq!(seed.payload_bytes, 31_526_948);
+
+        let continuation = graph_payload_plan(GraphPayloadFixture {
+            name: "disk_continuation_payload",
+            ctx_size: 32_768,
+            token_count: 561,
+        });
+        assert_eq!(continuation.header.raw_live_rows, 128);
+        assert_eq!(continuation.ratio4_rows, 140);
+        assert_eq!(continuation.ratio128_rows, 4);
+        assert_eq!(continuation.payload_bytes, 31_688_272);
+    }
 }

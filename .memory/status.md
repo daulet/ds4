@@ -3,11 +3,11 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7c Rust Disk KV Payload Restore Smoke
-- Last validated source before the active item: M10.7b Rust Graph Session Payload
-  Reader And Writer.
-- Earlier M10.7a Rust Graph Session Payload
-  Layout Plan.
+- Active item: M10.7c2 Rust Disk KV Payload Byte Import Smoke
+- Last validated source before the active item: M10.7c1 Rust Restore Payload
+  Header Contract.
+- Earlier M10.7b Rust Graph Session Payload Reader And Writer.
+- Earlier M10.7a Rust Graph Session Payload Layout Plan.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
@@ -30,6 +30,28 @@
 
 ## Last Evidence
 
+- M10.7c1 adds `ds4-session-payload-dump-rs --restore-header-plan`, a
+  hash-only Rust restore payload header plan over the committed M7.8 current-C
+  restore oracle. It emits the four seed/continuation disk-payload and
+  memory-snapshot cases, model identity, raw-body policy, DSV4 header bytes,
+  payload byte counts, graph caps, raw-live rows, and ratio row counts without
+  reading raw restore bodies or claiming tensor restore.
+- M10.7c1 adds `ds4-parity/compare_restore_payload_header_plan.py`, which
+  normalizes `ds4-parity/baselines/kv/m7.8/current-c.json` into the same
+  restore-header shape and compares schema/source/oracle path, model path and
+  SHA, case order and count, kind, prompt case, prompt token count, exact
+  header bytes, payload/snapshot byte budgets, graph fields, and hash-only
+  policy. The comparator passed 127 checks and negative tests rejected 7
+  mutations.
+- M10.7c1 validation passed Rust restore-header JSON emission and JSON parse,
+  `python3 ds4-parity/compare_restore_payload_header_plan.py`, `python3
+  ds4-parity/compare_restore_payload_header_plan.py --negative-test`, targeted
+  Rust test `restore_header_contract_matches_m78_payload_sizes`,
+  `python3 -m py_compile ds4-parity/compare_restore_payload_header_plan.py
+  ds4-parity/run_parity_report.py`, `git diff --check`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 50 passed, 36
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all --
+  --check`, and non-interactive Claude review with `NO BLOCKERS`.
 - M10.7b adds a graph-specific Rust payload runtime, `read_graph_payload`,
   `append_graph_payload_plan`, parsed section summaries, and
   `ds4-session-payload-dump-rs --graph-probe`. The reader/writer slice validates

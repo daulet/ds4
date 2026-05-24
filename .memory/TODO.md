@@ -5102,24 +5102,90 @@
 
 ### M10.7c: Rust Disk KV Payload Restore Smoke
 
-- Status: pending
-- Goal: restore a C-written disk KVC payload into Rust graph session state and
-  prove next-token behavior matches current C.
+- Status: split into M10.7c1-M10.7c3 before implementation; M10.7c1 done.
+- Goal: advance disk and memory restore parity in slices: committed restore
+  metadata first, raw B300 payload bytes second, and tensor restore behavior
+  third.
 - Oracle: current C M7.8 restore oracle and M0.5 disk KVC artifacts on B300.
+- Acceptance: each subitem has its own oracle, fixture, comparator, and
+  validation gate before any tensor-restore claims.
+- Owner path: Rust graph restore runtime, B300 restore comparator,
+  `ds4-parity/`, `.memory/status.md`.
+
+### M10.7c1: Rust Restore Payload Header Contract
+
+- Status: done
+- Goal: prove Rust graph payload planning matches the committed M7.8 restore
+  oracle headers and payload byte counts before loading raw restore bodies.
+- Oracle: `ds4-parity/baselines/kv/m7.8/current-c.json` header prefixes,
+  payload/snapshot byte counts, prompt-token counts, and fixture identity.
+- Fixture: disk and in-memory restore records for seed and continuation prompts
+  on `/workspace/ds4/ds4flash.gguf`.
+- Comparator: current-C restore oracle vs Rust restore-header plan over case
+  order, kind, prompt tokens, header prefix bytes, graph caps, raw-live rows,
+  payload/snapshot byte counts, and hash-only body policy.
+- Acceptance: Rust emits the same DSV4 graph payload header and byte budget as
+  the M7.8 current-C restore records without reading raw payload bodies or
+  claiming tensor restore.
+- Drift policy: header bytes, prompt-token counts, payload byte counts, model
+  identity, and raw-body hash-only policy are exact.
+- Review gate: ask Claude to review that this remains a header/size contract
+  and does not overclaim restore behavior.
+- Validation passed: Rust restore-header JSON emission and JSON parse;
+  `python3 ds4-parity/compare_restore_payload_header_plan.py` passed 127
+  checks; `python3 ds4-parity/compare_restore_payload_header_plan.py
+  --negative-test` passed 127 checks and rejected 7 mutations; targeted Rust
+  test `restore_header_contract_matches_m78_payload_sizes`;
+  `python3 -m py_compile ds4-parity/compare_restore_payload_header_plan.py
+  ds4-parity/run_parity_report.py`; `git diff --check`; `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` reported 50 passed, 36
+  skipped, and 0 failed; `cargo test --workspace`; `cargo fmt --all --
+  --check`; and non-interactive Claude review with `NO BLOCKERS`.
+- Owner path: Rust restore header plan, M7.8 restore comparator, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M10.7c2: Rust Disk KV Payload Byte Import Smoke
+
+- Status: active
+- Goal: on B300, feed the raw C-written disk KVC restore payload bytes into the
+  Rust graph payload reader and prove Rust accepts the bytes with the recorded
+  hashes and section plan.
+- Oracle: M7.8 disk payload raw files and `payload_sha256` records on B300.
+- Fixture: seed and continuation disk restore payload bodies in the M7.8 raw
+  artifact location on `/workspace/ds4`.
+- Comparator: B300 Rust payload-reader smoke over payload SHA256, header fields,
+  payload length, section byte plan, compressed/index counts, and rejection of
+  mutated raw bytes.
+- Acceptance: Rust can import the same raw disk payload bytes as C at the reader
+  level, without restoring tensors into graph memory yet.
+- Drift policy: raw payload hashes, lengths, header fields, count tables, and
+  section offsets are exact.
+- Review gate: ask Claude to review raw-byte bounds checks and B300 evidence.
+- Validation needed: B300 raw payload reader smoke, local comparator negative
+  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
+- Owner path: Rust graph payload byte reader, B300 raw payload comparator,
+  `.memory/status.md`.
+
+### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
+
+- Status: pending
+- Goal: restore C-written disk and memory snapshot payloads into Rust graph
+  session state on B300 and prove next-token behavior matches current C.
+- Oracle: current C M7.8 restore oracle on B300.
 - Fixture: seed disk payload restore, continuation disk payload restore, and
   in-memory snapshot restore on `/workspace/ds4/ds4flash.gguf`.
 - Comparator: B300 Rust-vs-current-C restore comparator over payload hashes,
   checkpoint tokens, selected token, top-logprob order, cache source, and graph
   counters.
-- Acceptance: Rust-restored sessions produce the same next-token state as the
-  C restore oracle for the committed fixtures.
-- Drift policy: payload body hashes, restored checkpoint length, selected
-  token, top-logprob order, cache source, and graph counters are exact; raw
-  payload bodies remain hash-only unless a later item explicitly commits them.
+- Acceptance: Rust-restored sessions produce the same next-token state as the C
+  restore oracle for the committed fixtures.
+- Drift policy: payload body hashes, restored checkpoint length, selected token,
+  top-logprob order, cache source, and graph counters are exact.
 - Review gate: ask Claude to review restore invariants and B300 evidence.
 - Validation needed: B300 restore smoke, session payload comparator, KV replay
-  comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
-  diff --check`, and non-interactive Claude review with no blockers.
+  comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
 - Owner path: Rust graph restore runtime, B300 restore comparator,
   `.memory/status.md`.
 

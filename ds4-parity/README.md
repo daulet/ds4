@@ -922,6 +922,25 @@ and the C-compatible rejection codes for truncated, trailing, invalid
 compressed/index counts, raw-ring, context, layout, chunk-layout, and comp-cap
 boundary cases without restoring tensors.
 
+Compare the M10.7c1 Rust restore payload header plan against the committed
+M7.8 B300 current-C restore oracle:
+
+```sh
+python3 ds4-parity/compare_restore_payload_header_plan.py
+python3 ds4-parity/compare_restore_payload_header_plan.py --negative-test
+cargo run -p ds4-gguf --bin ds4-session-payload-dump-rs --quiet -- \
+  --restore-header-plan \
+  > /tmp/ds4-m107c1-restore-header-rust.json
+python3 ds4-parity/compare_restore_payload_header_plan.py \
+  --candidate /tmp/ds4-m107c1-restore-header-rust.json
+```
+
+The comparator checks M7.8 disk and memory-snapshot restore records for seed and
+continuation prompts, including case order, model identity, prompt tokens,
+DSV4 header bytes, graph caps, raw-live rows, payload/snapshot byte counts, and
+the hash-only raw-body policy. It does not require raw restore bodies or claim
+tensor restore behavior.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

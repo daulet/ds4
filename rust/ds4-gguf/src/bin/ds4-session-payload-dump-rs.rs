@@ -2,9 +2,10 @@ use ds4_gguf::session_payload::{
     append_full_payload, append_graph_payload_plan, append_prefix_to_first_comp,
     append_prefix_to_first_index, compress_ratio, default_cpu_runtime,
     default_graph_payload_runtime, default_header, graph_payload_plan, read_graph_payload,
-    sections, validate_payload_cpu, GraphPayloadPlan, GraphPayloadRead, PayloadError,
-    PayloadHeader, PayloadSections, GRAPH_PAYLOAD_FIXTURES, HEADER_BYTES, IO_CHUNK_BYTES, MAGIC,
-    N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB, U32_FIELDS, VERSION,
+    sections, validate_payload_cpu, GraphPayloadFixture, GraphPayloadPlan, GraphPayloadRead,
+    PayloadError, PayloadHeader, PayloadSections, GRAPH_PAYLOAD_FIXTURES, HEADER_BYTES,
+    IO_CHUNK_BYTES, MAGIC, N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB, U32_FIELDS,
+    VERSION,
 };
 use std::io::{self, Write};
 
@@ -13,6 +14,7 @@ enum DumpMode {
     Shape,
     GraphPlan,
     GraphProbe,
+    RestoreHeaderPlan,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,18 +31,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else if arg == "--graph-probe" {
             if mode != DumpMode::Shape {
                 return Err(
-                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe]".into(),
+                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan]".into(),
                 );
             }
             mode = DumpMode::GraphProbe;
+        } else if arg == "--restore-header-plan" {
+            if mode != DumpMode::Shape {
+                return Err(
+                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan]".into(),
+                );
+            }
+            mode = DumpMode::RestoreHeaderPlan;
         } else {
-            return Err("usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe]".into());
+            return Err(
+                "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan]".into(),
+            );
         }
     }
     match mode {
         DumpMode::Shape => write_dump(&mut out)?,
         DumpMode::GraphPlan => write_graph_plan_dump(&mut out)?,
         DumpMode::GraphProbe => write_graph_probe_dump(&mut out)?,
+        DumpMode::RestoreHeaderPlan => write_restore_header_plan_dump(&mut out)?,
     }
     Ok(())
 }
@@ -580,6 +592,106 @@ fn fnv1a64_hex(bytes: &[u8]) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+struct RestoreHeaderCase {
+    id: &'static str,
+    kind: &'static str,
+    prompt_case: &'static str,
+    token_count: u32,
+}
+
+const RESTORE_HEADER_CASES: &[RestoreHeaderCase] = &[
+    RestoreHeaderCase {
+        id: "disk_seed_payload",
+        kind: "disk-payload",
+        prompt_case: "seed",
+        token_count: 550,
+    },
+    RestoreHeaderCase {
+        id: "snapshot_seed",
+        kind: "memory-snapshot",
+        prompt_case: "seed",
+        token_count: 550,
+    },
+    RestoreHeaderCase {
+        id: "disk_continuation_payload",
+        kind: "disk-payload",
+        prompt_case: "continuation",
+        token_count: 561,
+    },
+    RestoreHeaderCase {
+        id: "snapshot_continuation",
+        kind: "memory-snapshot",
+        prompt_case: "continuation",
+        token_count: 561,
+    },
+];
+
+fn write_restore_header_plan_dump<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "{{")?;
+    writeln!(
+        out,
+        "  \"schema\": \"ds4.rust_restore_payload_header_plan.v1\","
+    )?;
+    writeln!(
+        out,
+        "  \"source\": \"rust-restore-payload-header-plan-no-raw-bodies\","
+    )?;
+    writeln!(
+        out,
+        "  \"oracle\": \"ds4-parity/baselines/kv/m7.8/current-c.json\","
+    )?;
+    writeln!(out, "  \"model_path\": \"/workspace/ds4/ds4flash.gguf\",")?;
+    writeln!(
+        out,
+        "  \"model_sha256\": \"efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668\","
+    )?;
+    writeln!(out, "  \"raw_body_policy\": \"hash-only; raw restore bodies are not required for this header contract\",")?;
+    writeln!(out, "  \"cases\": [")?;
+    for (idx, case) in RESTORE_HEADER_CASES.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_restore_header_case(out, case)?;
+    }
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")
+}
+
+fn write_restore_header_case<W: Write>(out: &mut W, case: &RestoreHeaderCase) -> io::Result<()> {
+    let plan = graph_payload_plan(GraphPayloadFixture {
+        name: case.id,
+        ctx_size: 32_768,
+        token_count: case.token_count,
+    });
+    write!(out, "    {{\"id\": ")?;
+    write_json_string(out, case.id)?;
+    write!(out, ", \"kind\": ")?;
+    write_json_string(out, case.kind)?;
+    write!(out, ", \"prompt_case\": ")?;
+    write_json_string(out, case.prompt_case)?;
+    write!(
+        out,
+        ", \"ctx\": {}, \"prompt_tokens\": {}, \"raw_payload_committed\": false, \
+         \"header_prefix_hex\": ",
+        plan.header.ctx_size, plan.header.token_count
+    )?;
+    write_json_string(out, &hex_string(&plan.header.to_bytes()))?;
+    write!(
+        out,
+        ", \"payload_bytes\": {}, \"graph\": {{\"prefill_cap\": {}, \
+         \"raw_cap\": {}, \"raw_window\": {}, \"comp_cap\": {}, \
+         \"raw_live_rows\": {}, \"ratio4_rows\": {}, \"ratio128_rows\": {}}}}}",
+        plan.payload_bytes,
+        plan.header.prefill_cap,
+        plan.header.raw_cap,
+        plan.header.raw_window,
+        plan.header.comp_cap,
+        plan.header.raw_live_rows,
+        plan.ratio4_rows,
+        plan.ratio128_rows
+    )
 }
 
 fn write_header_rejection_cases<W: Write>(out: &mut W) -> io::Result<()> {
