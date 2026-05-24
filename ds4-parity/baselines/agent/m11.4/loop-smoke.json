@@ -1,0 +1,41 @@
+{
+  "schema": "ds4.agent_loop_smoke.v1",
+  "milestone": "M11.4",
+  "source": "rust-agent-loop-smoke",
+  "oracle": "M11.1 trace fixture, M11.2 rendered context, and M11.3 deterministic replay",
+  "model_sampling": false,
+  "live_tool_execution": false,
+  "manual_smoke": "deferred until model-backed Rust agent loop is enabled",
+  "cases": [
+    {
+      "id": "single_tool_round",
+      "replay_sources": ["M11.1", "M11.2", "M11.3"],
+      "loop_steps": [
+        {"step": 0, "phase": "render_prompt", "message_roles": ["system", "user"], "prompt_has_user_marker": true, "prompt_has_tool_result": false},
+        {"step": 1, "phase": "parse_model_event", "round": 0, "parser_state": "done", "parsed_tool_calls": 1, "raw_dsml_preserved": true},
+        {"step": 2, "phase": "tool_replay", "source": "deterministic_stub", "live_tool_execution": false, "round": 0, "name": "list", "args": [{"name": "path", "value": ".", "is_string": true}], "inserted_role": "tool", "output": "Tool result for list path=\".\":\nREADME.md\nds4_agent.c\n"},
+        {"step": 3, "phase": "render_after_tool", "message_roles": ["system", "user", "assistant", "tool"], "prompt_has_tool_result": true, "prompt_has_tool_output": true},
+        {"step": 4, "phase": "final_model_event", "round": 1, "visible": "README.md and ds4_agent.c are visible."}
+      ],
+      "parsed_tool_sequence": [{"round": 0, "name": "list", "args": [{"name": "path", "value": ".", "is_string": true}]}],
+      "final_transcript_roles": ["system", "user", "assistant", "tool", "assistant"],
+      "final_visible_output": "README.md and ds4_agent.c are visible."
+    },
+    {
+      "id": "session_switching_commands",
+      "replay_sources": ["M11.1", "M11.2", "M11.3"],
+      "loop_steps": [
+        {"step": 0, "phase": "model_event", "round": 0, "visible": "Noted: alpha was inspected.", "transcript_roles": ["system", "user", "assistant"]},
+        {"step": 1, "phase": "session_command", "input": "/save", "command": "save", "session": "<SESSION:alpha>", "visible": "saved session <SESSION:alpha> (3 turns)"},
+        {"step": 2, "phase": "session_command", "input": "/list", "command": "list", "sessions": ["<SESSION:alpha>"]},
+        {"step": 3, "phase": "session_command", "input": "/switch <SESSION:alpha>", "command": "switch", "session": "<SESSION:alpha>", "visible": "switched to <SESSION:alpha>"},
+        {"step": 4, "phase": "session_command", "input": "/history 2", "command": "history", "turns": 2, "visible": "user: Remember that alpha was inspected."},
+        {"step": 5, "phase": "session_command", "input": "/new", "command": "new", "visible": "new session started from system prompt", "active_session": "<SESSION:new>"}
+      ],
+      "saved_sessions": ["<SESSION:alpha>"],
+      "active_session": "<SESSION:new>",
+      "final_transcript_roles": ["system"],
+      "final_visible_output": "new session started from system prompt"
+    }
+  ]
+}

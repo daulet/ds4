@@ -383,6 +383,20 @@ order and inputs, history text, final command-visible output, manifest hashes,
 and the M11.2 rendered-context boundary for the tool result. It remains
 model-free and does not claim live Rust agent-loop ownership.
 
+Validate the M11.4 Agent no-model loop smoke:
+
+```sh
+cargo run --quiet -p ds4-gguf --bin ds4-agent-loop-smoke-rs \
+  > ds4-parity/baselines/agent/m11.4/loop-smoke.json
+python3 ds4-parity/compare_agent_loop_smoke.py --negative-test
+```
+
+The M11.4 comparator checks the replay-proven Rust loop smoke against M11.1
+through M11.3: prompt rendering before and after tool insertion, Rust DSML
+parser state, deterministic tool replay, session command order, normalized
+session ids, and final visible outputs. It remains no-model and explicitly
+defers model-backed manual smoke until the live Rust agent loop is enabled.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

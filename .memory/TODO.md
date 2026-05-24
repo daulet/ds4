@@ -6677,7 +6677,7 @@
 
 #### M11.4: Rust Agent Loop And Manual Smoke
 
-- Status: active.
+- Status: complete.
 - Goal: wire the replay-proven Rust prompt, tool, and session paths into a live
   Rust agent loop while keeping manual sessions as smoke validation.
 - Oracle: M11.1 through M11.3 replay fixtures plus current-C no-model command
@@ -6689,8 +6689,32 @@
 - Acceptance: the Rust loop consumes scripted model events, invokes
   deterministic tool replay, applies session commands, and records visible
   output without model sampling before any manual smoke claim.
-- Owner path: agent trace fixtures, replay comparator, Rust agent loop,
-  `.memory/status.md`.
+- Evidence:
+  - Added Rust `ds4-agent-loop-smoke-rs` no-model smoke emitter.
+  - Added `ds4-parity/baselines/agent/m11.4/loop-smoke.json` and
+    `manifest.json`.
+  - Added unified parity report item `M11.4 Agent no-model loop smoke`.
+- Validation passed:
+  - `cargo run --quiet -p ds4-gguf --bin ds4-agent-loop-smoke-rs >
+    ds4-parity/baselines/agent/m11.4/loop-smoke.json`
+  - `python3 ds4-parity/compare_agent_loop_smoke.py --negative-test`
+    (`223 checks`)
+
+#### M12: Backend Replacement Parity Split Planning
+
+- Status: active.
+- Goal: split backend replacement into replay-comparable milestones before any
+  CUDA/Metal backend ownership changes.
+- Oracle: current backend implementation plus M10 runtime graph and benchmark
+  fixtures.
+- Fixture: operation-level tensor fixtures, official-vector fixtures,
+  long-context fixtures, and `ds4-bench` CSVs.
+- Comparator: per-stage tensor/runtime/benchmark comparators with explicit
+  current-C or B300 oracles.
+- Acceptance: each M12 substage has an oracle, fixture, comparator,
+  acceptance criteria, and drift policy before implementation begins.
+- Owner path: backend replacement split, tensor/runtime fixtures,
+  `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
 
 ## Later Items
 

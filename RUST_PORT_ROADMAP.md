@@ -5986,7 +5986,7 @@ claiming more live behavior:
 
 #### M11.4: Rust Agent Loop And Manual Smoke
 
-- Status: active.
+- Status: complete.
 - Goal: wire the replay-proven Rust prompt, tool, and session paths into a live
   Rust agent loop while keeping manual sessions as smoke validation.
 - Oracle: M11.1 through M11.3 replay fixtures plus current-C no-model command
@@ -5998,8 +5998,17 @@ claiming more live behavior:
 - Acceptance: the Rust loop consumes scripted model events, invokes
   deterministic tool replay, applies session commands, and records visible
   output without model sampling before any manual smoke claim.
+- Validation evidence:
+  - `cargo run --quiet -p ds4-gguf --bin ds4-agent-loop-smoke-rs >
+    ds4-parity/baselines/agent/m11.4/loop-smoke.json` regenerated the no-model
+    loop-smoke artifact.
+  - `python3 ds4-parity/compare_agent_loop_smoke.py --negative-test` passed
+    with 223 checks.
+  - Unified parity wiring includes `M11.4 Agent no-model loop smoke`.
 
 ## Milestone 12: Backend Replacement Parity
+
+Status: active for split planning before implementation.
 
 Only after Rust owns the host runtime should GPU backend replacement begin.
 

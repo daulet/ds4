@@ -32,6 +32,10 @@ name = "ds4-agent-deterministic-replay-rs"
 path = "src/bin/ds4-agent-deterministic-replay-rs.rs"
 
 [[bin]]
+name = "ds4-agent-loop-smoke-rs"
+path = "src/bin/ds4-agent-loop-smoke-rs.rs"
+
+[[bin]]
 name = "ds4-sampling-dump-rs"
 path = "src/bin/ds4-sampling-dump-rs.rs"
 

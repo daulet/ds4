@@ -22,7 +22,7 @@ pub use agent_dsml::{
     hex as agent_dsml_hex, AgentDsmlParser, AgentDsmlState, AgentToolArg, AgentToolCall,
 };
 pub use agent_trace_replay::{
-    write_agent_deterministic_replay, write_agent_rendered_context_replay,
+    write_agent_deterministic_replay, write_agent_loop_smoke, write_agent_rendered_context_replay,
     write_agent_trace_replay_oracle,
 };
 pub use decode_policy::{

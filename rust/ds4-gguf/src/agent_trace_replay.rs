@@ -1,3 +1,4 @@
+use crate::agent_dsml::AgentDsmlParser;
 use crate::prompt::{render_chat_prompt_text, ChatMessage, ThinkMode, ToolArgument, ToolCall};
 use std::io::{self, Write};
 
@@ -95,6 +96,30 @@ pub fn write_agent_deterministic_replay<W: Write>(out: &mut W) -> io::Result<()>
     write_deterministic_single_tool_round(out)?;
     writeln!(out, ",")?;
     write_deterministic_session_commands(out)?;
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")?;
+    Ok(())
+}
+
+pub fn write_agent_loop_smoke<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "{{")?;
+    writeln!(out, "  \"schema\": \"ds4.agent_loop_smoke.v1\",")?;
+    writeln!(out, "  \"milestone\": \"M11.4\",")?;
+    writeln!(out, "  \"source\": \"rust-agent-loop-smoke\",")?;
+    writeln!(
+        out,
+        "  \"oracle\": \"M11.1 trace fixture, M11.2 rendered context, and M11.3 deterministic replay\","
+    )?;
+    writeln!(out, "  \"model_sampling\": false,")?;
+    writeln!(out, "  \"live_tool_execution\": false,")?;
+    writeln!(
+        out,
+        "  \"manual_smoke\": \"deferred until model-backed Rust agent loop is enabled\","
+    )?;
+    writeln!(out, "  \"cases\": [")?;
+    write_loop_single_tool_round(out)?;
+    writeln!(out, ",")?;
+    write_loop_session_commands(out)?;
     writeln!(out, "\n  ]")?;
     writeln!(out, "}}")?;
     Ok(())
@@ -409,6 +434,130 @@ fn write_deterministic_session_commands<W: Write>(out: &mut W) -> io::Result<()>
     Ok(())
 }
 
+fn write_loop_single_tool_round<W: Write>(out: &mut W) -> io::Result<()> {
+    let messages = single_tool_messages();
+    let before_tool_prompt = render_chat_prompt_text(&messages[..2], None, ThinkMode::None);
+    let after_tool_prompt = render_chat_prompt_text(&messages[..4], None, ThinkMode::None);
+    let mut parser = AgentDsmlParser::default();
+    parser.feed(TOOL_DSML.as_bytes());
+    let parsed_name = parser
+        .calls
+        .first()
+        .and_then(|call| call.name.as_deref())
+        .unwrap_or("");
+    let parsed_arg = parser.calls.first().and_then(|call| call.args.first());
+
+    writeln!(out, "    {{")?;
+    writeln!(out, "      \"id\": \"single_tool_round\",")?;
+    writeln!(
+        out,
+        "      \"replay_sources\": [\"M11.1\", \"M11.2\", \"M11.3\"],"
+    )?;
+    writeln!(out, "      \"loop_steps\": [")?;
+    writeln!(
+        out,
+        "        {{\"step\": 0, \"phase\": \"render_prompt\", \"message_roles\": [\"system\", \"user\"], \"prompt_has_user_marker\": {}, \"prompt_has_tool_result\": {}}},",
+        before_tool_prompt.contains("<｜User｜>"),
+        before_tool_prompt.contains("<tool_result>")
+    )?;
+    writeln!(
+        out,
+        "        {{\"step\": 1, \"phase\": \"parse_model_event\", \"round\": 0, \"parser_state\": \"{}\", \"parsed_tool_calls\": {}, \"raw_dsml_preserved\": {}}},",
+        parser.state.name(),
+        parser.calls.len(),
+        parser.raw == TOOL_DSML.as_bytes()
+    )?;
+    write!(
+        out,
+        "        {{\"step\": 2, \"phase\": \"tool_replay\", \"source\": \"deterministic_stub\", \"live_tool_execution\": false, \"round\": 0, \"name\": "
+    )?;
+    write_json_string(out, parsed_name)?;
+    write!(out, ", \"args\": [{{\"name\": ")?;
+    write_json_string(out, parsed_arg.map(|arg| arg.name.as_str()).unwrap_or(""))?;
+    write!(out, ", \"value\": ")?;
+    write_json_string(out, parsed_arg.map(|arg| arg.value.as_str()).unwrap_or(""))?;
+    writeln!(
+        out,
+        ", \"is_string\": {}}}], \"inserted_role\": \"tool\", \"output\": {}}},",
+        parsed_arg.map(|arg| arg.is_string).unwrap_or(false),
+        json_string(TOOL_OUTPUT)
+    )?;
+    writeln!(
+        out,
+        "        {{\"step\": 3, \"phase\": \"render_after_tool\", \"message_roles\": [\"system\", \"user\", \"assistant\", \"tool\"], \"prompt_has_tool_result\": {}, \"prompt_has_tool_output\": {}}},",
+        after_tool_prompt.contains("<tool_result>"),
+        after_tool_prompt.contains(TOOL_OUTPUT)
+    )?;
+    write!(
+        out,
+        "        {{\"step\": 4, \"phase\": \"final_model_event\", \"round\": 1, \"visible\": "
+    )?;
+    write_json_string(out, FINAL_ANSWER)?;
+    writeln!(out, "}}")?;
+    writeln!(out, "      ],")?;
+    writeln!(
+        out,
+        "      \"parsed_tool_sequence\": [{{\"round\": 0, \"name\": \"list\", \"args\": [{{\"name\": \"path\", \"value\": \".\", \"is_string\": true}}]}}],"
+    )?;
+    writeln!(
+        out,
+        "      \"final_transcript_roles\": [\"system\", \"user\", \"assistant\", \"tool\", \"assistant\"],"
+    )?;
+    write!(out, "      \"final_visible_output\": ")?;
+    write_json_string(out, FINAL_ANSWER)?;
+    writeln!(out)?;
+    write!(out, "    }}")?;
+    Ok(())
+}
+
+fn write_loop_session_commands<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "    {{")?;
+    writeln!(out, "      \"id\": \"session_switching_commands\",")?;
+    writeln!(
+        out,
+        "      \"replay_sources\": [\"M11.1\", \"M11.2\", \"M11.3\"],"
+    )?;
+    writeln!(out, "      \"loop_steps\": [")?;
+    write!(
+        out,
+        "        {{\"step\": 0, \"phase\": \"model_event\", \"round\": 0, \"visible\": "
+    )?;
+    write_json_string(out, SESSION_MODEL_ANSWER)?;
+    writeln!(
+        out,
+        ", \"transcript_roles\": [\"system\", \"user\", \"assistant\"]}},"
+    )?;
+    writeln!(
+        out,
+        "        {{\"step\": 1, \"phase\": \"session_command\", \"input\": \"/save\", \"command\": \"save\", \"session\": \"<SESSION:alpha>\", \"visible\": \"saved session <SESSION:alpha> (3 turns)\"}},"
+    )?;
+    writeln!(
+        out,
+        "        {{\"step\": 2, \"phase\": \"session_command\", \"input\": \"/list\", \"command\": \"list\", \"sessions\": [\"<SESSION:alpha>\"]}},"
+    )?;
+    writeln!(
+        out,
+        "        {{\"step\": 3, \"phase\": \"session_command\", \"input\": \"/switch <SESSION:alpha>\", \"command\": \"switch\", \"session\": \"<SESSION:alpha>\", \"visible\": \"switched to <SESSION:alpha>\"}},"
+    )?;
+    writeln!(
+        out,
+        "        {{\"step\": 4, \"phase\": \"session_command\", \"input\": \"/history 2\", \"command\": \"history\", \"turns\": 2, \"visible\": \"user: Remember that alpha was inspected.\"}},"
+    )?;
+    writeln!(
+        out,
+        "        {{\"step\": 5, \"phase\": \"session_command\", \"input\": \"/new\", \"command\": \"new\", \"visible\": \"new session started from system prompt\", \"active_session\": \"<SESSION:new>\"}}"
+    )?;
+    writeln!(out, "      ],")?;
+    writeln!(out, "      \"saved_sessions\": [\"<SESSION:alpha>\"],")?;
+    writeln!(out, "      \"active_session\": \"<SESSION:new>\",")?;
+    writeln!(out, "      \"final_transcript_roles\": [\"system\"],")?;
+    write!(out, "      \"final_visible_output\": ")?;
+    write_json_string(out, SESSION_FINAL_COMMAND_OUTPUT)?;
+    writeln!(out)?;
+    write!(out, "    }}")?;
+    Ok(())
+}
+
 fn single_tool_messages() -> Vec<ChatMessage> {
     vec![
         ChatMessage::new(
@@ -462,6 +611,12 @@ fn write_json_string<W: Write>(out: &mut W, value: &str) -> io::Result<()> {
     Ok(())
 }
 
+fn json_string(value: &str) -> String {
+    let mut out = Vec::new();
+    write_json_string(&mut out, value).expect("write to vec");
+    String::from_utf8(out).expect("json string is utf8")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,5 +662,16 @@ mod tests {
         assert!(text.contains("\"rendered_context_contains_tool_result\": true"));
         assert!(text.contains("\"command\": \"history\""));
         assert!(text.contains(SESSION_FINAL_COMMAND_OUTPUT));
+    }
+
+    #[test]
+    fn loop_smoke_records_no_model_tool_and_session_flow() {
+        let mut bytes = Vec::new();
+        write_agent_loop_smoke(&mut bytes).expect("write smoke");
+        let text = String::from_utf8(bytes).expect("utf8");
+        assert!(text.contains("\"schema\": \"ds4.agent_loop_smoke.v1\""));
+        assert!(text.contains("\"parser_state\": \"done\""));
+        assert!(text.contains("\"live_tool_execution\": false"));
+        assert!(text.contains("\"active_session\": \"<SESSION:new>\""));
     }
 }
