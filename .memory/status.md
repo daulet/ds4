@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g3b Runtime Target-Stream No-Drift Comparator
-- Last validated source before the active item: M10.8g3a Rust Runtime MTP Guard
-  Contract And Static Wiring.
+- Active item: M10.8g3c B300 Missing-Support Runtime Smoke
+- Last validated source before the active item: M10.8g3b Runtime Target-Stream
+  No-Drift Comparator.
+- Earlier M10.8g3b Runtime Target-Stream No-Drift Comparator.
 - Earlier M10.8g3a Rust Runtime MTP Guard Contract And Static Wiring.
 - Earlier M10.8g3 Rust Runtime Guard And Target-Stream No-Drift Smoke split
   into M10.8g3a through M10.8g3c before implementation.
@@ -68,6 +69,22 @@
 
 ## Last Evidence
 
+- M10.8g3b adds `ds4-parity/compare_mtp_runtime_no_drift.py` and wires it into
+  `ds4-parity/run_parity_report.py` and `ds4-parity/README.md`. The comparator
+  ties the M10.8g3a disabled runtime guard rows to the M8.12a current-C
+  one-shot target-stream oracle and the M9.8f5 B300 Rust runtime replay
+  summary, checking 3 CLI no-MTP target-stream cases, 3 server no-MTP replay
+  cases, cache/KVC ledger probes, guard linkage, and static runtime report
+  hooks.
+- M10.8g3b validation passed Python syntax, `python3
+  ds4-parity/compare_mtp_runtime_no_drift.py --negative-test` with 3 CLI
+  cases, 3 server cases, 180 checks, and 6 negative mutations, live B300
+  one-shot no-MTP runtime comparator with 144 checks and 5 negative checks,
+  `python3 ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped,
+  and 0 failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 68 passed, 42 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8g3a adds `rust/ds4-gpu/src/mtp_runtime_guard_plan.rs`,
   `rust/ds4-gpu/src/bin/ds4-mtp-runtime-guard-plan.rs`, and
   `ds4-parity/compare_mtp_runtime_guard.py`, a Rust model-free runtime guard

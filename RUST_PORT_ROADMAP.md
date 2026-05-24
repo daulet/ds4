@@ -5402,6 +5402,22 @@ restore boundary.
   checks, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all --
   --check`, `git diff --check`, unified parity report, and non-interactive
   Claude review with no blockers.
+- Evidence: added `ds4-parity/compare_mtp_runtime_no_drift.py` and wired it
+  into `ds4-parity/run_parity_report.py` and `ds4-parity/README.md`. The
+  comparator ties the M10.8g3a disabled runtime guard rows to the M8.12a
+  current-C one-shot target-stream oracle and the M9.8f5 B300 Rust runtime
+  replay summary, checking 3 CLI no-MTP target-stream cases, 3 server no-MTP
+  replay cases, cache/KVC ledger probes, guard linkage, and static runtime
+  report hooks.
+- Evidence: validation passed Python syntax, `python3
+  ds4-parity/compare_mtp_runtime_no_drift.py --negative-test` with 3 CLI
+  cases, 3 server cases, 180 checks, and 6 negative mutations, live B300
+  one-shot no-MTP runtime comparator with 144 checks and 5 negative checks,
+  `python3 ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped,
+  and 0 failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 68 passed, 42 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 
 ##### M10.8g3c: B300 Missing-Support Runtime Smoke
 

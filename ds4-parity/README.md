@@ -1269,6 +1269,20 @@ one-shot/interactive/server runtime mappings, argmax/session non-MTP surfaces,
 current-C speculative dispatch guards, and B300 missing-support artifact
 anchors remain present.
 
+Check the M10.8g3b runtime target-stream no-drift contract:
+
+```sh
+python3 ds4-parity/compare_mtp_runtime_no_drift.py
+python3 ds4-parity/compare_mtp_runtime_no_drift.py --negative-test
+```
+
+The comparator ties the M10.8g3a disabled runtime guard rows to the committed
+M8.12a current-C one-shot target-stream oracle and the M9.8f5 B300 Rust runtime
+server replay summary. It verifies the one-shot target-stream cases remain
+MTP-off, the Rust server runtime replay still matches the M0.5 current-C
+content and cache/KVC accounting, and the B300 rerun hooks for Rust one-shot
+and server runtime replay remain documented.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
