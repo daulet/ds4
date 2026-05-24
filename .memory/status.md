@@ -3,9 +3,11 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d3 Graph Restore Continued-Frontier B300 Smoke
+- Active item: M10.7d3a Graph Restore Frontier Contract
 - Last validated source before the active item: M10.7d2c Runtime
   Continued-Store B300 Replay Refresh.
+- M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
+  through M10.7d3c before graph/KVC smoke claims.
 - Earlier M10.7d2c Runtime Continued-Store B300 Replay Refresh.
 - Earlier M10.7d2b Runtime KV Replay Checker Closure.
 - Earlier M10.7d2a Runtime Continued-Frontier Ledger Contract.
@@ -131,6 +133,9 @@
   closure, and M10.7d2c B300 runtime replay refresh. All three M10.7d2
   subitems are done; M10.7d3 is active and owns the graph-restore
   continued-frontier B300 smoke.
+- M10.7d3 is split before implementation into M10.7d3a model-free graph
+  restore frontier contract, M10.7d3b B300 restored-graph frontier projection,
+  and M10.7d3c post-restore KVC write/skip B300 smoke. M10.7d3a is active.
 - M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
   restores the four C-written disk payload and memory snapshot bodies into
   Rust graph state, computes selected token and top-logprob slices from the

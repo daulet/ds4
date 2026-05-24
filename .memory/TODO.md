@@ -5457,30 +5457,86 @@
   cache initialization.
 - Owner path: B300 runtime replay summary/checker, `.memory/status.md`.
 
-### M10.7d3: Graph Restore Continued-Frontier B300 Smoke
+### M10.7d3a: Graph Restore Frontier Contract
 
 - Status: active
-- Goal: prove B300 Rust graph restore and continued-frontier accounting remain
-  compatible when a restored disk checkpoint is followed by further save/skip
-  decisions.
-- Oracle: current C graph restore, M10.7c3d same-capture restore
-  next-token oracle, M9.8f4 continued-store runtime behavior, and current C
-  KVC reason/header fields.
+- Goal: define a model-free restore/frontier contract that maps restored graph
+  payload token counts onto continued-frontier decisions before any new B300
+  graph/KVC smoke is trusted.
+- Oracle: M10.7c3d same-capture restore cases, M9.8f4 continued-store runtime
+  behavior, M10.7d1 continued-frontier transition matrix, and current C KVC
+  reason/header fields.
+- Fixture: committed M10.7c3d restore summary, M7.2 continued-frontier policy
+  matrix, M9.8f4 cold/continued/shutdown store evidence, and M0.5 KVC header
+  rows.
+- Comparator: a restore-frontier contract checker covering restored token
+  counts, loaded frontier values, re-enabled continued-store targets,
+  already-stored skip cases, and KVC reason expectations.
+- Acceptance: the checked-in contract fails if restored graph token counts,
+  continued-frontier transitions, or expected post-restore reason fields drift.
+- Drift policy: restored token counts, frontier before/after values, event
+  order, KVC reason names, and skip/write decisions are exact; paths and raw
+  payload hashes remain normalized under the M10.7c3d same-capture policy.
+- Review gate: ask Claude to review contract coverage and oracle selection.
+- Validation needed: contract checker with negative tests, KV policy
+  comparator, graph restore next-token comparator, `cargo fmt --all --
+  --check`, `git diff --check`, and non-interactive Claude review with no
+  blockers.
+- Owner path: restore-frontier contract/checker, `.memory/status.md`.
+
+### M10.7d3b: B300 Restored-Graph Frontier Projection
+
+- Status: pending
+- Goal: extend the B300 Rust graph restore smoke so each restored payload emits
+  continued-frontier projection evidence derived from the actual restored graph
+  token counts.
+- Oracle: M10.7d3a contract, M10.7c3d same-capture current-C restore oracle,
+  and Rust restored-payload readback evidence.
+- Fixture: B300 raw graph payload and memory snapshot bodies for
+  `disk_seed_payload`, `snapshot_seed`, `disk_continuation_payload`, and
+  `snapshot_continuation`, plus the M10.7c3d current-C restore capture.
+- Comparator: B300 summary fields for restored token count, loaded frontier,
+  next continued target, already-stored skip, selected token/top-logprob
+  evidence, and graph counters.
+- Acceptance: Rust-restored graph payloads report the same frontier projection
+  decisions as the M10.7d3a contract while preserving M10.7c3d next-token
+  evidence.
+- Drift policy: restored token counts, selected token/top-logprob evidence,
+  frontier projection fields, and graph counters are exact within the
+  same-capture policy.
+- Review gate: ask Claude to review B300 command fidelity and restored-payload
+  frontier invariants.
+- Validation needed: B300 live graph restore projection capture, comparator
+  with negative tests, targeted Rust tests, `cargo test --workspace`, `cargo
+  fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
+  with no blockers.
+- Owner path: Rust graph restore smoke, B300 comparator, `.memory/status.md`.
+
+### M10.7d3c: Post-Restore KVC Write/Skip B300 Smoke
+
+- Status: pending
+- Goal: prove a restored graph checkpoint followed by save/skip decisions
+  writes or skips KVC checkpoints with current-C-compatible reason fields and
+  continued-frontier state.
+- Oracle: M10.7d3b restored-graph frontier projection, M9.8f4 runtime KVC
+  store behavior, current C graph restore, and current C KVC reason/header
+  fields.
 - Fixture: B300 fresh miss, exact-prefix disk restore, continuation restore,
   restored-frontier re-enable, already-stored frontier skip, and shutdown or
   continued KVC write after restore.
 - Comparator: restored checkpoint/logits evidence, cache source, cached/write
-  token counts, continued frontier state, KVC reason fields, and graph counters.
+  token counts, continued-frontier state, KVC reason fields, and graph
+  counters.
 - Acceptance: Rust-restored graph sessions continue with the same cache
   store/skip decisions as current C after restore.
-- Drift policy: restored token counts, selected token/top-logprob evidence,
-  frontier tokens, reason fields, and graph counters are exact within the
-  M10.7c3d same-capture policy.
-- Review gate: ask Claude to review B300 command fidelity and restore/frontier
+- Drift policy: restored token counts, frontier tokens, reason fields, graph
+  counters, and write/skip decisions are exact; paths, timestamps, and raw
+  payload hashes are normalized.
+- Review gate: ask Claude to review B300 command fidelity and post-restore KVC
   invariants.
-- Validation needed: B300 graph restore smoke when graph restore behavior is
-  touched, runtime KV replay comparator, targeted Rust tests, `cargo test
-  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+- Validation needed: B300 post-restore KVC smoke, runtime KV replay
+  comparator, graph restore projection comparator, targeted Rust tests, `cargo
+  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
 - Owner path: Rust graph restore/runtime cache integration, B300 comparator,
   `.memory/status.md`.
