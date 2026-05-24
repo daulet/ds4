@@ -6043,7 +6043,7 @@
 
 #### M10.8g3a: Rust Runtime MTP Guard Contract And Static Wiring
 
-- Status: active
+- Status: done
 - Goal: define the Rust-owned runtime MTP guard contract for disabled,
   first-draft-miss, and missing-support paths without launching model-backed
   runtime generation.
@@ -6069,10 +6069,23 @@
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, unified
   parity report, and non-interactive Claude review with no blockers.
 - Owner path: Rust runtime MTP guard plan, comparator, `.memory/status.md`.
+- Evidence: added `rust/ds4-gpu/src/mtp_runtime_guard_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-runtime-guard-plan.rs`, and
+  `ds4-parity/compare_mtp_runtime_guard.py`, a Rust model-free runtime guard
+  plan that ties `EngineOptions`, `ds4-gguf` MTP CLI parsing,
+  one-shot/interactive/server runtime mappings, argmax/session non-MTP
+  surfaces, current-C speculative dispatch guards, and the B300 missing-support
+  artifact check to the M10.8g2 disabled, first-draft-miss, and
+  missing-support stream outcomes. Validation passed targeted Rust guard tests,
+  JSON output parsing, Python syntax, the comparator with 7 cases, 292 checks,
+  and 7 negative mutations, the live B300 missing-support artifact check with
+  empty `mtp_candidates=`, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and unified parity with 67 passed, 42 skipped,
+  and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 
 #### M10.8g3b: Runtime Target-Stream No-Drift Comparator
 
-- Status: pending
+- Status: active
 - Goal: compare real Rust runtime no-MTP output against current-C target-stream
   output for the disabled guard path.
 - Oracle: current-C one-token target decode, existing Rust runtime non-spec

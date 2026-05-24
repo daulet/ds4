@@ -1254,6 +1254,21 @@ policy, cache/KVC visibility, fallback/error state, and verifies every selected
 draft, verifier, suffix, and frontier sub-plan ID is present in the Rust plan
 sources.
 
+Compare the M10.8g3a Rust MTP runtime guard plan against the M10.8g2
+unavailable stream outcomes and runtime source anchors:
+
+```sh
+python3 ds4-parity/compare_mtp_runtime_guard.py
+python3 ds4-parity/compare_mtp_runtime_guard.py --negative-test
+```
+
+The comparator runs `ds4-mtp-runtime-guard-plan`, checks disabled,
+first-draft-miss, and missing-support stream semantics against the M10.8g2
+planner, and verifies the `EngineOptions`, `ds4-gguf` CLI parser,
+one-shot/interactive/server runtime mappings, argmax/session non-MTP surfaces,
+current-C speculative dispatch guards, and B300 missing-support artifact
+anchors remain present.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

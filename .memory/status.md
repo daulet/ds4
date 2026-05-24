@@ -3,16 +3,15 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g3a Rust Runtime MTP Guard Contract And Static Wiring
-- Last validated source before the active item: M10.8g3 Rust Runtime Guard And
-  Target-Stream No-Drift Smoke split.
+- Active item: M10.8g3b Runtime Target-Stream No-Drift Comparator
+- Last validated source before the active item: M10.8g3a Rust Runtime MTP Guard
+  Contract And Static Wiring.
+- Earlier M10.8g3a Rust Runtime MTP Guard Contract And Static Wiring.
 - Earlier M10.8g3 Rust Runtime Guard And Target-Stream No-Drift Smoke split
   into M10.8g3a through M10.8g3c before implementation.
 - Earlier M10.8g2 Rust MTP Stream Outcome Planner.
-- Earlier M10.8g2 Rust MTP Stream Outcome Planner.
 - Earlier M10.8g1 MTP Stream Parity
   Contract And Blocker.
-- Earlier M10.8g1 MTP Stream Parity Contract And Blocker.
 - Earlier M10.8g Rust MTP End-To-End Stream Parity split into M10.8g1 through
   M10.8g4 before implementation.
 - Earlier M10.8f Rust Spec Frontier Snapshot Restore And Prefix1 Commit.
@@ -69,6 +68,21 @@
 
 ## Last Evidence
 
+- M10.8g3a adds `rust/ds4-gpu/src/mtp_runtime_guard_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-runtime-guard-plan.rs`, and
+  `ds4-parity/compare_mtp_runtime_guard.py`, a Rust model-free runtime guard
+  plan that ties `EngineOptions`, `ds4-gguf` MTP CLI parsing,
+  one-shot/interactive/server runtime mappings, argmax/session non-MTP
+  surfaces, current-C speculative dispatch guards, and the B300 missing-support
+  artifact check to the M10.8g2 disabled, first-draft-miss, and
+  missing-support stream outcomes.
+- M10.8g3a validation passed targeted Rust guard tests, JSON output parsing,
+  Python syntax, `python3 ds4-parity/compare_mtp_runtime_guard.py
+  --negative-test` with 7 cases, 292 checks, and 7 negative mutations, the live
+  B300 missing-support artifact check with empty `mtp_candidates=`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 67 passed, 42
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8g3 is split before implementation into M10.8g3a Rust runtime MTP guard
   contract and static wiring, M10.8g3b runtime target-stream no-drift
   comparator, and M10.8g3c B300 missing-support runtime smoke. The split keeps
