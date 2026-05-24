@@ -4985,6 +4985,187 @@ restore boundary.
 - Validation gate: B300 MTP comparator, targeted Rust tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Status: split before implementation into M10.8a through M10.8g so MTP
+  availability, state-machine decisions, verifier orchestration, frontier
+  mutation, and end-to-end stream parity can be reviewed independently.
+
+##### M10.8a: MTP State Machine Contract And Availability Check
+
+- Goal: capture the current-C speculative decode decision contract and B300
+  MTP support-artifact availability before any Rust MTP execution is trusted.
+- Oracle: `ds4_engine_has_mtp`, `ds4_engine_mtp_draft_tokens`,
+  `ds4_session_decode_speculative`, `metal_graph_eval_mtp_draft`,
+  `metal_graph_verify_decode2_exact`, `metal_graph_verify_suffix_tops`,
+  `spec_frontier_snapshot`, `spec_frontier_restore`, and
+  `spec_frontier_commit_prefix1`.
+- Fixture: MTP disabled, missing MTP support model, first-draft miss, exact
+  N=2 two-token accept, exact N=2 one-token prefix1 accept, verifier failure
+  rollback, microbatch full accept, microbatch prefix1 accept, replay fallback,
+  and sequential safety fallback cases.
+- Comparator: model-free JSON contract plus checker that pins guard conditions,
+  verifier path selection, checkpoint mutations, accepted-token counts, logits
+  source, frontier snapshot/restore/commit calls, and B300 support-artifact
+  availability/blocker state.
+- Acceptance: every later M10.8 implementation case has a named current-C
+  oracle row and exact expected state transition; if no MTP GGUF is present on
+  B300, the enabled live smoke remains explicitly blocked instead of silently
+  degrading to MTP-off behavior.
+- Drift policy: guard flags, environment-variable gates, accepted counts,
+  fallback names, checkpoint length transitions, and frontier operations are
+  exact; timings and probe log durations are ignored.
+- Review gate: ask Claude to review contract coverage against current-C MTP
+  control flow and B300 availability evidence.
+- Validation gate: contract checker with negative tests, Python/JSON syntax,
+  `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
+  non-interactive Claude review with no blockers.
+
+##### M10.8b: Rust MTP Decision Planner
+
+- Goal: add Rust-owned model-free planning for MTP verifier selection,
+  accepted-prefix decisions, fallback routing, and logits/frontier ownership
+  without executing GPU kernels.
+- Oracle: M10.8a state-machine contract.
+- Fixture: the M10.8a decision rows, including disabled/missing-support rows
+  and verifier success/failure rows.
+- Comparator: Rust planner JSON compared exactly to the M10.8a contract for
+  selected verifier path, snapshot requirement, commit/restore action,
+  accepted token count, checkpoint mutation, and logits source.
+- Acceptance: Rust can fail closed for unavailable MTP, choose the same C
+  verifier/fallback path for each row, and describe state mutations without
+  touching target-stream logits or graph tensors.
+- Drift policy: planner enums, operation order, accepted counts, and
+  fail-closed errors are exact; runtime timing and log text are ignored.
+- Review gate: ask Claude to review target-stream safety and fail-closed
+  behavior.
+- Validation gate: Rust planner tests, comparator with negative tests,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  unified parity report, and non-interactive Claude review with no blockers.
+
+##### M10.8c: Rust MTP Draft Kernel Orchestration Smoke
+
+- Goal: move Rust-owned orchestration for the MTP draft graph path while
+  preserving the current-C draft top-id/logits contract.
+- Oracle: `metal_graph_eval_mtp_draft`,
+  `metal_graph_eval_mtp_draft_from_hc`, M10.2 command boundaries, and the
+  M10.8a draft rows.
+- Fixture: first-draft path, repeated draft-from-HC path, MTP raw-window cap
+  behavior, and draft failure/fallback probes on B300 when an MTP support
+  model is available; otherwise the fixture is a documented support-artifact
+  blocker.
+- Comparator: command-boundary trace, `mtp_n_raw` transition, draft top-id,
+  logits role, previous/output HC tensor role, and fail-closed error
+  comparison against the current-C oracle.
+- Acceptance: Rust draft orchestration produces the same draft top-id/logits
+  role and `mtp_n_raw` transition as current C, and any draft failure leaves
+  target decode state eligible for the same fallback path.
+- Drift policy: draft path name, command boundaries, tensor roles,
+  `mtp_n_raw`, top-id, and fallback classification are exact; float logits use
+  M10.4 tolerances when captured.
+- Review gate: ask Claude to review draft graph state isolation from the
+  target stream.
+- Validation gate: B300 MTP draft smoke or explicit MTP-model blocker,
+  comparator with negative tests, targeted Rust tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.8d: Rust Exact N=2 Verifier Orchestration Smoke
+
+- Goal: move the exact N=2 verifier command orchestration into Rust while
+  preserving the target decode kernel order and row-logits contract.
+- Oracle: `metal_graph_verify_decode2_exact`, M10.2 command boundaries, M10.4
+  checkpoint policy, and the M10.8a exact-N=2 rows.
+- Fixture: exact N=2 full accept, exact N=2 prefix1 accept, and exact N=2
+  verifier failure/rollback probes on B300 when an MTP support model is
+  available; otherwise the fixture is a documented support-artifact blocker.
+- Comparator: command-boundary trace, top0/logits0/logits1 metadata, accepted
+  sequence, checkpoint length, and frontier action comparison against the
+  current-C oracle.
+- Acceptance: Rust exact-N=2 orchestration produces the same accepted prefix
+  and logits source as current C, and restores the pre-verifier frontier on
+  failure.
+- Drift policy: verifier path name, command boundaries, accepted counts,
+  logits row role, checkpoint length, and restore behavior are exact; float
+  logits use M10.4 tolerances when captured.
+- Review gate: ask Claude to review exact target-stream preservation.
+- Validation gate: B300 exact-N=2 smoke or explicit MTP-model blocker,
+  comparator with negative tests, targeted Rust tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.8e: Rust Suffix Verifier Orchestration Smoke
+
+- Goal: move Rust-owned orchestration for the suffix/microbatch verifier path
+  while preserving current-C full-accept, prefix1-accept, replay, and rollback
+  decisions.
+- Oracle: `metal_graph_verify_suffix_tops`, `metal_graph_read_spec_logits_row`,
+  the microbatch branch in `ds4_session_decode_speculative`, and the M10.8a
+  suffix-verifier rows.
+- Fixture: microbatch full accept, microbatch prefix1 accept with captured
+  prefix state, replay fallback, exact-replay debug fallback, and verifier
+  failure rollback probes on B300 when an MTP support model is available;
+  otherwise the fixture is a documented support-artifact blocker.
+- Comparator: row top-id sequence, accepted prefix length, logits-row role,
+  checkpoint length transition, snapshot requirement, prefix1/replay/restore
+  action, and failure classification.
+- Acceptance: Rust suffix verifier orchestration accepts the same prefix as
+  current C, reads logits from the same row role, and restores or commits the
+  same frontier action before returning to the target stream.
+- Drift policy: verifier path, row-top order, accepted count, checkpoint
+  length, logits-row role, and frontier action are exact; float logits use
+  M10.4 tolerances when captured.
+- Review gate: ask Claude to review suffix verifier rollback and prefix1
+  safety.
+- Validation gate: B300 suffix-verifier smoke or explicit MTP-model blocker,
+  comparator with negative tests, targeted Rust tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.8f: Rust Spec Frontier Snapshot Restore And Prefix1 Commit
+
+- Goal: move speculative frontier snapshot, restore, and prefix1 commit state
+  mutation into Rust-owned orchestration.
+- Oracle: `spec_frontier_snapshot`, `spec_frontier_restore`,
+  `spec_frontier_commit_prefix1`, and the M10.7d3 restored-frontier/KVC
+  evidence for counter semantics.
+- Fixture: compressed-layer frontier counters, ratio-4 index counters,
+  `mtp_n_raw`, prefix1 captured frontiers, full restore, and one-token commit
+  probes.
+- Comparator: counter/tensor-copy plan comparison and B300 state digest
+  comparison for snapshot, restore, and prefix1 commit.
+- Acceptance: Rust can restore exactly to the pre-verifier frontier after a
+  miss and can commit exactly one verified token without exposing speculative
+  row counters as live target state.
+- Drift policy: frontier counters, layer sets, ratio-specific index handling,
+  `mtp_n_raw`, and state digest hashes are exact; invisible append-only garbage
+  rows remain allowed only where the C contract allows them.
+- Review gate: ask Claude to review rollback and prefix1 commit safety.
+- Validation gate: B300 frontier mutation smoke, comparator with negative
+  tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, and non-interactive Claude review with no
+  blockers.
+
+##### M10.8g: Rust MTP End-To-End Stream Parity
+
+- Goal: integrate Rust MTP draft/verifier/frontier orchestration into the
+  runtime path and compare accepted tokens against current C.
+- Oracle: current-C speculative decode on the same B300 model/support-model
+  pair, plus M10.8a through M10.8f contracts.
+- Fixture: MTP disabled, missing support model, first-draft miss, one-token
+  accept, two-token accept, verifier failure, prefix1 commit, rollback, and
+  sequential fallback cases.
+- Comparator: accepted token sequence, visible target output stream, final
+  checkpoint length, logits/top-id parity, frontier state digest, and cache/KVC
+  accounting.
+- Acceptance: Rust MTP never changes the non-speculative target stream,
+  commits only verified prefixes, and restores graph state exactly on misses
+  or verifier failures.
+- Drift policy: accepted sequence, visible output, checkpoint/frontier state,
+  and cache accounting are exact; probe logs and timings are normalized.
+- Review gate: ask Claude to review end-to-end target-stream safety.
+- Validation gate: B300 MTP comparator or explicit support-artifact blocker,
+  server/runtime parity checks, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, unified parity report, and non-interactive
+  Claude review with no blockers.
 
 #### M10.9: Runtime Graph End-To-End And Benchmark Closure
 

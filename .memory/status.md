@@ -3,9 +3,11 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8 Rust MTP Draft And Verifier Orchestration
+- Active item: M10.8a MTP State Machine Contract And Availability Check
 - Last validated source before the active item: M10.7d3c2 B300 Restored Payload
   KVC File Smoke.
+- M10.8 Rust MTP Draft And Verifier Orchestration is split into M10.8a through
+  M10.8g before implementation.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
 - M10.7d3c Post-Restore KVC Write/Skip B300 Smoke is split into M10.7d3c1
@@ -51,6 +53,18 @@
 
 ## Last Evidence
 
+- M10.8 is split before implementation into M10.8a state-machine contract and
+  B300 MTP availability check, M10.8b Rust model-free decision planner,
+  M10.8c Rust MTP draft kernel orchestration smoke, M10.8d exact-N=2 verifier
+  orchestration smoke, M10.8e suffix verifier orchestration smoke, M10.8f Rust
+  speculative frontier snapshot/restore/prefix1 commit, and M10.8g end-to-end
+  stream parity. The split follows current-C boundaries in
+  `ds4_session_decode_speculative`, `metal_graph_eval_mtp_draft`,
+  `metal_graph_verify_decode2_exact`, `metal_graph_verify_suffix_tops`,
+  `spec_frontier_snapshot`, `spec_frontier_restore`, and
+  `spec_frontier_commit_prefix1`; non-interactive Claude review returned
+  `NO BLOCKERS` after a first pass caught and the final split fixed missing
+  dedicated MTP draft and suffix-verifier stages.
 - M10.7d3c2 adds `ds4-post-restore-kvc-smoke`,
   `ds4-parity/compare_post_restore_kvc_smoke.py`, and
   `ds4-parity/baselines/kv/m10.7d3/rust-b300-post-restore-kvc.json`, a live
