@@ -1080,6 +1080,19 @@ FNV, selected token, top-logprob order and scores, cache source, same-capture
 Rust readback evidence, committed M10.7c3c readback evidence, and post-restore
 graph counters.
 
+Validate the M10.7d3a graph restore continued-frontier contract:
+
+```sh
+python3 ds4-parity/check_graph_restore_frontier_contract.py
+python3 ds4-parity/check_graph_restore_frontier_contract.py --negative-test
+```
+
+The checker compares the committed M10.7d3 restore-frontier contract against
+the M10.7c3d restored-token evidence and the M7.2 current-C continued-frontier
+policy oracle. It pins restored token counts, loaded frontier values,
+re-enabled continued-store targets, already-stored skip behavior, and KVC
+reason-code references without requiring a B300 recapture.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

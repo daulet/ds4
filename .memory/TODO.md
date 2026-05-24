@@ -5459,7 +5459,7 @@
 
 ### M10.7d3a: Graph Restore Frontier Contract
 
-- Status: active
+- Status: done
 - Goal: define a model-free restore/frontier contract that maps restored graph
   payload token counts onto continued-frontier decisions before any new B300
   graph/KVC smoke is trusted.
@@ -5478,15 +5478,23 @@
   order, KVC reason names, and skip/write decisions are exact; paths and raw
   payload hashes remain normalized under the M10.7c3d same-capture policy.
 - Review gate: ask Claude to review contract coverage and oracle selection.
-- Validation needed: contract checker with negative tests, KV policy
+- Validation passed: contract checker with negative tests, KV policy
   comparator, graph restore next-token comparator, `cargo fmt --all --
   --check`, `git diff --check`, and non-interactive Claude review with no
   blockers.
+- Evidence: added
+  `ds4-parity/baselines/kv/m10.7d3/restore-frontier-contract.json` and
+  `ds4-parity/check_graph_restore_frontier_contract.py`. The checker validates
+  restored graph token counts, loaded frontier values, re-enabled continued
+  targets, already-stored skip behavior, and KVC reason references against
+  M10.7c3d, M7.2, and M0.5 artifacts with seven negative mutations, and is
+  wired into the unified parity report. Non-interactive Claude review returned
+  no blockers.
 - Owner path: restore-frontier contract/checker, `.memory/status.md`.
 
 ### M10.7d3b: B300 Restored-Graph Frontier Projection
 
-- Status: pending
+- Status: active
 - Goal: extend the B300 Rust graph restore smoke so each restored payload emits
   continued-frontier projection evidence derived from the actual restored graph
   token counts.

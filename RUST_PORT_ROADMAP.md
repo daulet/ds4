@@ -4821,6 +4821,16 @@ restore boundary.
 - Validation gate: contract checker with negative tests, KV policy comparator,
   graph restore next-token comparator, `cargo fmt --all -- --check`, `git diff
   --check`, and non-interactive Claude review with no blockers.
+- Evidence: added
+  `ds4-parity/baselines/kv/m10.7d3/restore-frontier-contract.json` and
+  `ds4-parity/check_graph_restore_frontier_contract.py`. The checker validates
+  the contract against M10.7c3d restored-token evidence, M7.2 current-C
+  continued-frontier policy, and M0.5 KVC reason/header rows with seven
+  negative mutations; it is wired into `run_parity_report.py` and documented in
+  `ds4-parity/README.md`. Validation passed the contract checker, KV policy
+  comparator, graph restore next-token comparator, formatting, diff check, and
+  skip-local unified parity report, plus non-interactive Claude review with no
+  blockers.
 
 ##### M10.7d3b: B300 Restored-Graph Frontier Projection
 

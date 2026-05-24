@@ -1,0 +1,166 @@
+{
+  "schema": "ds4.graph_restore_frontier_contract.v1",
+  "milestone": "M10.7d3a",
+  "source": "model-free-graph-restore-frontier-contract",
+  "restore_summary_path": "ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json",
+  "policy_oracle_path": "ds4-parity/baselines/kv/m7.2/current-c.json",
+  "policy_options": {
+    "min_tokens": 512,
+    "cold_max_tokens": 30000,
+    "continued_interval_tokens": 10000,
+    "boundary_trim_tokens": 32,
+    "boundary_align_tokens": 2048,
+    "continued_step_tokens": 10240
+  },
+  "reason_codes": {
+    "cold": 1,
+    "continued": 2,
+    "shutdown": 4
+  },
+  "policy_probes": [
+    {
+      "name": "restored_seed_frontier_reenables_next_boundary",
+      "frontier_before": 550,
+      "live_tokens": 10240,
+      "target": 10240,
+      "reason_name": "continued",
+      "reason": 2
+    },
+    {
+      "name": "restored_continuation_frontier_reenables_next_boundary",
+      "frontier_before": 561,
+      "live_tokens": 10240,
+      "target": 10240,
+      "reason_name": "continued",
+      "reason": 2
+    },
+    {
+      "name": "already_stored_boundary_skips",
+      "frontier_before": 10240,
+      "live_tokens": 10240,
+      "target": 0
+    }
+  ],
+  "restore_frontier_cases": [
+    {
+      "name": "disk_seed_payload",
+      "prompt_case": "seed",
+      "kind": "disk-payload",
+      "restored_tokens": 550,
+      "loaded_frontier": 550,
+      "current_live_skip": {
+        "live_tokens": 550,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 550,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "post_restore_shutdown": {
+        "reason_name": "shutdown",
+        "reason": 4,
+        "tokens_source": "restored-session-position"
+      },
+      "cold_store_reference": {
+        "file": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+        "reason_name": "cold",
+        "reason": 1,
+        "tokens": 550
+      }
+    },
+    {
+      "name": "snapshot_seed",
+      "prompt_case": "seed",
+      "kind": "memory-snapshot",
+      "restored_tokens": 550,
+      "loaded_frontier": 550,
+      "current_live_skip": {
+        "live_tokens": 550,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 550,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "post_restore_shutdown": {
+        "reason_name": "shutdown",
+        "reason": 4,
+        "tokens_source": "restored-session-position"
+      },
+      "cold_store_reference": {
+        "file": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+        "reason_name": "cold",
+        "reason": 1,
+        "tokens": 550
+      }
+    },
+    {
+      "name": "disk_continuation_payload",
+      "prompt_case": "continuation",
+      "kind": "disk-payload",
+      "restored_tokens": 561,
+      "loaded_frontier": 561,
+      "current_live_skip": {
+        "live_tokens": 561,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 561,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "post_restore_shutdown": {
+        "reason_name": "shutdown",
+        "reason": 4,
+        "tokens_source": "restored-session-position"
+      },
+      "restored_disk_reference": {
+        "file": "a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv",
+        "reason_name": "shutdown",
+        "reason": 4,
+        "tokens": 552
+      }
+    },
+    {
+      "name": "snapshot_continuation",
+      "prompt_case": "continuation",
+      "kind": "memory-snapshot",
+      "restored_tokens": 561,
+      "loaded_frontier": 561,
+      "current_live_skip": {
+        "live_tokens": 561,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 561,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "post_restore_shutdown": {
+        "reason_name": "shutdown",
+        "reason": 4,
+        "tokens_source": "restored-session-position"
+      },
+      "restored_disk_reference": {
+        "file": "a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv",
+        "reason_name": "shutdown",
+        "reason": 4,
+        "tokens": 552
+      }
+    }
+  ]
+}

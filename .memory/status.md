@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d3a Graph Restore Frontier Contract
-- Last validated source before the active item: M10.7d2c Runtime
-  Continued-Store B300 Replay Refresh.
+- Active item: M10.7d3b B300 Restored-Graph Frontier Projection
+- Last validated source before the active item: M10.7d3a Graph Restore
+  Frontier Contract.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
+- Earlier M10.7d3a Graph Restore Frontier Contract.
 - Earlier M10.7d2c Runtime Continued-Store B300 Replay Refresh.
 - Earlier M10.7d2b Runtime KV Replay Checker Closure.
 - Earlier M10.7d2a Runtime Continued-Frontier Ledger Contract.
@@ -44,6 +45,25 @@
 
 ## Last Evidence
 
+- M10.7d3a adds
+  `ds4-parity/baselines/kv/m10.7d3/restore-frontier-contract.json`, a
+  model-free graph-restore continued-frontier contract that maps the four
+  M10.7c3d restored graph payload cases onto restored token counts, loaded
+  frontier values, re-enabled continued-store targets, already-stored skip
+  behavior, and KVC reason-code references.
+- M10.7d3a adds `ds4-parity/check_graph_restore_frontier_contract.py`, which
+  validates the contract against the M10.7c3d restored-token summary, the M7.2
+  current-C continued-frontier policy matrix, and the M0.5 KVC header rows.
+  The checker has seven mutation-based negative tests and is wired into
+  `ds4-parity/run_parity_report.py`.
+- M10.7d3a validation passed `python3
+  ds4-parity/check_graph_restore_frontier_contract.py --negative-test`,
+  `python3 ds4-parity/compare_kv_policy.py --negative-test`, `python3
+  ds4-parity/compare_graph_restore_next_token.py --negative-test`, Python
+  syntax and JSON checks, `cargo fmt --all -- --check`, `git diff --check`,
+  and `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 56
+  passed, 40 skipped, and 0 failed, plus `cargo test --workspace` and
+  non-interactive Claude review with `NO BLOCKERS`.
 - M10.7d2c exposes the Rust runtime cache ledger in per-request traces under
   `--- runtime cache ledger ---`, including cache source, reason, token counts,
   cached/write/disk token counts, continued-frontier before/after values, and
@@ -135,7 +155,8 @@
   continued-frontier B300 smoke.
 - M10.7d3 is split before implementation into M10.7d3a model-free graph
   restore frontier contract, M10.7d3b B300 restored-graph frontier projection,
-  and M10.7d3c post-restore KVC write/skip B300 smoke. M10.7d3a is active.
+  and M10.7d3c post-restore KVC write/skip B300 smoke. M10.7d3a is done;
+  M10.7d3b is active.
 - M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
   restores the four C-written disk payload and memory snapshot bodies into
   Rust graph state, computes selected token and top-logprob slices from the
