@@ -3,9 +3,9 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4d4 Rust Directional-Steering Decode Coverage
-- Last validated source before the active item: M10.5c4d3 Rust Long
-  Indexed-Continuation Attention Coverage.
+- Active item: M10.6 Rust Layer-Major Prefill And Chunking
+- Last validated source before the active item: M10.5c4d4 Rust
+  Directional-Steering Decode Coverage.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
@@ -28,6 +28,50 @@
 
 ## Last Evidence
 
+- M10.5c4d4 adds `ds4-directional-steering-oracle-dump` and
+  `ds4_dump_directional_steering_decode_oracle_json`, which emit
+  `ds4.directional_steering_decode_oracle.v1` for B300 `ds4flash.gguf`, token
+  `0`, layer `0`, `dir-steering/out/verbosity.f32`, attention scale `0.5`,
+  and FFN scale `0.25`. The current-C oracle loads the steering file through
+  `metal_graph_load_directional_steering`, captures layer-0 post-steer
+  `attn_out`, post-steer attention HC expansion, post-steer `ffn_out`,
+  post-steer FFN HC expansion, final layer-42 HC, output-head tensors, and
+  final logits.
+- M10.5c4d4 extends `ds4-decode-full-output-head` with optional
+  `--dir-steering-file`, `--dir-steering-attn`, and `--dir-steering-ffn` flags.
+  The Rust candidate emits `ds4.decode_directional_steering.v1` and uses safe
+  facade wrappers for `attention_output_q8_batch`,
+  `directional_steering_project`, `add`, and `hc_expand_split` so the
+  directional-steering attention and FFN branches match current-C placement.
+- The B300 paired directional-steering validator passed 469 pinned checks with
+  steering file FNV `960514fa6e7884ca`. Full-buffer FNV digests are
+  `layer0_attn_out=68356dba6c067ffa`,
+  `layer0_after_attn_hc=f1c47bcde7bdec38`,
+  `layer0_ffn_out=7c8abeae9af7cc84`,
+  `layer0_after_ffn_hc=db94a9015d610f1b`,
+  `after_layer42_hc=7b8a60690319eff8`,
+  `output_pre=5b6b7ffd274f62b2`,
+  `output_weights=42a754df67d85acf`,
+  `output_embd=c1e3490b198cf968`,
+  `output_norm=53be42a180587d23`, and
+  `logits=8caf00d359fba4f1`.
+- M10.5c4d4 validation passed local `python3
+  ds4-parity/compare_decode_directional_steering.py` with 33 checks, local and
+  B300 `python3 ds4-parity/compare_decode_directional_steering.py
+  --negative-test` with 13 rejected mutations, B300 current-C oracle plus Rust
+  CUDA candidate validation with 469 checks, copied local artifact validation
+  with 469 checks, local `arch -arm64 make
+  ds4-directional-steering-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-full-output-head`, `python3 -m py_compile
+  ds4-parity/compare_decode_directional_steering.py
+  ds4-parity/run_parity_report.py`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 43 passed, 33
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, touched-file NUL scan, and non-interactive
+  Claude review with `NO BLOCKERS`. Artifact SHA256:
+  `oracle=0f558a7d6cd9f24cf60b7f93b63479ecf3e3f7aeabe261608f657a2eb9bff3c1`
+  and
+  `rust=c27189cc8a719fc9431a8c2b02f33a95d5c44b04c329c44e48fa925c30f538f7`.
 - M10.5c4d3 adds `ds4-long-indexed-attention-oracle-dump` and
   `ds4_dump_long_indexed_attention_oracle_json`, which emit
   `ds4.long_indexed_attention_oracle.v1` for deterministic tokens `0..2051`.

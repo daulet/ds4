@@ -3,6 +3,17 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-05-24: Comparator Scripts Need A Live Entrypoint Check
+
+- Symptom: `compare_decode_directional_steering.py --negative-test` initially
+  exited 0 without printing any checks or failures.
+- Root cause: the script defined `main()` but did not call it under
+  `if __name__ == "__main__"`, so Python syntax checks and shell exit status
+  alone did not prove that the comparator ran.
+- Permanent rule: new parity comparators must be run at least once in the
+  static/no-args mode and once with `--negative-test`, and the validation log
+  should record the printed check or mutation count, not just exit code.
+
 ## 2026-05-22: Local Apple Silicon Builds Need Explicit arm64 In This Shell
 
 - Symptom: plain `make` failed before compiling DS4 because Apple clang rejected

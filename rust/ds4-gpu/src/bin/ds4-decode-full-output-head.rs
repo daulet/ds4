@@ -19,9 +19,12 @@ use std::path::{Path, PathBuf};
 
 const SCHEMA: &str = "ds4.decode_full_output_head.v1";
 const CASE: &str = "token0_full_output_head";
+const STEERING_SCHEMA: &str = "ds4.decode_directional_steering.v1";
+const STEERING_CASE: &str = "token0_layer0_directional_steering_full_output_head";
 const TOKEN: u32 = 0;
 const POSITION: u32 = 0;
 const CTX_SIZE: u32 = 32_768;
+const STEERING_LAYER: usize = 0;
 const LAYER42: usize = 42;
 const PROT_READ: c_int = 0x1;
 const MAP_PRIVATE: c_int = 0x02;
@@ -55,6 +58,11 @@ fn main() {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse()?;
+    let steering = args
+        .steering_file
+        .as_ref()
+        .map(|path| SteeringConfig::load(path, args.steering_attn, args.steering_ffn))
+        .transpose()?;
     let (gguf, header_bytes_read) = parse_header_prefix(&args.model)?;
     let weights = bind_ds4_weights(&gguf)?;
     let mapped = MappedModel::open(&args.model)?;
@@ -79,6 +87,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let raw_start = 0;
     let dims = Dims::new(&weights.layers[0])?;
     let mut state = DecodeState::allocate(plan, dims)?;
+    let steering_dirs = steering
+        .as_ref()
+        .map(|config| {
+            let mut tensor = Tensor::allocate(config.bytes.len())
+                .map_err(|err| format!("failed to allocate steering directions: {err}"))?;
+            tensor
+                .write_bytes(0, &config.bytes)
+                .map_err(|err| format!("failed to upload steering directions: {err}"))?;
+            Ok::<Tensor, Box<dyn std::error::Error>>(tensor)
+        })
+        .transpose()?;
+    let mut steering_checkpoints = steering
+        .as_ref()
+        .map(|_| SteeringCheckpoints::allocate(dims))
+        .transpose()?;
     let mut after_layer42_hc = Tensor::allocate(byte_len(dims.hc_dim)?)
         .map_err(|err| format!("failed to allocate after_layer42_hc: {err}"))?;
     let mut output_pre = Tensor::allocate(byte_len(u64::from(N_HC))?)
@@ -104,6 +127,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         )
         .map_err(|err| format!("embed_token_hc failed: {err}"))?;
     for layer in 0..N_LAYER {
+        let steering_runtime =
+            steering
+                .as_ref()
+                .zip(steering_dirs.as_ref())
+                .map(|(config, dirs)| SteeringRuntime {
+                    dirs,
+                    attn_scale: config.attn_scale,
+                    ffn_scale: config.ffn_scale,
+                });
         execute_layer(
             backend,
             &weights.layers[layer],
@@ -114,7 +146,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             raw_start,
             &mut state,
             dims,
+            steering_runtime,
         )?;
+        if layer == STEERING_LAYER {
+            if let Some(checkpoints) = &mut steering_checkpoints {
+                checkpoints.copy_from_state(&state, dims, &mut command_batch)?;
+            }
+        }
         std::mem::swap(&mut state.cur_hc, &mut state.after_ffn_hc);
         if layer == LAYER42 {
             after_layer42_hc
@@ -189,18 +227,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|err| format!("finish failed: {err}"))?;
     synchronize().map_err(|err| format!("synchronize failed: {err}"))?;
 
-    let outputs = vec![
+    let mut outputs = Vec::new();
+    if let Some(checkpoints) = &steering_checkpoints {
+        outputs.extend(checkpoints.read_outputs(dims)?);
+    }
+    outputs.extend([
         read_tensor_output("after_layer42_hc", &after_layer42_hc, dims.hc_dim)?,
         read_tensor_output("output_pre", &output_pre, u64::from(N_HC))?,
         read_tensor_output("output_weights", &output_weights, u64::from(N_HC))?,
         read_tensor_output("output_embd", &output_embd, u64::from(N_EMBD))?,
         read_tensor_output("output_norm", &output_norm, u64::from(N_EMBD))?,
         read_tensor_output("logits", &logits, u64::from(N_VOCAB))?,
-    ];
+    ]);
 
     write_report(
         &gguf,
         &weights,
+        steering.as_ref(),
         header_bytes_read,
         mapped.size,
         plan,
@@ -224,6 +267,7 @@ fn execute_layer(
     raw_start: u32,
     state: &mut DecodeState,
     dims: Dims,
+    steering: Option<SteeringRuntime<'_>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let compression = layer_compression(layer).ok_or("invalid layer")?;
     let compressed = compression != LayerCompression::Dense;
@@ -565,30 +609,71 @@ fn execute_layer(
             ROPE_YARN_BETA_SLOW,
         )
         .map_err(|err| format!("layer{layer} heads inverse rope_tail failed: {err}"))?;
-    backend
-        .attention_output_low_q8(
-            state.attn_low.as_tensor_mut(),
-            layer_weights.attn_output_a.abs_offset,
-            dims.group_dim,
-            dims.rank,
-            N_OUT_GROUP,
-            state.heads.as_tensor_ref(),
-        )
-        .map_err(|err| format!("layer{layer} attention_output_low_q8 failed: {err}"))?;
-    backend
-        .matmul_q8_0_hc_expand(
-            state.after_attn_hc.as_tensor_mut(),
-            state.attn_out.as_tensor_mut(),
-            layer_weights.attn_output_b.abs_offset,
-            dims.low_dim,
-            u64::from(N_EMBD),
-            state.attn_low.as_tensor_ref(),
-            state.cur_hc.as_tensor_ref(),
-            state.hc_split.as_tensor_ref(),
-            N_EMBD,
-            N_HC,
-        )
-        .map_err(|err| format!("layer{layer} matmul_q8_0_hc_expand failed: {err}"))?;
+    if let Some(steering) = steering.filter(|config| config.attn_scale != 0.0) {
+        backend
+            .attention_output_q8_batch(
+                state.attn_out.as_tensor_mut(),
+                state.attn_low.as_tensor_mut(),
+                state.batch_group_tmp.as_tensor_mut(),
+                state.batch_low_tmp.as_tensor_mut(),
+                layer_weights.attn_output_a.abs_offset,
+                layer_weights.attn_output_b.abs_offset,
+                dims.group_dim,
+                dims.rank,
+                N_OUT_GROUP,
+                u64::from(N_EMBD),
+                state.heads.as_tensor_ref(),
+                1,
+            )
+            .map_err(|err| format!("layer{layer} attention_output_q8_batch failed: {err}"))?;
+        backend
+            .directional_steering_project(
+                state.attn_out.as_tensor_mut(),
+                steering.dirs.as_tensor_ref(),
+                u32::try_from(layer)?,
+                N_EMBD,
+                1,
+                steering.attn_scale,
+            )
+            .map_err(|err| format!("layer{layer} attention directional steering failed: {err}"))?;
+        backend
+            .hc_expand_split(
+                state.after_attn_hc.as_tensor_mut(),
+                state.attn_out.as_tensor_ref(),
+                state.cur_hc.as_tensor_ref(),
+                state.hc_split.as_tensor_ref(),
+                N_EMBD,
+                N_HC,
+            )
+            .map_err(|err| {
+                format!("layer{layer} steering attention hc_expand_split failed: {err}")
+            })?;
+    } else {
+        backend
+            .attention_output_low_q8(
+                state.attn_low.as_tensor_mut(),
+                layer_weights.attn_output_a.abs_offset,
+                dims.group_dim,
+                dims.rank,
+                N_OUT_GROUP,
+                state.heads.as_tensor_ref(),
+            )
+            .map_err(|err| format!("layer{layer} attention_output_low_q8 failed: {err}"))?;
+        backend
+            .matmul_q8_0_hc_expand(
+                state.after_attn_hc.as_tensor_mut(),
+                state.attn_out.as_tensor_mut(),
+                layer_weights.attn_output_b.abs_offset,
+                dims.low_dim,
+                u64::from(N_EMBD),
+                state.attn_low.as_tensor_ref(),
+                state.cur_hc.as_tensor_ref(),
+                state.hc_split.as_tensor_ref(),
+                N_EMBD,
+                N_HC,
+            )
+            .map_err(|err| format!("layer{layer} matmul_q8_0_hc_expand failed: {err}"))?;
+    }
     backend
         .rms_norm_plain(
             state.flat_hc.as_tensor_mut(),
@@ -706,32 +791,81 @@ fn execute_layer(
             SWIGLU_CLAMP_EXP,
         )
         .map_err(|err| format!("layer{layer} shared_gate_up_swiglu_q8_0 failed: {err}"))?;
-    backend
-        .shared_down_hc_expand_q8_0(
-            state.after_ffn_hc.as_tensor_mut(),
-            state.shared_out.as_tensor_mut(),
-            layer_weights.ffn_down_shexp.abs_offset,
-            dims.shared_dim,
-            u64::from(N_EMBD),
-            state.shared_mid.as_tensor_ref(),
-            state.routed_out.as_tensor_ref(),
-            state.after_attn_hc.as_tensor_ref(),
-            state.hc_split.as_tensor_ref(),
-            N_EMBD,
-            N_HC,
-        )
-        .map_err(|err| format!("layer{layer} shared_down_hc_expand_q8_0 failed: {err}"))?;
+    if let Some(steering) = steering.filter(|config| config.ffn_scale != 0.0) {
+        backend
+            .matmul_q8_0(
+                state.shared_out.as_tensor_mut(),
+                layer_weights.ffn_down_shexp.abs_offset,
+                dims.shared_dim,
+                u64::from(N_EMBD),
+                state.shared_mid.as_tensor_ref(),
+                1,
+            )
+            .map_err(|err| {
+                format!("layer{layer} steering shared_down matmul_q8_0 failed: {err}")
+            })?;
+        backend
+            .add(
+                state.ffn_out.as_tensor_mut(),
+                state.shared_out.as_tensor_ref(),
+                state.routed_out.as_tensor_ref(),
+                N_EMBD,
+            )
+            .map_err(|err| format!("layer{layer} steering ffn add failed: {err}"))?;
+        backend
+            .directional_steering_project(
+                state.ffn_out.as_tensor_mut(),
+                steering.dirs.as_tensor_ref(),
+                u32::try_from(layer)?,
+                N_EMBD,
+                1,
+                steering.ffn_scale,
+            )
+            .map_err(|err| format!("layer{layer} FFN directional steering failed: {err}"))?;
+        backend
+            .hc_expand_split(
+                state.after_ffn_hc.as_tensor_mut(),
+                state.ffn_out.as_tensor_ref(),
+                state.after_attn_hc.as_tensor_ref(),
+                state.hc_split.as_tensor_ref(),
+                N_EMBD,
+                N_HC,
+            )
+            .map_err(|err| format!("layer{layer} steering FFN hc_expand_split failed: {err}"))?;
+    } else {
+        backend
+            .shared_down_hc_expand_q8_0(
+                state.after_ffn_hc.as_tensor_mut(),
+                state.shared_out.as_tensor_mut(),
+                layer_weights.ffn_down_shexp.abs_offset,
+                dims.shared_dim,
+                u64::from(N_EMBD),
+                state.shared_mid.as_tensor_ref(),
+                state.routed_out.as_tensor_ref(),
+                state.after_attn_hc.as_tensor_ref(),
+                state.hc_split.as_tensor_ref(),
+                N_EMBD,
+                N_HC,
+            )
+            .map_err(|err| format!("layer{layer} shared_down_hc_expand_q8_0 failed: {err}"))?;
+    }
 
     Ok(())
 }
 
 struct Args {
     model: PathBuf,
+    steering_file: Option<PathBuf>,
+    steering_attn: f32,
+    steering_ffn: f32,
 }
 
 impl Args {
     fn parse() -> Result<Self, Box<dyn std::error::Error>> {
         let mut model = None;
+        let mut steering_file = None;
+        let mut steering_attn = 0.0f32;
+        let mut steering_ffn = 0.0f32;
         let mut args = std::env::args_os().skip(1);
         while let Some(arg) = args.next() {
             if arg == "--model" {
@@ -739,14 +873,175 @@ impl Args {
                     return Err("--model requires a path".into());
                 };
                 model = Some(PathBuf::from(value));
+            } else if arg == "--dir-steering-file" {
+                let Some(value) = args.next() else {
+                    return Err("--dir-steering-file requires a path".into());
+                };
+                steering_file = Some(PathBuf::from(value));
+            } else if arg == "--dir-steering-attn" {
+                steering_attn = parse_f32_arg("--dir-steering-attn", args.next())?;
+            } else if arg == "--dir-steering-ffn" {
+                steering_ffn = parse_f32_arg("--dir-steering-ffn", args.next())?;
             } else {
-                return Err("usage: ds4-decode-full-output-head --model FILE".into());
+                return Err("usage: ds4-decode-full-output-head --model FILE [--dir-steering-file FILE --dir-steering-attn F --dir-steering-ffn F]".into());
             }
         }
         let Some(model) = model else {
-            return Err("usage: ds4-decode-full-output-head --model FILE".into());
+            return Err("usage: ds4-decode-full-output-head --model FILE [--dir-steering-file FILE --dir-steering-attn F --dir-steering-ffn F]".into());
         };
-        Ok(Self { model })
+        if steering_file.is_none() && (steering_attn != 0.0 || steering_ffn != 0.0) {
+            return Err("directional steering scales require --dir-steering-file".into());
+        }
+        if steering_file.is_some() && steering_attn == 0.0 && steering_ffn == 0.0 {
+            return Err("--dir-steering-file requires a nonzero attention or FFN scale".into());
+        }
+        Ok(Self {
+            model,
+            steering_file,
+            steering_attn,
+            steering_ffn,
+        })
+    }
+}
+
+fn parse_f32_arg(
+    flag: &str,
+    value: Option<std::ffi::OsString>,
+) -> Result<f32, Box<dyn std::error::Error>> {
+    let Some(value) = value else {
+        return Err(format!("{flag} requires a value").into());
+    };
+    let value = value
+        .into_string()
+        .map_err(|_| format!("{flag} value must be valid UTF-8"))?;
+    Ok(value
+        .parse::<f32>()
+        .map_err(|err| format!("{flag}: invalid float {value}: {err}"))?)
+}
+
+struct SteeringConfig {
+    path: PathBuf,
+    bytes: Vec<u8>,
+    fnv1a64: u64,
+    attn_scale: f32,
+    ffn_scale: f32,
+}
+
+impl SteeringConfig {
+    fn load(
+        path: &Path,
+        attn_scale: f32,
+        ffn_scale: f32,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut file = File::open(path)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        let expected_bytes = usize::try_from(u64::from(N_LAYER as u32) * u64::from(N_EMBD) * 4)?;
+        if bytes.len() != expected_bytes {
+            return Err(format!(
+                "directional steering file length drift: got {}, expected {expected_bytes}",
+                bytes.len()
+            )
+            .into());
+        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            fnv1a64: fnv1a64(&bytes),
+            bytes,
+            attn_scale,
+            ffn_scale,
+        })
+    }
+
+    fn elements(&self) -> u64 {
+        u64::try_from(self.bytes.len() / 4).expect("steering byte length fits u64")
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SteeringRuntime<'a> {
+    dirs: &'a Tensor,
+    attn_scale: f32,
+    ffn_scale: f32,
+}
+
+struct SteeringCheckpoints {
+    layer0_attn_out: Tensor,
+    layer0_after_attn_hc: Tensor,
+    layer0_ffn_out: Tensor,
+    layer0_after_ffn_hc: Tensor,
+}
+
+impl SteeringCheckpoints {
+    fn allocate(dims: Dims) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            layer0_attn_out: alloc("layer0_attn_out", u64::from(N_EMBD))?,
+            layer0_after_attn_hc: alloc("layer0_after_attn_hc", dims.hc_dim)?,
+            layer0_ffn_out: alloc("layer0_ffn_out", u64::from(N_EMBD))?,
+            layer0_after_ffn_hc: alloc("layer0_after_ffn_hc", dims.hc_dim)?,
+        })
+    }
+
+    fn copy_from_state(
+        &mut self,
+        state: &DecodeState,
+        dims: Dims,
+        command_batch: &mut CommandBatch,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.layer0_attn_out
+            .copy_from(
+                &state.attn_out,
+                0,
+                0,
+                byte_len(u64::from(N_EMBD))?,
+                command_batch,
+            )
+            .map_err(|err| format!("layer0_attn_out copy failed: {err}"))?;
+        self.layer0_after_attn_hc
+            .copy_from(
+                &state.after_attn_hc,
+                0,
+                0,
+                byte_len(dims.hc_dim)?,
+                command_batch,
+            )
+            .map_err(|err| format!("layer0_after_attn_hc copy failed: {err}"))?;
+        self.layer0_ffn_out
+            .copy_from(
+                &state.ffn_out,
+                0,
+                0,
+                byte_len(u64::from(N_EMBD))?,
+                command_batch,
+            )
+            .map_err(|err| format!("layer0_ffn_out copy failed: {err}"))?;
+        self.layer0_after_ffn_hc
+            .copy_from(
+                &state.after_ffn_hc,
+                0,
+                0,
+                byte_len(dims.hc_dim)?,
+                command_batch,
+            )
+            .map_err(|err| format!("layer0_after_ffn_hc copy failed: {err}"))?;
+        Ok(())
+    }
+
+    fn read_outputs(&self, dims: Dims) -> Result<Vec<TensorOutput>, Box<dyn std::error::Error>> {
+        Ok(vec![
+            read_tensor_output("layer0_attn_out", &self.layer0_attn_out, u64::from(N_EMBD))?,
+            read_tensor_output(
+                "layer0_after_attn_hc",
+                &self.layer0_after_attn_hc,
+                dims.hc_dim,
+            )?,
+            read_tensor_output("layer0_ffn_out", &self.layer0_ffn_out, u64::from(N_EMBD))?,
+            read_tensor_output(
+                "layer0_after_ffn_hc",
+                &self.layer0_after_ffn_hc,
+                dims.hc_dim,
+            )?,
+        ])
     }
 }
 
@@ -823,6 +1118,8 @@ struct DecodeState {
     comp_sc_cur: Tensor,
     heads: Tensor,
     attn_low: Tensor,
+    batch_group_tmp: Tensor,
+    batch_low_tmp: Tensor,
     attn_out: Tensor,
     after_attn_hc: Tensor,
     ffn_cur: Tensor,
@@ -840,6 +1137,7 @@ struct DecodeState {
     shared_up: Tensor,
     shared_mid: Tensor,
     shared_out: Tensor,
+    ffn_out: Tensor,
     after_ffn_hc: Tensor,
 }
 
@@ -970,6 +1268,8 @@ impl DecodeState {
             comp_sc_cur: alloc("comp_sc_cur", u64::from(2 * N_HEAD_DIM))?,
             heads: alloc("heads", dims.q_dim)?,
             attn_low: alloc("attn_low", dims.low_dim)?,
+            batch_group_tmp: alloc("batch_group_tmp", dims.group_dim)?,
+            batch_low_tmp: alloc("batch_low_tmp", dims.rank)?,
             attn_out: alloc("attn_out", u64::from(N_EMBD))?,
             after_attn_hc: alloc("after_attn_hc", dims.hc_dim)?,
             ffn_cur: alloc("ffn_cur", u64::from(N_EMBD))?,
@@ -987,6 +1287,7 @@ impl DecodeState {
             shared_up: alloc("shared_up", dims.shared_dim)?,
             shared_mid: alloc("shared_mid", dims.shared_dim)?,
             shared_out: alloc("shared_out", u64::from(N_EMBD))?,
+            ffn_out: alloc("ffn_out", u64::from(N_EMBD))?,
             after_ffn_hc: alloc("after_ffn_hc", dims.hc_dim)?,
         })
     }
@@ -1208,6 +1509,7 @@ fn compressed_rope_attn_factor() -> f32 {
 fn write_report(
     gguf: &Gguf,
     weights: &Ds4Weights,
+    steering: Option<&SteeringConfig>,
     header_bytes_read: u64,
     mapped_size: u64,
     plan: GraphPlan,
@@ -1218,8 +1520,22 @@ fn write_report(
     outputs: &[TensorOutput],
 ) {
     println!("{{");
-    println!("  \"schema\": \"{SCHEMA}\",");
-    println!("  \"case\": \"{CASE}\",");
+    println!(
+        "  \"schema\": \"{}\",",
+        if steering.is_some() {
+            STEERING_SCHEMA
+        } else {
+            SCHEMA
+        }
+    );
+    println!(
+        "  \"case\": \"{}\",",
+        if steering.is_some() {
+            STEERING_CASE
+        } else {
+            CASE
+        }
+    );
     println!("  \"model\": {{");
     println!("    \"mapped_size\": {mapped_size},");
     println!("    \"header_bytes_read\": {header_bytes_read},");
@@ -1228,8 +1544,13 @@ fn write_report(
     println!("    \"bound_layers\": {}", weights.layers.len());
     println!("  }},");
     println!("  \"operation\": {{");
-    println!("    \"name\": \"rust_gpu_full_output_head\",");
-    println!("    \"method\": \"decode_backend_execute_layer_x43+swap_cur_after_ffn_hc+rms_norm_plain+matmul_f16+output_hc_weights+hc_weighted_sum+rms_norm_weight+matmul_q8_0\",");
+    if steering.is_some() {
+        println!("    \"name\": \"rust_gpu_directional_steering_decode\",");
+        println!("    \"method\": \"decode_backend_execute_layer_x43+directional_steering_attn_ffn+swap_cur_after_ffn_hc+rms_norm_plain+matmul_f16+output_hc_weights+hc_weighted_sum+rms_norm_weight+matmul_q8_0\",");
+    } else {
+        println!("    \"name\": \"rust_gpu_full_output_head\",");
+        println!("    \"method\": \"decode_backend_execute_layer_x43+swap_cur_after_ffn_hc+rms_norm_plain+matmul_f16+output_hc_weights+hc_weighted_sum+rms_norm_weight+matmul_q8_0\",");
+    }
     println!("    \"command_batch\": true,");
     println!("    \"synchronized\": true,");
     println!("    \"token\": {TOKEN},");
@@ -1272,7 +1593,41 @@ fn write_report(
     println!("    \"layer42_n_comp\": 0,");
     println!("    \"layer42_n_index_comp\": 0,");
     println!("    \"rms_eps\": {RMS_EPS},");
-    println!("    \"hc_eps\": {HC_EPS}");
+    if let Some(steering) = steering {
+        println!("    \"hc_eps\": {HC_EPS},");
+        println!(
+            "    \"directional_steering_file\": {},",
+            json_string(&steering.path.display().to_string())
+        );
+        println!(
+            "    \"directional_steering_bytes\": {},",
+            steering.bytes.len()
+        );
+        println!(
+            "    \"directional_steering_elements\": {},",
+            steering.elements()
+        );
+        println!(
+            "    \"directional_steering_fnv1a64\": \"{:016x}\",",
+            steering.fnv1a64
+        );
+        println!(
+            "    \"directional_steering_attn\": {},",
+            steering.attn_scale
+        );
+        println!("    \"directional_steering_ffn\": {},", steering.ffn_scale);
+        println!(
+            "    \"directional_steering_attn_enabled\": {},",
+            steering.attn_scale != 0.0
+        );
+        println!(
+            "    \"directional_steering_ffn_enabled\": {},",
+            steering.ffn_scale != 0.0
+        );
+        println!("    \"steering_layer\": {STEERING_LAYER}");
+    } else {
+        println!("    \"hc_eps\": {HC_EPS}");
+    }
     println!("  }},");
     println!("  \"weights\": {{");
     write_weight("token_embd", "base.token_embd", &weights.token_embd, true);
@@ -1350,6 +1705,24 @@ fn write_output(output: &TensorOutput, trailing_comma: bool) {
         print!(",");
     }
     println!();
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch < ' ' => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 fn print_json_f32(value: f32) {

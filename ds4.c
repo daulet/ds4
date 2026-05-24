@@ -20056,8 +20056,16 @@ cleanup:
     return rc;
 }
 
-int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FILE *fp) {
+static int ds4_dump_full_output_head_oracle_json_impl(
+        const char *model_path,
+        int         token,
+        const char *steering_path,
+        float       steering_attn,
+        float       steering_ffn,
+        FILE       *fp) {
     if (!model_path || !fp || token < 0 || token >= DS4_N_VOCAB) return 1;
+    const bool steering_enabled = steering_path && steering_path[0] &&
+                                  (steering_attn != 0.0f || steering_ffn != 0.0f);
 
     ds4_model model = { .fd = -1 };
     ds4_weights weights;
@@ -20082,6 +20090,16 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
     float *output_embd = NULL;
     float *output_norm = NULL;
     float *logits = NULL;
+    float *layer0_attn_out = NULL;
+    float *layer0_after_attn_hc = NULL;
+    float *layer0_ffn_out = NULL;
+    float *layer0_after_ffn_hc = NULL;
+    float *steering_dirs = NULL;
+    char steering_fnv[17] = {0};
+    ds4_gpu_tensor *layer0_attn_out_tensor = NULL;
+    ds4_gpu_tensor *layer0_after_attn_hc_tensor = NULL;
+    ds4_gpu_tensor *layer0_ffn_out_tensor = NULL;
+    ds4_gpu_tensor *layer0_after_ffn_hc_tensor = NULL;
     ds4_gpu_graph g;
     memset(&g, 0, sizeof(g));
     bool graph_touched = false;
@@ -20099,6 +20117,20 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
     output_embd = xmalloc((size_t)DS4_N_EMBD * sizeof(output_embd[0]));
     output_norm = xmalloc((size_t)DS4_N_EMBD * sizeof(output_norm[0]));
     logits = xmalloc((size_t)vocab_dim * sizeof(logits[0]));
+    if (steering_enabled) {
+        const uint64_t steering_n = (uint64_t)DS4_N_LAYER * DS4_N_EMBD;
+        steering_dirs = xmalloc((size_t)steering_n * sizeof(steering_dirs[0]));
+        if (!read_f32_binary_file(steering_path, steering_dirs, steering_n)) {
+            fprintf(stderr, "ds4: failed to read directional steering file: %s\n", steering_path);
+            goto cleanup;
+        }
+        snprintf(steering_fnv, sizeof(steering_fnv), "%016" PRIx64,
+                 ds4_fnv1a64_bytes(steering_dirs, (size_t)steering_n * sizeof(steering_dirs[0])));
+        layer0_attn_out = xmalloc((size_t)DS4_N_EMBD * sizeof(layer0_attn_out[0]));
+        layer0_after_attn_hc = xmalloc((size_t)hc_dim * sizeof(layer0_after_attn_hc[0]));
+        layer0_ffn_out = xmalloc((size_t)DS4_N_EMBD * sizeof(layer0_ffn_out[0]));
+        layer0_after_ffn_hc = xmalloc((size_t)hc_dim * sizeof(layer0_after_ffn_hc[0]));
+    }
 
     bool ok = ds4_gpu_init() != 0;
     if (ok) ok = ds4_gpu_set_model_fd(model.fd) != 0;
@@ -20112,6 +20144,17 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
         graph_touched = true;
         ok = metal_graph_alloc_raw_cap(&g, &weights, &weights.layer[0],
                                        raw_cap, ctx_size, prefill_cap, false);
+    }
+    if (ok && steering_enabled) {
+        layer0_attn_out_tensor = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+        layer0_after_attn_hc_tensor = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
+        layer0_ffn_out_tensor = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+        layer0_after_ffn_hc_tensor = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
+        ok = layer0_attn_out_tensor &&
+             layer0_after_attn_hc_tensor &&
+             layer0_ffn_out_tensor &&
+             layer0_after_ffn_hc_tensor &&
+             metal_graph_load_directional_steering(&g, steering_path, steering_attn, steering_ffn);
     }
     if (ok) {
         commands_started = ds4_gpu_begin_commands() != 0;
@@ -20138,6 +20181,28 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
                                              raw_row,
                                              n_raw,
                                              token);
+        if (ok && steering_enabled && il == 0) {
+            ok = ds4_gpu_tensor_copy(layer0_attn_out_tensor,
+                                     0,
+                                     g.attn_out,
+                                     0,
+                                     (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+                 ds4_gpu_tensor_copy(layer0_after_attn_hc_tensor,
+                                     0,
+                                     g.after_attn_hc,
+                                     0,
+                                     hc_dim * sizeof(float)) != 0 &&
+                 ds4_gpu_tensor_copy(layer0_ffn_out_tensor,
+                                     0,
+                                     g.ffn_out,
+                                     0,
+                                     (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+                 ds4_gpu_tensor_copy(layer0_after_ffn_hc_tensor,
+                                     0,
+                                     g.after_ffn_hc,
+                                     0,
+                                     hc_dim * sizeof(float)) != 0;
+        }
         if (ok) {
             ds4_gpu_tensor *tmp = g.cur_hc;
             g.cur_hc = g.after_ffn_hc;
@@ -20159,11 +20224,34 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
              ds4_gpu_tensor_read(g.output_norm, 0, output_norm, (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
              ds4_gpu_tensor_read(g.logits, 0, logits, vocab_dim * sizeof(float)) != 0;
     }
+    if (ok && steering_enabled) {
+        ok = ds4_gpu_tensor_read(layer0_attn_out_tensor,
+                                 0,
+                                 layer0_attn_out,
+                                 (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(layer0_after_attn_hc_tensor,
+                                 0,
+                                 layer0_after_attn_hc,
+                                 hc_dim * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(layer0_ffn_out_tensor,
+                                 0,
+                                 layer0_ffn_out,
+                                 (uint64_t)DS4_N_EMBD * sizeof(float)) != 0 &&
+             ds4_gpu_tensor_read(layer0_after_ffn_hc_tensor,
+                                 0,
+                                 layer0_after_ffn_hc,
+                                 hc_dim * sizeof(float)) != 0;
+    }
     if (!ok) goto cleanup;
 
     fputs("{\n", fp);
-    fputs("  \"schema\": \"ds4.full_output_head_oracle.v1\",\n", fp);
-    fputs("  \"case\": \"token0_full_output_head\",\n", fp);
+    if (steering_enabled) {
+        fputs("  \"schema\": \"ds4.directional_steering_decode_oracle.v1\",\n", fp);
+        fputs("  \"case\": \"token0_layer0_directional_steering_full_output_head\",\n", fp);
+    } else {
+        fputs("  \"schema\": \"ds4.full_output_head_oracle.v1\",\n", fp);
+        fputs("  \"case\": \"token0_full_output_head\",\n", fp);
+    }
     fputs("  \"source\": \"current-c\",\n", fp);
     fputs("  \"model\": {\n", fp);
     fprintf(fp, "    \"mapped_size\": %" PRIu64 ",\n", model.size);
@@ -20172,8 +20260,13 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
     fputs("    \"bound_layers\": 43\n", fp);
     fputs("  },\n", fp);
     fputs("  \"operation\": {\n", fp);
-    fputs("    \"name\": \"current_c_gpu_full_output_head\",\n", fp);
-    fputs("    \"method\": \"metal_graph_encode_decode_layer_x43+swap_cur_after_ffn_hc+metal_graph_encode_output_head\",\n", fp);
+    if (steering_enabled) {
+        fputs("    \"name\": \"current_c_gpu_directional_steering_decode\",\n", fp);
+        fputs("    \"method\": \"metal_graph_load_directional_steering+metal_graph_encode_decode_layer_x43+directional_steering_attn_ffn+swap_cur_after_ffn_hc+metal_graph_encode_output_head\",\n", fp);
+    } else {
+        fputs("    \"name\": \"current_c_gpu_full_output_head\",\n", fp);
+        fputs("    \"method\": \"metal_graph_encode_decode_layer_x43+swap_cur_after_ffn_hc+metal_graph_encode_output_head\",\n", fp);
+    }
     fprintf(fp, "    \"token\": %d,\n", token);
     fputs("    \"first_layer\": 0,\n", fp);
     fputs("    \"last_layer\": 42,\n", fp);
@@ -20208,7 +20301,28 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
     fprintf(fp, "    \"layer42_n_comp\": %u,\n", g.layer_n_comp[layer42]);
     fprintf(fp, "    \"layer42_n_index_comp\": %u,\n", g.layer_n_index_comp[layer42]);
     fprintf(fp, "    \"rms_eps\": %.9g,\n", (double)DS4_RMS_EPS);
-    fprintf(fp, "    \"hc_eps\": %.9g\n", (double)DS4_HC_EPS);
+    if (steering_enabled) {
+        fprintf(fp, "    \"hc_eps\": %.9g,\n", (double)DS4_HC_EPS);
+        fputs("    \"directional_steering_file\": ", fp);
+        json_cstr_write(fp, steering_path);
+        fputs(",\n", fp);
+        fprintf(fp, "    \"directional_steering_bytes\": %" PRIu64 ",\n",
+                (uint64_t)DS4_N_LAYER * DS4_N_EMBD * sizeof(float));
+        fprintf(fp, "    \"directional_steering_elements\": %" PRIu64 ",\n",
+                (uint64_t)DS4_N_LAYER * DS4_N_EMBD);
+        fputs("    \"directional_steering_fnv1a64\": \"", fp);
+        fputs(steering_fnv, fp);
+        fputs("\",\n", fp);
+        fprintf(fp, "    \"directional_steering_attn\": %.9g,\n", (double)steering_attn);
+        fprintf(fp, "    \"directional_steering_ffn\": %.9g,\n", (double)steering_ffn);
+        fprintf(fp, "    \"directional_steering_attn_enabled\": %s,\n",
+                steering_attn != 0.0f ? "true" : "false");
+        fprintf(fp, "    \"directional_steering_ffn_enabled\": %s,\n",
+                steering_ffn != 0.0f ? "true" : "false");
+        fputs("    \"steering_layer\": 0\n", fp);
+    } else {
+        fprintf(fp, "    \"hc_eps\": %.9g\n", (double)DS4_HC_EPS);
+    }
     fputs("  },\n", fp);
     fputs("  \"weights\": {\n", fp);
     layer0_attn_oracle_write_weight(fp, "token_embd", "base.token_embd", weights.token_embd, true);
@@ -20219,6 +20333,12 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
     layer0_attn_oracle_write_weight(fp, "output", "base.output", weights.output, false);
     fputs("  },\n", fp);
     fputs("  \"outputs\": {\n", fp);
+    if (steering_enabled) {
+        layer0_attn_oracle_write_output(fp, "layer0_attn_out", layer0_attn_out, DS4_N_EMBD, true);
+        layer0_attn_oracle_write_output(fp, "layer0_after_attn_hc", layer0_after_attn_hc, hc_dim, true);
+        layer0_attn_oracle_write_output(fp, "layer0_ffn_out", layer0_ffn_out, DS4_N_EMBD, true);
+        layer0_attn_oracle_write_output(fp, "layer0_after_ffn_hc", layer0_after_ffn_hc, hc_dim, true);
+    }
     layer0_attn_oracle_write_output(fp, "after_layer42_hc", after_layer42_hc, hc_dim, true);
     layer0_attn_oracle_write_output(fp, "output_pre", output_pre, DS4_N_HC, true);
     layer0_attn_oracle_write_output(fp, "output_weights", output_weights, DS4_N_HC, true);
@@ -20230,10 +20350,19 @@ int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FIL
     rc = ferror(fp) ? 1 : 0;
 
 cleanup:
+    ds4_gpu_tensor_free(layer0_after_ffn_hc_tensor);
+    ds4_gpu_tensor_free(layer0_ffn_out_tensor);
+    ds4_gpu_tensor_free(layer0_after_attn_hc_tensor);
+    ds4_gpu_tensor_free(layer0_attn_out_tensor);
     if (graph_touched) metal_graph_free(&g);
     ds4_gpu_cleanup();
     weights_free(&weights);
     model_close(&model);
+    free(steering_dirs);
+    free(layer0_after_ffn_hc);
+    free(layer0_ffn_out);
+    free(layer0_after_attn_hc);
+    free(layer0_attn_out);
     free(logits);
     free(output_norm);
     free(output_embd);
@@ -20241,6 +20370,21 @@ cleanup:
     free(output_pre);
     free(after_layer42_hc);
     return rc;
+}
+
+int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FILE *fp) {
+    return ds4_dump_full_output_head_oracle_json_impl(model_path, token, NULL, 0.0f, 0.0f, fp);
+}
+
+int ds4_dump_directional_steering_decode_oracle_json(
+        const char *model_path,
+        int         token,
+        const char *steering_path,
+        float       steering_attn,
+        float       steering_ffn,
+        FILE       *fp) {
+    return ds4_dump_full_output_head_oracle_json_impl(
+            model_path, token, steering_path, steering_attn, steering_ffn, fp);
 }
 
 int ds4_dump_short_continuation_output_head_oracle_json(const char *model_path, FILE *fp) {

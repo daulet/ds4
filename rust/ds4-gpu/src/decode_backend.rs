@@ -162,6 +162,29 @@ pub const DEFAULT_DECODE_FACADE_OPERATIONS: &[DecodeFacadeOperation] = &[
     },
 ];
 
+pub const DIRECTIONAL_STEERING_DECODE_FACADE_OPERATIONS: &[DecodeFacadeOperation] = &[
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_attention_output_q8_batch_tensor",
+        method: "attention_output_q8_batch",
+        tensor_args: &["out", "low", "group_tmp", "low_tmp", "heads"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_add_tensor",
+        method: "add",
+        tensor_args: &["out", "a", "b"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_directional_steering_project_tensor",
+        method: "directional_steering_project",
+        tensor_args: &["x", "directions"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_hc_expand_split_tensor",
+        method: "hc_expand_split",
+        tensor_args: &["out_hc", "block_out", "residual_hc", "split"],
+    },
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExistingDecodeOperation {
     pub operation: &'static str,
@@ -912,6 +935,43 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn attention_output_q8_batch(
+        self,
+        out: TensorMut<'_>,
+        low: TensorMut<'_>,
+        group_tmp: TensorMut<'_>,
+        low_tmp: TensorMut<'_>,
+        out_a_offset: u64,
+        out_b_offset: u64,
+        group_dim: u64,
+        rank: u64,
+        n_groups: u32,
+        out_dim: u64,
+        heads: TensorRef<'_>,
+        n_tokens: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_attention_output_q8_batch_tensor(
+                out.raw(),
+                low.raw(),
+                group_tmp.raw(),
+                low_tmp.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                out_a_offset,
+                out_b_offset,
+                group_dim,
+                rank,
+                n_groups,
+                out_dim,
+                heads.raw(),
+                n_tokens,
+            ))
+            .into_result()
+        }
+    }
+
     pub fn matmul_q8_0_hc_expand(
         self,
         out_hc: TensorMut<'_>,
@@ -935,6 +995,28 @@ impl<'a> DecodeBackend<'a> {
                 in_dim,
                 out_dim,
                 x.raw(),
+                residual_hc.raw(),
+                split.raw(),
+                n_embd,
+                n_hc,
+            ))
+            .into_result()
+        }
+    }
+
+    pub fn hc_expand_split(
+        self,
+        out_hc: TensorMut<'_>,
+        block_out: TensorRef<'_>,
+        residual_hc: TensorRef<'_>,
+        split: TensorRef<'_>,
+        n_embd: u32,
+        n_hc: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_hc_expand_split_tensor(
+                out_hc.raw(),
+                block_out.raw(),
                 residual_hc.raw(),
                 split.raw(),
                 n_embd,
@@ -1033,6 +1115,41 @@ impl<'a> DecodeBackend<'a> {
                 n_expert,
                 clamp,
                 x.raw(),
+            ))
+            .into_result()
+        }
+    }
+
+    pub fn add(
+        self,
+        out: TensorMut<'_>,
+        a: TensorRef<'_>,
+        b: TensorRef<'_>,
+        n: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_add_tensor(out.raw(), a.raw(), b.raw(), n))
+                .into_result()
+        }
+    }
+
+    pub fn directional_steering_project(
+        self,
+        x: TensorMut<'_>,
+        directions: TensorRef<'_>,
+        layer: u32,
+        width: u32,
+        rows: u32,
+        scale: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_directional_steering_project_tensor(
+                x.raw(),
+                directions.raw(),
+                layer,
+                width,
+                rows,
+                scale,
             ))
             .into_result()
         }
@@ -1192,6 +1309,13 @@ mod tests {
         "ds4_gpu_hc_weighted_sum_tensor",
     ];
 
+    const EXPECTED_DIRECTIONAL_STEERING_OPS: &[&str] = &[
+        "ds4_gpu_attention_output_q8_batch_tensor",
+        "ds4_gpu_add_tensor",
+        "ds4_gpu_directional_steering_project_tensor",
+        "ds4_gpu_hc_expand_split_tensor",
+    ];
+
     #[test]
     fn default_decode_facade_operations_are_pinned() {
         assert_eq!(DEFAULT_DECODE_FACADE_OPERATIONS.len(), 26);
@@ -1212,6 +1336,19 @@ mod tests {
                 assert_ne!(left.operation, right.operation);
                 assert_ne!(left.method, right.method);
             }
+        }
+    }
+
+    #[test]
+    fn directional_steering_decode_facade_operations_are_pinned() {
+        assert_eq!(DIRECTIONAL_STEERING_DECODE_FACADE_OPERATIONS.len(), 4);
+        for (spec, expected) in DIRECTIONAL_STEERING_DECODE_FACADE_OPERATIONS
+            .iter()
+            .zip(EXPECTED_DIRECTIONAL_STEERING_OPS)
+        {
+            assert_eq!(spec.operation, *expected);
+            assert!(!spec.method.is_empty());
+            assert!(!spec.tensor_args.is_empty());
         }
     }
 

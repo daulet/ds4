@@ -4868,32 +4868,36 @@
 
 ### M10.5c4d4: Rust Directional-Steering Decode Coverage
 
-- Status: active
-- Goal: validate or explicitly skip directional-steering decode execution in
-  the Rust decode facade once continuation state is already comparable.
-- Oracle: C directional-steering decode branches around attention output and
-  FFN output projection.
-- Fixture: B300 `ds4flash.gguf` plus `dir-steering/out/verbosity.f32` when the
-  support artifact is present and the needed facade operations are implemented.
-- Comparator: Rust-vs-C steering tensor hashes/samples for attention output,
-  FFN output, post-steering HC expansion, and final logits, or an exact skip
-  record naming the missing facade operation or support artifact.
+- Status: done
+- Goal: validate directional-steering decode execution in the Rust decode
+  facade now that continuation state is comparable.
+- Oracle: C `metal_graph_encode_decode_layer` directional-steering branches
+  around attention output and FFN output projection, followed by the current-C
+  output head.
+- Fixture: B300 `ds4flash.gguf`, token `0`, layer `0`, and
+  `dir-steering/out/verbosity.f32` with attention scale `0.5` and FFN scale
+  `0.25`.
+- Comparator: Rust-vs-C steering tensor hashes/samples for layer-0 post-steer
+  attention output, post-steer attention HC expansion, post-steer FFN output,
+  post-steer FFN HC expansion, and final logits.
 - Acceptance: steering-enabled Rust decode matches current-C for the selected
-  fixture, or the roadmap records an explicit unavailable-fixture/facade skip
-  before Milestone 10 closure.
+  fixture; an exact skip is allowed only if the B300 steering artifact or a
+  named safe facade operation becomes unavailable before implementation.
 - Drift policy: steering file path, file hash, attn/FFN scales, layer index,
-  and skip text are exact.
+  output tensor set, and skip text are exact.
 - Review gate: ask Claude to review optional tensor ownership, steering
   projection placement, and skip conditions.
-- Validation needed: steering comparator on B300 or exact skip, targeted Rust
-  checks, `cargo test --workspace`, `cargo fmt --all --check`, `git diff
-  --check`, and non-interactive Claude review with no blockers.
+- Validation passed: B300 current-C oracle plus Rust CUDA candidate validation
+  with 469 pinned checks; local static comparator passed with 33 checks;
+  negative tests rejected 13 mutations; `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, touched-file NUL scan, and
+  non-interactive Claude review passed.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 
 ### M10.6: Rust Layer-Major Prefill And Chunking
 
-- Status: pending
+- Status: active
 - Goal: move layer-major and chunked prefill scheduling into Rust while keeping
   backend operations FFI-backed.
 - Oracle: M10.4 prefill checkpoints plus C

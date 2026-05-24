@@ -709,6 +709,27 @@ python3 ds4-parity/compare_decode_long_indexed_attention.py \
   --candidate /tmp/ds4-c4d3-long-indexed-attention-rust.json
 ```
 
+Compare the M10.5c4d4 Rust directional-steering decode branch for token `0`,
+layer `0`, `dir-steering/out/verbosity.f32`, attention scale `0.5`, and FFN
+scale `0.25`:
+
+```sh
+python3 ds4-parity/compare_decode_directional_steering.py
+python3 ds4-parity/compare_decode_directional_steering.py --negative-test
+```
+
+The comparator checks that `ds4-directional-steering-oracle-dump` emits the
+current-C GPU steering path around attention output and FFN output projection,
+then validates the Rust safe facade readback for layer-0 post-steer attention,
+post-steer HC expansion, post-steer FFN, and final logits. On B300, validate
+the current-C oracle and Rust readback together:
+
+```sh
+python3 ds4-parity/compare_decode_directional_steering.py \
+  --oracle /tmp/ds4-c4d4-directional-steering-oracle.json \
+  --candidate /tmp/ds4-c4d4-directional-steering-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
