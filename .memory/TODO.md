@@ -4768,7 +4768,7 @@
 
 ### M10.5c4d2: Rust Ratio-Boundary Continuation Coverage
 
-- Status: active
+- Status: completed
 - Goal: extend decode-continuation execution to a ratio boundary where ratio-4
   and ratio-128 compressed rows are emitted by the final token.
 - Oracle: current-C GPU `metal_graph_eval_token_raw_swa` over the same
@@ -4784,15 +4784,47 @@
   M10.5 tolerant-sample policy.
 - Review gate: ask Claude to review ratio-boundary counter transitions and row
   quantization.
-- Validation needed: ratio-boundary comparator on B300, targeted Rust checks,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
-  and non-interactive Claude review with no blockers.
+- Validation passed: ratio-boundary comparator with negative test, paired local
+  artifact validation with 865 pinned checks, B300 current-C oracle plus Rust
+  CUDA candidate validation with 829 checks, local `arch -arm64 make
+  ds4-ratio-boundary-output-head-oracle-dump`, local `cargo check -p ds4-gpu
+  --bin ds4-decode-ratio-boundary-output-head`, local unified report with B300
+  rerun command coverage, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, touched-file NUL scan, non-interactive Claude
+  review with `NO BLOCKERS`, and pinned artifact SHA256
+  `oracle=b8e813b11312f931a4bb786d297661d933588bba78da7bad78a147653c2c58c7`
+  and
+  `rust=72fbe9424cecf96d6710d0a1adc43563a5d7af0360ec804628e9224bec081449`.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
+- Evidence: B300 ratio-boundary paired validation matched `sequence_len=128`,
+  `final_position=127`, `raw_row=127`, `raw_start=0`, `n_raw=128`,
+  `emit_compressed_row=1`, `layer2_n_comp=32`,
+  `layer2_n_index_comp=32`, `layer5_n_comp=1`, `layer42_n_comp=32`,
+  and `layer42_n_index_comp=32`. Full-buffer FNV digests are
+  `after_layer42_hc=12f1089ad3297673`,
+  `output_pre=71f7d1ca0703e093`,
+  `output_weights=3e646960d299fca0`,
+  `output_embd=3f0d9c27cf78b430`,
+  `output_norm=a1baf22acb3476dc`,
+  `logits=c67eab1a566286ae`,
+  `layer2_raw_cache_row=cfc54c8671abaa5a`,
+  `layer2_attn_comp_row31=72353245d1b57607`,
+  `layer2_index_comp_row31=63be8943c4bf8cd2`,
+  `layer5_raw_cache_row=082429f33ac1c8df`,
+  `layer5_attn_comp_row0=e65ab25c4927545f`,
+  `layer5_attn_state_kv=49fb25b3760e6207`,
+  `layer5_attn_state_score=3e158062911a288e`,
+  `layer42_raw_cache_row=3346c7f9ebeed46e`,
+  `layer42_attn_comp_row31=6b9b38fa19457e18`,
+  `layer42_index_comp_row31=2a0d37865baff695`,
+  `layer42_attn_state_kv=0aa0087d1d1dcd79`, and
+  `layer42_index_state_kv=1e0df1e98d453bcd`; local
+  `run_parity_report.py --skip-local-oracles` passed 41/31/0.
 
 ### M10.5c4d3: Rust Long Indexed-Continuation Attention Coverage
 
-- Status: pending
+- Status: active
 - Goal: cover the long-context ratio-4 indexed-attention branch without
   requiring Rust layer-major prefill ownership.
 - Oracle: current-C GPU decode-layer execution for the selected long indexed

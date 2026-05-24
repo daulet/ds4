@@ -3,9 +3,9 @@
 - Date: 2026-05-23 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4d2 Rust Ratio-Boundary Continuation Coverage
-- Last validated source before the active item: M10.5c4d1 Rust Short
-  Decode-Continuation Output-Head B300 Execution.
+- Active item: M10.5c4d3 Rust Long Indexed-Continuation Attention Coverage
+- Last validated source before the active item: M10.5c4d2 Rust Ratio-Boundary
+  Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
 - Active debugging ledger: none
 - B300 context: `hou2-prod1`
@@ -26,6 +26,56 @@
 
 ## Last Evidence
 
+- M10.5c4d2 adds `ds4-ratio-boundary-output-head-oracle-dump` and
+  `ds4_dump_ratio_boundary_output_head_oracle_json`, which emit
+  `ds4.ratio_boundary_output_head_oracle.v1` for the deterministic token
+  sequence `0..127`, final position `127`, production current-C
+  `metal_graph_eval_token_raw_swa`, final layer-42 HC, output-head tensors,
+  ratio-4 row `31`, ratio-128 row `0`, and selected raw/cache state.
+- M10.5c4d2 adds `ds4-decode-ratio-boundary-output-head`, which maps the real
+  GGUF on B300, executes 128 tokens through all 43 Rust safe-facade decode
+  layers, flushes after layer `3`, emits and quantizes ratio-4 and ratio-128
+  compressed rows at the final token, stays below the indexed-attention
+  threshold, and runs the final output-head/logits kernels.
+- The B300 paired ratio-boundary output-head validator passed 829 checks
+  before digest pinning and 865 pinned checks locally against copied artifacts.
+  It matched `sequence_len=128`, `final_position=127`, `raw_row=127`,
+  `raw_start=0`, `n_raw=128`, `emit_compressed_row=1`,
+  `layer2_n_comp=32`, `layer2_n_index_comp=32`, `layer5_n_comp=1`,
+  `layer42_n_comp=32`, and `layer42_n_index_comp=32`. Full-buffer FNV
+  digests are `after_layer42_hc=12f1089ad3297673`,
+  `output_pre=71f7d1ca0703e093`,
+  `output_weights=3e646960d299fca0`,
+  `output_embd=3f0d9c27cf78b430`,
+  `output_norm=a1baf22acb3476dc`,
+  `logits=c67eab1a566286ae`,
+  `layer2_raw_cache_row=cfc54c8671abaa5a`,
+  `layer2_attn_comp_row31=72353245d1b57607`,
+  `layer2_index_comp_row31=63be8943c4bf8cd2`,
+  `layer5_raw_cache_row=082429f33ac1c8df`,
+  `layer5_attn_comp_row0=e65ab25c4927545f`,
+  `layer5_attn_state_kv=49fb25b3760e6207`,
+  `layer5_attn_state_score=3e158062911a288e`,
+  `layer42_raw_cache_row=3346c7f9ebeed46e`,
+  `layer42_attn_comp_row31=6b9b38fa19457e18`,
+  `layer42_index_comp_row31=2a0d37865baff695`,
+  `layer42_attn_state_kv=0aa0087d1d1dcd79`, and
+  `layer42_index_state_kv=1e0df1e98d453bcd`.
+- M10.5c4d2 validation passed `python3
+  ds4-parity/compare_decode_ratio_boundary_output_head.py --negative-test`,
+  paired local artifact validation with 865 checks, local `arch -arm64 make
+  ds4-ratio-boundary-output-head-oracle-dump`, local `cargo check -p ds4-gpu
+  --bin ds4-decode-ratio-boundary-output-head`, B300 current-C oracle plus
+  Rust CUDA candidate validation with 829 checks, `python3 -m py_compile
+  ds4-parity/compare_decode_ratio_boundary_output_head.py
+  ds4-parity/run_parity_report.py`, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, touched-file NUL scan,
+  non-interactive Claude review with `NO BLOCKERS`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 41 passed, 31
+  skipped, and 0 failed, and artifact SHA256
+  `oracle=b8e813b11312f931a4bb786d297661d933588bba78da7bad78a147653c2c58c7`
+  and
+  `rust=72fbe9424cecf96d6710d0a1adc43563a5d7af0360ec804628e9224bec081449`.
 - M10.5c4d1 adds `ds4-short-continuation-output-head-oracle-dump` and
   `ds4_dump_short_continuation_output_head_oracle_json`, which emit
   `ds4.short_continuation_output_head_oracle.v1` for the deterministic

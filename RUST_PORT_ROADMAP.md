@@ -4147,9 +4147,27 @@ kernels:
   M10.5 tolerant-sample policy.
 - Review gate: ask Claude to review ratio-boundary counter transitions and row
   quantization.
-- Validation gate: ratio-boundary comparator on B300, targeted Rust checks,
-  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
-  and non-interactive Claude review with no blockers.
+- Validation evidence: ratio-boundary comparator with negative test, paired
+  local artifact validation with 865 pinned checks, B300 current-C oracle plus
+  Rust CUDA candidate validation with 829 checks, local `arch -arm64 make
+  ds4-ratio-boundary-output-head-oracle-dump`, local `cargo check -p ds4-gpu
+  --bin ds4-decode-ratio-boundary-output-head`, local unified report with B300
+  rerun command coverage, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, touched-file NUL scan, non-interactive Claude
+  review with `NO BLOCKERS`, and pinned artifact SHA256
+  `oracle=b8e813b11312f931a4bb786d297661d933588bba78da7bad78a147653c2c58c7`
+  and
+  `rust=72fbe9424cecf96d6710d0a1adc43563a5d7af0360ec804628e9224bec081449`.
+- Evidence: B300 ratio-boundary paired validation matched `sequence_len=128`,
+  `final_position=127`, `raw_row=127`, `raw_start=0`, `n_raw=128`,
+  `emit_compressed_row=1`, `layer2_n_comp=32`,
+  `layer2_n_index_comp=32`, `layer5_n_comp=1`, `layer42_n_comp=32`, and
+  `layer42_n_index_comp=32`; full-buffer FNV digests include
+  `after_layer42_hc=12f1089ad3297673`,
+  `logits=c67eab1a566286ae`,
+  `layer2_attn_comp_row31=72353245d1b57607`,
+  `layer5_attn_comp_row0=e65ab25c4927545f`, and
+  `layer42_index_state_kv=1e0df1e98d453bcd`.
 
 ##### M10.5c4d3: Rust Long Indexed-Continuation Attention Coverage
 
