@@ -6412,21 +6412,39 @@ Drift policy:
 
 #### M13.3: Indexed Decode Selection Replacement Slice
 
-- Status: active.
+- Status: complete.
 - Goal: add opt-in replacement slices for
   `ds4_gpu_indexer_score_one_tensor` and `ds4_gpu_indexer_topk_tensor`.
 - Oracle: current-C long indexed-attention decode comparator.
-- Fixture: indexed decode selection replacement descriptor.
-- Comparator: long indexed-attention pair comparator plus replacement-slice
-  checker.
+- Fixture:
+  `ds4-parity/baselines/backend/m13.3/indexed-decode-selection-replacement-slices.json`.
+- Comparator: `ds4-parity/check_backend_indexed_decode_slice.py
+  --negative-test` plus the long indexed-attention pair comparator.
 - Acceptance: indexer score and selected-row outputs match current-C fixtures,
   unsupported backends fail closed, and default runtime routing is unchanged.
 - Drift policy: score or selected-row drift requires a same-B300 long
   indexed-attention oracle refresh.
+- Evidence:
+  - Added explicit Rust replacement slice descriptors for
+    `ds4_gpu_indexer_score_one_tensor` and `ds4_gpu_indexer_topk_tensor`.
+  - Added the M13.3 slice-set fixture and
+    `ds4-parity/check_backend_indexed_decode_slice.py --negative-test`.
+  - The slices use the M13.1 pair-comparator-ready rows and the M10.5c4d3 long
+    indexed-attention comparator, require explicit per-slice selection, fail
+    closed for CPU, Metal, and runtime-default-route, and keep runtime route,
+    general backend replacement, and kernel replacement claims false.
+  - Validation passed:
+    `python3 ds4-parity/check_backend_indexed_decode_slice.py
+    --negative-test` (195 checks), `cargo test -p ds4-gpu replacement_slice`
+    (6 tests), `python3 ds4-parity/check_backend_replacement_slice.py
+    --negative-test` (85 checks), `python3
+    ds4-parity/check_backend_batched_embedding_slice.py --negative-test` (96
+    checks), and `python3 ds4-parity/run_parity_report.py
+    --skip-local-oracles` (91 passed, 50 skipped, 0 failed).
 
 #### M13.4: Batch Indexer Fixture Gap Closure
 
-- Status: pending.
+- Status: active.
 - Goal: close fixture gaps for `ds4_gpu_indexer_scores_prefill_tensor`,
   `ds4_gpu_indexer_scores_decode_batch_tensor`, and
   `ds4_gpu_dsv4_topk_mask_tensor`.

@@ -524,6 +524,23 @@ whole/chunked/resumed prefill comparators. It verifies the selected
 keeps runtime routing, general backend replacement, and kernel replacement
 claims false. The committed M13.2 fixture passes with 96 checker assertions.
 
+Validate the M13.3 Indexed decode selection replacement slice:
+
+```sh
+python3 ds4-parity/check_backend_indexed_decode_slice.py --negative-test
+```
+
+The M13.3 checker validates
+`baselines/backend/m13.3/indexed-decode-selection-replacement-slices.json`
+against the M13.1 matrix rows for `ds4_gpu_indexer_score_one_tensor` and
+`ds4_gpu_indexer_topk_tensor`, the Rust replacement slice registry, the
+`ds4-backend-replacement-slice` emitter, and the M10.5c4d3 long indexed
+attention comparator. It keeps the two slices explicit, rejects ambiguous
+`m13.3` selection, verifies the selected `cuda-b300` backend path,
+CPU/Metal/default-route fail-closed behavior, and keeps runtime routing,
+general backend replacement, and kernel replacement claims false. The committed
+M13.3 fixture passes with 195 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

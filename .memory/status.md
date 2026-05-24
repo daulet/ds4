@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M13.3 Indexed Decode Selection Replacement Slice
-- Last validated source before the active item: M13.2 Batched Embedding
+- Active item: M13.4 Batch Indexer Fixture Gap Closure
+- Last validated source before the active item: M13.3 Indexed Decode Selection
   Replacement Slice.
+- Earlier M13.3 Indexed Decode Selection Replacement Slice.
 - Earlier M13.2 Batched Embedding Replacement Slice.
 - Earlier M13.1 Embedding/Indexer Expansion Fixture Matrix.
 - Earlier M13.0 Backend Expansion Decision.
@@ -100,6 +101,21 @@
 
 ## Last Evidence
 
+- M13.3 adds explicit Rust replacement slice descriptors for
+  `ds4_gpu_indexer_score_one_tensor` and `ds4_gpu_indexer_topk_tensor`,
+  `ds4-parity/baselines/backend/m13.3/indexed-decode-selection-replacement-slices.json`,
+  and `ds4-parity/check_backend_indexed_decode_slice.py --negative-test`. The
+  two slices use the M13.1 pair-comparator-ready rows and the M10.5c4d3 long
+  indexed-attention comparator, require explicit per-slice selection, keep CPU,
+  Metal, and runtime-default-route fail-closed, and leave runtime route,
+  default-route, general backend replacement, and kernel replacement claims
+  false. Validation passed: `python3
+  ds4-parity/check_backend_indexed_decode_slice.py --negative-test` (195
+  checks), `cargo test -p ds4-gpu replacement_slice` (6 tests), `python3
+  ds4-parity/check_backend_replacement_slice.py --negative-test` (85 checks),
+  `python3 ds4-parity/check_backend_batched_embedding_slice.py --negative-test`
+  (96 checks), and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` (91 passed, 50 skipped, 0 failed).
 - M13.2 adds the Rust replacement slice descriptor for
   `ds4_gpu_embed_tokens_hc_tensor`,
   `ds4-parity/baselines/backend/m13.2/batched-embedding-replacement-slice.json`,

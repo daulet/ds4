@@ -83,9 +83,62 @@ pub const BATCHED_EMBEDDING_REPLACEMENT_SLICE: ReplacementSliceSpec = Replacemen
     next_required_gate: "M13.3 Indexed Decode Selection Replacement Slice",
 };
 
+pub const INDEXER_SCORE_ONE_REPLACEMENT_SLICE: ReplacementSliceSpec = ReplacementSliceSpec {
+    schema: "ds4.backend_replacement_slice.v1",
+    milestone: "M13.3",
+    status: "indexed-decode-selection-replacement-slice",
+    id: "m13.3-embedding-and-indexer-indexer-score-one",
+    operation_family: "embedding_and_indexer",
+    fixture_id: "m13.1-indexer-score-one",
+    operation: "ds4_gpu_indexer_score_one_tensor",
+    method: "indexer_score_one",
+    rust_module: "rust/ds4-gpu/src/replacement_slice.rs",
+    facade_replay: "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+    tensor_fixture_manifest:
+        "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+    comparator: "ds4-parity/compare_decode_long_indexed_attention.py",
+    output_fields: &["layer2_indexer_scores"],
+    supported_backends: &["cuda-b300"],
+    unsupported_backends: &["cpu", "metal", "runtime-default-route"],
+    runtime_route_change: false,
+    general_backend_replacement: false,
+    kernel_replacement: false,
+    next_required_gate: "M13.4 Batch Indexer Fixture Gap Closure",
+};
+
+pub const INDEXER_TOPK_REPLACEMENT_SLICE: ReplacementSliceSpec = ReplacementSliceSpec {
+    schema: "ds4.backend_replacement_slice.v1",
+    milestone: "M13.3",
+    status: "indexed-decode-selection-replacement-slice",
+    id: "m13.3-embedding-and-indexer-indexer-topk",
+    operation_family: "embedding_and_indexer",
+    fixture_id: "m13.1-indexer-topk",
+    operation: "ds4_gpu_indexer_topk_tensor",
+    method: "indexer_topk",
+    rust_module: "rust/ds4-gpu/src/replacement_slice.rs",
+    facade_replay: "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+    tensor_fixture_manifest:
+        "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+    comparator: "ds4-parity/compare_decode_long_indexed_attention.py",
+    output_fields: &["layer2_comp_selected"],
+    supported_backends: &["cuda-b300"],
+    unsupported_backends: &["cpu", "metal", "runtime-default-route"],
+    runtime_route_change: false,
+    general_backend_replacement: false,
+    kernel_replacement: false,
+    next_required_gate: "M13.4 Batch Indexer Fixture Gap Closure",
+};
+
+pub const INDEXED_DECODE_SELECTION_REPLACEMENT_SLICES: &[ReplacementSliceSpec] = &[
+    INDEXER_SCORE_ONE_REPLACEMENT_SLICE,
+    INDEXER_TOPK_REPLACEMENT_SLICE,
+];
+
 pub const BACKEND_REPLACEMENT_SLICES: &[ReplacementSliceSpec] = &[
     FIRST_BACKEND_REPLACEMENT_SLICE,
     BATCHED_EMBEDDING_REPLACEMENT_SLICE,
+    INDEXER_SCORE_ONE_REPLACEMENT_SLICE,
+    INDEXER_TOPK_REPLACEMENT_SLICE,
 ];
 
 pub const fn first_backend_replacement_slice() -> &'static ReplacementSliceSpec {
@@ -96,6 +149,18 @@ pub const fn batched_embedding_replacement_slice() -> &'static ReplacementSliceS
     &BATCHED_EMBEDDING_REPLACEMENT_SLICE
 }
 
+pub const fn indexer_score_one_replacement_slice() -> &'static ReplacementSliceSpec {
+    &INDEXER_SCORE_ONE_REPLACEMENT_SLICE
+}
+
+pub const fn indexer_topk_replacement_slice() -> &'static ReplacementSliceSpec {
+    &INDEXER_TOPK_REPLACEMENT_SLICE
+}
+
+pub const fn indexed_decode_selection_replacement_slices() -> &'static [ReplacementSliceSpec] {
+    INDEXED_DECODE_SELECTION_REPLACEMENT_SLICES
+}
+
 pub const fn replacement_slices() -> &'static [ReplacementSliceSpec] {
     BACKEND_REPLACEMENT_SLICES
 }
@@ -103,16 +168,22 @@ pub const fn replacement_slices() -> &'static [ReplacementSliceSpec] {
 pub fn replacement_slice_by_id(id: &str) -> Option<&'static ReplacementSliceSpec> {
     for spec in replacement_slices() {
         if str_eq(spec.id, id)
-            || str_eq(spec.milestone, id)
             || str_eq(spec.fixture_id, id)
             || str_eq(spec.method, id)
+            || str_eq(spec.operation, id)
         {
             return Some(spec);
         }
     }
     match id {
-        "first" | "m12.4" => Some(first_backend_replacement_slice()),
-        "batched-embedding" | "m13.2" => Some(batched_embedding_replacement_slice()),
+        "first" | "m12.4" | "M12.4" => Some(first_backend_replacement_slice()),
+        "batched-embedding" | "m13.2" | "M13.2" => Some(batched_embedding_replacement_slice()),
+        "indexed-score-one" | "indexer-score-one" | "m13.3-score-one" | "M13.3-score-one" => {
+            Some(indexer_score_one_replacement_slice())
+        }
+        "indexed-topk" | "indexer-topk" | "m13.3-topk" | "M13.3-topk" => {
+            Some(indexer_topk_replacement_slice())
+        }
         _ => None,
     }
 }
@@ -210,5 +281,42 @@ mod tests {
             Some("m13.2-embedding-and-indexer-embed-tokens-hc")
         );
         assert!(replacement_slice_by_id("missing").is_none());
+    }
+
+    #[test]
+    fn m13_3_indexed_decode_slices_stay_bounded() {
+        let score = indexer_score_one_replacement_slice();
+        assert_eq!(score.milestone, "M13.3");
+        assert_eq!(score.status, "indexed-decode-selection-replacement-slice");
+        assert_eq!(score.operation, "ds4_gpu_indexer_score_one_tensor");
+        assert_eq!(score.method, "indexer_score_one");
+        assert_eq!(score.output_fields, &["layer2_indexer_scores"]);
+        assert!(!score.runtime_route_change);
+        assert!(!score.general_backend_replacement);
+        assert!(!score.kernel_replacement);
+
+        let topk = indexer_topk_replacement_slice();
+        assert_eq!(topk.milestone, "M13.3");
+        assert_eq!(topk.status, "indexed-decode-selection-replacement-slice");
+        assert_eq!(topk.operation, "ds4_gpu_indexer_topk_tensor");
+        assert_eq!(topk.method, "indexer_topk");
+        assert_eq!(topk.output_fields, &["layer2_comp_selected"]);
+        assert!(!topk.runtime_route_change);
+        assert!(!topk.general_backend_replacement);
+        assert!(!topk.kernel_replacement);
+    }
+
+    #[test]
+    fn m13_3_selection_requires_explicit_slice() {
+        assert_eq!(
+            replacement_slice_by_id("indexer-score-one").map(|spec| spec.id),
+            Some("m13.3-embedding-and-indexer-indexer-score-one")
+        );
+        assert_eq!(
+            replacement_slice_by_id("ds4_gpu_indexer_topk_tensor").map(|spec| spec.id),
+            Some("m13.3-embedding-and-indexer-indexer-topk")
+        );
+        assert!(replacement_slice_by_id("m13.3").is_none());
+        assert_eq!(indexed_decode_selection_replacement_slices().len(), 2);
     }
 }
