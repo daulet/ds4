@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: post-M12 roadmap decision
-- Last validated source before the active item: M12.6 Backend Replacement
-  Closure And Removal Decision.
+- Active item: M13.1 Embedding/Indexer Expansion Fixture Matrix
+- Last validated source before the active item: M13.0 Backend Expansion
+  Decision.
+- Earlier M13.0 Backend Expansion Decision.
 - Earlier M12.6 Backend Replacement Closure And Removal Decision.
 - Earlier M12.5 Runtime Backend Route Gate.
 - Earlier M12.4 First Backend Replacement Slice.
@@ -97,6 +98,23 @@
 
 ## Last Evidence
 
+- M13.0 adds
+  `ds4-parity/baselines/backend/m13.0/backend-expansion-decision.json` and
+  `ds4-parity/check_backend_expansion_decision.py --negative-test`. The
+  decision chooses to broaden the existing `embedding_and_indexer` route rather
+  than start a new backend family because M12.6 left one opt-in
+  `ds4_gpu_embed_token_hc_tensor` replacement and six remaining operations in
+  that same family. The M13 split covers M13.1 fixture-matrix closure, M13.2
+  batched embedding replacement, M13.3 indexed decode selection replacement,
+  M13.4 batch indexer fixture-gap closure, and M13.5 route-gate/closure. It
+  keeps removals, default-route replacement, general backend replacement, and
+  kernel replacement claims false. Validation passed `python3
+  ds4-parity/check_backend_expansion_decision.py --negative-test` with 186
+  checks, Python syntax, JSON formatting, the M12.6 closure checker, `cargo fmt
+  --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 88 passed, 50
+  skipped, 0 failed. M13.1 Embedding/Indexer Expansion Fixture Matrix is
+  active.
 - M12.6 adds
   `ds4-parity/baselines/backend/m12.6/backend-replacement-closure.json` and
   `ds4-parity/check_backend_replacement_closure.py --negative-test`. The

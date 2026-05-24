@@ -30,7 +30,10 @@ ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
 STATUS = ROOT / ".memory/status.md"
 
-TERMINAL_ACTIVE_ITEM = "Active item: post-M12 roadmap decision"
+ACCEPTED_ACTIVE_ITEMS = [
+    "Active item: post-M12 roadmap decision",
+    "Active item: M13",
+]
 EXPECTED_FAMILIES = [
     "backend_lifecycle",
     "tensor_lifetime",
@@ -333,7 +336,10 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check("Validate the M12.6 Backend replacement closure" in texts["readme"], "README wiring missing")
     report.check("M12.6: Backend Replacement Closure And Removal Decision" in texts["roadmap"], "roadmap M12.6 missing")
     report.check("- Status: complete." in texts["roadmap"], "roadmap M12.6 complete status missing")
-    report.check(TERMINAL_ACTIVE_ITEM in texts["status"], "status terminal active item missing")
+    report.check(
+        any(item in texts["status"] for item in ACCEPTED_ACTIVE_ITEMS),
+        "status terminal active item missing",
+    )
     report.check("Earlier M12.6 Backend Replacement Closure And Removal Decision" in texts["status"], "status M12.6 previous item missing")
     report.check("#### M12.6: Backend Replacement Closure And Removal Decision" in texts["todo"], "TODO M12.6 missing")
 

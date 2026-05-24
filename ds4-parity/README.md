@@ -480,6 +480,21 @@ claims, and any C/CUDA/Metal removal decision while only one embedding/indexer
 operation has an opt-in route-gated replacement slice. The current M12.6
 fixture passes with 147 checker assertions.
 
+Validate the M13.0 Backend expansion decision:
+
+```sh
+python3 ds4-parity/check_backend_expansion_decision.py --negative-test
+```
+
+The M13.0 checker validates
+`baselines/backend/m13.0/backend-expansion-decision.json` against the M12.6
+closure matrix, M12.1 backend inventory, M10.2 graph inventory, and existing
+M10.5/M10.6 prefill/indexed-attention comparator paths. It chooses to broaden
+the existing embedding/indexer route, requires all six remaining M12.6
+operations to be assigned to M13.1 through M13.5 work, and keeps removals,
+default-route replacement, general backend replacement, and kernel replacement
+claims false. The current M13.0 fixture passes with 186 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

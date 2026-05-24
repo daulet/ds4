@@ -1,0 +1,157 @@
+{
+  "schema": "ds4.backend_expansion_decision.v1",
+  "source": "m13.0-backend-expansion-decision",
+  "milestone": "M13.0",
+  "parent": "M13",
+  "previous_stage": "M12.6",
+  "next_stage": "M13.1",
+  "status": "split-planned",
+  "decision": "broaden_embedding_and_indexer_route",
+  "source_artifacts": {
+    "boundary_inventory": "ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json",
+    "operation_fixture_manifest": "ds4-parity/baselines/backend/m12.2/manifest.json",
+    "facade_replay": "ds4-parity/baselines/backend/m12.3/facade-replay.json",
+    "replacement_slice": "ds4-parity/baselines/backend/m12.4/replacement-slice.json",
+    "runtime_route_gate": "ds4-parity/baselines/backend/m12.5/runtime-route-gate.json",
+    "backend_replacement_closure": "ds4-parity/baselines/backend/m12.6/backend-replacement-closure.json",
+    "graph_plan_inventory": "ds4-parity/baselines/graph/m10.2/graph-plan-inventory.json"
+  },
+  "source_comparators": {
+    "embed_tokens_hc": "ds4-parity/compare_prefill_whole_short.py",
+    "indexer_decode": "ds4-parity/compare_decode_long_indexed_attention.py",
+    "chunked_prefill": "ds4-parity/compare_prefill_chunked.py",
+    "resumed_prefill": "ds4-parity/compare_prefill_resumed.py"
+  },
+  "selection_policy": {
+    "chosen_operation_family": "embedding_and_indexer",
+    "reason": "M12.6 left exactly one opt-in replacement in embedding_and_indexer and six remaining operations in the same family. Broadening that route preserves the existing oracle chain before starting an unrelated backend family.",
+    "broaden_existing_route": true,
+    "start_new_family": false,
+    "default_route_unchanged": true,
+    "replacement_route_opt_in_only": true,
+    "general_backend_replacement": false,
+    "kernel_replacement": false,
+    "removals_allowed": false,
+    "current_backend_retained_as_oracle": true,
+    "current_backend_retained_as_sidecar": true
+  },
+  "remaining_operations_from_m12_6": [
+    "ds4_gpu_embed_tokens_hc_tensor",
+    "ds4_gpu_indexer_score_one_tensor",
+    "ds4_gpu_indexer_scores_prefill_tensor",
+    "ds4_gpu_indexer_scores_decode_batch_tensor",
+    "ds4_gpu_indexer_topk_tensor",
+    "ds4_gpu_dsv4_topk_mask_tensor"
+  ],
+  "operation_coverage": [
+    {
+      "operation": "ds4_gpu_embed_tokens_hc_tensor",
+      "coverage": "existing_prefill_pair_comparators",
+      "oracle": "current-C whole/chunked/resumed prefill",
+      "comparators": [
+        "ds4-parity/compare_prefill_whole_short.py",
+        "ds4-parity/compare_prefill_chunked.py",
+        "ds4-parity/compare_prefill_resumed.py"
+      ],
+      "next_stage": "M13.2 Batched Embedding Replacement Slice"
+    },
+    {
+      "operation": "ds4_gpu_indexer_score_one_tensor",
+      "coverage": "existing_long_indexed_attention_pair_comparator",
+      "oracle": "current-C long indexed-attention decode",
+      "comparators": [
+        "ds4-parity/compare_decode_long_indexed_attention.py"
+      ],
+      "next_stage": "M13.3 Indexed Decode Selection Replacement Slice"
+    },
+    {
+      "operation": "ds4_gpu_indexer_scores_prefill_tensor",
+      "coverage": "inventory_only",
+      "oracle": "current-C prefill indexer scoring",
+      "comparators": [],
+      "next_stage": "M13.4 Batch Indexer Fixture Gap Closure"
+    },
+    {
+      "operation": "ds4_gpu_indexer_scores_decode_batch_tensor",
+      "coverage": "existing_chunked_prefill_static_and_pair_surface",
+      "oracle": "current-C chunked prefill",
+      "comparators": [
+        "ds4-parity/compare_prefill_chunked.py"
+      ],
+      "next_stage": "M13.4 Batch Indexer Fixture Gap Closure"
+    },
+    {
+      "operation": "ds4_gpu_indexer_topk_tensor",
+      "coverage": "existing_long_indexed_attention_pair_comparator",
+      "oracle": "current-C long indexed-attention decode",
+      "comparators": [
+        "ds4-parity/compare_decode_long_indexed_attention.py"
+      ],
+      "next_stage": "M13.3 Indexed Decode Selection Replacement Slice"
+    },
+    {
+      "operation": "ds4_gpu_dsv4_topk_mask_tensor",
+      "coverage": "inventory_only",
+      "oracle": "current-C prefill top-k mask",
+      "comparators": [],
+      "next_stage": "M13.4 Batch Indexer Fixture Gap Closure"
+    }
+  ],
+  "stage_plan": [
+    {
+      "stage": "M13.1",
+      "name": "Embedding/Indexer Expansion Fixture Matrix",
+      "goal": "turn the post-M12 decision into an operation-by-operation fixture matrix before any new route claim",
+      "oracle": "M12.6 closure, M12.1 inventory, M10.2 graph inventory, and existing M10.5/M10.6 comparators",
+      "fixture": "M13.1 embedding/indexer expansion matrix",
+      "comparator": "ds4-parity/check_backend_expansion_matrix.py --negative-test",
+      "acceptance": "all six remaining operations are classified as covered or gap with a next owner stage and no removal claim",
+      "drift_policy": "refresh the matrix whenever embedding/indexer operation signatures or existing prefill/indexed-attention comparators change"
+    },
+    {
+      "stage": "M13.2",
+      "name": "Batched Embedding Replacement Slice",
+      "goal": "add an opt-in replacement slice for ds4_gpu_embed_tokens_hc_tensor",
+      "oracle": "current-C prefill embedding outputs from M10.6 whole/chunked/resumed prefill comparators",
+      "fixture": "batched embedding replacement slice descriptor",
+      "comparator": "batched embedding slice checker with current-C prefill pair comparators",
+      "acceptance": "batched embedding output fields match current-C fixtures and unsupported routes fail closed",
+      "drift_policy": "same-B300 rerun required for any embedding output drift"
+    },
+    {
+      "stage": "M13.3",
+      "name": "Indexed Decode Selection Replacement Slice",
+      "goal": "add opt-in replacement slices for ds4_gpu_indexer_score_one_tensor and ds4_gpu_indexer_topk_tensor",
+      "oracle": "current-C long indexed-attention decode output fields",
+      "fixture": "indexed decode selection replacement descriptor",
+      "comparator": "long indexed-attention pair comparator plus slice checker",
+      "acceptance": "indexer scores and selected top-k rows match current-C fixtures and default route stays current-backend",
+      "drift_policy": "same-B300 long indexed-attention rerun required for score or selected-row drift"
+    },
+    {
+      "stage": "M13.4",
+      "name": "Batch Indexer Fixture Gap Closure",
+      "goal": "close fixture gaps for ds4_gpu_indexer_scores_prefill_tensor, ds4_gpu_indexer_scores_decode_batch_tensor, and ds4_gpu_dsv4_topk_mask_tensor",
+      "oracle": "current-C prefill and batch-decode indexer paths on B300",
+      "fixture": "batch indexer fixture bundle",
+      "comparator": "batch indexer fixture checker with negative tests",
+      "acceptance": "each batch-only indexer operation has current-C fixture coverage before route expansion",
+      "drift_policy": "fixture drift requires same-hardware current-C oracle refresh and comparator rationale"
+    },
+    {
+      "stage": "M13.5",
+      "name": "Embedding/Indexer Route Gate And Closure",
+      "goal": "gate the expanded embedding/indexer replacement route and record retained-sidecar closure",
+      "oracle": "M13.1 through M13.4 artifacts plus M10.9 official-vector, long-context, tool/server, and benchmark gates",
+      "fixture": "expanded route gate and closure matrix",
+      "comparator": "expanded route closure checker with runtime gate evidence",
+      "acceptance": "expanded replacement route remains opt-in, default route remains current-backend, and removal is rejected unless every family operation is covered",
+      "drift_policy": "route drift keeps all prior current-backend oracles until default-route parity is proven"
+    }
+  ],
+  "overall_decision": {
+    "active_next_item": "M13.1 Embedding/Indexer Expansion Fixture Matrix",
+    "removals_allowed": false,
+    "reason": "M13 expands the already-started embedding/indexer route because it has the only existing route-gated replacement and the clearest operation-family continuity. New backend families remain deferred until this route is broadened or explicitly blocked."
+  }
+}

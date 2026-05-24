@@ -6923,5 +6923,117 @@
 
 ## Later Items
 
-Post-M12 roadmap decision is active. Choose the next backend replacement family
-or broaden the embedding/indexer route before allowing any backend removal.
+### M13: Backend Replacement Expansion
+
+- Status: split before implementation into M13.0 through M13.5.
+- Goal: broaden the only existing route-gated backend family before considering
+  any unrelated backend-family replacement or removal.
+- Oracle: M12.6 closure matrix, M12.1 backend inventory, M10.2 graph
+  operation inventory, and existing M10.5/M10.6 current-C execution
+  comparators.
+- Fixture: M13 decision and per-operation embedding/indexer expansion
+  artifacts.
+- Comparator: M13 decision, fixture-matrix, replacement-slice, route-gate, and
+  closure checkers.
+- Acceptance: every remaining embedding/indexer operation is assigned to a
+  covered fixture or explicit gap stage; default route stays current-backend;
+  removals stay blocked.
+- Drift policy: refresh the M13 matrix whenever embedding/indexer operation
+  signatures, fixture coverage, or route selectors change.
+
+#### M13.0: Backend Expansion Decision
+
+- Status: complete.
+- Goal: choose the post-M12 backend replacement direction and split it into
+  reviewable, oracle-comparable M13 stages.
+- Oracle: M12.6 closure matrix, M12.1 operation inventory, M10.2 graph
+  operation inventory, and existing prefill/indexed-attention comparator
+  coverage.
+- Fixture:
+  `ds4-parity/baselines/backend/m13.0/backend-expansion-decision.json`.
+- Comparator: `ds4-parity/check_backend_expansion_decision.py
+  --negative-test`.
+- Acceptance: M13 chooses to broaden the existing `embedding_and_indexer`
+  route, maps all six remaining M12.6 operations to M13 work, and keeps
+  removals/default-route replacement/general backend replacement/kernel
+  replacement claims false.
+- Drift policy: if M12.6 closure or existing comparator coverage changes,
+  refresh this decision before starting M13.1.
+- Validation passed:
+  - `python3 ds4-parity/check_backend_expansion_decision.py --negative-test`
+    with 186 checks.
+  - Python syntax, JSON formatting, the M12.6 closure checker, `cargo fmt
+    --all -- --check`, `git diff --check`, and `python3
+    ds4-parity/run_parity_report.py --skip-local-oracles` with 88 passed, 50
+    skipped, 0 failed.
+
+#### M13.1: Embedding/Indexer Expansion Fixture Matrix
+
+- Status: active.
+- Goal: create the operation-by-operation fixture matrix for all six remaining
+  `embedding_and_indexer` operations.
+- Oracle: M13.0 decision, M12.6 remaining-operation list, M12.1 inventory,
+  M10.2 graph inventory, and existing prefill/indexed-attention comparators.
+- Fixture: embedding/indexer expansion matrix with one row per remaining
+  operation.
+- Comparator: `ds4-parity/check_backend_expansion_matrix.py --negative-test`.
+- Acceptance: covered operations reference executable comparators; gap
+  operations remain blocked; no route/default-route/removal claim changes.
+- Drift policy: operation-list drift requires refreshing current-backend
+  inventory and preserving the M13.0 decision artifact.
+
+#### M13.2: Batched Embedding Replacement Slice
+
+- Status: pending.
+- Goal: add an opt-in replacement slice for
+  `ds4_gpu_embed_tokens_hc_tensor`.
+- Oracle: current-C whole/chunked/resumed prefill output comparators.
+- Fixture: batched embedding replacement slice descriptor.
+- Comparator: batched embedding slice checker plus M10.6 prefill pair
+  comparators.
+- Acceptance: batched embedding output fields match current-C fixtures and
+  unsupported backends fail closed without changing the default route.
+- Drift policy: output drift requires a same-B300 current-C oracle refresh.
+
+#### M13.3: Indexed Decode Selection Replacement Slice
+
+- Status: pending.
+- Goal: add opt-in replacement slices for
+  `ds4_gpu_indexer_score_one_tensor` and `ds4_gpu_indexer_topk_tensor`.
+- Oracle: current-C long indexed-attention decode comparator.
+- Fixture: indexed decode selection replacement descriptor.
+- Comparator: long indexed-attention pair comparator plus replacement-slice
+  checker.
+- Acceptance: indexer score and selected-row outputs match current-C fixtures
+  and unsupported backends fail closed without changing the default route.
+- Drift policy: score or selected-row drift requires a same-B300 long
+  indexed-attention oracle refresh.
+
+#### M13.4: Batch Indexer Fixture Gap Closure
+
+- Status: pending.
+- Goal: close fixture gaps for `ds4_gpu_indexer_scores_prefill_tensor`,
+  `ds4_gpu_indexer_scores_decode_batch_tensor`, and
+  `ds4_gpu_dsv4_topk_mask_tensor`.
+- Oracle: current-C prefill and batch-decode indexer paths on B300.
+- Fixture: batch indexer fixture bundle.
+- Comparator: batch indexer fixture checker with negative tests.
+- Acceptance: each batch-only indexer operation has current-C fixture coverage
+  before it can join an expanded replacement route.
+- Drift policy: fixture drift requires a same-hardware current-C oracle refresh
+  and tolerance rationale.
+
+#### M13.5: Embedding/Indexer Route Gate And Closure
+
+- Status: pending.
+- Goal: expose the expanded embedding/indexer route through an opt-in gate and
+  record retained-sidecar closure.
+- Oracle: M13.1 through M13.4 artifacts plus M10.9 official-vector,
+  long-context, tool/server, and benchmark gates.
+- Fixture: expanded route gate and closure matrix.
+- Comparator: expanded route closure checker with runtime gate evidence.
+- Acceptance: expanded route stays opt-in, default route stays
+  current-backend, and removal is rejected unless every operation in the family
+  is covered.
+- Drift policy: route drift keeps all prior current-backend oracles until
+  default-route parity is proven.
