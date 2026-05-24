@@ -168,7 +168,7 @@ int ds4_dump_all_layer_final_hc_oracle_json(const char *model_path, int token, F
 int ds4_dump_full_output_head_oracle_json(const char *model_path, int token, FILE *fp);
 int ds4_dump_directional_steering_decode_oracle_json(const char *model_path, int token, const char *steering_path, float steering_attn, float steering_ffn, FILE *fp);
 int ds4_dump_short_continuation_output_head_oracle_json(const char *model_path, FILE *fp);
-int ds4_dump_prefill_whole_short_oracle_json(const char *model_path, const char *prompt_path, ds4_backend backend, FILE *fp);
+int ds4_dump_prefill_whole_short_oracle_json(const char *model_path, const char *prompt_path, int limit_tokens, ds4_backend backend, FILE *fp);
 int ds4_dump_ratio_boundary_output_head_oracle_json(const char *model_path, FILE *fp);
 int ds4_dump_long_indexed_attention_oracle_json(const char *model_path, FILE *fp);
 int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *opt, FILE *fp);

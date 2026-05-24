@@ -3,9 +3,9 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.6b Rust Whole-Prefill Short Execution
-- Last validated source before the active item: M10.6a Rust Prefill
-  Scheduling Plan.
+- Active item: M10.6d Rust Resumed-Suffix Prefill Execution
+- Last validated source before the active item: M10.6c Rust Cold
+  Chunked-Prefill Execution.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
@@ -3575,3 +3575,29 @@
   passed, 34 skipped, and 0 failed, `arch -arm64` C helper builds, full
   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
   and non-interactive Claude review with no blockers.
+- M10.6c extends the current-C prefill oracle helper and Rust
+  `ds4-prefill-whole-short` candidate to cold chunked prompts, including a
+  2052-token cap-crossing case and the full long memory archive prompt. The
+  paired current-C and Rust reports use a same-run C oracle rather than the
+  older M10.4 baseline because optimized CUDA MoE atomic-down output is
+  nondeterministic.
+- M10.6c adds `ds4-parity/compare_prefill_chunked.py`, which validates static
+  structure, live current-C oracle parity, chunk starts/sizes, output absolute
+  positions and local rows, raw ring rows/spans, compressed/index counters,
+  output digests, and sampled logits for both chunked fixtures.
+- M10.6c B300 validation used pod `ds4-rust-port-b300` in `hou2-prod1` with
+  `/workspace/ds4/ds4flash.gguf` and `DS4_CUDA_MOE_NO_ATOMIC_DOWN=1`;
+  current-C oracle vs Rust candidate comparator passed 400 checks for the
+  2052-token fixture and 400 checks for the full long prompt.
+- M10.6c local validation passed static chunked comparator 30 checks, chunked
+  negative tests rejected 5 mutations, whole-prefill negative tests rejected 15
+  mutations, unified parity report with local oracles skipped reported 46
+  passed, 35 skipped, and 0 failed, `arch -arm64 make
+  ds4-prefill-whole-short-oracle-dump`, `cargo check -p ds4-gpu --bin
+  ds4-prefill-whole-short`, full `cargo test --workspace`, `cargo fmt --all --
+  --check`, and `git diff --check`.
+- M10.6c non-interactive Claude review returned no blockers. The review noted a
+  dead future-context risk where continued aligned non-Ratio4 chunks could have
+  used the zero-prefix compressor prefill path; the final Rust path restricts
+  the aligned replay branch to Ratio4 and keeps continued non-Ratio4 chunks on
+  per-token compressor updates.

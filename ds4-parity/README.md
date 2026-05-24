@@ -771,6 +771,48 @@ The comparator checks that Rust uses the same rendered chat prompt tokens,
 2048-row prefill-cap graph plan, 21 active prompt rows, final-row output head,
 and layer-major raw/compressed cache counters as current C.
 
+Compare the M10.6c Rust cold chunked-prefill execution against the current-C
+chunked oracle. On CUDA, run both sides with `DS4_CUDA_MOE_NO_ATOMIC_DOWN=1`
+so the MoE down-projection path is deterministic enough for exact digest
+comparison:
+
+```sh
+python3 ds4-parity/compare_prefill_chunked.py
+python3 ds4-parity/compare_prefill_chunked.py --negative-test
+export DS4_CUDA_MOE_NO_ATOMIC_DOWN=1
+make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native
+./ds4-prefill-whole-short-oracle-dump --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 2052 \
+  --backend cuda \
+  --output /tmp/ds4-m106c-prefill-chunked-2052-oracle.json
+CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend \
+  --bin ds4-prefill-whole-short --quiet -- \
+  --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 2052 \
+  > /tmp/ds4-m106c-prefill-chunked-2052-rust.json
+python3 ds4-parity/compare_prefill_chunked.py \
+  --oracle /tmp/ds4-m106c-prefill-chunked-2052-oracle.json \
+  --candidate /tmp/ds4-m106c-prefill-chunked-2052-rust.json
+./ds4-prefill-whole-short-oracle-dump --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --backend cuda \
+  --output /tmp/ds4-m106c-prefill-chunked-long-oracle.json
+CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend \
+  --bin ds4-prefill-whole-short --quiet -- \
+  --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  > /tmp/ds4-m106c-prefill-chunked-long-rust.json
+python3 ds4-parity/compare_prefill_chunked.py \
+  --oracle /tmp/ds4-m106c-prefill-chunked-long-oracle.json \
+  --candidate /tmp/ds4-m106c-prefill-chunked-long-rust.json
+```
+
+The comparator checks the 2048+4 and 2048+1305 chunk schedules, absolute raw
+ring rows, per-layer compressed counters, final-row output head dimensions, and
+exact output digests/samples against the current-C chunked oracle.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

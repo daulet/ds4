@@ -25527,6 +25527,7 @@ done:
 int ds4_dump_prefill_whole_short_oracle_json(
         const char *model_path,
         const char *prompt_path,
+        int limit_tokens,
         ds4_backend backend,
         FILE *fp) {
     if (!model_path || !prompt_path || !fp) return 1;
@@ -25553,6 +25554,17 @@ int ds4_dump_prefill_whole_short_oracle_json(
         ok = false;
         goto done;
     }
+    if (limit_tokens > 0) {
+        if (limit_tokens > prompt.len) {
+            fprintf(stderr,
+                    "ds4: prefill oracle limit %d exceeds prompt token count %d\n",
+                    limit_tokens,
+                    prompt.len);
+            ok = false;
+            goto done;
+        }
+        prompt.len = limit_tokens;
+    }
     if (ds4_session_create(&s, e, ctx_size) != 0 || !s) {
         ok = false;
         goto done;
@@ -25564,17 +25576,19 @@ int ds4_dump_prefill_whole_short_oracle_json(
     }
     const char *boundary =
         prompt.len > (int)s->prefill_cap ? "metal_graph_prefill_chunked_range" : "metal_graph_prefill_layer_major";
-    if (strcmp(boundary, "metal_graph_prefill_layer_major") != 0) {
-        fprintf(stderr, "ds4: whole-prefill short prompt unexpectedly crossed prefill cap\n");
-        ok = false;
-        goto done;
-    }
+    const bool chunked = strcmp(boundary, "metal_graph_prefill_chunked_range") == 0;
 
     const uint32_t prompt_tokens = (uint32_t)prompt.len;
-    const uint32_t output_row = prompt_tokens - 1u;
-    const uint32_t raw_row = output_row % s->graph.raw_cap;
-    const uint32_t n_raw = prompt_tokens < s->graph.raw_window ? prompt_tokens : s->graph.raw_window;
-    const uint32_t raw_start = 0;
+    const uint32_t output_abs_pos = prompt_tokens - 1u;
+    const uint32_t output_row = chunked && s->graph.prefill_cap != 0
+        ? output_abs_pos % s->graph.prefill_cap
+        : output_abs_pos;
+    const uint32_t raw_row = output_abs_pos % s->graph.raw_cap;
+    const uint32_t n_raw = metal_graph_raw_span_for_batch(&s->graph, output_abs_pos, 1);
+    const uint32_t raw_start = metal_graph_raw_start_for_span(&s->graph, output_abs_pos, n_raw);
+    const uint32_t chunk_count = chunked && s->graph.prefill_cap != 0
+        ? (prompt_tokens + s->graph.prefill_cap - 1u) / s->graph.prefill_cap
+        : 1u;
     const uint32_t layer2 = 2;
     const uint32_t layer5 = 5;
     const uint32_t layer42 = 42;
@@ -25660,8 +25674,17 @@ int ds4_dump_prefill_whole_short_oracle_json(
     }
 
     fputs("{\n", fp);
-    fputs("  \"schema\": \"ds4.prefill_whole_short_oracle.v1\",\n", fp);
-    fputs("  \"case\": \"short_italian_fact_whole_prefill\",\n", fp);
+    if (chunked) {
+        fputs("  \"schema\": \"ds4.prefill_chunked_oracle.v1\",\n", fp);
+        if (prompt_tokens == 2052u) {
+            fputs("  \"case\": \"long_memory_archive_2052_chunked_prefill\",\n", fp);
+        } else {
+            fputs("  \"case\": \"long_memory_archive_chunked_prefill\",\n", fp);
+        }
+    } else {
+        fputs("  \"schema\": \"ds4.prefill_whole_short_oracle.v1\",\n", fp);
+        fputs("  \"case\": \"short_italian_fact_whole_prefill\",\n", fp);
+    }
     fputs("  \"source\": \"current-c\",\n", fp);
     fputs("  \"model\": {\n", fp);
     fprintf(fp, "    \"mapped_size\": %" PRIu64 ",\n", e->model.size);
@@ -25670,11 +25693,37 @@ int ds4_dump_prefill_whole_short_oracle_json(
     fputs("    \"bound_layers\": 43\n", fp);
     fputs("  },\n", fp);
     fputs("  \"operation\": {\n", fp);
-    fputs("    \"name\": \"current_c_gpu_prefill_whole_short\",\n", fp);
-    fputs("    \"method\": \"metal_graph_prefill_layer_major+metal_graph_encode_layer_batch_x43+final_row_output_head\",\n", fp);
-    fputs("    \"boundary\": \"whole_prefill\",\n", fp);
-    fputs("    \"fixture\": \"short_italian_fact\",\n", fp);
+    if (chunked) {
+        fputs("    \"name\": \"current_c_gpu_prefill_chunked\",\n", fp);
+        fputs("    \"method\": \"metal_graph_prefill_chunked_range+metal_graph_encode_layer_batch_x43+final_row_output_head\",\n", fp);
+        fputs("    \"boundary\": \"chunked_prefill\",\n", fp);
+        if (prompt_tokens == 2052u) {
+            fputs("    \"fixture\": \"long_memory_archive_2052\",\n", fp);
+        } else {
+            fputs("    \"fixture\": \"long_memory_archive\",\n", fp);
+        }
+        fprintf(fp, "    \"chunk_count\": %u,\n", chunk_count);
+        fputs("    \"chunks\": [", fp);
+        for (uint32_t i = 0; i < chunk_count; i++) {
+            const uint32_t start = i * s->graph.prefill_cap;
+            uint32_t n_chunk = s->graph.prefill_cap;
+            if (start + n_chunk > prompt_tokens) n_chunk = prompt_tokens - start;
+            if (i != 0) fputc(',', fp);
+            fprintf(fp,
+                    "{\"start\":%u,\"n_tokens\":%u,\"end\":%u}",
+                    start,
+                    n_chunk,
+                    start + n_chunk);
+        }
+        fputs("],\n", fp);
+    } else {
+        fputs("    \"name\": \"current_c_gpu_prefill_whole_short\",\n", fp);
+        fputs("    \"method\": \"metal_graph_prefill_layer_major+metal_graph_encode_layer_batch_x43+final_row_output_head\",\n", fp);
+        fputs("    \"boundary\": \"whole_prefill\",\n", fp);
+        fputs("    \"fixture\": \"short_italian_fact\",\n", fp);
+    }
     fprintf(fp, "    \"prompt_tokens\": %u,\n", prompt_tokens);
+    fprintf(fp, "    \"output_abs_pos\": %u,\n", output_abs_pos);
     fprintf(fp, "    \"output_row\": %u,\n", output_row);
     fputs("    \"first_layer\": 0,\n", fp);
     fputs("    \"last_layer\": 42,\n", fp);
@@ -25774,10 +25823,12 @@ int ds4_dump_graph_checkpoint_oracle_json(const ds4_graph_checkpoint_options *op
 int ds4_dump_prefill_whole_short_oracle_json(
         const char *model_path,
         const char *prompt_path,
+        int limit_tokens,
         ds4_backend backend,
         FILE *fp) {
     (void)model_path;
     (void)prompt_path;
+    (void)limit_tokens;
     (void)backend;
     (void)fp;
     fprintf(stderr, "ds4: whole-prefill short oracle requires a graph backend build\n");

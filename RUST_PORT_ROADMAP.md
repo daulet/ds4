@@ -4306,17 +4306,26 @@ prefill each have different C routing and failure boundaries.
   `metal_graph_prefill_chunked_range` with `start=0`.
 - Fixture: a 2052-token cap-crossing prompt and a longer context slice that
   emits multiple chunk boundaries.
-- Comparator: Rust-vs-C chunk boundary trace, progress points, selected
-  per-chunk logits, final logits, raw ring rows, and compressed counters.
+- Comparator: Rust-vs-live-current-C chunk boundary trace, progress-equivalent
+  chunk endpoints, final logits, raw ring rows, compressed counters, and output
+  digests/samples captured with deterministic CUDA MoE down projection
+  (`DS4_CUDA_MOE_NO_ATOMIC_DOWN=1` on B300).
 - Acceptance: Rust cold chunked prefill matches current-C chunk schedule and
   final cache/logit state.
 - Drift policy: chunk starts/sizes, final batch row, progress positions, raw
-  ring mapping, compressed counters, and selected logits are exact within
-  M10.4 tolerances.
+  ring mapping, compressed counters, and output digests are exact against the
+  same-run current-C oracle; optimized CUDA MoE atomic-down output is treated as
+  nondeterministic and excluded from exact comparison.
 - Review gate: ask Claude to review chunk loop state and final-row handling.
 - Validation gate: targeted B300 comparator, `cargo test --workspace`, `cargo
   fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
   with no blockers.
+- Evidence: implemented cold chunked prefill in the Rust
+  `ds4-prefill-whole-short` candidate and same-run current-C oracle coverage
+  for 2052-token and full long prompt fixtures. B300 current-C vs Rust
+  comparator passed 400 checks for each fixture with deterministic CUDA MoE
+  down projection enabled, covering chunk schedule, output rows, raw-ring rows,
+  compressed/index counters, output digests, and sampled logits.
 
 ##### M10.6d: Rust Resumed-Suffix Prefill Execution
 

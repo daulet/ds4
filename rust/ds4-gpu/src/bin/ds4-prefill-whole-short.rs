@@ -4,6 +4,7 @@ use ds4_gguf::{
     TensorInfo, ThinkMode,
 };
 use ds4_gpu::decode_backend::{set_model_fd, set_model_map_range, DecodeBackend, ModelMap};
+use ds4_gpu::decode_plan::{raw_row, raw_span_for_batch, raw_start_for_span};
 use ds4_gpu::graph_plan::{
     layer_compression, GraphPlan, LayerCompression, HC_EPS, N_EMBD, N_EXPERT, N_EXPERT_USED,
     N_FF_EXP, N_HC, N_HC_SINKHORN_ITER, N_HEAD, N_HEAD_DIM, N_HEAD_KV, N_INDEXER_HEAD,
@@ -18,9 +19,14 @@ use std::os::raw::c_int;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 
-const SCHEMA: &str = "ds4.prefill_whole_short.v1";
-const CASE: &str = "short_italian_fact_whole_prefill";
-const FIXTURE: &str = "short_italian_fact";
+const WHOLE_SHORT_SCHEMA: &str = "ds4.prefill_whole_short.v1";
+const WHOLE_SHORT_CASE: &str = "short_italian_fact_whole_prefill";
+const WHOLE_SHORT_FIXTURE: &str = "short_italian_fact";
+const CHUNKED_SCHEMA: &str = "ds4.prefill_chunked.v1";
+const CHUNKED_2052_CASE: &str = "long_memory_archive_2052_chunked_prefill";
+const CHUNKED_FULL_CASE: &str = "long_memory_archive_chunked_prefill";
+const CHUNKED_2052_FIXTURE: &str = "long_memory_archive_2052";
+const CHUNKED_FULL_FIXTURE: &str = "long_memory_archive";
 const CTX_SIZE: u32 = 32_768;
 const LAYER42: usize = 42;
 const PROT_READ: c_int = 0x1;
@@ -58,7 +64,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (gguf, header_bytes_read) = parse_header_prefix(&args.model)?;
     let weights = bind_ds4_weights(&gguf)?;
     let mapped = MappedModel::open(&args.model)?;
-    let tokens = load_prompt_tokens(&gguf, &args.prompt)?;
+    let mut tokens = load_prompt_tokens(&gguf, &args.prompt)?;
+    if let Some(limit) = args.limit_tokens {
+        let limit = usize::try_from(limit)?;
+        if limit == 0 {
+            return Err("--limit-tokens must be greater than zero".into());
+        }
+        if limit > tokens.len() {
+            return Err(format!(
+                "--limit-tokens {limit} exceeds prompt token count {}",
+                tokens.len()
+            )
+            .into());
+        }
+        tokens.truncate(limit);
+    }
     let prompt_tokens = u32::try_from(tokens.len())?;
     if prompt_tokens == 0 {
         return Err("prompt tokenization produced no tokens".into());
@@ -78,22 +98,29 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let backend = DecodeBackend::new(model);
 
     let plan = GraphPlan::for_context(CTX_SIZE, CTX_SIZE, false);
-    if prompt_tokens > plan.prefill_cap {
-        return Err(format!(
-            "prompt has {prompt_tokens} tokens, which exceeds prefill cap {}",
-            plan.prefill_cap
-        )
-        .into());
-    }
+    let chunks = prefill_chunks(prompt_tokens, plan.prefill_cap)?;
+    let last_chunk = chunks.last().ok_or("empty prefill chunk plan")?;
     let raw_cap = plan.allocated_raw_cap;
     let raw_window = plan.raw_window;
-    let output_row = prompt_tokens - 1;
-    let final_raw_row = output_row % raw_cap;
-    let final_n_raw = prompt_tokens.min(plan.raw_window);
-    let final_raw_start = 0;
+    let output_abs_pos = prompt_tokens - 1;
+    let output_row = last_chunk.n_tokens - 1;
+    let final_raw_row = raw_row(output_abs_pos, raw_cap);
+    let final_n_raw = raw_span_for_batch(raw_window, raw_cap, output_abs_pos, 1);
+    let final_raw_start = raw_start_for_span(output_abs_pos, final_n_raw, raw_cap);
+    let report_case = report_case(prompt_tokens, chunks.len());
+    let report_fixture = report_fixture(prompt_tokens, chunks.len());
+    let report_schema = if chunks.len() == 1 {
+        WHOLE_SHORT_SCHEMA
+    } else {
+        CHUNKED_SCHEMA
+    };
+    let report_boundary = if chunks.len() == 1 {
+        "whole_prefill"
+    } else {
+        "chunked_prefill"
+    };
     let dims = Dims::new(&weights.layers[0])?;
     let mut state = DecodeState::allocate(plan, dims)?;
-    write_prefill_tokens(&mut state.prefill_tokens, &tokens)?;
     let mut after_layer42_hc = Tensor::allocate(byte_len(dims.hc_dim)?)
         .map_err(|err| format!("failed to allocate after_layer42_hc: {err}"))?;
     let mut output_pre = Tensor::allocate(byte_len(u64::from(N_HC))?)
@@ -120,40 +147,46 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|err| format!("failed to allocate layer42_index_comp_row: {err}"))?;
 
     let mut command_batch = CommandBatch::begin().map_err(|err| format!("begin failed: {err}"))?;
-    backend
-        .embed_tokens_hc(
-            state.cur_hc.as_tensor_mut(),
-            state.prefill_tokens.as_tensor_ref(),
-            weights.token_embd.abs_offset,
-            N_VOCAB,
-            prompt_tokens,
-            N_EMBD,
-            N_HC,
-        )
-        .map_err(|err| format!("embed_tokens_hc failed: {err}"))?;
-    for layer in 0..N_LAYER {
-        execute_prefill_layer(
-            backend,
-            &weights.layers[layer],
-            layer,
-            prompt_tokens,
-            raw_cap,
-            raw_window,
-            &mut state,
-            dims,
-        )?;
-        std::mem::swap(&mut state.cur_hc, &mut state.after_ffn_hc);
-        if layer == LAYER42 {
-            let hc_row_bytes = byte_len(dims.hc_dim)?;
-            after_layer42_hc
-                .copy_from(
-                    &state.cur_hc,
-                    0,
-                    u64::from(output_row) * hc_row_bytes as u64,
-                    hc_row_bytes,
-                    &mut command_batch,
-                )
-                .map_err(|err| format!("after_layer42_hc copy failed: {err}"))?;
+    for (chunk_idx, chunk) in chunks.iter().enumerate() {
+        let start = usize::try_from(chunk.start)?;
+        let end = usize::try_from(chunk.start + chunk.n_tokens)?;
+        write_prefill_tokens(&mut state.prefill_tokens, &tokens[start..end])?;
+        backend
+            .embed_tokens_hc(
+                state.cur_hc.as_tensor_mut(),
+                state.prefill_tokens.as_tensor_ref(),
+                weights.token_embd.abs_offset,
+                N_VOCAB,
+                chunk.n_tokens,
+                N_EMBD,
+                N_HC,
+            )
+            .map_err(|err| format!("chunk{chunk_idx} embed_tokens_hc failed: {err}"))?;
+        for layer in 0..N_LAYER {
+            execute_prefill_layer(
+                backend,
+                &weights.layers[layer],
+                layer,
+                chunk.start,
+                chunk.n_tokens,
+                raw_cap,
+                raw_window,
+                &mut state,
+                dims,
+            )?;
+            std::mem::swap(&mut state.cur_hc, &mut state.after_ffn_hc);
+            if chunk_idx + 1 == chunks.len() && layer == LAYER42 {
+                let hc_row_bytes = byte_len(dims.hc_dim)?;
+                after_layer42_hc
+                    .copy_from(
+                        &state.cur_hc,
+                        0,
+                        u64::from(output_row) * hc_row_bytes as u64,
+                        hc_row_bytes,
+                        &mut command_batch,
+                    )
+                    .map_err(|err| format!("after_layer42_hc copy failed: {err}"))?;
+            }
         }
     }
     encode_output_head(
@@ -170,7 +203,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     copy_cache_checkpoints(
         &state,
-        output_row,
+        final_raw_row,
         &mut layer2_raw_cache_row,
         &mut layer2_attn_comp_row,
         &mut layer2_index_comp_row,
@@ -252,12 +285,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     write_report(
+        report_schema,
+        report_case,
+        report_fixture,
+        report_boundary,
         &gguf,
         &weights,
         header_bytes_read,
         mapped.size,
         plan,
+        &chunks,
         prompt_tokens,
+        output_abs_pos,
         output_row,
         final_raw_row,
         final_n_raw,
@@ -267,6 +306,56 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         &outputs,
     );
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct PrefillChunk {
+    start: u32,
+    n_tokens: u32,
+}
+
+fn prefill_chunks(
+    prompt_tokens: u32,
+    prefill_cap: u32,
+) -> Result<Vec<PrefillChunk>, Box<dyn std::error::Error>> {
+    if prompt_tokens == 0 {
+        return Err("prefill chunk plan requires tokens".into());
+    }
+    if prefill_cap == 0 {
+        return Err("prefill chunk plan requires nonzero prefill cap".into());
+    }
+    let mut chunks = Vec::new();
+    let mut pos = 0u32;
+    while pos < prompt_tokens {
+        let remaining = prompt_tokens - pos;
+        let n_tokens = remaining.min(prefill_cap);
+        chunks.push(PrefillChunk {
+            start: pos,
+            n_tokens,
+        });
+        pos += n_tokens;
+    }
+    Ok(chunks)
+}
+
+fn report_case(prompt_tokens: u32, n_chunks: usize) -> &'static str {
+    if n_chunks == 1 {
+        WHOLE_SHORT_CASE
+    } else if prompt_tokens == 2052 {
+        CHUNKED_2052_CASE
+    } else {
+        CHUNKED_FULL_CASE
+    }
+}
+
+fn report_fixture(prompt_tokens: u32, n_chunks: usize) -> &'static str {
+    if n_chunks == 1 {
+        WHOLE_SHORT_FIXTURE
+    } else if prompt_tokens == 2052 {
+        CHUNKED_2052_FIXTURE
+    } else {
+        CHUNKED_FULL_FIXTURE
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -350,7 +439,7 @@ fn encode_output_head(
 #[allow(clippy::too_many_arguments)]
 fn copy_cache_checkpoints(
     state: &DecodeState,
-    output_row: u32,
+    raw_row: u32,
     layer2_raw_cache_row: &mut Tensor,
     layer2_attn_comp_row: &mut Tensor,
     layer2_index_comp_row: &mut Tensor,
@@ -365,7 +454,7 @@ fn copy_cache_checkpoints(
     let layer42_comp_row = state.layer_n_comp[42]
         .checked_sub(1)
         .ok_or("layer42 emitted no compressed rows")?;
-    let raw_offset = u64::from(output_row) * u64::from(N_HEAD_DIM) * 4;
+    let raw_offset = u64::from(raw_row) * u64::from(N_HEAD_DIM) * 4;
     let layer2_attn_comp_offset = u64::from(layer2_comp_row) * u64::from(N_HEAD_DIM) * 4;
     let layer2_index_comp_offset = u64::from(layer2_comp_row) * u64::from(N_INDEXER_HEAD_DIM) * 4;
     let layer42_attn_comp_offset = u64::from(layer42_comp_row) * u64::from(N_HEAD_DIM) * 4;
@@ -436,6 +525,7 @@ fn execute_prefill_layer(
     backend: DecodeBackend<'_>,
     layer_weights: &Ds4LayerWeights,
     layer: usize,
+    pos0: u32,
     n_tokens: u32,
     raw_cap: u32,
     raw_window: u32,
@@ -581,7 +671,7 @@ fn execute_prefill_layer(
                 N_HEAD,
                 N_HEAD_DIM,
                 N_ROT,
-                0,
+                pos0,
                 n_ctx_orig,
                 false,
                 freq_base,
@@ -599,7 +689,7 @@ fn execute_prefill_layer(
                 N_HEAD_KV,
                 N_HEAD_DIM,
                 N_ROT,
-                0,
+                pos0,
                 n_ctx_orig,
                 false,
                 freq_base,
@@ -618,12 +708,13 @@ fn execute_prefill_layer(
                 state.raw_cache[layer].as_tensor_mut(),
                 state.kv.as_tensor_ref(),
                 raw_cap,
-                0,
+                pos0,
                 n_tokens,
                 N_HEAD_DIM,
             )
             .map_err(|err| format!("layer{layer} store_raw_kv_batch failed: {err}"))?;
 
+        let zero_prefix = pos0 == 0;
         let mut n_comp = 0u32;
         if compressed {
             let ratio = compression.ratio();
@@ -657,62 +748,159 @@ fn execute_prefill_layer(
                     u64::from(n_tokens),
                 )
                 .map_err(|err| format!("layer{layer} attention compressor score failed: {err}"))?;
-            n_comp = n_tokens / ratio;
-            backend
-                .compressor_prefill(
-                    state.layer_attn_comp_cache[layer]
-                        .as_mut()
-                        .ok_or("attn comp cache missing")?
-                        .as_tensor_mut(),
-                    state.layer_attn_state_kv[layer]
-                        .as_mut()
-                        .ok_or("attn state kv missing")?
-                        .as_tensor_mut(),
-                    state.layer_attn_state_score[layer]
-                        .as_mut()
-                        .ok_or("attn state score missing")?
-                        .as_tensor_mut(),
-                    state.comp_kv_cur.as_tensor_ref(),
-                    state.comp_sc_cur.as_tensor_ref(),
-                    layer_weights
-                        .attn_compressor_ape
-                        .as_ref()
-                        .ok_or("attn_compressor_ape missing")?
-                        .abs_offset,
-                    layer_weights
-                        .attn_compressor_ape
-                        .as_ref()
-                        .ok_or("attn_compressor_ape missing")?
-                        .type_id,
-                    layer_weights
-                        .attn_compressor_norm
-                        .as_ref()
-                        .ok_or("attn_compressor_norm missing")?
-                        .abs_offset,
-                    layer_weights
-                        .attn_compressor_norm
-                        .as_ref()
-                        .ok_or("attn_compressor_norm missing")?
-                        .type_id,
-                    N_HEAD_DIM,
-                    ratio,
-                    0,
-                    n_tokens,
-                    N_ROT,
-                    n_ctx_orig,
-                    true,
-                    freq_base,
-                    freq_scale,
-                    ext_factor,
-                    attn_factor,
-                    ROPE_YARN_BETA_FAST,
-                    ROPE_YARN_BETA_SLOW,
-                    RMS_EPS,
-                )
-                .map_err(|err| {
-                    format!("layer{layer} attention compressor_prefill failed: {err}")
-                })?;
-            if compression == LayerCompression::Ratio4 {
+
+            if zero_prefix {
+                n_comp = n_tokens / ratio;
+                backend
+                    .compressor_prefill(
+                        state.layer_attn_comp_cache[layer]
+                            .as_mut()
+                            .ok_or("attn comp cache missing")?
+                            .as_tensor_mut(),
+                        state.layer_attn_state_kv[layer]
+                            .as_mut()
+                            .ok_or("attn state kv missing")?
+                            .as_tensor_mut(),
+                        state.layer_attn_state_score[layer]
+                            .as_mut()
+                            .ok_or("attn state score missing")?
+                            .as_tensor_mut(),
+                        state.comp_kv_cur.as_tensor_ref(),
+                        state.comp_sc_cur.as_tensor_ref(),
+                        layer_weights
+                            .attn_compressor_ape
+                            .as_ref()
+                            .ok_or("attn_compressor_ape missing")?
+                            .abs_offset,
+                        layer_weights
+                            .attn_compressor_ape
+                            .as_ref()
+                            .ok_or("attn_compressor_ape missing")?
+                            .type_id,
+                        layer_weights
+                            .attn_compressor_norm
+                            .as_ref()
+                            .ok_or("attn_compressor_norm missing")?
+                            .abs_offset,
+                        layer_weights
+                            .attn_compressor_norm
+                            .as_ref()
+                            .ok_or("attn_compressor_norm missing")?
+                            .type_id,
+                        N_HEAD_DIM,
+                        ratio,
+                        pos0,
+                        n_tokens,
+                        N_ROT,
+                        n_ctx_orig,
+                        true,
+                        freq_base,
+                        freq_scale,
+                        ext_factor,
+                        attn_factor,
+                        ROPE_YARN_BETA_FAST,
+                        ROPE_YARN_BETA_SLOW,
+                        RMS_EPS,
+                    )
+                    .map_err(|err| {
+                        format!("layer{layer} attention compressor_prefill failed: {err}")
+                    })?;
+                if compression == LayerCompression::Ratio4 {
+                    refresh_ratio4_compressor_state(
+                        backend,
+                        layer_weights
+                            .attn_compressor_kv
+                            .as_ref()
+                            .ok_or("attn_compressor_kv missing")?,
+                        layer_weights
+                            .attn_compressor_gate
+                            .as_ref()
+                            .ok_or("attn_compressor_gate missing")?,
+                        layer_weights
+                            .attn_compressor_ape
+                            .as_ref()
+                            .ok_or("attn_compressor_ape missing")?,
+                        N_HEAD_DIM,
+                        comp_width,
+                        pos0,
+                        n_tokens,
+                        &mut state.attn_norm,
+                        &mut state.comp_kv_cur,
+                        &mut state.comp_sc_cur,
+                        state.layer_attn_state_kv[layer]
+                            .as_mut()
+                            .ok_or("attn state kv missing")?,
+                        state.layer_attn_state_score[layer]
+                            .as_mut()
+                            .ok_or("attn state score missing")?,
+                    )?;
+                }
+                state.layer_n_comp[layer] = n_comp;
+            } else if compression == LayerCompression::Ratio4
+                && pos0 % ratio == 0
+                && n_tokens % ratio == 0
+            {
+                let comp_before = state.layer_n_comp[layer];
+                let comp_chunk = n_tokens / ratio;
+                let mut comp_view = state.layer_attn_comp_cache[layer]
+                    .as_mut()
+                    .ok_or("attn comp cache missing")?
+                    .view(
+                        u64::from(comp_before) * u64::from(N_HEAD_DIM) * 4,
+                        byte_len(u64::from(comp_chunk) * u64::from(N_HEAD_DIM))?,
+                    )
+                    .map_err(|err| format!("layer{layer} attn comp chunk view failed: {err}"))?;
+                backend
+                    .compressor_prefill_ratio4_replay(
+                        comp_view.as_tensor_mut(),
+                        state.layer_attn_state_kv[layer]
+                            .as_mut()
+                            .ok_or("attn state kv missing")?
+                            .as_tensor_mut(),
+                        state.layer_attn_state_score[layer]
+                            .as_mut()
+                            .ok_or("attn state score missing")?
+                            .as_tensor_mut(),
+                        state.comp_kv_cur.as_tensor_ref(),
+                        state.comp_sc_cur.as_tensor_ref(),
+                        layer_weights
+                            .attn_compressor_ape
+                            .as_ref()
+                            .ok_or("attn_compressor_ape missing")?
+                            .abs_offset,
+                        layer_weights
+                            .attn_compressor_ape
+                            .as_ref()
+                            .ok_or("attn_compressor_ape missing")?
+                            .type_id,
+                        layer_weights
+                            .attn_compressor_norm
+                            .as_ref()
+                            .ok_or("attn_compressor_norm missing")?
+                            .abs_offset,
+                        layer_weights
+                            .attn_compressor_norm
+                            .as_ref()
+                            .ok_or("attn_compressor_norm missing")?
+                            .type_id,
+                        N_HEAD_DIM,
+                        pos0,
+                        n_tokens,
+                        N_ROT,
+                        n_ctx_orig,
+                        true,
+                        freq_base,
+                        freq_scale,
+                        ext_factor,
+                        attn_factor,
+                        ROPE_YARN_BETA_FAST,
+                        ROPE_YARN_BETA_SLOW,
+                        RMS_EPS,
+                    )
+                    .map_err(|err| {
+                        format!("layer{layer} attention compressor replay failed: {err}")
+                    })?;
+                drop(comp_view);
                 refresh_ratio4_compressor_state(
                     backend,
                     layer_weights
@@ -729,6 +917,7 @@ fn execute_prefill_layer(
                         .ok_or("attn_compressor_ape missing")?,
                     N_HEAD_DIM,
                     comp_width,
+                    pos0,
                     n_tokens,
                     &mut state.attn_norm,
                     &mut state.comp_kv_cur,
@@ -740,8 +929,108 @@ fn execute_prefill_layer(
                         .as_mut()
                         .ok_or("attn state score missing")?,
                 )?;
+                state.layer_n_comp[layer] = comp_before + comp_chunk;
+                n_comp = state.layer_n_comp[layer];
+            } else {
+                for t in 0..n_tokens {
+                    let pos = pos0 + t;
+                    let emit = (pos + 1) % ratio == 0;
+                    let comp_row = state.layer_n_comp[layer];
+                    let row_offset = u64::from(t) * u64::from(comp_width) * 4;
+                    let row_bytes = byte_len(u64::from(comp_width))?;
+                    let kv_view = state
+                        .comp_kv_cur
+                        .view(row_offset, row_bytes)
+                        .map_err(|err| {
+                            format!("layer{layer} attn comp kv row view failed: {err}")
+                        })?;
+                    let sc_view = state
+                        .comp_sc_cur
+                        .view(row_offset, row_bytes)
+                        .map_err(|err| {
+                            format!("layer{layer} attn comp score row view failed: {err}")
+                        })?;
+                    backend
+                        .compressor_update(
+                            kv_view.as_tensor_ref(),
+                            sc_view.as_tensor_ref(),
+                            state.layer_attn_state_kv[layer]
+                                .as_mut()
+                                .ok_or("attn state kv missing")?
+                                .as_tensor_mut(),
+                            state.layer_attn_state_score[layer]
+                                .as_mut()
+                                .ok_or("attn state score missing")?
+                                .as_tensor_mut(),
+                            state.layer_attn_comp_cache[layer]
+                                .as_mut()
+                                .ok_or("attn comp cache missing")?
+                                .as_tensor_mut(),
+                            layer_weights
+                                .attn_compressor_ape
+                                .as_ref()
+                                .ok_or("attn_compressor_ape missing")?
+                                .abs_offset,
+                            layer_weights
+                                .attn_compressor_ape
+                                .as_ref()
+                                .ok_or("attn_compressor_ape missing")?
+                                .type_id,
+                            layer_weights
+                                .attn_compressor_norm
+                                .as_ref()
+                                .ok_or("attn_compressor_norm missing")?
+                                .abs_offset,
+                            layer_weights
+                                .attn_compressor_norm
+                                .as_ref()
+                                .ok_or("attn_compressor_norm missing")?
+                                .type_id,
+                            N_HEAD_DIM,
+                            ratio,
+                            pos,
+                            comp_row,
+                            N_ROT,
+                            n_ctx_orig,
+                            freq_base,
+                            freq_scale,
+                            ext_factor,
+                            attn_factor,
+                            ROPE_YARN_BETA_FAST,
+                            ROPE_YARN_BETA_SLOW,
+                            RMS_EPS,
+                        )
+                        .map_err(|err| {
+                            format!("layer{layer} attention compressor_update failed: {err}")
+                        })?;
+                    drop(sc_view);
+                    drop(kv_view);
+                    if emit {
+                        let mut comp_row_view = state.layer_attn_comp_cache[layer]
+                            .as_mut()
+                            .ok_or("attn comp cache missing")?
+                            .view(
+                                u64::from(comp_row) * u64::from(N_HEAD_DIM) * 4,
+                                byte_len(u64::from(N_HEAD_DIM))?,
+                            )
+                            .map_err(|err| {
+                                format!("layer{layer} attn comp row view failed: {err}")
+                            })?;
+                        backend
+                            .dsv4_fp8_kv_quantize(
+                                comp_row_view.as_tensor_mut(),
+                                1,
+                                N_HEAD_DIM,
+                                N_ROT,
+                            )
+                            .map_err(|err| {
+                                format!("layer{layer} attn comp row quantize failed: {err}")
+                            })?;
+                        state.layer_n_comp[layer] += 1;
+                    }
+                }
+                n_comp = state.layer_n_comp[layer];
             }
-            state.layer_n_comp[layer] = n_comp;
 
             if compression == LayerCompression::Ratio4 {
                 let index_width = coeff * N_INDEXER_HEAD_DIM;
@@ -796,7 +1085,7 @@ fn execute_prefill_layer(
                         N_INDEXER_HEAD,
                         N_INDEXER_HEAD_DIM,
                         N_ROT,
-                        0,
+                        pos0,
                         n_ctx_orig,
                         false,
                         freq_base,
@@ -828,125 +1117,428 @@ fn execute_prefill_layer(
                         u64::from(n_tokens),
                     )
                     .map_err(|err| format!("layer{layer} indexer weights failed: {err}"))?;
-                backend
-                    .compressor_prefill(
-                        state.layer_index_comp_cache[layer]
-                            .as_mut()
-                            .ok_or("index comp cache missing")?
-                            .as_tensor_mut(),
-                        state.layer_index_state_kv[layer]
-                            .as_mut()
-                            .ok_or("index state kv missing")?
-                            .as_tensor_mut(),
-                        state.layer_index_state_score[layer]
-                            .as_mut()
-                            .ok_or("index state score missing")?
-                            .as_tensor_mut(),
-                        state.comp_kv_cur.as_tensor_ref(),
-                        state.comp_sc_cur.as_tensor_ref(),
-                        layer_weights
-                            .indexer_compressor_ape
-                            .as_ref()
-                            .ok_or("indexer_compressor_ape missing")?
-                            .abs_offset,
-                        layer_weights
-                            .indexer_compressor_ape
-                            .as_ref()
-                            .ok_or("indexer_compressor_ape missing")?
-                            .type_id,
-                        layer_weights
-                            .indexer_compressor_norm
-                            .as_ref()
-                            .ok_or("indexer_compressor_norm missing")?
-                            .abs_offset,
-                        layer_weights
-                            .indexer_compressor_norm
-                            .as_ref()
-                            .ok_or("indexer_compressor_norm missing")?
-                            .type_id,
-                        N_INDEXER_HEAD_DIM,
-                        ratio,
-                        0,
-                        n_tokens,
-                        N_ROT,
-                        n_ctx_orig,
-                        false,
-                        freq_base,
-                        freq_scale,
-                        ext_factor,
-                        attn_factor,
-                        ROPE_YARN_BETA_FAST,
-                        ROPE_YARN_BETA_SLOW,
-                        RMS_EPS,
-                    )
-                    .map_err(|err| {
-                        format!("layer{layer} index compressor_prefill failed: {err}")
-                    })?;
-                if n_comp != 0 {
+                if zero_prefix {
                     backend
-                        .dsv4_indexer_qat(
+                        .compressor_prefill(
                             state.layer_index_comp_cache[layer]
                                 .as_mut()
                                 .ok_or("index comp cache missing")?
                                 .as_tensor_mut(),
-                            n_comp,
+                            state.layer_index_state_kv[layer]
+                                .as_mut()
+                                .ok_or("index state kv missing")?
+                                .as_tensor_mut(),
+                            state.layer_index_state_score[layer]
+                                .as_mut()
+                                .ok_or("index state score missing")?
+                                .as_tensor_mut(),
+                            state.comp_kv_cur.as_tensor_ref(),
+                            state.comp_sc_cur.as_tensor_ref(),
+                            layer_weights
+                                .indexer_compressor_ape
+                                .as_ref()
+                                .ok_or("indexer_compressor_ape missing")?
+                                .abs_offset,
+                            layer_weights
+                                .indexer_compressor_ape
+                                .as_ref()
+                                .ok_or("indexer_compressor_ape missing")?
+                                .type_id,
+                            layer_weights
+                                .indexer_compressor_norm
+                                .as_ref()
+                                .ok_or("indexer_compressor_norm missing")?
+                                .abs_offset,
+                            layer_weights
+                                .indexer_compressor_norm
+                                .as_ref()
+                                .ok_or("indexer_compressor_norm missing")?
+                                .type_id,
                             N_INDEXER_HEAD_DIM,
+                            ratio,
+                            pos0,
+                            n_tokens,
+                            N_ROT,
+                            n_ctx_orig,
+                            false,
+                            freq_base,
+                            freq_scale,
+                            ext_factor,
+                            attn_factor,
+                            ROPE_YARN_BETA_FAST,
+                            ROPE_YARN_BETA_SLOW,
+                            RMS_EPS,
                         )
-                        .map_err(|err| format!("layer{layer} index comp qat failed: {err}"))?;
+                        .map_err(|err| {
+                            format!("layer{layer} index compressor_prefill failed: {err}")
+                        })?;
+                    if n_comp != 0 {
+                        backend
+                            .dsv4_indexer_qat(
+                                state.layer_index_comp_cache[layer]
+                                    .as_mut()
+                                    .ok_or("index comp cache missing")?
+                                    .as_tensor_mut(),
+                                n_comp,
+                                N_INDEXER_HEAD_DIM,
+                            )
+                            .map_err(|err| format!("layer{layer} index comp qat failed: {err}"))?;
+                    }
+                    refresh_ratio4_compressor_state(
+                        backend,
+                        layer_weights
+                            .indexer_compressor_kv
+                            .as_ref()
+                            .ok_or("indexer_compressor_kv missing")?,
+                        layer_weights
+                            .indexer_compressor_gate
+                            .as_ref()
+                            .ok_or("indexer_compressor_gate missing")?,
+                        layer_weights
+                            .indexer_compressor_ape
+                            .as_ref()
+                            .ok_or("indexer_compressor_ape missing")?,
+                        N_INDEXER_HEAD_DIM,
+                        index_width,
+                        pos0,
+                        n_tokens,
+                        &mut state.attn_norm,
+                        &mut state.comp_kv_cur,
+                        &mut state.comp_sc_cur,
+                        state.layer_index_state_kv[layer]
+                            .as_mut()
+                            .ok_or("index state kv missing")?,
+                        state.layer_index_state_score[layer]
+                            .as_mut()
+                            .ok_or("index state score missing")?,
+                    )?;
+                    state.layer_n_index_comp[layer] = n_comp;
+                } else if pos0 % ratio == 0 && n_tokens % ratio == 0 {
+                    let index_before = state.layer_n_index_comp[layer];
+                    let index_chunk = n_tokens / ratio;
+                    let mut index_view = state.layer_index_comp_cache[layer]
+                        .as_mut()
+                        .ok_or("index comp cache missing")?
+                        .view(
+                            u64::from(index_before) * u64::from(N_INDEXER_HEAD_DIM) * 4,
+                            byte_len(u64::from(index_chunk) * u64::from(N_INDEXER_HEAD_DIM))?,
+                        )
+                        .map_err(|err| {
+                            format!("layer{layer} index comp chunk view failed: {err}")
+                        })?;
+                    backend
+                        .compressor_prefill_ratio4_replay(
+                            index_view.as_tensor_mut(),
+                            state.layer_index_state_kv[layer]
+                                .as_mut()
+                                .ok_or("index state kv missing")?
+                                .as_tensor_mut(),
+                            state.layer_index_state_score[layer]
+                                .as_mut()
+                                .ok_or("index state score missing")?
+                                .as_tensor_mut(),
+                            state.comp_kv_cur.as_tensor_ref(),
+                            state.comp_sc_cur.as_tensor_ref(),
+                            layer_weights
+                                .indexer_compressor_ape
+                                .as_ref()
+                                .ok_or("indexer_compressor_ape missing")?
+                                .abs_offset,
+                            layer_weights
+                                .indexer_compressor_ape
+                                .as_ref()
+                                .ok_or("indexer_compressor_ape missing")?
+                                .type_id,
+                            layer_weights
+                                .indexer_compressor_norm
+                                .as_ref()
+                                .ok_or("indexer_compressor_norm missing")?
+                                .abs_offset,
+                            layer_weights
+                                .indexer_compressor_norm
+                                .as_ref()
+                                .ok_or("indexer_compressor_norm missing")?
+                                .type_id,
+                            N_INDEXER_HEAD_DIM,
+                            pos0,
+                            n_tokens,
+                            N_ROT,
+                            n_ctx_orig,
+                            false,
+                            freq_base,
+                            freq_scale,
+                            ext_factor,
+                            attn_factor,
+                            ROPE_YARN_BETA_FAST,
+                            ROPE_YARN_BETA_SLOW,
+                            RMS_EPS,
+                        )
+                        .map_err(|err| {
+                            format!("layer{layer} index compressor replay failed: {err}")
+                        })?;
+                    if index_chunk != 0 {
+                        backend
+                            .dsv4_indexer_qat(
+                                index_view.as_tensor_mut(),
+                                index_chunk,
+                                N_INDEXER_HEAD_DIM,
+                            )
+                            .map_err(|err| format!("layer{layer} index comp qat failed: {err}"))?;
+                    }
+                    drop(index_view);
+                    refresh_ratio4_compressor_state(
+                        backend,
+                        layer_weights
+                            .indexer_compressor_kv
+                            .as_ref()
+                            .ok_or("indexer_compressor_kv missing")?,
+                        layer_weights
+                            .indexer_compressor_gate
+                            .as_ref()
+                            .ok_or("indexer_compressor_gate missing")?,
+                        layer_weights
+                            .indexer_compressor_ape
+                            .as_ref()
+                            .ok_or("indexer_compressor_ape missing")?,
+                        N_INDEXER_HEAD_DIM,
+                        index_width,
+                        pos0,
+                        n_tokens,
+                        &mut state.attn_norm,
+                        &mut state.comp_kv_cur,
+                        &mut state.comp_sc_cur,
+                        state.layer_index_state_kv[layer]
+                            .as_mut()
+                            .ok_or("index state kv missing")?,
+                        state.layer_index_state_score[layer]
+                            .as_mut()
+                            .ok_or("index state score missing")?,
+                    )?;
+                    state.layer_n_index_comp[layer] = index_before + index_chunk;
+                } else {
+                    for t in 0..n_tokens {
+                        let pos = pos0 + t;
+                        let emit = (pos + 1) % ratio == 0;
+                        let index_row = state.layer_n_index_comp[layer];
+                        let row_offset = u64::from(t) * u64::from(index_width) * 4;
+                        let row_bytes = byte_len(u64::from(index_width))?;
+                        let kv_view =
+                            state
+                                .comp_kv_cur
+                                .view(row_offset, row_bytes)
+                                .map_err(|err| {
+                                    format!("layer{layer} index comp kv row view failed: {err}")
+                                })?;
+                        let sc_view =
+                            state
+                                .comp_sc_cur
+                                .view(row_offset, row_bytes)
+                                .map_err(|err| {
+                                    format!("layer{layer} index comp score row view failed: {err}")
+                                })?;
+                        backend
+                            .compressor_update(
+                                kv_view.as_tensor_ref(),
+                                sc_view.as_tensor_ref(),
+                                state.layer_index_state_kv[layer]
+                                    .as_mut()
+                                    .ok_or("index state kv missing")?
+                                    .as_tensor_mut(),
+                                state.layer_index_state_score[layer]
+                                    .as_mut()
+                                    .ok_or("index state score missing")?
+                                    .as_tensor_mut(),
+                                state.layer_index_comp_cache[layer]
+                                    .as_mut()
+                                    .ok_or("index comp cache missing")?
+                                    .as_tensor_mut(),
+                                layer_weights
+                                    .indexer_compressor_ape
+                                    .as_ref()
+                                    .ok_or("indexer_compressor_ape missing")?
+                                    .abs_offset,
+                                layer_weights
+                                    .indexer_compressor_ape
+                                    .as_ref()
+                                    .ok_or("indexer_compressor_ape missing")?
+                                    .type_id,
+                                layer_weights
+                                    .indexer_compressor_norm
+                                    .as_ref()
+                                    .ok_or("indexer_compressor_norm missing")?
+                                    .abs_offset,
+                                layer_weights
+                                    .indexer_compressor_norm
+                                    .as_ref()
+                                    .ok_or("indexer_compressor_norm missing")?
+                                    .type_id,
+                                N_INDEXER_HEAD_DIM,
+                                ratio,
+                                pos,
+                                index_row,
+                                N_ROT,
+                                n_ctx_orig,
+                                freq_base,
+                                freq_scale,
+                                ext_factor,
+                                attn_factor,
+                                ROPE_YARN_BETA_FAST,
+                                ROPE_YARN_BETA_SLOW,
+                                RMS_EPS,
+                            )
+                            .map_err(|err| {
+                                format!("layer{layer} indexer compressor_update failed: {err}")
+                            })?;
+                        drop(sc_view);
+                        drop(kv_view);
+                        if emit {
+                            let mut index_row_view = state.layer_index_comp_cache[layer]
+                                .as_mut()
+                                .ok_or("index comp cache missing")?
+                                .view(
+                                    u64::from(index_row) * u64::from(N_INDEXER_HEAD_DIM) * 4,
+                                    byte_len(u64::from(N_INDEXER_HEAD_DIM))?,
+                                )
+                                .map_err(|err| {
+                                    format!("layer{layer} index comp row view failed: {err}")
+                                })?;
+                            backend
+                                .dsv4_indexer_qat(
+                                    index_row_view.as_tensor_mut(),
+                                    1,
+                                    N_INDEXER_HEAD_DIM,
+                                )
+                                .map_err(|err| {
+                                    format!("layer{layer} index comp row qat failed: {err}")
+                                })?;
+                            state.layer_n_index_comp[layer] += 1;
+                        }
+                    }
                 }
-                refresh_ratio4_compressor_state(
-                    backend,
-                    layer_weights
-                        .indexer_compressor_kv
-                        .as_ref()
-                        .ok_or("indexer_compressor_kv missing")?,
-                    layer_weights
-                        .indexer_compressor_gate
-                        .as_ref()
-                        .ok_or("indexer_compressor_gate missing")?,
-                    layer_weights
-                        .indexer_compressor_ape
-                        .as_ref()
-                        .ok_or("indexer_compressor_ape missing")?,
-                    N_INDEXER_HEAD_DIM,
-                    index_width,
-                    n_tokens,
-                    &mut state.attn_norm,
-                    &mut state.comp_kv_cur,
-                    &mut state.comp_sc_cur,
-                    state.layer_index_state_kv[layer]
-                        .as_mut()
-                        .ok_or("index state kv missing")?,
-                    state.layer_index_state_score[layer]
-                        .as_mut()
-                        .ok_or("index state score missing")?,
-                )?;
-                state.layer_n_index_comp[layer] = n_comp;
             }
         }
 
         if compressed && n_comp != 0 {
-            backend
-                .attention_prefill_static_mixed_heads(
-                    state.heads.as_tensor_mut(),
-                    layer_weights.attn_sinks.abs_offset,
-                    state.q.as_tensor_ref(),
-                    state.kv.as_tensor_ref(),
-                    state.layer_attn_comp_cache[layer]
-                        .as_ref()
-                        .ok_or("attn comp cache missing")?
-                        .as_tensor_ref(),
-                    n_tokens,
-                    n_comp,
-                    raw_window,
-                    compression.ratio(),
-                    N_HEAD,
-                    N_HEAD_DIM,
-                )
-                .map_err(|err| {
-                    format!("layer{layer} attention_prefill_static_mixed_heads failed: {err}")
-                })?;
-        } else {
+            if zero_prefix {
+                if n_comp > N_INDEXER_TOP_K {
+                    return Err(format!(
+                        "zero-prefix indexed prefill is outside M10.6c scope: layer {layer} has {n_comp} compressed rows"
+                    )
+                    .into());
+                }
+                backend
+                    .attention_prefill_static_mixed_heads(
+                        state.heads.as_tensor_mut(),
+                        layer_weights.attn_sinks.abs_offset,
+                        state.q.as_tensor_ref(),
+                        state.kv.as_tensor_ref(),
+                        state.layer_attn_comp_cache[layer]
+                            .as_ref()
+                            .ok_or("attn comp cache missing")?
+                            .as_tensor_ref(),
+                        n_tokens,
+                        n_comp,
+                        raw_window,
+                        compression.ratio(),
+                        N_HEAD,
+                        N_HEAD_DIM,
+                    )
+                    .map_err(|err| {
+                        format!("layer{layer} attention_prefill_static_mixed_heads failed: {err}")
+                    })?;
+            } else {
+                let n_raw = raw_span_for_batch(raw_window, raw_cap, pos0, n_tokens);
+                let raw_start = raw_start_for_span(pos0 + n_tokens - 1, n_raw, raw_cap);
+                if compression == LayerCompression::Ratio4 && n_comp > N_INDEXER_TOP_K {
+                    let index_scale =
+                        1.0f32 / ((N_INDEXER_HEAD_DIM * N_INDEXER_HEAD) as f32).sqrt();
+                    backend
+                        .indexer_scores_decode_batch(
+                            state.indexer_scores.as_tensor_mut(),
+                            state.batch_indexer_q.as_tensor_ref(),
+                            state.batch_indexer_weights.as_tensor_ref(),
+                            state.layer_index_comp_cache[layer]
+                                .as_ref()
+                                .ok_or("index comp cache missing")?
+                                .as_tensor_ref(),
+                            n_comp,
+                            n_tokens,
+                            pos0,
+                            N_INDEXER_HEAD,
+                            N_INDEXER_HEAD_DIM,
+                            compression.ratio(),
+                            index_scale,
+                        )
+                        .map_err(|err| {
+                            format!("layer{layer} indexer_scores_decode_batch failed: {err}")
+                        })?;
+                    backend
+                        .indexer_topk(
+                            state.comp_selected.as_tensor_mut(),
+                            state.indexer_scores.as_tensor_ref(),
+                            n_comp,
+                            n_tokens,
+                            N_INDEXER_TOP_K,
+                        )
+                        .map_err(|err| format!("layer{layer} indexer_topk failed: {err}"))?;
+                    backend
+                        .attention_indexed_mixed_batch_heads(
+                            state.heads.as_tensor_mut(),
+                            layer_weights.attn_sinks.abs_offset,
+                            state.q.as_tensor_ref(),
+                            state.raw_cache[layer].as_tensor_ref(),
+                            state.layer_attn_comp_cache[layer]
+                                .as_ref()
+                                .ok_or("attn comp cache missing")?
+                                .as_tensor_ref(),
+                            state.comp_selected.as_tensor_ref(),
+                            n_tokens,
+                            pos0,
+                            n_raw,
+                            raw_cap,
+                            raw_start,
+                            n_comp,
+                            N_INDEXER_TOP_K,
+                            raw_window,
+                            compression.ratio(),
+                            N_HEAD,
+                            N_HEAD_DIM,
+                        )
+                        .map_err(|err| {
+                            format!(
+                                "layer{layer} attention_indexed_mixed_batch_heads failed: {err}"
+                            )
+                        })?;
+                } else {
+                    backend
+                        .attention_decode_mixed_batch_heads(
+                            state.heads.as_tensor_mut(),
+                            layer_weights.attn_sinks.abs_offset,
+                            state.q.as_tensor_ref(),
+                            state.raw_cache[layer].as_tensor_ref(),
+                            state.layer_attn_comp_cache[layer]
+                                .as_ref()
+                                .ok_or("attn comp cache missing")?
+                                .as_tensor_ref(),
+                            None,
+                            0,
+                            n_tokens,
+                            pos0,
+                            n_raw,
+                            raw_cap,
+                            raw_start,
+                            n_comp,
+                            raw_window,
+                            compression.ratio(),
+                            N_HEAD,
+                            N_HEAD_DIM,
+                        )
+                        .map_err(|err| {
+                            format!("layer{layer} attention_decode_mixed_batch_heads failed: {err}")
+                        })?;
+                }
+            }
+        } else if zero_prefix {
             backend
                 .attention_prefill_raw_heads(
                     state.heads.as_tensor_mut(),
@@ -959,6 +1551,27 @@ fn execute_prefill_layer(
                     N_HEAD_DIM,
                 )
                 .map_err(|err| format!("layer{layer} attention_prefill_raw_heads failed: {err}"))?;
+        } else {
+            let n_raw = raw_span_for_batch(raw_window, raw_cap, pos0, n_tokens);
+            let raw_start = raw_start_for_span(pos0 + n_tokens - 1, n_raw, raw_cap);
+            backend
+                .attention_decode_raw_batch_heads(
+                    state.heads.as_tensor_mut(),
+                    layer_weights.attn_sinks.abs_offset,
+                    state.q.as_tensor_ref(),
+                    state.raw_cache[layer].as_tensor_ref(),
+                    n_tokens,
+                    pos0,
+                    n_raw,
+                    raw_cap,
+                    raw_start,
+                    raw_window,
+                    N_HEAD,
+                    N_HEAD_DIM,
+                )
+                .map_err(|err| {
+                    format!("layer{layer} attention_decode_raw_batch_heads failed: {err}")
+                })?;
         }
         backend
             .rope_tail(
@@ -967,7 +1580,7 @@ fn execute_prefill_layer(
                 N_HEAD,
                 N_HEAD_DIM,
                 N_ROT,
-                0,
+                pos0,
                 n_ctx_orig,
                 true,
                 freq_base,
@@ -1244,6 +1857,7 @@ fn refresh_ratio4_compressor_state(
     ape: &TensorInfo,
     head_dim: u32,
     width: u32,
+    pos0: u32,
     n_tokens: u32,
     attn_norm: &mut Tensor,
     comp_kv: &mut Tensor,
@@ -1287,7 +1901,7 @@ fn refresh_ratio4_compressor_state(
             ape.abs_offset,
             ape.type_id,
             head_dim,
-            n_tokens - 4,
+            pos0 + n_tokens - 4,
         )
         .map_err(|err| format!("ratio4 compressor_prefill_state_ratio4 failed: {err}"))?;
     Ok(())
@@ -1843,12 +2457,14 @@ fn execute_layer(
 struct Args {
     model: PathBuf,
     prompt: PathBuf,
+    limit_tokens: Option<u32>,
 }
 
 impl Args {
     fn parse() -> Result<Self, Box<dyn std::error::Error>> {
         let mut model = None;
         let mut prompt = None;
+        let mut limit_tokens = None;
         let mut args = std::env::args_os().skip(1);
         while let Some(arg) = args.next() {
             if arg == "--model" {
@@ -1861,17 +2477,40 @@ impl Args {
                     return Err("--prompt requires a path".into());
                 };
                 prompt = Some(PathBuf::from(value));
+            } else if arg == "--limit-tokens" {
+                let Some(value) = args.next() else {
+                    return Err("--limit-tokens requires a count".into());
+                };
+                let value = value
+                    .to_str()
+                    .ok_or("--limit-tokens must be valid UTF-8")?
+                    .parse::<u32>()
+                    .map_err(|err| format!("invalid --limit-tokens: {err}"))?;
+                limit_tokens = Some(value);
             } else {
-                return Err("usage: ds4-prefill-whole-short --model FILE --prompt FILE".into());
+                return Err(
+                    "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N]"
+                        .into(),
+                );
             }
         }
         let Some(model) = model else {
-            return Err("usage: ds4-prefill-whole-short --model FILE --prompt FILE".into());
+            return Err(
+                "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N]"
+                    .into(),
+            );
         };
         let Some(prompt) = prompt else {
-            return Err("usage: ds4-prefill-whole-short --model FILE --prompt FILE".into());
+            return Err(
+                "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N]"
+                    .into(),
+            );
         };
-        Ok(Self { model, prompt })
+        Ok(Self {
+            model,
+            prompt,
+            limit_tokens,
+        })
     }
 }
 
@@ -1949,6 +2588,8 @@ struct DecodeState {
     comp_sc_cur: Tensor,
     batch_indexer_q: Tensor,
     batch_indexer_weights: Tensor,
+    indexer_scores: Tensor,
+    comp_selected: Tensor,
     heads: Tensor,
     attn_low: Tensor,
     batch_group_tmp: Tensor,
@@ -2079,6 +2720,7 @@ impl DecodeState {
         let down_in_dim = dims.down_in_dim;
         let comp_width_max = 2 * u64::from(N_HEAD_DIM.max(N_INDEXER_HEAD_DIM));
         let indexer_q_dim = u64::from(N_INDEXER_HEAD) * u64::from(N_INDEXER_HEAD_DIM);
+        let max_ratio4_comp = u64::from(plan.layer_comp_cap(LayerCompression::Ratio4));
         Ok(Self {
             prefill_tokens: alloc("prefill_tokens", pc)?,
             cur_hc: alloc("cur_hc", pc * dims.hc_dim)?,
@@ -2105,6 +2747,8 @@ impl DecodeState {
             comp_sc_cur: alloc("comp_sc_cur", pc * comp_width_max)?,
             batch_indexer_q: alloc("batch_indexer_q", pc * indexer_q_dim)?,
             batch_indexer_weights: alloc("batch_indexer_weights", pc * u64::from(N_INDEXER_HEAD))?,
+            indexer_scores: alloc("indexer_scores", pc * max_ratio4_comp)?,
+            comp_selected: alloc("comp_selected", pc * u64::from(N_INDEXER_TOP_K))?,
             heads: alloc("heads", pc * dims.q_dim)?,
             attn_low: alloc("attn_low", pc * dims.low_dim)?,
             batch_group_tmp: alloc("batch_group_tmp", pc * dims.group_dim)?,
@@ -2373,12 +3017,18 @@ fn compressed_rope_attn_factor() -> f32 {
 }
 
 fn write_report(
+    schema: &str,
+    case: &str,
+    fixture: &str,
+    boundary: &str,
     gguf: &Gguf,
     weights: &Ds4Weights,
     header_bytes_read: u64,
     mapped_size: u64,
     plan: GraphPlan,
+    chunks: &[PrefillChunk],
     prompt_tokens: u32,
+    output_abs_pos: u32,
     output_row: u32,
     raw_row: u32,
     n_raw: u32,
@@ -2388,8 +3038,8 @@ fn write_report(
     outputs: &[TensorOutput],
 ) {
     println!("{{");
-    println!("  \"schema\": \"{SCHEMA}\",");
-    println!("  \"case\": \"{CASE}\",");
+    println!("  \"schema\": \"{schema}\",");
+    println!("  \"case\": \"{case}\",");
     println!("  \"model\": {{");
     println!("    \"mapped_size\": {mapped_size},");
     println!("    \"header_bytes_read\": {header_bytes_read},");
@@ -2398,13 +3048,29 @@ fn write_report(
     println!("    \"bound_layers\": {}", weights.layers.len());
     println!("  }},");
     println!("  \"operation\": {{");
-    println!("    \"name\": \"rust_gpu_prefill_whole_short\",");
-    println!("    \"method\": \"render_chat_prompt_text+Ds4Tokenizer+embed_tokens_hc+prefill_facade_execute_layer_x43+final_row_output_head\",");
+    println!("    \"name\": \"rust_gpu_prefill\",");
+    println!("    \"method\": \"render_chat_prompt_text+Ds4Tokenizer+chunked_embed_tokens_hc+prefill_facade_execute_layer_x43_per_chunk+final_row_output_head\",");
     println!("    \"command_batch\": true,");
     println!("    \"synchronized\": true,");
-    println!("    \"boundary\": \"whole_prefill\",");
-    println!("    \"fixture\": \"{FIXTURE}\",");
+    println!("    \"boundary\": \"{boundary}\",");
+    println!("    \"fixture\": \"{fixture}\",");
     println!("    \"prompt_tokens\": {prompt_tokens},");
+    println!("    \"chunk_count\": {},", chunks.len());
+    println!("    \"chunks\": [");
+    for (idx, chunk) in chunks.iter().enumerate() {
+        if idx != 0 {
+            println!(",");
+        }
+        print!(
+            "      {{\"start\": {}, \"n_tokens\": {}, \"end\": {}}}",
+            chunk.start,
+            chunk.n_tokens,
+            chunk.start + chunk.n_tokens
+        );
+    }
+    println!();
+    println!("    ],");
+    println!("    \"output_abs_pos\": {output_abs_pos},");
     println!("    \"output_row\": {output_row},");
     println!("    \"first_layer\": 0,");
     println!("    \"last_layer\": 42,");

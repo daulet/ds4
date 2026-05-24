@@ -4959,26 +4959,38 @@
 
 ### M10.6c: Rust Cold Chunked-Prefill Execution
 
-- Status: pending
+- Status: done
 - Goal: execute cold chunked prefill through Rust for prompts larger than the
   default prefill cap.
 - Oracle: C `metal_graph_prefill_chunked` and
   `metal_graph_prefill_chunked_range` with `start=0`.
 - Fixture: a 2052-token cap-crossing prompt and a longer context slice that
   emits multiple chunk boundaries.
-- Comparator: Rust-vs-C chunk boundary trace, progress points, selected
-  per-chunk logits, final logits, raw ring rows, and compressed counters.
+- Comparator: Rust-vs-live-current-C chunk boundary trace, progress-equivalent
+  chunk endpoints, final logits, raw ring rows, compressed counters, and output
+  digests/samples captured with deterministic CUDA MoE down projection
+  (`DS4_CUDA_MOE_NO_ATOMIC_DOWN=1` on B300).
 - Acceptance: Rust cold chunked prefill matches current-C chunk schedule and
   final cache/logit state.
 - Drift policy: chunk starts/sizes, final batch row, progress positions, raw
-  ring mapping, compressed counters, and selected logits are exact within M10.4
-  tolerances.
+  ring mapping, compressed counters, and output digests are exact against the
+  same-run current-C oracle; optimized CUDA MoE atomic-down output is treated as
+  nondeterministic and excluded from exact comparison.
 - Review gate: ask Claude to review chunk loop state and final-row handling.
-- Validation needed: targeted B300 comparator, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
-  review with no blockers.
-- Owner path: Rust graph prefill modules, B300 comparator,
-  `.memory/status.md`.
+- Validation passed: B300 `ds4-rust-port-b300` current-C oracle vs Rust
+  candidate comparator passed 400 checks for the 2052-token cap-crossing prompt
+  and 400 checks for the full long memory archive prompt with
+  `DS4_CUDA_MOE_NO_ATOMIC_DOWN=1`; local static comparator passed 30 checks;
+  negative tests rejected 5 chunked mutations and 15 whole-prefill mutations;
+  unified parity report with local oracles skipped reported 46 passed, 35
+  skipped, and 0 failed; `arch -arm64 make
+  ds4-prefill-whole-short-oracle-dump`; `cargo check -p ds4-gpu --bin
+  ds4-prefill-whole-short`; full `cargo test --workspace`; `cargo fmt --all --
+  --check`; `git diff --check`; and non-interactive Claude review with no
+  blockers.
+- Owner path: `ds4.c`, `ds4_prefill_whole_short_oracle_dump.c`,
+  `rust/ds4-gpu/src/bin/ds4-prefill-whole-short.rs`,
+  `rust/ds4-gpu/src/decode_backend.rs`, `ds4-parity/`.
 
 ### M10.6d: Rust Resumed-Suffix Prefill Execution
 

@@ -212,14 +212,34 @@ pub const PREFILL_FACADE_OPERATIONS: &[DecodeFacadeOperation] = &[
         tensor_args: &["comp_cache", "state_kv", "state_score", "kv", "sc"],
     },
     DecodeFacadeOperation {
+        operation: "ds4_gpu_compressor_prefill_ratio4_replay_tensor",
+        method: "compressor_prefill_ratio4_replay",
+        tensor_args: &["comp_cache", "state_kv", "state_score", "kv", "sc"],
+    },
+    DecodeFacadeOperation {
         operation: "ds4_gpu_compressor_prefill_state_ratio4_tensor",
         method: "compressor_prefill_state_ratio4",
         tensor_args: &["state_kv", "state_score", "kv_tail", "sc_tail"],
     },
     DecodeFacadeOperation {
+        operation: "ds4_gpu_indexer_scores_decode_batch_tensor",
+        method: "indexer_scores_decode_batch",
+        tensor_args: &["scores", "q", "weights", "index_comp"],
+    },
+    DecodeFacadeOperation {
         operation: "ds4_gpu_attention_prefill_raw_heads_tensor",
         method: "attention_prefill_raw_heads",
         tensor_args: &["heads", "q", "raw_kv"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_attention_decode_raw_batch_heads_tensor",
+        method: "attention_decode_raw_batch_heads",
+        tensor_args: &["heads", "q", "raw_kv"],
+    },
+    DecodeFacadeOperation {
+        operation: "ds4_gpu_attention_decode_mixed_batch_heads_tensor",
+        method: "attention_decode_mixed_batch_heads",
+        tensor_args: &["heads", "q", "raw_kv", "comp_kv", "comp_mask"],
     },
     DecodeFacadeOperation {
         operation: "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
@@ -964,6 +984,63 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn compressor_prefill_ratio4_replay(
+        self,
+        comp_cache: TensorMut<'_>,
+        state_kv: TensorMut<'_>,
+        state_score: TensorMut<'_>,
+        kv: TensorRef<'_>,
+        sc: TensorRef<'_>,
+        ape_offset: u64,
+        ape_type: u32,
+        norm_offset: u64,
+        norm_type: u32,
+        head_dim: u32,
+        pos0: u32,
+        n_tokens: u32,
+        n_rot: u32,
+        n_ctx_orig: u32,
+        quantize_fp8: bool,
+        freq_base: f32,
+        freq_scale: f32,
+        ext_factor: f32,
+        attn_factor: f32,
+        beta_fast: f32,
+        beta_slow: f32,
+        rms_eps: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_compressor_prefill_ratio4_replay_tensor(
+                comp_cache.raw(),
+                state_kv.raw(),
+                state_score.raw(),
+                kv.raw(),
+                sc.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                ape_offset,
+                ape_type,
+                norm_offset,
+                norm_type,
+                head_dim,
+                pos0,
+                n_tokens,
+                n_rot,
+                n_ctx_orig,
+                quantize_fp8,
+                freq_base,
+                freq_scale,
+                ext_factor,
+                attn_factor,
+                beta_fast,
+                beta_slow,
+                rms_eps,
+            ))
+            .into_result()
+        }
+    }
+
     pub fn compressor_prefill_state_ratio4(
         self,
         state_kv: TensorMut<'_>,
@@ -1052,6 +1129,39 @@ impl<'a> DecodeBackend<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn indexer_scores_decode_batch(
+        self,
+        scores: TensorMut<'_>,
+        q: TensorRef<'_>,
+        weights: TensorRef<'_>,
+        index_comp: TensorRef<'_>,
+        n_comp: u32,
+        n_tokens: u32,
+        pos0: u32,
+        n_head: u32,
+        head_dim: u32,
+        ratio: u32,
+        scale: f32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_indexer_scores_decode_batch_tensor(
+                scores.raw(),
+                q.raw(),
+                weights.raw(),
+                index_comp.raw(),
+                n_comp,
+                n_tokens,
+                pos0,
+                n_head,
+                head_dim,
+                ratio,
+                scale,
+            ))
+            .into_result()
+        }
+    }
+
     pub fn indexer_topk(
         self,
         selected: TensorMut<'_>,
@@ -1110,6 +1220,91 @@ impl<'a> DecodeBackend<'a> {
                 raw_start,
                 n_comp,
                 top_k,
+                window,
+                ratio,
+                n_head,
+                head_dim,
+            ))
+            .into_result()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn attention_decode_raw_batch_heads(
+        self,
+        heads: TensorMut<'_>,
+        sinks_offset: u64,
+        q: TensorRef<'_>,
+        raw_kv: TensorRef<'_>,
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        window: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> Result<(), GpuError> {
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_attention_decode_raw_batch_heads_tensor(
+                heads.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                sinks_offset,
+                q.raw(),
+                raw_kv.raw(),
+                n_tokens,
+                pos0,
+                n_raw,
+                raw_cap,
+                raw_start,
+                window,
+                n_head,
+                head_dim,
+            ))
+            .into_result()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn attention_decode_mixed_batch_heads(
+        self,
+        heads: TensorMut<'_>,
+        sinks_offset: u64,
+        q: TensorRef<'_>,
+        raw_kv: TensorRef<'_>,
+        comp_kv: TensorRef<'_>,
+        comp_mask: Option<TensorRef<'_>>,
+        use_comp_mask: u32,
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> Result<(), GpuError> {
+        let comp_mask = optional_tensor_ref(comp_mask, use_comp_mask != 0)?;
+        unsafe {
+            GpuStatus::from_raw(sys::ds4_gpu_attention_decode_mixed_batch_heads_tensor(
+                heads.raw(),
+                self.model.as_ptr(),
+                self.model.size(),
+                sinks_offset,
+                q.raw(),
+                raw_kv.raw(),
+                comp_kv.raw(),
+                comp_mask,
+                use_comp_mask,
+                n_tokens,
+                pos0,
+                n_raw,
+                raw_cap,
+                raw_start,
+                n_comp,
                 window,
                 ratio,
                 n_head,
@@ -1812,8 +2007,12 @@ mod tests {
         "ds4_gpu_rms_norm_weight_rows_tensor",
         "ds4_gpu_store_raw_kv_batch_tensor",
         "ds4_gpu_compressor_prefill_tensor",
+        "ds4_gpu_compressor_prefill_ratio4_replay_tensor",
         "ds4_gpu_compressor_prefill_state_ratio4_tensor",
+        "ds4_gpu_indexer_scores_decode_batch_tensor",
         "ds4_gpu_attention_prefill_raw_heads_tensor",
+        "ds4_gpu_attention_decode_raw_batch_heads_tensor",
+        "ds4_gpu_attention_decode_mixed_batch_heads_tensor",
         "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
         "ds4_gpu_router_select_batch_tensor",
         "ds4_gpu_routed_moe_batch_tensor",
@@ -1860,7 +2059,7 @@ mod tests {
 
     #[test]
     fn prefill_facade_operations_are_pinned() {
-        assert_eq!(PREFILL_FACADE_OPERATIONS.len(), 13);
+        assert_eq!(PREFILL_FACADE_OPERATIONS.len(), 17);
         for (spec, expected) in PREFILL_FACADE_OPERATIONS.iter().zip(EXPECTED_PREFILL_OPS) {
             assert_eq!(spec.operation, *expected);
             assert!(!spec.method.is_empty());
