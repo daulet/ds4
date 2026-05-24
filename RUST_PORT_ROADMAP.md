@@ -4920,6 +4920,14 @@ restore boundary.
   projection comparator, runtime KV replay checker, KVC file comparator,
   `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
   review with no blockers.
+- Evidence: added
+  `ds4-parity/baselines/kv/m10.7d3/post-restore-kvc-decision-contract.json`
+  and `ds4-parity/check_post_restore_kvc_decision_contract.py`. The checker
+  validates the four restored graph cases against M10.7d3b frontier
+  projections, the M10.7d3a frontier contract, M9.8f5 runtime replay
+  skip/write evidence, the M10.7d2 runtime ledger contract, and the M7.4a KVC
+  file layout oracle. It passed eight negative mutations covering token,
+  payload, reason, skip, runtime, projection, and KVC-layout drift.
 
 ##### M10.7d3c2: B300 Restored Payload KVC File Smoke
 

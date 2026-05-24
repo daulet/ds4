@@ -1,0 +1,214 @@
+{
+  "schema": "ds4.post_restore_kvc_decision_contract.v1",
+  "milestone": "M10.7d3c1",
+  "source": "model-free-post-restore-kvc-decision-contract",
+  "restore_summary_path": "ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json",
+  "frontier_contract_path": "ds4-parity/baselines/kv/m10.7d3/restore-frontier-contract.json",
+  "runtime_summary_path": "ds4-parity/baselines/kv/m9.8f5/runtime-rust-b300-summary.json",
+  "runtime_ledger_contract_path": "ds4-parity/baselines/kv/m10.7d2/runtime-ledger-contract.json",
+  "kvc_file_oracle_path": "ds4-parity/baselines/kv/m7.4a/current-c.json",
+  "policy_options": {
+    "min_tokens": 512,
+    "cold_max_tokens": 30000,
+    "continued_interval_tokens": 10000,
+    "boundary_trim_tokens": 32,
+    "boundary_align_tokens": 2048,
+    "continued_step_tokens": 10240
+  },
+  "reason_codes": {
+    "cold": 1,
+    "continued": 2,
+    "shutdown": 4
+  },
+  "kvc_header_contract": {
+    "quant_bits": 2,
+    "ext_flags": 0,
+    "hits_for_new_file": 0,
+    "ctx_size": 32768,
+    "fixed_header_bytes": 48,
+    "text_length_bytes": 4,
+    "trailer_bytes": 0,
+    "file_size_formula": "fixed_header_bytes + text_length_bytes + rendered_text_bytes + payload_bytes"
+  },
+  "runtime_restore_references": [
+    {
+      "name": "seed_restore_skips_continued",
+      "runtime_case": "seed_restore",
+      "cache_source": "disk-text",
+      "cached_tokens": 550,
+      "cache_write_tokens": 0,
+      "disk_cached_tokens": 550,
+      "kv_write_file": null,
+      "maybe_store_continued": {
+        "tokens": 550,
+        "frontier_before": 550,
+        "frontier_after": 550,
+        "success": false
+      }
+    },
+    {
+      "name": "continuation_restore_skips_continued",
+      "runtime_case": "continuation_restore",
+      "cache_source": "disk-text",
+      "cached_tokens": 552,
+      "cache_write_tokens": 9,
+      "disk_cached_tokens": 552,
+      "kv_write_file": null,
+      "maybe_store_continued": {
+        "tokens": 561,
+        "frontier_before": 552,
+        "frontier_after": 552,
+        "success": false
+      }
+    },
+    {
+      "name": "shutdown_reason_header_reference",
+      "runtime_header_file": "a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv",
+      "reason_name": "shutdown",
+      "reason": 4,
+      "ctx_size": 32768
+    }
+  ],
+  "post_restore_cases": [
+    {
+      "name": "disk_seed_payload",
+      "prompt_case": "seed",
+      "kind": "disk-payload",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
+      "restored_tokens": 550,
+      "payload_bytes": 31526948,
+      "current_live_skip": {
+        "live_tokens": 550,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 550,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "already_stored_boundary": {
+        "frontier_before": 10240,
+        "live_tokens": 10240,
+        "target": 0
+      },
+      "shutdown_write_header": {
+        "quant_bits": 2,
+        "reason_name": "shutdown",
+        "reason": 4,
+        "ext_flags": 0,
+        "tokens": 550,
+        "hits": 0,
+        "ctx_size": 32768,
+        "payload_bytes": 31526948
+      }
+    },
+    {
+      "name": "snapshot_seed",
+      "prompt_case": "seed",
+      "kind": "memory-snapshot",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
+      "restored_tokens": 550,
+      "payload_bytes": 31526948,
+      "current_live_skip": {
+        "live_tokens": 550,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 550,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "already_stored_boundary": {
+        "frontier_before": 10240,
+        "live_tokens": 10240,
+        "target": 0
+      },
+      "shutdown_write_header": {
+        "quant_bits": 2,
+        "reason_name": "shutdown",
+        "reason": 4,
+        "ext_flags": 0,
+        "tokens": 550,
+        "hits": 0,
+        "ctx_size": 32768,
+        "payload_bytes": 31526948
+      }
+    },
+    {
+      "name": "disk_continuation_payload",
+      "prompt_case": "continuation",
+      "kind": "disk-payload",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
+      "restored_tokens": 561,
+      "payload_bytes": 31688272,
+      "current_live_skip": {
+        "live_tokens": 561,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 561,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "already_stored_boundary": {
+        "frontier_before": 10240,
+        "live_tokens": 10240,
+        "target": 0
+      },
+      "shutdown_write_header": {
+        "quant_bits": 2,
+        "reason_name": "shutdown",
+        "reason": 4,
+        "ext_flags": 0,
+        "tokens": 561,
+        "hits": 0,
+        "ctx_size": 32768,
+        "payload_bytes": 31688272
+      }
+    },
+    {
+      "name": "snapshot_continuation",
+      "prompt_case": "continuation",
+      "kind": "memory-snapshot",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
+      "restored_tokens": 561,
+      "payload_bytes": 31688272,
+      "current_live_skip": {
+        "live_tokens": 561,
+        "target": 0,
+        "reason": "restored-position-unaligned"
+      },
+      "next_continued_store": {
+        "frontier_before": 561,
+        "live_tokens": 10240,
+        "target": 10240,
+        "reason_name": "continued",
+        "reason": 2
+      },
+      "already_stored_boundary": {
+        "frontier_before": 10240,
+        "live_tokens": 10240,
+        "target": 0
+      },
+      "shutdown_write_header": {
+        "quant_bits": 2,
+        "reason_name": "shutdown",
+        "reason": 4,
+        "ext_flags": 0,
+        "tokens": 561,
+        "hits": 0,
+        "ctx_size": 32768,
+        "payload_bytes": 31688272
+      }
+    }
+  ]
+}

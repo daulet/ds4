@@ -1097,6 +1097,20 @@ policy oracle. It pins restored token counts, loaded frontier values,
 re-enabled continued-store targets, already-stored skip behavior, and KVC
 reason-code references without requiring a B300 recapture.
 
+Validate the M10.7d3c1 post-restore KVC decision contract:
+
+```sh
+python3 ds4-parity/check_post_restore_kvc_decision_contract.py
+python3 ds4-parity/check_post_restore_kvc_decision_contract.py --negative-test
+```
+
+The checker compares the committed post-restore KVC decision contract against
+the M10.7d3b restored-frontier projection, the M10.7d2 runtime ledger
+contract, the M9.8f5 B300 runtime replay summary, and the M7.4a KVC file
+layout oracle. It pins unaligned continued-store skips, re-enabled next
+continued targets, already-stored boundary skips, and shutdown-write header
+expectations before the B300 KVC file-writing smoke.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

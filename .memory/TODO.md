@@ -5558,7 +5558,7 @@
 
 ### M10.7d3c1: Post-Restore KVC Decision Contract
 
-- Status: active
+- Status: done
 - Goal: define a model-free post-restore KVC decision contract before trusting
   a B300 file-writing smoke.
 - Oracle: M10.7d3b restored-graph frontier projection, M10.7d2 runtime ledger
@@ -5581,11 +5581,16 @@
   projection comparator, runtime KV replay checker, KVC file comparator,
   `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
   review with no blockers.
+- Evidence: added
+  `ds4-parity/baselines/kv/m10.7d3/post-restore-kvc-decision-contract.json`
+  and `ds4-parity/check_post_restore_kvc_decision_contract.py`. The checker
+  passed 4 post-restore cases, 3 runtime references, and 8 negative mutations,
+  and is wired into the unified parity report.
 - Owner path: post-restore KVC contract/checker, `.memory/status.md`.
 
 ### M10.7d3c2: B300 Restored Payload KVC File Smoke
 
-- Status: pending
+- Status: active
 - Goal: run a B300 Rust smoke that wraps restored graph payload bodies in KVC
   files and records the matching post-restore skip decisions.
 - Oracle: M10.7d3c1 post-restore KVC decision contract, M10.7d3b

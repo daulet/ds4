@@ -3,14 +3,15 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d3c1 Post-Restore KVC Decision Contract
-- Last validated source before the active item: M10.7d3b B300 Restored-Graph
-  Frontier Projection.
+- Active item: M10.7d3c2 B300 Restored Payload KVC File Smoke
+- Last validated source before the active item: M10.7d3c1 Post-Restore KVC
+  Decision Contract.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
 - M10.7d3c Post-Restore KVC Write/Skip B300 Smoke is split into M10.7d3c1
   model-free post-restore KVC decision contract and M10.7d3c2 B300 restored
   payload KVC file smoke.
+- Earlier M10.7d3c1 Post-Restore KVC Decision Contract.
 - Earlier M10.7d3b B300 Restored-Graph Frontier Projection.
 - Earlier M10.7d3a Graph Restore Frontier Contract.
 - Earlier M10.7d2c Runtime Continued-Store B300 Replay Refresh.
@@ -49,6 +50,25 @@
 
 ## Last Evidence
 
+- M10.7d3c1 adds
+  `ds4-parity/baselines/kv/m10.7d3/post-restore-kvc-decision-contract.json`
+  and `ds4-parity/check_post_restore_kvc_decision_contract.py`, a model-free
+  contract that ties the four restored graph payload cases to KVC
+  write/skip expectations before the B300 file-writing smoke.
+- M10.7d3c1 validates unaligned post-restore continued-store skips,
+  re-enabled next continued targets, already-stored boundary skips, and
+  shutdown-write header expectations against M10.7d3b restored-frontier
+  projection, the M10.7d3a frontier contract, M9.8f5 runtime replay evidence,
+  the M10.7d2 runtime ledger contract, and the M7.4a KVC file layout oracle.
+- M10.7d3c1 validation passed `python3
+  ds4-parity/check_post_restore_kvc_decision_contract.py --negative-test` with
+  4 post-restore cases, 3 runtime references, and 8 negative mutations, plus
+  graph restore projection, frontier contract, runtime KV replay, KVC file,
+  Python syntax, JSON syntax, `cargo fmt --all -- --check`, `git diff
+  --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 57 passed, 40 skipped, and 0 failed after
+  fail-loud negative-test target lookup hardening. Non-interactive Claude
+  review reported no blockers.
 - M10.7d3c is split before implementation into M10.7d3c1 model-free
   post-restore KVC decision contract and M10.7d3c2 B300 restored payload KVC
   file smoke, so the write/skip decision matrix is proven before any new B300
