@@ -4797,6 +4797,8 @@ restore boundary.
 
 - Status: split before implementation into M10.7d3a, M10.7d3b, and M10.7d3c
   so the graph-restore frontier work remains comparable at each step.
+  M10.7d3c is further split into M10.7d3c1 and M10.7d3c2 so the KVC
+  write/skip contract is proven before the B300 file-writing smoke.
 
 ##### M10.7d3a: Graph Restore Frontier Contract
 
@@ -4870,6 +4872,7 @@ restore boundary.
 
 ##### M10.7d3c: Post-Restore KVC Write/Skip B300 Smoke
 
+- Status: split before implementation into M10.7d3c1 and M10.7d3c2.
 - Goal: prove a restored graph checkpoint followed by save/skip decisions
   writes or skips KVC checkpoints with current-C-compatible reason fields and
   continued-frontier state.
@@ -4891,6 +4894,57 @@ restore boundary.
 - Validation gate: B300 post-restore KVC smoke, runtime KV replay comparator,
   graph restore projection comparator, targeted Rust tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+##### M10.7d3c1: Post-Restore KVC Decision Contract
+
+- Goal: define a model-free post-restore KVC decision contract before trusting
+  a B300 file-writing smoke.
+- Oracle: M10.7d3b restored-graph frontier projection, M10.7d2 runtime ledger
+  decisions, M0.5 KVC header rows, and the M7.4a KVC file layout oracle.
+- Fixture: restored token counts and frontier projections for the four
+  M10.7d3b graph restore cases, M9.8f5 runtime ledger events, M0.5 KVC header
+  rows, and KVC reason-code constants.
+- Comparator: a model-free checker covering unaligned post-restore continued
+  skips, re-enabled next continued targets, already-stored boundary skips, and
+  shutdown-write header expectations for restored graph payloads.
+- Acceptance: the contract fails if restored token counts, KVC reason names,
+  reason codes, header fields, write/skip decisions, or continued-frontier
+  transitions drift.
+- Drift policy: restored token counts, frontier values, KVC reason fields,
+  header fields, and skip/write decisions are exact; path and raw body hashes
+  remain normalized under the M10.7c3d same-capture policy.
+- Review gate: ask Claude to review oracle coverage and whether the contract
+  is strong enough to gate the B300 smoke.
+- Validation gate: contract checker with negative tests, graph restore
+  projection comparator, runtime KV replay checker, KVC file comparator,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+
+##### M10.7d3c2: B300 Restored Payload KVC File Smoke
+
+- Goal: run a B300 Rust smoke that wraps restored graph payload bodies in KVC
+  files and records the matching post-restore skip decisions.
+- Oracle: M10.7d3c1 post-restore KVC decision contract, M10.7d3b
+  same-capture restored graph evidence, and current C KVC file/header behavior.
+- Fixture: B300 raw graph payload and memory snapshot bodies for
+  `disk_seed_payload`, `snapshot_seed`, `disk_continuation_payload`, and
+  `snapshot_continuation`, plus rendered cache-text keys derived from the
+  same current-C restore capture.
+- Comparator: B300 summary fields for KVC file names, headers, payload byte
+  counts, payload digests, rendered text byte counts, skip decisions, restored
+  frontier state, and graph counters.
+- Acceptance: each restored graph payload can produce a current-C-compatible
+  shutdown KVC file, while unaligned and already-stored continued-store probes
+  skip exactly as the contract predicts.
+- Drift policy: KVC header fields, reason names/codes, token counts, payload
+  bytes, text bytes, skip/write decisions, and graph counters are exact; raw
+  body hashes remain same-capture evidence.
+- Review gate: ask Claude to review B300 command fidelity and KVC
+  header/payload invariants.
+- Validation gate: B300 post-restore KVC file smoke, comparator with negative
+  tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
 
 #### M10.8: Rust MTP Draft And Verifier Orchestration

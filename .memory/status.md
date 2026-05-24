@@ -3,11 +3,14 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d3c Post-Restore KVC Write/Skip B300 Smoke
+- Active item: M10.7d3c1 Post-Restore KVC Decision Contract
 - Last validated source before the active item: M10.7d3b B300 Restored-Graph
   Frontier Projection.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
+- M10.7d3c Post-Restore KVC Write/Skip B300 Smoke is split into M10.7d3c1
+  model-free post-restore KVC decision contract and M10.7d3c2 B300 restored
+  payload KVC file smoke.
 - Earlier M10.7d3b B300 Restored-Graph Frontier Projection.
 - Earlier M10.7d3a Graph Restore Frontier Contract.
 - Earlier M10.7d2c Runtime Continued-Store B300 Replay Refresh.
@@ -46,6 +49,10 @@
 
 ## Last Evidence
 
+- M10.7d3c is split before implementation into M10.7d3c1 model-free
+  post-restore KVC decision contract and M10.7d3c2 B300 restored payload KVC
+  file smoke, so the write/skip decision matrix is proven before any new B300
+  KVC file-writing evidence is trusted.
 - M10.7d3b extends `ds4-graph-restore-next-token` so each restored B300 graph
   payload emits `frontier_projection` evidence derived from the restored token
   count. The summary now records loaded frontier, unaligned current-live skip,
