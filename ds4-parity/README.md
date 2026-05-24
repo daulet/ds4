@@ -645,6 +645,27 @@ python3 ds4-parity/compare_decode_full_output_head.py \
   --candidate /tmp/ds4-c2b2b2b2b2b2b2b2b2b-full-output-head-rust.json
 ```
 
+Compare the M10.5c4d1 Rust short decode-continuation output-head/logits body
+after the deterministic token sequence `0..21`:
+
+```sh
+python3 ds4-parity/compare_decode_short_continuation_output_head.py
+python3 ds4-parity/compare_decode_short_continuation_output_head.py --negative-test
+```
+
+The comparator checks that `ds4-short-continuation-output-head-oracle-dump`
+emits the current-C GPU continuation path through 22 production
+`metal_graph_eval_token_raw_swa` calls, final layer-42 HC readback, output-head
+tensors, logits, selected raw-cache rows, and selected ratio-4/ratio-128
+compressed cache state. On B300, validate the current-C oracle and Rust
+readback together:
+
+```sh
+python3 ds4-parity/compare_decode_short_continuation_output_head.py \
+  --oracle /tmp/ds4-c4d1-short-continuation-output-head-oracle.json \
+  --candidate /tmp/ds4-c4d1-short-continuation-output-head-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

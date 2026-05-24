@@ -12,7 +12,8 @@ The report has two jobs:
   M10.5c4c2b2b2b2b1, M10.5c4c2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2a,
-  M10.5c4c2b2b2b2b2b2b2b1, and M10.5c4c2b2b2b2b2b2b2b2a.
+  M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
+  M10.5c4c2b2b2b2b2b2b2b2b, and M10.5c4d1.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -358,6 +359,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.5c4d1 Rust short continuation output-head comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_decode_short_continuation_output_head.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -681,6 +690,18 @@ def b300_skip_items() -> list[ReportItem]:
                 "and feature-gated Rust CUDA backend linkage"
             ),
             rerun_command=b300_full_output_head_oracle_command(),
+        ),
+        ReportItem(
+            name="M10.5c4d1 B300 short continuation output-head oracle rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Short continuation output-head/logits current-C oracle "
+                "comparison requires the B300 pod, the real q2-imatrix GGUF, "
+                "the current-C helper, and feature-gated Rust CUDA backend "
+                "linkage"
+            ),
+            rerun_command=b300_short_continuation_output_head_oracle_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1311,6 +1332,35 @@ def b300_full_output_head_oracle_command() -> str:
         "python3 ds4-parity/compare_decode_full_output_head.py "
         "--oracle /tmp/ds4-c2b2b2b2b2b2b2b2b2b-full-output-head-oracle.json "
         "--candidate /tmp/ds4-c2b2b2b2b2b2b2b2b2b-full-output-head-rust.json"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_short_continuation_output_head_oracle_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    smoke = b300_exec(
+        "make ds4-short-continuation-output-head-oracle-dump CUDA_ARCH=native && "
+        f"./ds4-short-continuation-output-head-oracle-dump -m {B300_MODEL} "
+        "-o /tmp/ds4-c4d1-short-continuation-output-head-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-decode-short-continuation-output-head --quiet -- "
+        f"--model {B300_MODEL} "
+        "> /tmp/ds4-c4d1-short-continuation-output-head-rust.json && "
+        "python3 ds4-parity/compare_decode_short_continuation_output_head.py "
+        "--oracle /tmp/ds4-c4d1-short-continuation-output-head-oracle.json "
+        "--candidate /tmp/ds4-c4d1-short-continuation-output-head-rust.json"
     )
     return f"{source_refresh} && {smoke}"
 

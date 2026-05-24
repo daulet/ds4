@@ -4707,26 +4707,135 @@
   passed 446 checks; predecessor all-layer final-HC B300 rerun passed 730
   checks; local `run_parity_report.py --skip-local-oracles` passed 39/29/0.
 
-### M10.5c4d: Decode Continuation And Optional Steering Closure
+### M10.5c4d1: Rust Short Decode-Continuation Output-Head B300 Execution
+
+- Status: completed
+- Goal: execute a short decode-seeded continuation sequence through the Rust
+  safe-facade scheduler, ending at token position `21` with real reused raw and
+  ratio-4 compressed decode state before layer-major Rust prefill exists.
+- Oracle: current-C GPU `metal_graph_eval_token_raw_swa` over the same
+  deterministic 22-token sequence, production HC swaps, compressed-row
+  emission, and final output-head logits.
+- Fixture: B300 `ds4flash.gguf`, token sequence `0..21`, context `32768`,
+  final position `21`, no directional steering, no MTP, and default split
+  flush after layer `3`.
+- Comparator: paired Rust-vs-C final tensor hashes/samples for layer-42 HC,
+  output-head tensors, logits, selected raw-cache rows, and selected
+  compressed-cache state/counter metadata.
+- Acceptance: Rust matches the current-C final logits and selected cache/state
+  checkpoints for the 22-token continuation sequence, with `layer2` and
+  `layer42` ratio-4 counters at `5` and ratio-128 counters at `0`.
+- Drift policy: token sequence, final position, split flush layer, cache
+  counters, raw ring rows, and output tensor digests are exact; JSON float
+  samples use the M10.5 tolerant-sample policy.
+- Review gate: ask Claude to review continuation state reuse, compressed-row
+  emission, counter increments, and command flush boundaries.
+- Validation passed: short continuation comparator with negative test, paired
+  local artifact validation with 798 pinned checks, B300 current-C oracle plus
+  Rust CUDA candidate validation with 766 checks, B300 predecessor full
+  output-head rerun with 430 checks, local `arch -arm64 make
+  ds4-short-continuation-output-head-oracle-dump`, local `cargo check -p
+  ds4-gpu --bin ds4-decode-short-continuation-output-head`, local unified
+  report with B300 rerun command coverage, `cargo test --workspace`, `cargo
+  fmt --all -- --check`, `git diff --check`, touched-file NUL scan,
+  non-interactive Claude review with `NO BLOCKERS`, and pinned artifact SHA256
+  `oracle=7c53400cef52a6f73aa8fea06ec4f64298d045bd0776397cc6f3030bbdf38429`
+  and
+  `rust=f00f23abc84474e7d00a8958ebb0c4f055889a384744b004954cfdfa9eb651a6`.
+- Owner path: Rust decode execution modules, B300 comparator,
+  `.memory/status.md`.
+- Evidence: B300 short continuation paired validation matched `sequence_len=22`,
+  `final_position=21`, `raw_row=21`, `raw_start=0`, `n_raw=22`,
+  `layer2_n_comp=5`, `layer2_n_index_comp=5`, `layer5_n_comp=0`,
+  `layer42_n_comp=5`, and `layer42_n_index_comp=5`. Full-buffer FNV digests
+  are `after_layer42_hc=40e22a11d8ca9178`,
+  `output_pre=642c2b6d18b62c67`,
+  `output_weights=9592e0f3a26737e1`,
+  `output_embd=e57d3ebe8ed8c63c`,
+  `output_norm=1615bc086702b3b8`,
+  `logits=fcc73408cecb8073`,
+  `layer2_raw_cache_row=3befca08431b15ed`,
+  `layer2_attn_comp_row4=061fb5b8eabae3db`,
+  `layer2_index_comp_row4=a8afc0bf90381f52`,
+  `layer5_attn_state_kv=2c574c58aad15bc1`,
+  `layer5_attn_state_score=71948016152ae1de`,
+  `layer42_raw_cache_row=998292db4c5534e7`,
+  `layer42_attn_comp_row4=24844d05b88a2c04`,
+  `layer42_index_comp_row4=c7e7a2f46c2aa3b2`,
+  `layer42_attn_state_kv=cf3576176ae9d092`, and
+  `layer42_index_state_kv=06ac626b7530144e`; local
+  `run_parity_report.py --skip-local-oracles` passed 40/30/0.
+
+### M10.5c4d2: Rust Ratio-Boundary Continuation Coverage
 
 - Status: active
-- Goal: close one-token decode coverage for continuation-state and optional
-  directional-steering cases after default B300 execution is passing.
-- Oracle: M10.4 continuation checkpoints, C directional-steering decode
-  branches, and M10.5c4c2b execution results.
-- Fixture: continuation-token decode after prefill, long indexed decode, and
-  directional-steering enabled cases when support vectors are available.
-- Comparator: continuation Rust-vs-C tensor/logit/counter diffs plus optional
-  steering-specific tensor diffs or an explicit unavailable-fixture skip.
-- Acceptance: continuation decode stays comparable to C, and steering coverage
-  is either validated or explicitly skipped with the missing fixture recorded.
-- Drift policy: continuation counters and command boundaries are exact; f32
-  values follow M10.4 tolerances; optional steering skip text is exact.
-- Review gate: ask Claude to review continuation state reuse, optional tensor
-  ownership, and skip conditions.
-- Validation needed: continuation/steering comparator on B300 or exact skip,
+- Goal: extend decode-continuation execution to a ratio boundary where ratio-4
+  and ratio-128 compressed rows are emitted by the final token.
+- Oracle: current-C GPU `metal_graph_eval_token_raw_swa` over the same
+  deterministic token sequence and final output-head path.
+- Fixture: B300 `ds4flash.gguf`, deterministic token sequence ending at
+  position `127`, no directional steering, and no MTP.
+- Comparator: paired Rust-vs-C final tensor hashes/samples, emitted compressed
+  row digests, and ratio-4/ratio-128 counter metadata.
+- Acceptance: Rust matches current-C through final logits while updating both
+  ratio-4 and ratio-128 compressed caches at the boundary.
+- Drift policy: token sequence, boundary position, cache counters, row
+  selection, and output tensor digests are exact; JSON float samples use the
+  M10.5 tolerant-sample policy.
+- Review gate: ask Claude to review ratio-boundary counter transitions and row
+  quantization.
+- Validation needed: ratio-boundary comparator on B300, targeted Rust checks,
   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
   and non-interactive Claude review with no blockers.
+- Owner path: Rust decode execution modules, B300 comparator,
+  `.memory/status.md`.
+
+### M10.5c4d3: Rust Long Indexed-Continuation Attention Coverage
+
+- Status: pending
+- Goal: cover the long-context ratio-4 indexed-attention branch without
+  requiring Rust layer-major prefill ownership.
+- Oracle: current-C GPU decode-layer execution for the selected long indexed
+  continuation state and indexed mixed-attention branch.
+- Fixture: B300 `ds4flash.gguf`, a deterministic long decode state whose
+  ratio-4 compressed row count exceeds `DS4_N_INDEXER_TOP_K`.
+- Comparator: Rust-vs-C indexed-attention tensor hashes/samples, top-k selected
+  rows, raw ring metadata, compressed counters, and final selected layer output.
+- Acceptance: Rust calls the indexed-attention backend with the same selected
+  compressed rows and matches the current-C selected tensor checkpoints.
+- Drift policy: indexed threshold, top-k rows, counter values, raw ring
+  metadata, and tensor digests are exact; JSON float samples use the M10.5
+  tolerant-sample policy.
+- Review gate: ask Claude to review indexed attention state seeding, top-k row
+  ownership, and row-selection comparator coverage.
+- Validation needed: indexed-continuation comparator on B300, targeted Rust
+  checks, `cargo test --workspace`, `cargo fmt --all --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
+- Owner path: Rust decode execution modules, B300 comparator,
+  `.memory/status.md`.
+
+### M10.5c4d4: Rust Directional-Steering Decode Coverage
+
+- Status: pending
+- Goal: validate or explicitly skip directional-steering decode execution in
+  the Rust decode facade once continuation state is already comparable.
+- Oracle: C directional-steering decode branches around attention output and
+  FFN output projection.
+- Fixture: B300 `ds4flash.gguf` plus `dir-steering/out/verbosity.f32` when the
+  support artifact is present and the needed facade operations are implemented.
+- Comparator: Rust-vs-C steering tensor hashes/samples for attention output,
+  FFN output, post-steering HC expansion, and final logits, or an exact skip
+  record naming the missing facade operation or support artifact.
+- Acceptance: steering-enabled Rust decode matches current-C for the selected
+  fixture, or the roadmap records an explicit unavailable-fixture/facade skip
+  before Milestone 10 closure.
+- Drift policy: steering file path, file hash, attn/FFN scales, layer index,
+  and skip text are exact.
+- Review gate: ask Claude to review optional tensor ownership, steering
+  projection placement, and skip conditions.
+- Validation needed: steering comparator on B300 or exact skip, targeted Rust
+  checks, `cargo test --workspace`, `cargo fmt --all --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 
