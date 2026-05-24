@@ -6470,7 +6470,7 @@
 
 #### M10.9d: B300 Long-Context Rust Runtime Gate
 
-- Status: active
+- Status: complete
 - Goal: run the long-context quality gate through the Rust graph runtime path
   and keep nondeterministic score surfaces out of exact comparisons.
 - Oracle: current-C `./ds4_test --long-context` baseline behavior, M7/M10
@@ -6488,16 +6488,27 @@
   markers, fallback state, and cache/KVC accounting are exact; floating score
   surfaces use documented tolerance or explicit nondeterminism labels.
 - Review gate: ask Claude to review long-context gate semantics.
-- Validation needed: live B300 Rust runtime long-context run, comparator with
-  negative tests, server/runtime parity report, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
-  non-interactive Claude review with no blockers.
+- Evidence: added `ds4-runtime-long-context-rs`, added
+  `ds4-parity/run_runtime_graph_long_context.py`, wired the comparator into the
+  unified report and README, and captured
+  `ds4-parity/baselines/graph/m10.9d/runtime-long-context.json` from the B300
+  pod. The artifact records route `graph`, backend `cuda`, q2-imatrix model
+  hash, prompt hash, current-C long-context stdout/stderr, raw Rust
+  stdout/stderr, 30,474 prompt tokens, 76 completion tokens, `stop`, exact
+  fact-recall output, and cache/KVC write accounting equal to the prompt token
+  count.
+- Validation: live B300 Rust runtime long-context capture passed with 126
+  checks and 8 negative mutations. Local comparator, Rust binary check/tests,
+  Python syntax checks, `cargo test --workspace`, server parity report,
+  formatter check, diff check, unified parity report, and non-interactive
+  Claude review passed. Exact command evidence is recorded in
+  `.memory/status.md`.
 - Owner path: B300 long-context Rust runtime artifact, comparator,
   `.memory/status.md`.
 
 #### M10.9e: Tool-Call Quality And Server Replay Rust Runtime Gate
 
-- Status: pending
+- Status: active
 - Goal: prove Rust graph runtime preserves tool-call quality and server/cache
   request behavior on B300.
 - Oracle: current-C `./ds4_test --tool-call-quality`, M9 server/runtime replay,

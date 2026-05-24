@@ -238,6 +238,36 @@ backend `cuda`, q2-imatrix model hash, fixture hash, selected token bytes,
 top-logprob shape, official-top presence, M6 logprob tolerance, and the
 current-C `long_memory_archive` skip reason.
 
+Validate the M10.9d Runtime graph long-context gate:
+
+```sh
+python3 ds4-parity/run_runtime_graph_long_context.py
+python3 ds4-parity/run_runtime_graph_long_context.py --negative-test
+```
+
+Refresh the live B300 Rust runtime long-context summary:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; CUDA_ARCH=native \
+  python3 ds4-parity/run_runtime_graph_long_context.py \
+    --workdir /workspace/ds4 --model /workspace/ds4/ds4flash.gguf \
+    --write-summary /tmp/ds4-m109d-long-context.json --negative-test'
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m109d-long-context.json \
+  ds4-parity/baselines/graph/m10.9d/runtime-long-context.json
+```
+
+The M10.9d comparator checks the Rust `ds4-runtime-long-context-rs`
+capture against the current-C `./ds4_test --long-context` pass/fail contract
+on B300: route `graph`, backend `cuda`, q2-imatrix model hash, long prompt
+hash, context length, deterministic generation settings, cache/KVC accounting,
+fact-recall output, no target-stream fallback marker, and retained raw logs.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

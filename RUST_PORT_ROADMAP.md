@@ -5779,6 +5779,20 @@ restore boundary.
   negative tests, server/runtime parity report, `cargo test --workspace`,
   `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
+- Evidence: added the Rust `ds4-runtime-long-context-rs` capture binary and
+  `ds4-parity/run_runtime_graph_long_context.py`; captured
+  `ds4-parity/baselines/graph/m10.9d/runtime-long-context.json` on B300. The
+  artifact records route `graph`, backend `cuda`, exact q2-imatrix model hash,
+  long-context prompt hash, current-C `./ds4_test --long-context` stdout/stderr,
+  raw Rust stdout/stderr, 30,474 prompt tokens, 76 completion tokens, `stop`,
+  exact fact-recall output, and cache/KVC write accounting equal to the prompt
+  token count.
+- Validation evidence: live B300 Rust runtime long-context capture passed with
+  126 checks and 8 negative mutations. Local comparator, Rust binary
+  check/tests, Python syntax checks, `cargo test --workspace`, server parity
+  report, formatter check, diff check, unified parity report, and
+  non-interactive Claude review passed. Exact command evidence is recorded in
+  `.memory/status.md`.
 
 ##### M10.9e: Tool-Call Quality And Server Replay Rust Runtime Gate
 

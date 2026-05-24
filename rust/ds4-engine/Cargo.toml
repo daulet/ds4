@@ -31,6 +31,10 @@ name = "ds4-runtime-official-vectors-rs"
 path = "src/bin/ds4-runtime-official-vectors-rs.rs"
 
 [[bin]]
+name = "ds4-runtime-long-context-rs"
+path = "src/bin/ds4-runtime-long-context-rs.rs"
+
+[[bin]]
 name = "ds4-cli-one-shot-rs"
 path = "src/bin/ds4-cli-one-shot-rs.rs"
 

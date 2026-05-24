@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.9d B300 Long-Context Rust Runtime Gate
-- Last validated source before the active item: M10.9c B300 Official-Vector
+- Active item: M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate
+- Last validated source before the active item: M10.9d B300 Long-Context
   Rust Runtime Gate.
+- Earlier M10.9d B300 Long-Context Rust Runtime Gate.
 - Earlier M10.9c B300 Official-Vector Rust Runtime Gate.
 - Earlier M10.9b Rust Runtime Graph Route Switch And Preflight.
 - Earlier M10.9a Runtime Graph Closure Matrix And Rerun Contract.
@@ -80,6 +81,28 @@
 
 ## Last Evidence
 
+- M10.9d adds the Rust `ds4-runtime-long-context-rs` capture binary, adds
+  `ds4-parity/run_runtime_graph_long_context.py`, wires the comparator into the
+  unified report and README, and records
+  `ds4-parity/baselines/graph/m10.9d/runtime-long-context.json` from the B300
+  pod. The artifact records route `graph`, backend `cuda`, q2-imatrix model
+  hash
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`,
+  long-context prompt hash
+  `29363eab21bbbccaeea8e13f669e7ce05e8eafc48e31fcf9b725edabb2058666`,
+  current-C long-context stdout/stderr, raw Rust stdout/stderr, 30,474 prompt
+  tokens, 76 completion tokens, `stop`, exact fact-recall output, and
+  cache/KVC write accounting equal to the prompt token count.
+- M10.9d validation passed the live B300 Rust runtime long-context capture with
+  126 checks and 8 negative mutations; `python3
+  ds4-parity/run_runtime_graph_long_context.py --negative-test`; `cargo check
+  -p ds4-engine --bin ds4-runtime-long-context-rs`; `cargo test -p
+  ds4-engine --bin ds4-runtime-long-context-rs`; Python syntax checks; `cargo
+  test --workspace`; `python3 ds4-parity/run_server_parity_report.py` with 10
+  passed, 3 skipped, and 0 failed; `cargo fmt --all -- --check`; `git diff
+  --check`; and `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+  with 75 passed, 48 skipped, and 0 failed. Non-interactive Claude review
+  returned `NO BLOCKERS`.
 - M10.9c adds the Rust `ds4-runtime-official-vectors-rs` capture binary,
   exposes Rust session argmax/top-logprob/eval APIs, adds
   `ds4-parity/run_runtime_graph_official_vectors.py`, wires the comparator into

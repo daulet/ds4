@@ -1,0 +1,157 @@
+{
+  "schema": "ds4.runtime_graph_long_context_summary.v1",
+  "source": "m10.9d-runtime-graph-long-context",
+  "milestone": "M10.9d",
+  "parent": "M10.9",
+  "next_stage": "M10.9e",
+  "runtime_graph_route": "graph",
+  "backend": "cuda",
+  "settings": {
+    "ctx": 100000,
+    "max_tokens": 350,
+    "seed": 12345,
+    "temperature": 0,
+    "top_k": 0,
+    "top_p": 1,
+    "min_p": 0
+  },
+  "score_surface_policy": {
+    "generated_text": "behavioral fact-recall exact",
+    "token_scores": "not captured; nondeterministic score surface excluded"
+  },
+  "workdir": "/workspace/ds4",
+  "model": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "resolved_path": "/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668",
+    "bytes": 86720111488,
+    "expected_sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "prompt": {
+    "path": "tests/long_context_story_prompt.txt",
+    "resolved_path": "/workspace/ds4/tests/long_context_story_prompt.txt",
+    "sha256": "29363eab21bbbccaeea8e13f669e7ce05e8eafc48e31fcf9b725edabb2058666",
+    "bytes": 140309,
+    "expected_sha256": "29363eab21bbbccaeea8e13f669e7ce05e8eafc48e31fcf9b725edabb2058666"
+  },
+  "build": {
+    "rust": {
+      "command": [
+        "cargo",
+        "build",
+        "-p",
+        "ds4-engine",
+        "--bin",
+        "ds4-runtime-long-context-rs"
+      ],
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        },
+        "stderr": {
+          "bytes": 136,
+          "sha256": "cb90c5ebf4b10aff5b59af0d23b2ad513713f9b2802a9902792dff3924dd5964",
+          "base64": "ICAgQ29tcGlsaW5nIGRzNC1lbmdpbmUgdjAuMC4wICgvd29ya3NwYWNlL2RzNC9ydXN0L2RzNC1lbmdpbmUpCiAgICBGaW5pc2hlZCBgZGV2YCBwcm9maWxlIFt1bm9wdGltaXplZCArIGRlYnVnaW5mb10gdGFyZ2V0KHMpIGluIDAuMzhzCg=="
+        }
+      }
+    },
+    "current_c": {
+      "command": [
+        "make",
+        "ds4_test"
+      ],
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 562,
+          "sha256": "082b6aea234da9dc05510a3634e75d34d764cedc30c07f83cc28737ab33ebc47",
+          "base64": "Y2MgLU8zIC1mZmFzdC1tYXRoIC1nIC1tYXJjaD1uYXRpdmUgLVdhbGwgLVdleHRyYSAtc3RkPWM5OSAtRF9HTlVfU09VUkNFIC1mbm8tZmluaXRlLW1hdGgtb25seSAtV25vLXVudXNlZC1mdW5jdGlvbiAtYyAtbyBkczRfdGVzdC5vIHRlc3RzL2RzNF90ZXN0LmMKY2MgLU8zIC1mZmFzdC1tYXRoIC1nIC1tYXJjaD1uYXRpdmUgLVdhbGwgLVdleHRyYSAtc3RkPWM5OSAtRF9HTlVfU09VUkNFIC1mbm8tZmluaXRlLW1hdGgtb25seSAtYyAtbyBkczRfa3ZzdG9yZS5vIGRzNF9rdnN0b3JlLmMKL3Vzci9sb2NhbC9jdWRhL2Jpbi9udmNjIC1PMyAtZyAtbGluZWluZm8gLS11c2VfZmFzdF9tYXRoIC1hcmNoPW5hdGl2ZSAtWGNvbXBpbGVyIC1tYXJjaD1uYXRpdmUgLVhjb21waWxlciAtcHRocmVhZCAtbyBkczRfdGVzdCBkczRfdGVzdC5vIGRzNF9rdnN0b3JlLm8gcmF4Lm8gZHM0Lm8gZHM0X2N1ZGEubyAtbG0gLVhjb21waWxlciAtcHRocmVhZCAtTC91c3IvbG9jYWwvY3VkYS90YXJnZXRzL3Nic2EtbGludXgvbGliIC1ML3Vzci9sb2NhbC9jdWRhL2xpYjY0IC1sY3VkYXJ0IC1sY3VibGFzCg=="
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        }
+      }
+    }
+  },
+  "current_c": {
+    "command": [
+      "./ds4_test",
+      "--long-context"
+    ],
+    "env": {
+      "DS4_TEST_MODEL": "/workspace/ds4/ds4flash.gguf",
+      "DS4_TEST_LONG_PROMPT": "/workspace/ds4/tests/long_context_story_prompt.txt"
+    },
+    "exit_code": 0,
+    "stdout": {
+      "bytes": 14,
+      "sha256": "b0a3351e598c58159ba958c72016f0e79852c15f7e0a0df51402f2654a00ae76",
+      "base64": "ZHM0IHRlc3RzOiBvawo="
+    },
+    "stderr": {
+      "bytes": 787,
+      "sha256": "af7b2fc06405345b6b800af828780cd20eddeb54750fad5b8868048a6deaa3a3",
+      "base64": "bG9uZy1jb250ZXh0OgpkczQ6IENVREEgYmFja2VuZCBpbml0aWFsaXplZCBvbiBOVklESUEgQjMwMCBTWE02IEFDIChzbV8xMDMpCmRzNDogQ1VEQSBob3N0IHJlZ2lzdHJhdGlvbiBza2lwcGVkOiBvcGVyYXRpb24gbm90IHN1cHBvcnRlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIGludG8gZGV2aWNlIGNhY2hlCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMTYuMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDMyLjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA0OC4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNjQuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDgwLjA0IEdpQiBjYWNoZWQKZHM0OiBDVURBIHN0YXJ0dXAgbW9kZWwgY2FjaGUgcHJlcGFyZWQgODAuNzYgR2lCIG9mIHRlbnNvciBzcGFucyBpbiAxMy4wMDFzCmRzNDogY3VkYSBiYWNrZW5kIGluaXRpYWxpemVkIGZvciBncmFwaCBkaWFnbm9zdGljcwpkczQtdGVzdDogbG9uZy1jb250ZXh0IHByZWZpbGwgMC8zMDQ3NApkczQtdGVzdDogbG9uZy1jb250ZXh0IHByZWZpbGwgODE5Mi8zMDQ3NApkczQtdGVzdDogbG9uZy1jb250ZXh0IHByZWZpbGwgMTYzODQvMzA0NzQKZHM0LXRlc3Q6IGxvbmctY29udGV4dCBwcmVmaWxsIDI0NTc2LzMwNDc0CmRzNC10ZXN0OiBsb25nLWNvbnRleHQgcHJlZmlsbCAzMDQ3NC8zMDQ3NApsb25nLWNvbnRleHQ6IE9LCg=="
+    }
+  },
+  "rust": {
+    "binary": "/workspace/ds4/target/debug/ds4-runtime-long-context-rs",
+    "command": [
+      "/workspace/ds4/target/debug/ds4-runtime-long-context-rs",
+      "--model",
+      "/workspace/ds4/ds4flash.gguf",
+      "--prompt-file",
+      "/workspace/ds4/tests/long_context_story_prompt.txt",
+      "--cuda",
+      "--runtime-graph",
+      "graph",
+      "--ctx",
+      "100000",
+      "--tokens",
+      "350",
+      "--seed",
+      "12345"
+    ],
+    "exit_code": 0,
+    "stdout": {
+      "bytes": 774,
+      "sha256": "43aa16fade0d797b65b689b340a5c3412e1cd2aad493b8679f11be2830e36dbf",
+      "base64": "ewogICJzY2hlbWEiOiAiZHM0LnJ1bnRpbWVfZ3JhcGhfbG9uZ19jb250ZXh0LnJ1c3QudjEiLAogICJzb3VyY2UiOiAiZHM0LXJ1bnRpbWUtbG9uZy1jb250ZXh0LXJzIiwKICAicnVudGltZV9ncmFwaF9yb3V0ZSI6ICJncmFwaCIsCiAgImJhY2tlbmQiOiAiY3VkYSIsCiAgIm1vZGVsX3BhdGgiOiAiL3dvcmtzcGFjZS9kczQvZHM0Zmxhc2guZ2d1ZiIsCiAgInByb21wdF9maWxlIjogIi93b3Jrc3BhY2UvZHM0L3Rlc3RzL2xvbmdfY29udGV4dF9zdG9yeV9wcm9tcHQudHh0IiwKICAiY3R4IjogMTAwMDAwLAogICJtYXhfdG9rZW5zIjogMzUwLAogICJzZWVkIjogMTIzNDUsCiAgInRlbXBlcmF0dXJlIjogMCwKICAidG9wX2siOiAwLAogICJ0b3BfcCI6IDEsCiAgIm1pbl9wIjogMCwKICAiZXhpdF9jb2RlIjogMCwKICAicHJvbXB0X3Rva2VucyI6IDMwNDc0LAogICJjb21wbGV0aW9uX3Rva2VucyI6IDc2LAogICJjYWNoZV9yZWFkX3Rva2VucyI6IDAsCiAgImNhY2hlX3dyaXRlX3Rva2VucyI6IDMwNDc0LAogICJsaXZlX3Rva2Vuc19iZWZvcmUiOiAwLAogICJsaXZlX3Byb21wdF9jb21tb24iOiAwLAogICJmaW5pc2hfcmVhc29uIjogInN0b3AiLAogICJnZW5lcmF0ZWRfdGV4dCI6ICJCb2I9MzRcbkFsaWNlPTUyXG5DbGFyYT03MVxuRGllZ289OTNcbkVsZW5hPTE2XG5GZWxpeD04OFxuR3JldGE9NDdcbkh1Z289MjlcbklyaXM9NjRcbkpvbmFzPTEyXG5LaXJhPTgxXG5MZW89Mzlcbk1hcnRhPTc2XG5OYWRpYT0yM1xuT3dlbj01OFxuUHJpeWE9OTciCn0K"
+    },
+    "stderr": {
+      "bytes": 546,
+      "sha256": "7241c3066b7b7eb71c550db90aecf4d3aec102845367fbf9611d45dae6b4edd0",
+      "base64": "ZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuNjQ3cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MK"
+    },
+    "json": {
+      "schema": "ds4.runtime_graph_long_context.rust.v1",
+      "source": "ds4-runtime-long-context-rs",
+      "runtime_graph_route": "graph",
+      "backend": "cuda",
+      "model_path": "/workspace/ds4/ds4flash.gguf",
+      "prompt_file": "/workspace/ds4/tests/long_context_story_prompt.txt",
+      "ctx": 100000,
+      "max_tokens": 350,
+      "seed": 12345,
+      "temperature": 0,
+      "top_k": 0,
+      "top_p": 1,
+      "min_p": 0,
+      "exit_code": 0,
+      "prompt_tokens": 30474,
+      "completion_tokens": 76,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 30474,
+      "live_tokens_before": 0,
+      "live_prompt_common": 0,
+      "finish_reason": "stop",
+      "generated_text": "Bob=34\nAlice=52\nClara=71\nDiego=93\nElena=16\nFelix=88\nGreta=47\nHugo=29\nIris=64\nJonas=12\nKira=81\nLeo=39\nMarta=76\nNadia=23\nOwen=58\nPriya=97"
+    },
+    "json_error": ""
+  }
+}
