@@ -15,8 +15,8 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
-  M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d, and
-  M10.7d3a.
+  M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
+  M10.7d3a, and M10.7d3b.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -483,7 +483,7 @@ class ParityReport:
                 ],
             ),
             (
-                "M10.7c3d Rust graph restore next-token comparator",
+                "M10.7d3b Rust graph restore frontier projection comparator",
                 [
                     sys.executable,
                     "ds4-parity/compare_graph_restore_next_token.py",
@@ -938,13 +938,13 @@ def b300_skip_items() -> list[ReportItem]:
             rerun_command=b300_rust_graph_restore_readback_command(),
         ),
         ReportItem(
-            name="M10.7c3d B300 Rust graph restore next-token rerun",
+            name="M10.7d3b B300 Rust graph restore frontier projection rerun",
             kind="b300-oracle",
             status="SKIP",
             reason=(
-                "Graph restore next-token smoke requires the B300 pod because "
-                "the M7.8 disk payload and memory snapshot raw bodies are "
-                "hash-only and remain in /workspace/ds4"
+                "Graph restore frontier projection requires the B300 pod "
+                "because the M7.8 disk payload and memory snapshot raw bodies "
+                "are hash-only and remain in /workspace/ds4"
             ),
             rerun_command=b300_rust_graph_restore_next_token_command(),
         ),
@@ -1949,7 +1949,7 @@ def b300_rust_graph_restore_next_token_command() -> str:
         "git archive HEAD | "
         + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
     )
-    summary = "/tmp/ds4-m107c3d-restore-next-token.json"
+    summary = "/tmp/ds4-m107d3b-restore-next-token.json"
     smoke = b300_exec(
         "CUDA_ARCH=native python3 ds4-parity/compare_graph_restore_next_token.py "
         f"--live --workdir {B300_WORKDIR} --write-summary {summary} --negative-test"

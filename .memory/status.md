@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d3b B300 Restored-Graph Frontier Projection
-- Last validated source before the active item: M10.7d3a Graph Restore
-  Frontier Contract.
+- Active item: M10.7d3c Post-Restore KVC Write/Skip B300 Smoke
+- Last validated source before the active item: M10.7d3b B300 Restored-Graph
+  Frontier Projection.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
+- Earlier M10.7d3b B300 Restored-Graph Frontier Projection.
 - Earlier M10.7d3a Graph Restore Frontier Contract.
 - Earlier M10.7d2c Runtime Continued-Store B300 Replay Refresh.
 - Earlier M10.7d2b Runtime KV Replay Checker Closure.
@@ -45,6 +46,27 @@
 
 ## Last Evidence
 
+- M10.7d3b extends `ds4-graph-restore-next-token` so each restored B300 graph
+  payload emits `frontier_projection` evidence derived from the restored token
+  count. The summary now records loaded frontier, unaligned current-live skip,
+  next continued-store target, already-stored boundary skip, and shutdown
+  reason projection for `disk_seed_payload`, `snapshot_seed`,
+  `disk_continuation_payload`, and `snapshot_continuation`.
+- M10.7d3b refreshes
+  `ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json` from a
+  live `hou2-prod1` B300 run. The four cases loaded restored frontiers 550,
+  550, 561, and 561; current-live target stayed 0; next continued target was
+  10240; and already-stored boundary target stayed 0.
+- M10.7d3b validation passed the exact-tree live B300 graph restore projection
+  comparator with 4177 checks and 12 negative mutations, local `python3
+  ds4-parity/compare_graph_restore_next_token.py --negative-test`,
+  `python3 ds4-parity/check_graph_restore_frontier_contract.py
+  --negative-test`, `python3 ds4-parity/compare_kv_policy.py
+  --negative-test`, targeted Rust frontier-projection tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 56 passed, 40
+  skipped, and 0 failed, plus non-interactive Claude review with `NO
+  BLOCKERS`.
 - M10.7d3a adds
   `ds4-parity/baselines/kv/m10.7d3/restore-frontier-contract.json`, a
   model-free graph-restore continued-frontier contract that maps the four
@@ -155,8 +177,8 @@
   continued-frontier B300 smoke.
 - M10.7d3 is split before implementation into M10.7d3a model-free graph
   restore frontier contract, M10.7d3b B300 restored-graph frontier projection,
-  and M10.7d3c post-restore KVC write/skip B300 smoke. M10.7d3a is done;
-  M10.7d3b is active.
+  and M10.7d3c post-restore KVC write/skip B300 smoke. M10.7d3a and M10.7d3b
+  are done; M10.7d3c is active.
 - M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
   restores the four C-written disk payload and memory snapshot bodies into
   Rust graph state, computes selected token and top-logprob slices from the

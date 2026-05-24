@@ -1,3 +1,6 @@
+use ds4_gguf::kv_policy::{
+    continued_store_target, KvPolicyConfig, REASON_CONTINUED, REASON_SHUTDOWN,
+};
 use ds4_gguf::session_payload::{
     compress_ratio, default_graph_payload_runtime, layer_attn_state_bytes, layer_index_state_bytes,
     read_graph_payload, GraphPayloadRead, PayloadSections, HEADER_BYTES,
@@ -333,6 +336,17 @@ struct NextTokenReport {
     top_logprobs: Vec<TokenScore>,
     layer_n_comp: [u32; N_LAYER],
     layer_n_index_comp: [u32; N_LAYER],
+    frontier_projection: FrontierProjection,
+}
+
+struct FrontierProjection {
+    policy: KvPolicyConfig,
+    continued_step_tokens: i32,
+    loaded_frontier: i32,
+    current_live_target: i32,
+    next_continued_tokens: i32,
+    next_continued_target: i32,
+    already_stored_boundary_target: i32,
 }
 
 fn next_token_report(
@@ -353,7 +367,62 @@ fn next_token_report(
         top_logprobs: top,
         layer_n_comp: state.layer_n_comp,
         layer_n_index_comp: state.layer_n_index_comp,
+        frontier_projection: frontier_projection(parsed.header.token_count),
     })
+}
+
+fn frontier_projection(restored_tokens: u32) -> FrontierProjection {
+    let restored_tokens = i32::try_from(restored_tokens).expect("restored token count fits i32");
+    let mut policy = KvPolicyConfig::default();
+    policy.continued_last_store_tokens = restored_tokens;
+    let continued_step_tokens = continued_step(policy);
+    let next_continued_tokens = next_continued_probe_tokens(restored_tokens, continued_step_tokens);
+
+    let current_live_target = continued_store_target(policy, restored_tokens);
+    let next_continued_target = continued_store_target(policy, next_continued_tokens);
+    let mut already_stored_policy = policy;
+    already_stored_policy.continued_last_store_tokens = next_continued_tokens;
+    let already_stored_boundary_target =
+        continued_store_target(already_stored_policy, next_continued_tokens);
+
+    FrontierProjection {
+        policy,
+        continued_step_tokens,
+        loaded_frontier: restored_tokens,
+        current_live_target,
+        next_continued_tokens,
+        next_continued_target,
+        already_stored_boundary_target,
+    }
+}
+
+fn next_continued_probe_tokens(restored_tokens: i32, continued_step_tokens: i32) -> i32 {
+    if continued_step_tokens <= 0 {
+        return 0;
+    }
+    let mut probe = ((restored_tokens + continued_step_tokens - 1) / continued_step_tokens)
+        * continued_step_tokens;
+    if probe <= restored_tokens {
+        probe += continued_step_tokens;
+    }
+    probe
+}
+
+fn continued_step(policy: KvPolicyConfig) -> i32 {
+    let interval = policy.options.continued_interval_tokens;
+    if !policy.enabled || interval <= 0 {
+        return 0;
+    }
+    let align = policy.options.boundary_align_tokens;
+    if align <= 0 {
+        return interval;
+    }
+    let step = ((interval + align - 1) / align) * align;
+    if step <= 0 {
+        align
+    } else {
+        step
+    }
 }
 
 fn f32_vec_from_le_bytes(bytes: &[u8]) -> Result<Vec<f32>, String> {
@@ -496,7 +565,48 @@ fn write_next_token<W: Write>(out: &mut W, report: &NextTokenReport) -> io::Resu
     write_u32_array(out, &report.layer_n_comp)?;
     write!(out, ", \"layer_n_index_comp\": ")?;
     write_u32_array(out, &report.layer_n_index_comp)?;
-    write!(out, "}}}}")
+    write!(out, "}}, \"frontier_projection\": ")?;
+    write_frontier_projection(out, &report.frontier_projection)?;
+    write!(out, "}}")
+}
+
+fn write_frontier_projection<W: Write>(
+    out: &mut W,
+    projection: &FrontierProjection,
+) -> io::Result<()> {
+    write!(
+        out,
+        "{{\"source\": \"restored-token-count\", \
+         \"policy\": {{\"min_tokens\": {}, \"cold_max_tokens\": {}, \
+         \"continued_interval_tokens\": {}, \"boundary_trim_tokens\": {}, \
+         \"boundary_align_tokens\": {}, \"continued_step_tokens\": {}}}, \
+         \"loaded_frontier\": {}, \
+         \"current_live_skip\": {{\"live_tokens\": {}, \"target\": {}, \
+         \"reason\": \"restored-position-unaligned\"}}, \
+         \"next_continued_store\": {{\"frontier_before\": {}, \"live_tokens\": {}, \
+         \"target\": {}, \"reason_name\": \"continued\", \"reason\": {}}}, \
+         \"already_stored_boundary\": {{\"frontier_before\": {}, \"live_tokens\": {}, \
+         \"target\": {}}}, \
+         \"post_restore_shutdown\": {{\"reason_name\": \"shutdown\", \"reason\": {}, \
+         \"tokens_source\": \"restored-session-position\"}}}}",
+        projection.policy.options.min_tokens,
+        projection.policy.options.cold_max_tokens,
+        projection.policy.options.continued_interval_tokens,
+        projection.policy.options.boundary_trim_tokens,
+        projection.policy.options.boundary_align_tokens,
+        projection.continued_step_tokens,
+        projection.loaded_frontier,
+        projection.loaded_frontier,
+        projection.current_live_target,
+        projection.loaded_frontier,
+        projection.next_continued_tokens,
+        projection.next_continued_target,
+        REASON_CONTINUED,
+        projection.next_continued_tokens,
+        projection.next_continued_tokens,
+        projection.already_stored_boundary_target,
+        REASON_SHUTDOWN,
+    )
 }
 
 fn write_score<W: Write>(out: &mut W, score: &TokenScore) -> io::Result<()> {
@@ -544,4 +654,30 @@ fn write_json_string<W: Write>(out: &mut W, value: &str) -> io::Result<()> {
         }
     }
     write!(out, "\"")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frontier_projection_reenables_next_boundary_after_seed_restore() {
+        let projection = frontier_projection(550);
+        assert_eq!(projection.continued_step_tokens, 10_240);
+        assert_eq!(projection.loaded_frontier, 550);
+        assert_eq!(projection.current_live_target, 0);
+        assert_eq!(projection.next_continued_tokens, 10_240);
+        assert_eq!(projection.next_continued_target, 10_240);
+        assert_eq!(projection.already_stored_boundary_target, 0);
+    }
+
+    #[test]
+    fn frontier_projection_reenables_next_boundary_after_continuation_restore() {
+        let projection = frontier_projection(561);
+        assert_eq!(projection.loaded_frontier, 561);
+        assert_eq!(projection.current_live_target, 0);
+        assert_eq!(projection.next_continued_tokens, 10_240);
+        assert_eq!(projection.next_continued_target, 10_240);
+        assert_eq!(projection.already_stored_boundary_target, 0);
+    }
 }

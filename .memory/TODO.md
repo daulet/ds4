@@ -5494,7 +5494,7 @@
 
 ### M10.7d3b: B300 Restored-Graph Frontier Projection
 
-- Status: active
+- Status: done
 - Goal: extend the B300 Rust graph restore smoke so each restored payload emits
   continued-frontier projection evidence derived from the actual restored graph
   token counts.
@@ -5518,11 +5518,18 @@
   with negative tests, targeted Rust tests, `cargo test --workspace`, `cargo
   fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
   with no blockers.
+- Evidence: `ds4-graph-restore-next-token` now emits
+  `frontier_projection` for each restored payload, including loaded frontier,
+  unaligned current-live skip, next continued target, already-stored boundary
+  skip, and shutdown reason projection. The B300 live comparator refreshed
+  `ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json` and
+  passed 4177 checks plus 12 negative mutations; full workspace, formatting,
+  diff, unified parity, and non-interactive Claude validation also passed.
 - Owner path: Rust graph restore smoke, B300 comparator, `.memory/status.md`.
 
 ### M10.7d3c: Post-Restore KVC Write/Skip B300 Smoke
 
-- Status: pending
+- Status: active
 - Goal: prove a restored graph checkpoint followed by save/skip decisions
   writes or skips KVC checkpoints with current-C-compatible reason fields and
   continued-frontier state.

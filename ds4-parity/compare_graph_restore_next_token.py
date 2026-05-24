@@ -14,6 +14,7 @@ from typing import Any
 
 import compare_graph_payload_raw_import as raw_import
 import compare_graph_restore_readback as readback_cmp
+import check_graph_restore_frontier_contract as frontier_cmp
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,7 @@ DISK_SUMMARY = ROOT / "ds4-parity" / "baselines" / "kv" / "m10.7c2" / "rust-b300
 SNAPSHOT_SUMMARY = ROOT / "ds4-parity" / "baselines" / "kv" / "m10.7c3a" / "rust-b300-snapshot-raw-import.json"
 READBACK_SUMMARY = ROOT / "ds4-parity" / "baselines" / "kv" / "m10.7c3c" / "rust-b300-restore-readback.json"
 SUMMARY = ROOT / "ds4-parity" / "baselines" / "kv" / "m10.7c3d" / "rust-b300-restore-next-token.json"
+FRONTIER_CONTRACT = ROOT / "ds4-parity" / "baselines" / "kv" / "m10.7d3" / "restore-frontier-contract.json"
 SCHEMA = "ds4.rust_graph_restore_next_token_summary.v1"
 RUST_SCHEMA = "ds4.rust_graph_restore_next_token.v1"
 RUST_READBACK_SCHEMA = "ds4.rust_graph_restore_readback.v1"
@@ -280,6 +282,7 @@ def validate_summary(
     committed_readback_summary: dict[str, Any],
     disk_summary: dict[str, Any],
     snapshot_summary: dict[str, Any],
+    frontier_contract: dict[str, Any],
 ) -> Report:
     report = Report()
     shape_cases = restore_oracle_cases(report, shape_oracle)
@@ -325,6 +328,9 @@ def validate_summary(
     validate_runtime(report, readback_meta.get("runtime"), "summary.rust_readback.runtime")
 
     summary_cases = cases_by_id(report, summary.get("cases"), "summary")
+    frontier_cases = frontier_contract_cases(report, frontier_contract)
+    policy_options = require_dict(report, frontier_contract.get("policy_options"), "frontier_contract.policy_options")
+    already_stored_probe = frontier_policy_probe(report, frontier_contract, "already_stored_boundary_skips")
     shape_by_id = {str(case["id"]): case for case in shape_cases}
     tolerance = float(current_c_meta.get("score_abs_tolerance", 1e-5))
     for case_id in EXPECTED_CASES:
@@ -348,6 +354,14 @@ def validate_summary(
         rust = require_dict(report, summary_case.get("rust"), f"{path}.rust")
         validate_rust_readback_case(report, shape_case, rust_readback, rust, path)
         validate_rust_next_token_case(report, shape_case, current_c, rust, rust_readback, tolerance, path)
+        validate_frontier_projection(
+            report,
+            frontier_cases.get(case_id, {}),
+            policy_options,
+            already_stored_probe,
+            rust,
+            path,
+        )
     static_checks(report)
     return report
 
@@ -462,6 +476,86 @@ def validate_post_restore_state(
     compare_value(report, expected_state, state, f"{path}.post_restore_state")
 
 
+def frontier_contract_cases(
+    report: Report,
+    contract: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    report.check(contract.get("schema") == frontier_cmp.SCHEMA, "frontier contract schema drift")
+    report.check(contract.get("milestone") == "M10.7d3a", "frontier contract milestone drift")
+    cases = require_list(report, contract.get("restore_frontier_cases"), "frontier_contract.restore_frontier_cases")
+    out: dict[str, dict[str, Any]] = {}
+    for case in cases:
+        if not isinstance(case, dict):
+            report.check(False, "frontier contract case must be object")
+            continue
+        name = case.get("name")
+        report.check(isinstance(name, str), "frontier contract case name missing")
+        if isinstance(name, str):
+            out[name] = case
+    report.check(list(out) == EXPECTED_CASES, "frontier contract case order drift")
+    return out
+
+
+def frontier_policy_probe(
+    report: Report,
+    contract: dict[str, Any],
+    name: str,
+) -> dict[str, Any]:
+    probes = require_list(report, contract.get("policy_probes"), "frontier_contract.policy_probes")
+    for probe in probes:
+        if isinstance(probe, dict) and probe.get("name") == name:
+            return probe
+    report.check(False, f"frontier contract policy probe missing: {name}")
+    return {}
+
+
+def validate_frontier_projection(
+    report: Report,
+    contract_case: dict[str, Any],
+    policy_options: dict[str, Any],
+    already_stored_probe: dict[str, Any],
+    rust: dict[str, Any],
+    path: str,
+) -> None:
+    next_token = require_dict(report, rust.get("next_token"), f"{path}.rust.next_token")
+    projection = require_dict(report, next_token.get("frontier_projection"), f"{path}.frontier_projection")
+    report.check(projection.get("source") == "restored-token-count", f"{path}.frontier.source drift")
+    compare_value(report, policy_options, projection.get("policy"), f"{path}.frontier.policy")
+    report.check(
+        projection.get("loaded_frontier") == contract_case.get("loaded_frontier"),
+        f"{path}.frontier.loaded_frontier drift",
+    )
+    compare_value(
+        report,
+        contract_case.get("current_live_skip"),
+        projection.get("current_live_skip"),
+        f"{path}.frontier.current_live_skip",
+    )
+    compare_value(
+        report,
+        contract_case.get("next_continued_store"),
+        projection.get("next_continued_store"),
+        f"{path}.frontier.next_continued_store",
+    )
+    expected_already_stored = {
+        "frontier_before": already_stored_probe.get("frontier_before"),
+        "live_tokens": already_stored_probe.get("live_tokens"),
+        "target": already_stored_probe.get("target"),
+    }
+    compare_value(
+        report,
+        expected_already_stored,
+        projection.get("already_stored_boundary"),
+        f"{path}.frontier.already_stored_boundary",
+    )
+    compare_value(
+        report,
+        contract_case.get("post_restore_shutdown"),
+        projection.get("post_restore_shutdown"),
+        f"{path}.frontier.post_restore_shutdown",
+    )
+
+
 def is_fnv_hex(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 16 and all(ch in "0123456789abcdef" for ch in value)
 
@@ -483,12 +577,13 @@ def static_checks(report: Report) -> None:
     report.check("M10.7c3d Rust Graph Tensor Restore Next-Token Smoke" in status_flat, "status M10.7c3d missing")
     report.check("compare_graph_restore_next_token.py" in text["readme"], "README restore next-token command missing")
     report.check("same-capture current-C restore oracle" in text["readme"], "README same-capture policy missing")
-    report.check("M10.7c3d Rust graph restore next-token comparator" in text["report"], "unified report M10.7c3d missing")
-    report.check("M10.7c3d B300 Rust graph restore next-token rerun" in text["report"], "B300 restore next-token rerun missing")
+    report.check("M10.7d3b Rust graph restore frontier projection comparator" in text["report"], "unified report M10.7d3b missing")
+    report.check("M10.7d3b B300 Rust graph restore frontier projection rerun" in text["report"], "B300 restore frontier projection rerun missing")
     for snippet in (
         "restored-graph-payload",
         "restored-session-logits",
         "top_logprobs",
+        "frontier_projection",
         "layer_raw_cache",
     ):
         report.check(snippet in text["rust_bin"], f"Rust next-token marker missing: {snippet}")
@@ -507,6 +602,7 @@ def run_negative_tests(
     committed_readback_summary: dict[str, Any],
     disk_summary: dict[str, Any],
     snapshot_summary: dict[str, Any],
+    frontier_contract: dict[str, Any],
 ) -> Report:
     report = Report()
     mutations: list[tuple[str, list[str | int], Any]] = [
@@ -521,14 +617,38 @@ def run_negative_tests(
         ("readback evidence drift", ["cases", 0, "rust_readback", "readback", "logits", "matched"], False),
         ("runtime drift", ["rust_next_token", "runtime", "backend"], "not-ds4-gpu"),
         ("policy drift", ["raw_body_policy"], "raw bodies committed"),
+        (
+            "frontier projection drift",
+            [
+                "cases",
+                0,
+                "rust",
+                "next_token",
+                "frontier_projection",
+                "next_continued_store",
+                "target",
+            ],
+            0,
+        ),
     ]
     for label, path, value in mutations:
         bad = copy.deepcopy(summary)
         target: Any = bad
-        for part in path[:-1]:
-            target = target[part]
-        target[path[-1]] = value
-        result = validate_summary(shape_oracle, bad, committed_readback_summary, disk_summary, snapshot_summary)
+        try:
+            for part in path[:-1]:
+                target = target[part]
+            target[path[-1]] = value
+        except (KeyError, IndexError, TypeError):
+            report.check(False, f"negative test mutation path missing for {label}")
+            continue
+        result = validate_summary(
+            shape_oracle,
+            bad,
+            committed_readback_summary,
+            disk_summary,
+            snapshot_summary,
+            frontier_contract,
+        )
         report.check(not result.ok, f"negative test failed to catch {label}")
     return report
 
@@ -547,6 +667,7 @@ def main() -> int:
     parser.add_argument("--readback-summary", type=Path, default=READBACK_SUMMARY)
     parser.add_argument("--disk-summary", type=Path, default=DISK_SUMMARY)
     parser.add_argument("--snapshot-summary", type=Path, default=SNAPSHOT_SUMMARY)
+    parser.add_argument("--frontier-contract", type=Path, default=FRONTIER_CONTRACT)
     parser.add_argument("--live", action="store_true", help="recapture C restore and run Rust GPU restore over the same B300 raw files")
     parser.add_argument("--workdir", type=Path, default=ROOT)
     parser.add_argument("--model", type=Path, default=DEFAULT_B300_MODEL)
@@ -559,6 +680,7 @@ def main() -> int:
     committed_readback_summary = load_json(args.readback_summary)
     disk_summary = load_json(args.disk_summary)
     snapshot_summary = load_json(args.snapshot_summary)
+    frontier_contract = load_json(args.frontier_contract)
     if args.live:
         summary = build_live_summary(shape_oracle, args.workdir, args.current_c_output, args.model)
         if args.write_summary:
@@ -566,11 +688,25 @@ def main() -> int:
     else:
         summary = load_json(args.summary)
 
-    report = validate_summary(shape_oracle, summary, committed_readback_summary, disk_summary, snapshot_summary)
+    report = validate_summary(
+        shape_oracle,
+        summary,
+        committed_readback_summary,
+        disk_summary,
+        snapshot_summary,
+        frontier_contract,
+    )
     print_report("Graph restore next-token comparator", report)
     ok = report.ok
     if args.negative_test:
-        negative = run_negative_tests(shape_oracle, summary, committed_readback_summary, disk_summary, snapshot_summary)
+        negative = run_negative_tests(
+            shape_oracle,
+            summary,
+            committed_readback_summary,
+            disk_summary,
+            snapshot_summary,
+            frontier_contract,
+        )
         print_report("Graph restore next-token negative tests", negative)
         ok = ok and negative.ok
     return 0 if ok else 1

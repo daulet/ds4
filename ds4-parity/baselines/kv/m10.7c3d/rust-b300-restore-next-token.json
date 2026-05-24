@@ -44,8 +44,8 @@
       "prompt_case": "seed",
       "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
       "raw_bytes": 31526948,
-      "raw_sha256": "6678d805dcdddff97ea2e3e55f2a91e6df50b30e0f0155f3bdf664f8445158d8",
-      "current_c_raw_sha256": "6678d805dcdddff97ea2e3e55f2a91e6df50b30e0f0155f3bdf664f8445158d8",
+      "raw_sha256": "31844af09837eec7428df62eeff8cf3a851041f8bb6ad65fb71ae94e5d19be22",
+      "current_c_raw_sha256": "31844af09837eec7428df62eeff8cf3a851041f8bb6ad65fb71ae94e5d19be22",
       "m7_8_oracle_raw_sha256": "eec10e160f9092399eb77d8376bda173916efdaeae55b95a68ea8030834391ad",
       "raw_sha256_matches_current_c": true,
       "raw_sha256_matches_m7_8_oracle": false,
@@ -56,122 +56,122 @@
           {
             "id": 43,
             "bytes_hex": "49",
-            "logit": 26.5209961,
-            "logprob": -0.721558452
-          },
-          {
-            "id": 2107,
-            "bytes_hex": "4974",
-            "logit": 25.5695724,
-            "logprob": -1.6729821
+            "logit": 26.37673,
+            "logprob": -0.720301092
           },
           {
             "id": 62010,
             "bytes_hex": "6361636865",
-            "logit": 24.9580288,
-            "logprob": -2.28452563
+            "logit": 25.4610729,
+            "logprob": -1.63595819
           },
           {
             "id": 33001,
             "bytes_hex": "4f6b6179",
-            "logit": 23.9326267,
-            "logprob": -3.3099277
-          },
-          {
-            "id": 9544,
-            "bytes_hex": "48657265",
-            "logit": 23.7503357,
-            "logprob": -3.49221873
-          },
-          {
-            "id": 3648,
-            "bytes_hex": "e5a5bde79a84",
-            "logit": 23.0940399,
-            "logprob": -4.14851475
-          },
-          {
-            "id": 671,
-            "bytes_hex": "546865",
-            "logit": 22.9349365,
-            "logprob": -4.30761814
-          },
-          {
-            "id": 3476,
-            "bytes_hex": "596f75",
-            "logit": 22.8929939,
-            "logprob": -4.34956074
-          },
-          {
-            "id": 39111,
-            "bytes_hex": "4c6f6f6b696e67",
-            "logit": 22.7925262,
-            "logprob": -4.45002842
-          },
-          {
-            "id": 32111,
-            "bytes_hex": "4261736564",
-            "logit": 22.7007847,
-            "logprob": -4.54176998
+            "logit": 23.9952278,
+            "logprob": -3.1018033
           },
           {
             "id": 61446,
             "bytes_hex": "6b76",
-            "logit": 22.6904106,
-            "logprob": -4.55214405
+            "logit": 23.8032322,
+            "logprob": -3.29379892
+          },
+          {
+            "id": 9544,
+            "bytes_hex": "48657265",
+            "logit": 23.6009598,
+            "logprob": -3.49607134
+          },
+          {
+            "id": 671,
+            "bytes_hex": "546865",
+            "logit": 23.3508987,
+            "logprob": -3.74613237
+          },
+          {
+            "id": 39111,
+            "bytes_hex": "4c6f6f6b696e67",
+            "logit": 23.23242,
+            "logprob": -3.86461115
           },
           {
             "id": 2581,
             "bytes_hex": "5765",
-            "logit": 22.5895042,
-            "logprob": -4.65305042
+            "logit": 23.1435814,
+            "logprob": -3.95344973
           },
           {
-            "id": 2337,
-            "bytes_hex": "54686973",
-            "logit": 22.1725578,
-            "logprob": -5.06999683
+            "id": 3648,
+            "bytes_hex": "e5a5bde79a84",
+            "logit": 23.0673275,
+            "logprob": -4.02970362
           },
           {
             "id": 6932,
             "bytes_hex": "4f66",
-            "logit": 21.9332523,
-            "logprob": -5.30930233
+            "logit": 23.0120316,
+            "logprob": -4.08499956
+          },
+          {
+            "id": 2107,
+            "bytes_hex": "4974",
+            "logit": 22.8304138,
+            "logprob": -4.2666173
+          },
+          {
+            "id": 32111,
+            "bytes_hex": "4261736564",
+            "logit": 22.5329971,
+            "logprob": -4.56403399
           },
           {
             "id": 7230,
             "bytes_hex": "54686174",
-            "logit": 21.8689442,
-            "logprob": -5.3736105
+            "logit": 22.2366428,
+            "logprob": -4.86038828
           },
           {
-            "id": 30594,
-            "bytes_hex": "e4bda0e5a5bd",
-            "logit": 21.7478752,
-            "logprob": -5.49467945
+            "id": 9854,
+            "bytes_hex": "606060",
+            "logit": 22.0953522,
+            "logprob": -5.00167894
           },
           {
-            "id": 57078,
-            "bytes_hex": "e682a8e5a5bd",
-            "logit": 21.6004715,
-            "logprob": -5.64208317
+            "id": 3476,
+            "bytes_hex": "596f75",
+            "logit": 22.0607452,
+            "logprob": -5.03628588
           },
           {
             "id": 8229,
             "bytes_hex": "4166746572",
-            "logit": 21.5924435,
-            "logprob": -5.6501112
+            "logit": 21.8452797,
+            "logprob": -5.25175142
           },
           {
-            "id": 4246,
-            "bytes_hex": "5468657265",
-            "logit": 21.4082031,
-            "logprob": -5.83435154
+            "id": 2337,
+            "bytes_hex": "54686973",
+            "logit": 21.5219345,
+            "logprob": -5.57509661
           },
           {
-            "id": 5480,
-            "bytes_hex": "416c6c",
-            "logit": 21.2782249,
-            "logprob": -5.96432972
+            "id": 103633,
+            "bytes_hex": "416c7269676874",
+            "logit": 21.4301758,
+            "logprob": -5.66685534
+          },
+          {
+            "id": 42895,
+            "bytes_hex": "556e666f7274756e6174656c79",
+            "logit": 21.4009552,
+            "logprob": -5.69607592
+          },
+          {
+            "id": 11932,
+            "bytes_hex": "4f4b",
+            "logit": 21.2764206,
+            "logprob": -5.82061052
           }
         ]
       },
@@ -179,7 +179,7 @@
         "id": "disk_seed_payload",
         "path": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
         "payload_bytes": 31526948,
-        "file_fnv1a64": "d3defab52c52dd05",
+        "file_fnv1a64": "3c9be869fd659a1c",
         "ok": true,
         "error": "",
         "parsed": {
@@ -214,8 +214,8 @@
           },
           "logits": {
             "bytes": 517120,
-            "source_fnv1a64": "94d2e8864394a195",
-            "readback_fnv1a64": "94d2e8864394a195",
+            "source_fnv1a64": "fee95c6236179fe4",
+            "readback_fnv1a64": "fee95c6236179fe4",
             "matched": true
           },
           "attn_counts": {
@@ -232,44 +232,44 @@
           },
           "raw_rows": {
             "bytes": 11272192,
-            "source_fnv1a64": "e38af0b0af659687",
-            "readback_fnv1a64": "e38af0b0af659687",
+            "source_fnv1a64": "30d6011a265d3df8",
+            "readback_fnv1a64": "30d6011a265d3df8",
             "matched": true
           },
           "attn_compressed_rows": {
             "bytes": 6055936,
-            "source_fnv1a64": "1384bc909c3513d5",
-            "readback_fnv1a64": "1384bc909c3513d5",
+            "source_fnv1a64": "8247fc09446dc225",
+            "readback_fnv1a64": "8247fc09446dc225",
             "matched": true
           },
           "attn_state_kv": {
             "bytes": 5931008,
-            "source_fnv1a64": "2befae0d7c4aeae7",
-            "readback_fnv1a64": "2befae0d7c4aeae7",
+            "source_fnv1a64": "aa0d8d69404e9bde",
+            "readback_fnv1a64": "aa0d8d69404e9bde",
             "matched": true
           },
           "attn_state_score": {
             "bytes": 5931008,
-            "source_fnv1a64": "148785df0e8055af",
-            "readback_fnv1a64": "148785df0e8055af",
+            "source_fnv1a64": "6e80f0719a59c7c8",
+            "readback_fnv1a64": "6e80f0719a59c7c8",
             "matched": true
           },
           "indexer_compressed_rows": {
             "bytes": 1473024,
-            "source_fnv1a64": "10477bfe2ae7cd9c",
-            "readback_fnv1a64": "10477bfe2ae7cd9c",
+            "source_fnv1a64": "464b4a8aa1bd516f",
+            "readback_fnv1a64": "464b4a8aa1bd516f",
             "matched": true
           },
           "index_state_kv": {
             "bytes": 172032,
-            "source_fnv1a64": "cf84a205c7077d5b",
-            "readback_fnv1a64": "cf84a205c7077d5b",
+            "source_fnv1a64": "d0ce09c687d822df",
+            "readback_fnv1a64": "d0ce09c687d822df",
             "matched": true
           },
           "index_state_score": {
             "bytes": 172032,
-            "source_fnv1a64": "68dba84de8e529d5",
-            "readback_fnv1a64": "68dba84de8e529d5",
+            "source_fnv1a64": "b86b34a97e73b3cf",
+            "readback_fnv1a64": "b86b34a97e73b3cf",
             "matched": true
           },
           "samples": [
@@ -294,44 +294,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "8675e1b69fdf809c",
-                "readback_fnv1a64": "8675e1b69fdf809c",
+                "source_fnv1a64": "840cca3fdd5e1ef1",
+                "readback_fnv1a64": "840cca3fdd5e1ef1",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 280576,
-                "source_fnv1a64": "530ca32839067828",
-                "readback_fnv1a64": "530ca32839067828",
+                "source_fnv1a64": "3b3eba7ba979b275",
+                "readback_fnv1a64": "3b3eba7ba979b275",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "284a5b8c879301e3",
-                "readback_fnv1a64": "284a5b8c879301e3",
+                "source_fnv1a64": "8b482b8a7273c9fe",
+                "readback_fnv1a64": "8b482b8a7273c9fe",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "d18c5ebf40d58bb7",
-                "readback_fnv1a64": "d18c5ebf40d58bb7",
+                "source_fnv1a64": "96897897676db626",
+                "readback_fnv1a64": "96897897676db626",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 70144,
-                "source_fnv1a64": "51981773b44ef84b",
-                "readback_fnv1a64": "51981773b44ef84b",
+                "source_fnv1a64": "f22fb73d2437bd02",
+                "readback_fnv1a64": "f22fb73d2437bd02",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "c51deaccb752c175",
-                "readback_fnv1a64": "c51deaccb752c175",
+                "source_fnv1a64": "5257910aca556f27",
+                "readback_fnv1a64": "5257910aca556f27",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "08f7574a527b647f",
-                "readback_fnv1a64": "08f7574a527b647f",
+                "source_fnv1a64": "53426bf4b096b893",
+                "readback_fnv1a64": "53426bf4b096b893",
                 "matched": true
               }
             },
@@ -340,26 +340,26 @@
               "ratio": 128,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "d04ee5afb9374a8c",
-                "readback_fnv1a64": "d04ee5afb9374a8c",
+                "source_fnv1a64": "0e37df86ccab9f0e",
+                "readback_fnv1a64": "0e37df86ccab9f0e",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 8192,
-                "source_fnv1a64": "a9e599f25128e1bf",
-                "readback_fnv1a64": "a9e599f25128e1bf",
+                "source_fnv1a64": "ccb8f076e3a40fb5",
+                "readback_fnv1a64": "ccb8f076e3a40fb5",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 262144,
-                "source_fnv1a64": "6a2785ce40944ce3",
-                "readback_fnv1a64": "6a2785ce40944ce3",
+                "source_fnv1a64": "5c916ef3e7a3094b",
+                "readback_fnv1a64": "5c916ef3e7a3094b",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 262144,
-                "source_fnv1a64": "05c1f8de90499ba3",
-                "readback_fnv1a64": "05c1f8de90499ba3",
+                "source_fnv1a64": "b5709c2e0b8d9935",
+                "readback_fnv1a64": "b5709c2e0b8d9935",
                 "matched": true
               },
               "indexer_compressed_rows": null,
@@ -371,44 +371,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "c563df4955634b34",
-                "readback_fnv1a64": "c563df4955634b34",
+                "source_fnv1a64": "23961f49f83186b0",
+                "readback_fnv1a64": "23961f49f83186b0",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 280576,
-                "source_fnv1a64": "ac7e34fe0033753e",
-                "readback_fnv1a64": "ac7e34fe0033753e",
+                "source_fnv1a64": "155cdfbf929252c0",
+                "readback_fnv1a64": "155cdfbf929252c0",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "9db199253ffd3d60",
-                "readback_fnv1a64": "9db199253ffd3d60",
+                "source_fnv1a64": "9ce342f4ba0d782e",
+                "readback_fnv1a64": "9ce342f4ba0d782e",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "1b2d648d9a81c542",
-                "readback_fnv1a64": "1b2d648d9a81c542",
+                "source_fnv1a64": "93bdd9e130c4b37e",
+                "readback_fnv1a64": "93bdd9e130c4b37e",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 70144,
-                "source_fnv1a64": "34670af430ba0f8b",
-                "readback_fnv1a64": "34670af430ba0f8b",
+                "source_fnv1a64": "2ca6a04d1084d15b",
+                "readback_fnv1a64": "2ca6a04d1084d15b",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "c58e8fab2acca5c4",
-                "readback_fnv1a64": "c58e8fab2acca5c4",
+                "source_fnv1a64": "32950985ee00eccc",
+                "readback_fnv1a64": "32950985ee00eccc",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "e8d3c6f8222b5fa2",
-                "readback_fnv1a64": "e8d3c6f8222b5fa2",
+                "source_fnv1a64": "21f7f6bf24a2ad78",
+                "readback_fnv1a64": "21f7f6bf24a2ad78",
                 "matched": true
               }
             }
@@ -514,7 +514,7 @@
         "id": "disk_seed_payload",
         "path": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
         "payload_bytes": 31526948,
-        "file_fnv1a64": "d3defab52c52dd05",
+        "file_fnv1a64": "3c9be869fd659a1c",
         "ok": true,
         "error": "",
         "parsed": {
@@ -546,108 +546,108 @@
           "graph_restored": true,
           "checkpoint_tokens": 550,
           "checkpoint_fnv1a64": "658b58c6d38f0c74",
-          "logits_fnv1a64": "94d2e8864394a195",
+          "logits_fnv1a64": "fee95c6236179fe4",
           "selected_token": 43,
           "top_logprobs": [
             {
               "id": 43,
-              "logit": 26.520996094,
-              "logprob": -0.721558452
-            },
-            {
-              "id": 2107,
-              "logit": 25.569572449,
-              "logprob": -1.672982097
+              "logit": 26.376729965,
+              "logprob": -0.720301092
             },
             {
               "id": 62010,
-              "logit": 24.958028793,
-              "logprob": -2.284525633
+              "logit": 25.461072922,
+              "logprob": -1.635958195
             },
             {
               "id": 33001,
-              "logit": 23.932626724,
-              "logprob": -3.309927702
-            },
-            {
-              "id": 9544,
-              "logit": 23.750335693,
-              "logprob": -3.492218733
-            },
-            {
-              "id": 3648,
-              "logit": 23.094039917,
-              "logprob": -4.148514748
-            },
-            {
-              "id": 671,
-              "logit": 22.934936523,
-              "logprob": -4.307618141
-            },
-            {
-              "id": 3476,
-              "logit": 22.892993927,
-              "logprob": -4.349560738
-            },
-            {
-              "id": 39111,
-              "logit": 22.792526245,
-              "logprob": -4.450028419
-            },
-            {
-              "id": 32111,
-              "logit": 22.700784683,
-              "logprob": -4.541769981
+              "logit": 23.995227814,
+              "logprob": -3.101803303
             },
             {
               "id": 61446,
-              "logit": 22.690410614,
-              "logprob": -4.552144051
+              "logit": 23.803232193,
+              "logprob": -3.293798923
+            },
+            {
+              "id": 9544,
+              "logit": 23.600959778,
+              "logprob": -3.496071339
+            },
+            {
+              "id": 671,
+              "logit": 23.350898743,
+              "logprob": -3.746132374
+            },
+            {
+              "id": 39111,
+              "logit": 23.232419968,
+              "logprob": -3.864611149
             },
             {
               "id": 2581,
-              "logit": 22.589504242,
-              "logprob": -4.653050423
+              "logit": 23.14358139,
+              "logprob": -3.953449726
             },
             {
-              "id": 2337,
-              "logit": 22.172557831,
-              "logprob": -5.069996834
+              "id": 3648,
+              "logit": 23.067327499,
+              "logprob": -4.029703617
             },
             {
               "id": 6932,
-              "logit": 21.933252335,
-              "logprob": -5.30930233
+              "logit": 23.012031555,
+              "logprob": -4.084999561
+            },
+            {
+              "id": 2107,
+              "logit": 22.830413818,
+              "logprob": -4.266617298
+            },
+            {
+              "id": 32111,
+              "logit": 22.532997131,
+              "logprob": -4.564033985
             },
             {
               "id": 7230,
-              "logit": 21.868944168,
-              "logprob": -5.373610497
+              "logit": 22.236642838,
+              "logprob": -4.860388279
             },
             {
-              "id": 30594,
-              "logit": 21.747875214,
-              "logprob": -5.494679451
+              "id": 9854,
+              "logit": 22.095352173,
+              "logprob": -5.001678944
             },
             {
-              "id": 57078,
-              "logit": 21.600471497,
-              "logprob": -5.642083168
+              "id": 3476,
+              "logit": 22.060745239,
+              "logprob": -5.036285877
             },
             {
               "id": 8229,
-              "logit": 21.592443466,
-              "logprob": -5.650111198
+              "logit": 21.845279694,
+              "logprob": -5.251751423
             },
             {
-              "id": 4246,
-              "logit": 21.408203125,
-              "logprob": -5.83435154
+              "id": 2337,
+              "logit": 21.521934509,
+              "logprob": -5.575096607
             },
             {
-              "id": 5480,
-              "logit": 21.278224945,
-              "logprob": -5.96432972
+              "id": 103633,
+              "logit": 21.430175781,
+              "logprob": -5.666855335
+            },
+            {
+              "id": 42895,
+              "logit": 21.4009552,
+              "logprob": -5.696075916
+            },
+            {
+              "id": 11932,
+              "logit": 21.276420593,
+              "logprob": -5.820610523
             }
           ],
           "post_restore_state": {
@@ -744,6 +744,40 @@
               0,
               137
             ]
+          },
+          "frontier_projection": {
+            "source": "restored-token-count",
+            "policy": {
+              "min_tokens": 512,
+              "cold_max_tokens": 30000,
+              "continued_interval_tokens": 10000,
+              "boundary_trim_tokens": 32,
+              "boundary_align_tokens": 2048,
+              "continued_step_tokens": 10240
+            },
+            "loaded_frontier": 550,
+            "current_live_skip": {
+              "live_tokens": 550,
+              "target": 0,
+              "reason": "restored-position-unaligned"
+            },
+            "next_continued_store": {
+              "frontier_before": 550,
+              "live_tokens": 10240,
+              "target": 10240,
+              "reason_name": "continued",
+              "reason": 2
+            },
+            "already_stored_boundary": {
+              "frontier_before": 10240,
+              "live_tokens": 10240,
+              "target": 0
+            },
+            "post_restore_shutdown": {
+              "reason_name": "shutdown",
+              "reason": 4,
+              "tokens_source": "restored-session-position"
+            }
           }
         }
       }
@@ -754,8 +788,8 @@
       "prompt_case": "seed",
       "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
       "raw_bytes": 31526948,
-      "raw_sha256": "016aa4f4e7bb848675408ecff1a9ce5f5d5b07577ad4b7e07e4cf2243f4bd5f2",
-      "current_c_raw_sha256": "016aa4f4e7bb848675408ecff1a9ce5f5d5b07577ad4b7e07e4cf2243f4bd5f2",
+      "raw_sha256": "b4acecd4a25daef98161a032d03fc76e31a2218c9572c7851ac8a5af36b9cbef",
+      "current_c_raw_sha256": "b4acecd4a25daef98161a032d03fc76e31a2218c9572c7851ac8a5af36b9cbef",
       "m7_8_oracle_raw_sha256": "46b8e3694a7c160e96e2b39292fc852eb34c5c0eb321da6c4c994ba766a39533",
       "raw_sha256_matches_current_c": true,
       "raw_sha256_matches_m7_8_oracle": false,
@@ -766,122 +800,122 @@
           {
             "id": 43,
             "bytes_hex": "49",
-            "logit": 27.4595585,
-            "logprob": -0.27930817
-          },
-          {
-            "id": 62010,
-            "bytes_hex": "6361636865",
-            "logit": 24.9099407,
-            "logprob": -2.82892585
-          },
-          {
-            "id": 33001,
-            "bytes_hex": "4f6b6179",
-            "logit": 24.0392685,
-            "logprob": -3.69959807
-          },
-          {
-            "id": 9544,
-            "bytes_hex": "48657265",
-            "logit": 24.0265388,
-            "logprob": -3.71232772
-          },
-          {
-            "id": 671,
-            "bytes_hex": "546865",
-            "logit": 24.0080338,
-            "logprob": -3.73083282
-          },
-          {
-            "id": 3648,
-            "bytes_hex": "e5a5bde79a84",
-            "logit": 23.9460144,
-            "logprob": -3.79285216
-          },
-          {
-            "id": 2581,
-            "bytes_hex": "5765",
-            "logit": 23.3071365,
-            "logprob": -4.43173027
-          },
-          {
-            "id": 61446,
-            "bytes_hex": "6b76",
-            "logit": 23.2653027,
-            "logprob": -4.47356415
+            "logit": 26.2319355,
+            "logprob": -1.08930981
           },
           {
             "id": 2107,
             "bytes_hex": "4974",
-            "logit": 23.2471046,
-            "logprob": -4.49176216
+            "logit": 25.5214272,
+            "logprob": -1.79981816
           },
           {
-            "id": 7230,
-            "bytes_hex": "54686174",
-            "logit": 22.625946,
-            "logprob": -5.11292076
+            "id": 33001,
+            "bytes_hex": "4f6b6179",
+            "logit": 25.507225,
+            "logprob": -1.81402028
           },
           {
-            "id": 6932,
-            "bytes_hex": "4f66",
-            "logit": 22.5173588,
-            "logprob": -5.22150803
+            "id": 9544,
+            "bytes_hex": "48657265",
+            "logit": 24.6900864,
+            "logprob": -2.63115883
           },
           {
-            "id": 3476,
-            "bytes_hex": "596f75",
-            "logit": 22.368576,
-            "logprob": -5.37029076
+            "id": 62010,
+            "bytes_hex": "6361636865",
+            "logit": 24.3064423,
+            "logprob": -3.01480293
+          },
+          {
+            "id": 671,
+            "bytes_hex": "546865",
+            "logit": 24.1141891,
+            "logprob": -3.20705605
           },
           {
             "id": 39111,
             "bytes_hex": "4c6f6f6b696e67",
-            "logit": 21.9589043,
-            "logprob": -5.77996254
+            "logit": 23.3644066,
+            "logprob": -3.95683861
+          },
+          {
+            "id": 2581,
+            "bytes_hex": "5765",
+            "logit": 23.2375374,
+            "logprob": -4.08370781
+          },
+          {
+            "id": 3648,
+            "bytes_hex": "e5a5bde79a84",
+            "logit": 23.155014,
+            "logprob": -4.16623116
           },
           {
             "id": 32111,
             "bytes_hex": "4261736564",
-            "logit": 21.8393192,
-            "logprob": -5.89954758
+            "logit": 22.8930645,
+            "logprob": -4.42818069
           },
           {
-            "id": 666,
-            "bytes_hex": "2a2a",
-            "logit": 21.6911983,
-            "logprob": -6.04766846
+            "id": 3476,
+            "bytes_hex": "596f75",
+            "logit": 22.8632488,
+            "logprob": -4.45799637
+          },
+          {
+            "id": 7230,
+            "bytes_hex": "54686174",
+            "logit": 22.6020737,
+            "logprob": -4.71917152
+          },
+          {
+            "id": 61446,
+            "bytes_hex": "6b76",
+            "logit": 22.521677,
+            "logprob": -4.79956818
           },
           {
             "id": 2337,
             "bytes_hex": "54686973",
-            "logit": 21.5855827,
-            "logprob": -6.15328407
+            "logit": 22.419178,
+            "logprob": -4.90206718
           },
           {
-            "id": 19923,
-            "bytes_hex": "48656c6c6f",
-            "logit": 21.3799896,
-            "logprob": -6.35887718
+            "id": 6932,
+            "bytes_hex": "4f66",
+            "logit": 22.3847504,
+            "logprob": -4.93649483
           },
           {
-            "id": 42895,
-            "bytes_hex": "556e666f7274756e6174656c79",
-            "logit": 21.3187408,
-            "logprob": -6.42012596
+            "id": 11932,
+            "bytes_hex": "4f4b",
+            "logit": 22.2645664,
+            "logprob": -5.05667877
           },
           {
-            "id": 531,
-            "bytes_hex": "e68891",
-            "logit": 21.2764435,
-            "logprob": -6.46242332
+            "id": 5480,
+            "bytes_hex": "416c6c",
+            "logit": 22.2616234,
+            "logprob": -5.05962181
           },
           {
-            "id": 30594,
-            "bytes_hex": "e4bda0e5a5bd",
-            "logit": 21.2533875,
-            "logprob": -6.48547935
+            "id": 103633,
+            "bytes_hex": "416c7269676874",
+            "logit": 22.0527306,
+            "logprob": -5.26851463
+          },
+          {
+            "id": 8229,
+            "bytes_hex": "4166746572",
+            "logit": 21.8598251,
+            "logprob": -5.46142006
+          },
+          {
+            "id": 35,
+            "bytes_hex": "41",
+            "logit": 21.4957275,
+            "logprob": -5.82551765
           }
         ]
       },
@@ -889,7 +923,7 @@
         "id": "snapshot_seed",
         "path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
         "payload_bytes": 31526948,
-        "file_fnv1a64": "331d0f15300afa26",
+        "file_fnv1a64": "90511f05e395ec5a",
         "ok": true,
         "error": "",
         "parsed": {
@@ -924,8 +958,8 @@
           },
           "logits": {
             "bytes": 517120,
-            "source_fnv1a64": "5d23044ed93cad25",
-            "readback_fnv1a64": "5d23044ed93cad25",
+            "source_fnv1a64": "3c76905473e6aaec",
+            "readback_fnv1a64": "3c76905473e6aaec",
             "matched": true
           },
           "attn_counts": {
@@ -942,44 +976,44 @@
           },
           "raw_rows": {
             "bytes": 11272192,
-            "source_fnv1a64": "0ef0b86c93798272",
-            "readback_fnv1a64": "0ef0b86c93798272",
+            "source_fnv1a64": "a6e84729f9a9b1f5",
+            "readback_fnv1a64": "a6e84729f9a9b1f5",
             "matched": true
           },
           "attn_compressed_rows": {
             "bytes": 6055936,
-            "source_fnv1a64": "c0f271954e662657",
-            "readback_fnv1a64": "c0f271954e662657",
+            "source_fnv1a64": "a8a3de8bcbcb0a36",
+            "readback_fnv1a64": "a8a3de8bcbcb0a36",
             "matched": true
           },
           "attn_state_kv": {
             "bytes": 5931008,
-            "source_fnv1a64": "a6b90a81486092c7",
-            "readback_fnv1a64": "a6b90a81486092c7",
+            "source_fnv1a64": "d6bbc2ee86643d65",
+            "readback_fnv1a64": "d6bbc2ee86643d65",
             "matched": true
           },
           "attn_state_score": {
             "bytes": 5931008,
-            "source_fnv1a64": "edaf523e09969db7",
-            "readback_fnv1a64": "edaf523e09969db7",
+            "source_fnv1a64": "9e5be2d6facc064d",
+            "readback_fnv1a64": "9e5be2d6facc064d",
             "matched": true
           },
           "indexer_compressed_rows": {
             "bytes": 1473024,
-            "source_fnv1a64": "47eca14d6fd66edf",
-            "readback_fnv1a64": "47eca14d6fd66edf",
+            "source_fnv1a64": "7cb1d1982cb35d0e",
+            "readback_fnv1a64": "7cb1d1982cb35d0e",
             "matched": true
           },
           "index_state_kv": {
             "bytes": 172032,
-            "source_fnv1a64": "c2a655d63b0746e5",
-            "readback_fnv1a64": "c2a655d63b0746e5",
+            "source_fnv1a64": "2253e71532357cb0",
+            "readback_fnv1a64": "2253e71532357cb0",
             "matched": true
           },
           "index_state_score": {
             "bytes": 172032,
-            "source_fnv1a64": "a92936a63226ba50",
-            "readback_fnv1a64": "a92936a63226ba50",
+            "source_fnv1a64": "5713e5204e6cb8b3",
+            "readback_fnv1a64": "5713e5204e6cb8b3",
             "matched": true
           },
           "samples": [
@@ -1004,44 +1038,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "e5c1b2e7063e244a",
-                "readback_fnv1a64": "e5c1b2e7063e244a",
+                "source_fnv1a64": "4f4d6d3244fd32e5",
+                "readback_fnv1a64": "4f4d6d3244fd32e5",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 280576,
-                "source_fnv1a64": "8c914eda292e5c38",
-                "readback_fnv1a64": "8c914eda292e5c38",
+                "source_fnv1a64": "6dbb1ce15c7b3100",
+                "readback_fnv1a64": "6dbb1ce15c7b3100",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "db37cced0f90bc9e",
-                "readback_fnv1a64": "db37cced0f90bc9e",
+                "source_fnv1a64": "8b482b8a7273c9fe",
+                "readback_fnv1a64": "8b482b8a7273c9fe",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "6dcc8a965835b347",
-                "readback_fnv1a64": "6dcc8a965835b347",
+                "source_fnv1a64": "96897897676db626",
+                "readback_fnv1a64": "96897897676db626",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 70144,
-                "source_fnv1a64": "fc31ba29e26bccd8",
-                "readback_fnv1a64": "fc31ba29e26bccd8",
+                "source_fnv1a64": "b0a661357e6f5f9b",
+                "readback_fnv1a64": "b0a661357e6f5f9b",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "7ebc068c7313a079",
-                "readback_fnv1a64": "7ebc068c7313a079",
+                "source_fnv1a64": "5257910aca556f27",
+                "readback_fnv1a64": "5257910aca556f27",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "501703f01bcb188e",
-                "readback_fnv1a64": "501703f01bcb188e",
+                "source_fnv1a64": "53426bf4b096b893",
+                "readback_fnv1a64": "53426bf4b096b893",
                 "matched": true
               }
             },
@@ -1050,26 +1084,26 @@
               "ratio": 128,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "304208e1ad831db7",
-                "readback_fnv1a64": "304208e1ad831db7",
+                "source_fnv1a64": "091d5122e5eb54e0",
+                "readback_fnv1a64": "091d5122e5eb54e0",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 8192,
-                "source_fnv1a64": "281a5a720a9c0177",
-                "readback_fnv1a64": "281a5a720a9c0177",
+                "source_fnv1a64": "50e4f5405e2b87af",
+                "readback_fnv1a64": "50e4f5405e2b87af",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 262144,
-                "source_fnv1a64": "00901c981bebbea4",
-                "readback_fnv1a64": "00901c981bebbea4",
+                "source_fnv1a64": "c293e9a30b96a77b",
+                "readback_fnv1a64": "c293e9a30b96a77b",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 262144,
-                "source_fnv1a64": "cd5705974034ecf3",
-                "readback_fnv1a64": "cd5705974034ecf3",
+                "source_fnv1a64": "944393f260b7931d",
+                "readback_fnv1a64": "944393f260b7931d",
                 "matched": true
               },
               "indexer_compressed_rows": null,
@@ -1081,44 +1115,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "b14834c03e6a1c6d",
-                "readback_fnv1a64": "b14834c03e6a1c6d",
+                "source_fnv1a64": "e6121b68f9ed949d",
+                "readback_fnv1a64": "e6121b68f9ed949d",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 280576,
-                "source_fnv1a64": "a233312ae4d54bf1",
-                "readback_fnv1a64": "a233312ae4d54bf1",
+                "source_fnv1a64": "833c25e78679db15",
+                "readback_fnv1a64": "833c25e78679db15",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "ef96402e3ead8b98",
-                "readback_fnv1a64": "ef96402e3ead8b98",
+                "source_fnv1a64": "469f5168fab04e34",
+                "readback_fnv1a64": "469f5168fab04e34",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "fc941d692ad26546",
-                "readback_fnv1a64": "fc941d692ad26546",
+                "source_fnv1a64": "3df16526a9ea0708",
+                "readback_fnv1a64": "3df16526a9ea0708",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 70144,
-                "source_fnv1a64": "769f4b2cdb8a7ca2",
-                "readback_fnv1a64": "769f4b2cdb8a7ca2",
+                "source_fnv1a64": "49ef97508a8db6a8",
+                "readback_fnv1a64": "49ef97508a8db6a8",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "30f8a3327b78e159",
-                "readback_fnv1a64": "30f8a3327b78e159",
+                "source_fnv1a64": "b6ff948ab50a7250",
+                "readback_fnv1a64": "b6ff948ab50a7250",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "ae69dfe43848d8a4",
-                "readback_fnv1a64": "ae69dfe43848d8a4",
+                "source_fnv1a64": "07426bf4a98e6f17",
+                "readback_fnv1a64": "07426bf4a98e6f17",
                 "matched": true
               }
             }
@@ -1224,7 +1258,7 @@
         "id": "snapshot_seed",
         "path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
         "payload_bytes": 31526948,
-        "file_fnv1a64": "331d0f15300afa26",
+        "file_fnv1a64": "90511f05e395ec5a",
         "ok": true,
         "error": "",
         "parsed": {
@@ -1256,108 +1290,108 @@
           "graph_restored": true,
           "checkpoint_tokens": 550,
           "checkpoint_fnv1a64": "658b58c6d38f0c74",
-          "logits_fnv1a64": "5d23044ed93cad25",
+          "logits_fnv1a64": "3c76905473e6aaec",
           "selected_token": 43,
           "top_logprobs": [
             {
               "id": 43,
-              "logit": 27.459558487,
-              "logprob": -0.27930817
-            },
-            {
-              "id": 62010,
-              "logit": 24.90994072,
-              "logprob": -2.828925848
-            },
-            {
-              "id": 33001,
-              "logit": 24.039268494,
-              "logprob": -3.699598074
-            },
-            {
-              "id": 9544,
-              "logit": 24.026538849,
-              "logprob": -3.712327719
-            },
-            {
-              "id": 671,
-              "logit": 24.008033752,
-              "logprob": -3.730832815
-            },
-            {
-              "id": 3648,
-              "logit": 23.946014404,
-              "logprob": -3.792852163
-            },
-            {
-              "id": 2581,
-              "logit": 23.307136536,
-              "logprob": -4.43173027
-            },
-            {
-              "id": 61446,
-              "logit": 23.265302658,
-              "logprob": -4.473564148
+              "logit": 26.231935501,
+              "logprob": -1.089309812
             },
             {
               "id": 2107,
-              "logit": 23.247104645,
-              "logprob": -4.491762161
+              "logit": 25.521427155,
+              "logprob": -1.799818158
             },
             {
-              "id": 7230,
-              "logit": 22.625946045,
-              "logprob": -5.112920761
+              "id": 33001,
+              "logit": 25.507225037,
+              "logprob": -1.814020276
             },
             {
-              "id": 6932,
-              "logit": 22.51735878,
-              "logprob": -5.221508026
+              "id": 9544,
+              "logit": 24.690086365,
+              "logprob": -2.631158829
             },
             {
-              "id": 3476,
-              "logit": 22.36857605,
-              "logprob": -5.370290756
+              "id": 62010,
+              "logit": 24.306442261,
+              "logprob": -3.014802933
+            },
+            {
+              "id": 671,
+              "logit": 24.114189148,
+              "logprob": -3.207056046
             },
             {
               "id": 39111,
-              "logit": 21.958904266,
-              "logprob": -5.77996254
+              "logit": 23.364406586,
+              "logprob": -3.956838608
+            },
+            {
+              "id": 2581,
+              "logit": 23.237537384,
+              "logprob": -4.083707809
+            },
+            {
+              "id": 3648,
+              "logit": 23.155014038,
+              "logprob": -4.166231155
             },
             {
               "id": 32111,
-              "logit": 21.839319229,
-              "logprob": -5.899547577
+              "logit": 22.893064499,
+              "logprob": -4.428180695
             },
             {
-              "id": 666,
-              "logit": 21.691198349,
-              "logprob": -6.047668457
+              "id": 3476,
+              "logit": 22.863248825,
+              "logprob": -4.457996368
+            },
+            {
+              "id": 7230,
+              "logit": 22.602073669,
+              "logprob": -4.719171524
+            },
+            {
+              "id": 61446,
+              "logit": 22.521677017,
+              "logprob": -4.799568176
             },
             {
               "id": 2337,
-              "logit": 21.585582733,
-              "logprob": -6.153284073
+              "logit": 22.419178009,
+              "logprob": -4.902067184
             },
             {
-              "id": 19923,
-              "logit": 21.379989624,
-              "logprob": -6.358877182
+              "id": 6932,
+              "logit": 22.384750366,
+              "logprob": -4.936494827
             },
             {
-              "id": 42895,
-              "logit": 21.318740845,
-              "logprob": -6.420125961
+              "id": 11932,
+              "logit": 22.264566422,
+              "logprob": -5.056678772
             },
             {
-              "id": 531,
-              "logit": 21.276443481,
-              "logprob": -6.462423325
+              "id": 5480,
+              "logit": 22.261623383,
+              "logprob": -5.059621811
             },
             {
-              "id": 30594,
-              "logit": 21.253387451,
-              "logprob": -6.485479355
+              "id": 103633,
+              "logit": 22.05273056,
+              "logprob": -5.268514633
+            },
+            {
+              "id": 8229,
+              "logit": 21.859825134,
+              "logprob": -5.461420059
+            },
+            {
+              "id": 35,
+              "logit": 21.495727539,
+              "logprob": -5.825517654
             }
           ],
           "post_restore_state": {
@@ -1454,6 +1488,40 @@
               0,
               137
             ]
+          },
+          "frontier_projection": {
+            "source": "restored-token-count",
+            "policy": {
+              "min_tokens": 512,
+              "cold_max_tokens": 30000,
+              "continued_interval_tokens": 10000,
+              "boundary_trim_tokens": 32,
+              "boundary_align_tokens": 2048,
+              "continued_step_tokens": 10240
+            },
+            "loaded_frontier": 550,
+            "current_live_skip": {
+              "live_tokens": 550,
+              "target": 0,
+              "reason": "restored-position-unaligned"
+            },
+            "next_continued_store": {
+              "frontier_before": 550,
+              "live_tokens": 10240,
+              "target": 10240,
+              "reason_name": "continued",
+              "reason": 2
+            },
+            "already_stored_boundary": {
+              "frontier_before": 10240,
+              "live_tokens": 10240,
+              "target": 0
+            },
+            "post_restore_shutdown": {
+              "reason_name": "shutdown",
+              "reason": 4,
+              "tokens_source": "restored-session-position"
+            }
           }
         }
       }
@@ -1464,8 +1532,8 @@
       "prompt_case": "continuation",
       "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
       "raw_bytes": 31688272,
-      "raw_sha256": "78fb7069c6bdc5426d6614a3519e947e461202b33dfcc871a2dcc041ca213689",
-      "current_c_raw_sha256": "78fb7069c6bdc5426d6614a3519e947e461202b33dfcc871a2dcc041ca213689",
+      "raw_sha256": "876aa3af44453bc706baa2c5260e0cbc20f345e80a93cb26668886c079e68a4c",
+      "current_c_raw_sha256": "876aa3af44453bc706baa2c5260e0cbc20f345e80a93cb26668886c079e68a4c",
       "m7_8_oracle_raw_sha256": "794d4df3fe8847c48098d50b2bdfced578e66da1016dc7755965d7457fd5ed71",
       "raw_sha256_matches_current_c": true,
       "raw_sha256_matches_m7_8_oracle": false,
@@ -1476,122 +1544,122 @@
           {
             "id": 61446,
             "bytes_hex": "6b76",
-            "logit": 28.3907738,
-            "logprob": -0.578523576
+            "logit": 29.1566162,
+            "logprob": -0.252374887
           },
           {
             "id": 43,
             "bytes_hex": "49",
-            "logit": 27.7067127,
-            "logprob": -1.26258457
-          },
-          {
-            "id": 62010,
-            "bytes_hex": "6361636865",
-            "logit": 25.9564667,
-            "logprob": -3.01283073
+            "logit": 27.4149399,
+            "logprob": -1.99405122
           },
           {
             "id": 47626,
             "bytes_hex": "636f6e74696e756564",
-            "logit": 25.6825943,
-            "logprob": -3.28670311
+            "logit": 25.6413097,
+            "logprob": -3.76768136
+          },
+          {
+            "id": 62010,
+            "bytes_hex": "6361636865",
+            "logit": 25.5361652,
+            "logprob": -3.87282586
           },
           {
             "id": 19837,
             "bytes_hex": "636f6e74696e",
-            "logit": 24.9488049,
-            "logprob": -4.02049255
-          },
-          {
-            "id": 4989,
-            "bytes_hex": "6b6579",
-            "logit": 24.2769814,
-            "logprob": -4.69231606
-          },
-          {
-            "id": 9544,
-            "bytes_hex": "48657265",
-            "logit": 23.9459724,
-            "logprob": -5.02332497
+            "logit": 24.7435913,
+            "logprob": -4.66539955
           },
           {
             "id": 52659,
             "bytes_hex": "73656564",
-            "logit": 23.4388733,
-            "logprob": -5.53042412
+            "logit": 23.9125214,
+            "logprob": -5.4964695
           },
           {
-            "id": 2107,
-            "bytes_hex": "4974",
-            "logit": 23.2506332,
-            "logprob": -5.71866417
-          },
-          {
-            "id": 9854,
-            "bytes_hex": "606060",
-            "logit": 23.1951523,
-            "logprob": -5.77414513
-          },
-          {
-            "id": 81418,
-            "bytes_hex": "4b56",
-            "logit": 22.8669281,
-            "logprob": -6.10236931
-          },
-          {
-            "id": 671,
-            "bytes_hex": "546865",
-            "logit": 22.8276081,
-            "logprob": -6.1416893
-          },
-          {
-            "id": 18,
-            "bytes_hex": "30",
-            "logit": 22.492609,
-            "logprob": -6.47668839
+            "id": 9544,
+            "bytes_hex": "48657265",
+            "logit": 23.6577854,
+            "logprob": -5.75120544
           },
           {
             "id": 77,
             "bytes_hex": "6b",
-            "logit": 22.3501816,
-            "logprob": -6.61911583
+            "logit": 23.6383705,
+            "logprob": -5.77062035
+          },
+          {
+            "id": 4989,
+            "bytes_hex": "6b6579",
+            "logit": 23.5851479,
+            "logprob": -5.823843
+          },
+          {
+            "id": 9854,
+            "bytes_hex": "606060",
+            "logit": 23.1914024,
+            "logprob": -6.21758842
+          },
+          {
+            "id": 81418,
+            "bytes_hex": "4b56",
+            "logit": 23.1164951,
+            "logprob": -6.29249573
+          },
+          {
+            "id": 671,
+            "bytes_hex": "546865",
+            "logit": 22.6541214,
+            "logprob": -6.75486946
           },
           {
             "id": 45,
             "bytes_hex": "4b",
-            "logit": 22.2735062,
-            "logprob": -6.69579124
+            "logit": 22.5227795,
+            "logprob": -6.8862114
           },
           {
-            "id": 35789,
-            "bytes_hex": "436f6e74696e",
-            "logit": 22.197197,
-            "logprob": -6.77210045
+            "id": 18,
+            "bytes_hex": "30",
+            "logit": 22.4093742,
+            "logprob": -6.99961662
           },
           {
             "id": 1613,
             "bytes_hex": "2e2e2e",
-            "logit": 21.9809341,
-            "logprob": -6.98836327
+            "logit": 22.2506447,
+            "logprob": -7.15834618
           },
           {
-            "id": 47248,
-            "bytes_hex": "636f6e74696e75",
-            "logit": 21.8554039,
-            "logprob": -7.11389351
+            "id": 35789,
+            "bytes_hex": "436f6e74696e",
+            "logit": 21.9933376,
+            "logprob": -7.41565323
           },
           {
-            "id": 66293,
-            "bytes_hex": "6b56",
-            "logit": 21.7958298,
-            "logprob": -7.17346764
+            "id": 4484,
+            "bytes_hex": "4e6f",
+            "logit": 21.939724,
+            "logprob": -7.46926689
           },
           {
-            "id": 1320,
-            "bytes_hex": "303030",
-            "logit": 21.6679497,
-            "logprob": -7.30134773
+            "id": 2107,
+            "bytes_hex": "4974",
+            "logit": 21.8483486,
+            "logprob": -7.56064224
+          },
+          {
+            "id": 111018,
+            "bytes_hex": "436f6e74696e756564",
+            "logit": 21.7984009,
+            "logprob": -7.61058998
+          },
+          {
+            "id": 66,
+            "bytes_hex": "60",
+            "logit": 21.7417259,
+            "logprob": -7.66726494
           }
         ]
       },
@@ -1599,7 +1667,7 @@
         "id": "disk_continuation_payload",
         "path": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
         "payload_bytes": 31688272,
-        "file_fnv1a64": "622f11c70fbcc88a",
+        "file_fnv1a64": "2b8530b1fd45ad16",
         "ok": true,
         "error": "",
         "parsed": {
@@ -1634,8 +1702,8 @@
           },
           "logits": {
             "bytes": 517120,
-            "source_fnv1a64": "276553308599c41e",
-            "readback_fnv1a64": "276553308599c41e",
+            "source_fnv1a64": "f701d0071d6a3500",
+            "readback_fnv1a64": "f701d0071d6a3500",
             "matched": true
           },
           "attn_counts": {
@@ -1652,44 +1720,44 @@
           },
           "raw_rows": {
             "bytes": 11272192,
-            "source_fnv1a64": "0021d5235fe9e850",
-            "readback_fnv1a64": "0021d5235fe9e850",
+            "source_fnv1a64": "22994d9b91d67400",
+            "readback_fnv1a64": "22994d9b91d67400",
             "matched": true
           },
           "attn_compressed_rows": {
             "bytes": 6184960,
-            "source_fnv1a64": "1a0fb772ab7f03d6",
-            "readback_fnv1a64": "1a0fb772ab7f03d6",
+            "source_fnv1a64": "4ee69a77ab62d638",
+            "readback_fnv1a64": "4ee69a77ab62d638",
             "matched": true
           },
           "attn_state_kv": {
             "bytes": 5931008,
-            "source_fnv1a64": "f83ea00560cfe333",
-            "readback_fnv1a64": "f83ea00560cfe333",
+            "source_fnv1a64": "dc1d3ab8d7150bf8",
+            "readback_fnv1a64": "dc1d3ab8d7150bf8",
             "matched": true
           },
           "attn_state_score": {
             "bytes": 5931008,
-            "source_fnv1a64": "99f5f37c8b58816c",
-            "readback_fnv1a64": "99f5f37c8b58816c",
+            "source_fnv1a64": "380d68424b90dca6",
+            "readback_fnv1a64": "380d68424b90dca6",
             "matched": true
           },
           "indexer_compressed_rows": {
             "bytes": 1505280,
-            "source_fnv1a64": "3d76e86e69f7bf41",
-            "readback_fnv1a64": "3d76e86e69f7bf41",
+            "source_fnv1a64": "142cd1867c8815c8",
+            "readback_fnv1a64": "142cd1867c8815c8",
             "matched": true
           },
           "index_state_kv": {
             "bytes": 172032,
-            "source_fnv1a64": "cb310b0e7f01d081",
-            "readback_fnv1a64": "cb310b0e7f01d081",
+            "source_fnv1a64": "381c3b4d480c934b",
+            "readback_fnv1a64": "381c3b4d480c934b",
             "matched": true
           },
           "index_state_score": {
             "bytes": 172032,
-            "source_fnv1a64": "3dbee7d283b4696c",
-            "readback_fnv1a64": "3dbee7d283b4696c",
+            "source_fnv1a64": "6eaa915654c65e8a",
+            "readback_fnv1a64": "6eaa915654c65e8a",
             "matched": true
           },
           "samples": [
@@ -1714,44 +1782,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "5e91909b8c777be5",
-                "readback_fnv1a64": "5e91909b8c777be5",
+                "source_fnv1a64": "4542a14f6b136e27",
+                "readback_fnv1a64": "4542a14f6b136e27",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 286720,
-                "source_fnv1a64": "2f6198eb8f15c23c",
-                "readback_fnv1a64": "2f6198eb8f15c23c",
+                "source_fnv1a64": "5df918891d4cb8a6",
+                "readback_fnv1a64": "5df918891d4cb8a6",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "dfd9f3cf514b078d",
-                "readback_fnv1a64": "dfd9f3cf514b078d",
+                "source_fnv1a64": "95cb55ca47f43716",
+                "readback_fnv1a64": "95cb55ca47f43716",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "e9c79368bda9b84d",
-                "readback_fnv1a64": "e9c79368bda9b84d",
+                "source_fnv1a64": "0e7998b4a7ae44df",
+                "readback_fnv1a64": "0e7998b4a7ae44df",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 71680,
-                "source_fnv1a64": "15702dc6b1848158",
-                "readback_fnv1a64": "15702dc6b1848158",
+                "source_fnv1a64": "ea5c0441704f1445",
+                "readback_fnv1a64": "ea5c0441704f1445",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "6a3aead522395c00",
-                "readback_fnv1a64": "6a3aead522395c00",
+                "source_fnv1a64": "f460db392064627a",
+                "readback_fnv1a64": "f460db392064627a",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "0759c5f829dc32c2",
-                "readback_fnv1a64": "0759c5f829dc32c2",
+                "source_fnv1a64": "cc82708b3e9519f7",
+                "readback_fnv1a64": "cc82708b3e9519f7",
                 "matched": true
               }
             },
@@ -1760,26 +1828,26 @@
               "ratio": 128,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "e3293f6f2b1914cd",
-                "readback_fnv1a64": "e3293f6f2b1914cd",
+                "source_fnv1a64": "8e276ec8ca39e2af",
+                "readback_fnv1a64": "8e276ec8ca39e2af",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 8192,
-                "source_fnv1a64": "d0c97a6a5a8877ee",
-                "readback_fnv1a64": "d0c97a6a5a8877ee",
+                "source_fnv1a64": "43dff746977ef021",
+                "readback_fnv1a64": "43dff746977ef021",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 262144,
-                "source_fnv1a64": "2534a4780587ec35",
-                "readback_fnv1a64": "2534a4780587ec35",
+                "source_fnv1a64": "c388d6eee4365884",
+                "readback_fnv1a64": "c388d6eee4365884",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 262144,
-                "source_fnv1a64": "95114bce78173a24",
-                "readback_fnv1a64": "95114bce78173a24",
+                "source_fnv1a64": "ea9ccd81e2d445e2",
+                "readback_fnv1a64": "ea9ccd81e2d445e2",
                 "matched": true
               },
               "indexer_compressed_rows": null,
@@ -1791,44 +1859,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "cbc1fa3c7aff0cc2",
-                "readback_fnv1a64": "cbc1fa3c7aff0cc2",
+                "source_fnv1a64": "5cb31e4d13770b9b",
+                "readback_fnv1a64": "5cb31e4d13770b9b",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 286720,
-                "source_fnv1a64": "613d968587fa5ab9",
-                "readback_fnv1a64": "613d968587fa5ab9",
+                "source_fnv1a64": "92673bce769a503a",
+                "readback_fnv1a64": "92673bce769a503a",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "134af75097510c19",
-                "readback_fnv1a64": "134af75097510c19",
+                "source_fnv1a64": "2d163d76d202bd3f",
+                "readback_fnv1a64": "2d163d76d202bd3f",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "48b299d4e6f3297d",
-                "readback_fnv1a64": "48b299d4e6f3297d",
+                "source_fnv1a64": "bd0f5a41ff801727",
+                "readback_fnv1a64": "bd0f5a41ff801727",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 71680,
-                "source_fnv1a64": "574684516721849b",
-                "readback_fnv1a64": "574684516721849b",
+                "source_fnv1a64": "55feabcd5999c512",
+                "readback_fnv1a64": "55feabcd5999c512",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "9deb6996895f1717",
-                "readback_fnv1a64": "9deb6996895f1717",
+                "source_fnv1a64": "12260ec636351a80",
+                "readback_fnv1a64": "12260ec636351a80",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "1fa2d6f75d5839fc",
-                "readback_fnv1a64": "1fa2d6f75d5839fc",
+                "source_fnv1a64": "8348ed8b3cd59a03",
+                "readback_fnv1a64": "8348ed8b3cd59a03",
                 "matched": true
               }
             }
@@ -1934,7 +2002,7 @@
         "id": "disk_continuation_payload",
         "path": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
         "payload_bytes": 31688272,
-        "file_fnv1a64": "622f11c70fbcc88a",
+        "file_fnv1a64": "2b8530b1fd45ad16",
         "ok": true,
         "error": "",
         "parsed": {
@@ -1966,108 +2034,108 @@
           "graph_restored": true,
           "checkpoint_tokens": 561,
           "checkpoint_fnv1a64": "07a12363340cd346",
-          "logits_fnv1a64": "276553308599c41e",
+          "logits_fnv1a64": "f701d0071d6a3500",
           "selected_token": 61446,
           "top_logprobs": [
             {
               "id": 61446,
-              "logit": 28.390773773,
-              "logprob": -0.578523576
+              "logit": 29.156616211,
+              "logprob": -0.252374887
             },
             {
               "id": 43,
-              "logit": 27.706712723,
-              "logprob": -1.262584567
-            },
-            {
-              "id": 62010,
-              "logit": 25.956466675,
-              "logprob": -3.012830734
+              "logit": 27.41493988,
+              "logprob": -1.994051218
             },
             {
               "id": 47626,
-              "logit": 25.682594299,
-              "logprob": -3.28670311
+              "logit": 25.641309738,
+              "logprob": -3.76768136
+            },
+            {
+              "id": 62010,
+              "logit": 25.536165237,
+              "logprob": -3.872825861
             },
             {
               "id": 19837,
-              "logit": 24.948804855,
-              "logprob": -4.020492554
-            },
-            {
-              "id": 4989,
-              "logit": 24.276981354,
-              "logprob": -4.692316055
-            },
-            {
-              "id": 9544,
-              "logit": 23.945972443,
-              "logprob": -5.023324966
+              "logit": 24.743591309,
+              "logprob": -4.665399551
             },
             {
               "id": 52659,
-              "logit": 23.438873291,
-              "logprob": -5.530424118
+              "logit": 23.912521362,
+              "logprob": -5.496469498
             },
             {
-              "id": 2107,
-              "logit": 23.25063324,
-              "logprob": -5.718664169
-            },
-            {
-              "id": 9854,
-              "logit": 23.195152283,
-              "logprob": -5.774145126
-            },
-            {
-              "id": 81418,
-              "logit": 22.866928101,
-              "logprob": -6.102369308
-            },
-            {
-              "id": 671,
-              "logit": 22.827608109,
-              "logprob": -6.141689301
-            },
-            {
-              "id": 18,
-              "logit": 22.492609024,
-              "logprob": -6.476688385
+              "id": 9544,
+              "logit": 23.657785416,
+              "logprob": -5.751205444
             },
             {
               "id": 77,
-              "logit": 22.35018158,
-              "logprob": -6.619115829
+              "logit": 23.638370514,
+              "logprob": -5.770620346
+            },
+            {
+              "id": 4989,
+              "logit": 23.585147858,
+              "logprob": -5.823843002
+            },
+            {
+              "id": 9854,
+              "logit": 23.191402435,
+              "logprob": -6.217588425
+            },
+            {
+              "id": 81418,
+              "logit": 23.116495132,
+              "logprob": -6.292495728
+            },
+            {
+              "id": 671,
+              "logit": 22.654121399,
+              "logprob": -6.754869461
             },
             {
               "id": 45,
-              "logit": 22.273506165,
-              "logprob": -6.695791245
+              "logit": 22.522779465,
+              "logprob": -6.886211395
             },
             {
-              "id": 35789,
-              "logit": 22.19719696,
-              "logprob": -6.772100449
+              "id": 18,
+              "logit": 22.409374237,
+              "logprob": -6.999616623
             },
             {
               "id": 1613,
-              "logit": 21.980934143,
-              "logprob": -6.988363266
+              "logit": 22.250644684,
+              "logprob": -7.158346176
             },
             {
-              "id": 47248,
-              "logit": 21.8554039,
-              "logprob": -7.113893509
+              "id": 35789,
+              "logit": 21.993337631,
+              "logprob": -7.415653229
             },
             {
-              "id": 66293,
-              "logit": 21.795829773,
-              "logprob": -7.173467636
+              "id": 4484,
+              "logit": 21.939723969,
+              "logprob": -7.469266891
             },
             {
-              "id": 1320,
-              "logit": 21.667949677,
-              "logprob": -7.301347733
+              "id": 2107,
+              "logit": 21.848348618,
+              "logprob": -7.560642242
+            },
+            {
+              "id": 111018,
+              "logit": 21.798400879,
+              "logprob": -7.610589981
+            },
+            {
+              "id": 66,
+              "logit": 21.741725922,
+              "logprob": -7.667264938
             }
           ],
           "post_restore_state": {
@@ -2164,6 +2232,40 @@
               0,
               140
             ]
+          },
+          "frontier_projection": {
+            "source": "restored-token-count",
+            "policy": {
+              "min_tokens": 512,
+              "cold_max_tokens": 30000,
+              "continued_interval_tokens": 10000,
+              "boundary_trim_tokens": 32,
+              "boundary_align_tokens": 2048,
+              "continued_step_tokens": 10240
+            },
+            "loaded_frontier": 561,
+            "current_live_skip": {
+              "live_tokens": 561,
+              "target": 0,
+              "reason": "restored-position-unaligned"
+            },
+            "next_continued_store": {
+              "frontier_before": 561,
+              "live_tokens": 10240,
+              "target": 10240,
+              "reason_name": "continued",
+              "reason": 2
+            },
+            "already_stored_boundary": {
+              "frontier_before": 10240,
+              "live_tokens": 10240,
+              "target": 0
+            },
+            "post_restore_shutdown": {
+              "reason_name": "shutdown",
+              "reason": 4,
+              "tokens_source": "restored-session-position"
+            }
           }
         }
       }
@@ -2174,8 +2276,8 @@
       "prompt_case": "continuation",
       "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
       "raw_bytes": 31688272,
-      "raw_sha256": "3022459849090c0e8dfcd6ac3f88a49ef58cfcc2fb1aada431e0b67ad7e9bb13",
-      "current_c_raw_sha256": "3022459849090c0e8dfcd6ac3f88a49ef58cfcc2fb1aada431e0b67ad7e9bb13",
+      "raw_sha256": "ac5390ae626222ee53b4d7a77c66f7fe70f563abd6a7b896ed5a928fa4c03772",
+      "current_c_raw_sha256": "ac5390ae626222ee53b4d7a77c66f7fe70f563abd6a7b896ed5a928fa4c03772",
       "m7_8_oracle_raw_sha256": "998fbd3d12dc2cc9cf1ddf9b40f8d6d32a9db6b5ca66e5da78240a987d2936e3",
       "raw_sha256_matches_current_c": true,
       "raw_sha256_matches_m7_8_oracle": false,
@@ -2186,122 +2288,122 @@
           {
             "id": 61446,
             "bytes_hex": "6b76",
-            "logit": 28.4574051,
-            "logprob": -0.422913104
+            "logit": 28.8669949,
+            "logprob": -0.352298319
           },
           {
             "id": 43,
             "bytes_hex": "49",
-            "logit": 27.345459,
-            "logprob": -1.53485918
+            "logit": 27.6218109,
+            "logprob": -1.5974822
           },
           {
             "id": 62010,
             "bytes_hex": "6361636865",
-            "logit": 25.9436245,
-            "logprob": -2.93669367
+            "logit": 25.7943726,
+            "logprob": -3.42492056
           },
           {
             "id": 47626,
             "bytes_hex": "636f6e74696e756564",
-            "logit": 24.6628036,
-            "logprob": -4.21751451
+            "logit": 24.8992653,
+            "logprob": -4.32002783
           },
           {
             "id": 19837,
             "bytes_hex": "636f6e74696e",
-            "logit": 24.1449471,
-            "logprob": -4.73537111
-          },
-          {
-            "id": 4989,
-            "bytes_hex": "6b6579",
-            "logit": 23.9439411,
-            "logprob": -4.93637705
-          },
-          {
-            "id": 9544,
-            "bytes_hex": "48657265",
-            "logit": 23.59552,
-            "logprob": -5.28479815
-          },
-          {
-            "id": 2107,
-            "bytes_hex": "4974",
-            "logit": 23.226017,
-            "logprob": -5.65430117
-          },
-          {
-            "id": 52659,
-            "bytes_hex": "73656564",
-            "logit": 23.2130222,
-            "logprob": -5.66729593
-          },
-          {
-            "id": 81418,
-            "bytes_hex": "4b56",
-            "logit": 23.1686382,
-            "logprob": -5.71167994
-          },
-          {
-            "id": 9854,
-            "bytes_hex": "606060",
-            "logit": 23.0337219,
-            "logprob": -5.84659624
+            "logit": 24.6948204,
+            "logprob": -4.52447271
           },
           {
             "id": 77,
             "bytes_hex": "6b",
-            "logit": 22.9430962,
-            "logprob": -5.937222
+            "logit": 24.2386646,
+            "logprob": -4.98062849
           },
           {
-            "id": 18,
-            "bytes_hex": "30",
-            "logit": 22.8695908,
-            "logprob": -6.01072741
+            "id": 4989,
+            "bytes_hex": "6b6579",
+            "logit": 23.9400139,
+            "logprob": -5.27927923
+          },
+          {
+            "id": 9544,
+            "bytes_hex": "48657265",
+            "logit": 23.8420525,
+            "logprob": -5.37724066
+          },
+          {
+            "id": 2107,
+            "bytes_hex": "4974",
+            "logit": 23.0823746,
+            "logprob": -6.13691854
           },
           {
             "id": 671,
             "bytes_hex": "546865",
-            "logit": 22.7387409,
-            "logprob": -6.14157724
+            "logit": 22.8137589,
+            "logprob": -6.40553427
+          },
+          {
+            "id": 9854,
+            "bytes_hex": "606060",
+            "logit": 22.7456284,
+            "logprob": -6.47366476
+          },
+          {
+            "id": 81418,
+            "bytes_hex": "4b56",
+            "logit": 22.5822639,
+            "logprob": -6.63702917
           },
           {
             "id": 45,
             "bytes_hex": "4b",
-            "logit": 22.3716736,
-            "logprob": -6.50864458
-          },
-          {
-            "id": 35789,
-            "bytes_hex": "436f6e74696e",
-            "logit": 22.2808037,
-            "logprob": -6.59951448
-          },
-          {
-            "id": 1613,
-            "bytes_hex": "2e2e2e",
-            "logit": 22.0837536,
-            "logprob": -6.79656458
-          },
-          {
-            "id": 66,
-            "bytes_hex": "60",
-            "logit": 21.948967,
-            "logprob": -6.93135118
+            "logit": 22.4693222,
+            "logprob": -6.74997091
           },
           {
             "id": 66293,
             "bytes_hex": "6b56",
-            "logit": 21.6983013,
-            "logprob": -7.18201685
+            "logit": 22.0654488,
+            "logprob": -7.15384436
+          },
+          {
+            "id": 35789,
+            "bytes_hex": "436f6e74696e",
+            "logit": 21.9493217,
+            "logprob": -7.26997137
+          },
+          {
+            "id": 7115,
+            "bytes_hex": "4b6579",
+            "logit": 21.7953682,
+            "logprob": -7.42392492
+          },
+          {
+            "id": 2581,
+            "bytes_hex": "5765",
+            "logit": 21.780489,
+            "logprob": -7.43880415
+          },
+          {
+            "id": 6932,
+            "bytes_hex": "4f66",
+            "logit": 21.7633801,
+            "logprob": -7.45591307
+          },
+          {
+            "id": 69,
+            "bytes_hex": "63",
+            "logit": 21.696785,
+            "logprob": -7.52250814
           },
           {
             "id": 61,
             "bytes_hex": "5b",
-            "logit": 21.6470375,
-            "logprob": -7.23328066
+            "logit": 21.6716766,
+            "logprob": -7.54761648
           }
         ]
       },
@@ -2309,7 +2411,7 @@
         "id": "snapshot_continuation",
         "path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
         "payload_bytes": 31688272,
-        "file_fnv1a64": "d44f7587fca9e3d3",
+        "file_fnv1a64": "153476badb47bab1",
         "ok": true,
         "error": "",
         "parsed": {
@@ -2344,8 +2446,8 @@
           },
           "logits": {
             "bytes": 517120,
-            "source_fnv1a64": "5d9c78fee4ff7198",
-            "readback_fnv1a64": "5d9c78fee4ff7198",
+            "source_fnv1a64": "dc2a526a243b58ba",
+            "readback_fnv1a64": "dc2a526a243b58ba",
             "matched": true
           },
           "attn_counts": {
@@ -2362,44 +2464,44 @@
           },
           "raw_rows": {
             "bytes": 11272192,
-            "source_fnv1a64": "075b4cbafcf7afd8",
-            "readback_fnv1a64": "075b4cbafcf7afd8",
+            "source_fnv1a64": "623bb6121d56eb9f",
+            "readback_fnv1a64": "623bb6121d56eb9f",
             "matched": true
           },
           "attn_compressed_rows": {
             "bytes": 6184960,
-            "source_fnv1a64": "2bc02f64b5a33aa8",
-            "readback_fnv1a64": "2bc02f64b5a33aa8",
+            "source_fnv1a64": "0b1091361c417733",
+            "readback_fnv1a64": "0b1091361c417733",
             "matched": true
           },
           "attn_state_kv": {
             "bytes": 5931008,
-            "source_fnv1a64": "69a73be42aedb688",
-            "readback_fnv1a64": "69a73be42aedb688",
+            "source_fnv1a64": "0a7b80ab6b7ba047",
+            "readback_fnv1a64": "0a7b80ab6b7ba047",
             "matched": true
           },
           "attn_state_score": {
             "bytes": 5931008,
-            "source_fnv1a64": "36bd962c7efc5049",
-            "readback_fnv1a64": "36bd962c7efc5049",
+            "source_fnv1a64": "68e51aae0a96fa41",
+            "readback_fnv1a64": "68e51aae0a96fa41",
             "matched": true
           },
           "indexer_compressed_rows": {
             "bytes": 1505280,
-            "source_fnv1a64": "cb9d2a719e4b9d2c",
-            "readback_fnv1a64": "cb9d2a719e4b9d2c",
+            "source_fnv1a64": "360d1d76ac1fcd2c",
+            "readback_fnv1a64": "360d1d76ac1fcd2c",
             "matched": true
           },
           "index_state_kv": {
             "bytes": 172032,
-            "source_fnv1a64": "cc5c91dc1eedcd88",
-            "readback_fnv1a64": "cc5c91dc1eedcd88",
+            "source_fnv1a64": "b6627ee1a5a98862",
+            "readback_fnv1a64": "b6627ee1a5a98862",
             "matched": true
           },
           "index_state_score": {
             "bytes": 172032,
-            "source_fnv1a64": "66e2638643d080bb",
-            "readback_fnv1a64": "66e2638643d080bb",
+            "source_fnv1a64": "3c47881cfed5d152",
+            "readback_fnv1a64": "3c47881cfed5d152",
             "matched": true
           },
           "samples": [
@@ -2424,44 +2526,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "98b7c5a3751494a8",
-                "readback_fnv1a64": "98b7c5a3751494a8",
+                "source_fnv1a64": "d9ba1204316f5de8",
+                "readback_fnv1a64": "d9ba1204316f5de8",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 286720,
-                "source_fnv1a64": "901f5cc6833c3145",
-                "readback_fnv1a64": "901f5cc6833c3145",
+                "source_fnv1a64": "f71ed8415241f60d",
+                "readback_fnv1a64": "f71ed8415241f60d",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "b6df3d0f94452d72",
-                "readback_fnv1a64": "b6df3d0f94452d72",
+                "source_fnv1a64": "b3599e449c8d3b3f",
+                "readback_fnv1a64": "b3599e449c8d3b3f",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "b11545c1699143b0",
-                "readback_fnv1a64": "b11545c1699143b0",
+                "source_fnv1a64": "f638a1d197b4a628",
+                "readback_fnv1a64": "f638a1d197b4a628",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 71680,
-                "source_fnv1a64": "4ca5ff26f95716d8",
-                "readback_fnv1a64": "4ca5ff26f95716d8",
+                "source_fnv1a64": "400e6f12499f8a9b",
+                "readback_fnv1a64": "400e6f12499f8a9b",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "4e042165b34ab433",
-                "readback_fnv1a64": "4e042165b34ab433",
+                "source_fnv1a64": "3e1fea0509aff896",
+                "readback_fnv1a64": "3e1fea0509aff896",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "9130464ccfd258f3",
-                "readback_fnv1a64": "9130464ccfd258f3",
+                "source_fnv1a64": "4b977322ac61948a",
+                "readback_fnv1a64": "4b977322ac61948a",
                 "matched": true
               }
             },
@@ -2470,26 +2572,26 @@
               "ratio": 128,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "cfcee55500df3a9d",
-                "readback_fnv1a64": "cfcee55500df3a9d",
+                "source_fnv1a64": "4bd2540dbe395178",
+                "readback_fnv1a64": "4bd2540dbe395178",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 8192,
-                "source_fnv1a64": "b960c791fcd31cd0",
-                "readback_fnv1a64": "b960c791fcd31cd0",
+                "source_fnv1a64": "cc18733aa2e00795",
+                "readback_fnv1a64": "cc18733aa2e00795",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 262144,
-                "source_fnv1a64": "64a70676d7b83a7e",
-                "readback_fnv1a64": "64a70676d7b83a7e",
+                "source_fnv1a64": "9476524d8199fcfa",
+                "readback_fnv1a64": "9476524d8199fcfa",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 262144,
-                "source_fnv1a64": "a3e0ff765ec7c185",
-                "readback_fnv1a64": "a3e0ff765ec7c185",
+                "source_fnv1a64": "2aafcff069b688b2",
+                "readback_fnv1a64": "2aafcff069b688b2",
                 "matched": true
               },
               "indexer_compressed_rows": null,
@@ -2501,44 +2603,44 @@
               "ratio": 4,
               "raw": {
                 "bytes": 262144,
-                "source_fnv1a64": "c09de31c25a5699e",
-                "readback_fnv1a64": "c09de31c25a5699e",
+                "source_fnv1a64": "6f75ea540736306d",
+                "readback_fnv1a64": "6f75ea540736306d",
                 "matched": true
               },
               "attn_compressed_rows": {
                 "bytes": 286720,
-                "source_fnv1a64": "a64230380d4ed9ed",
-                "readback_fnv1a64": "a64230380d4ed9ed",
+                "source_fnv1a64": "0afe0bd9603a575f",
+                "readback_fnv1a64": "0afe0bd9603a575f",
                 "matched": true
               },
               "attn_state_kv": {
                 "bytes": 32768,
-                "source_fnv1a64": "769ccdf7a67c27d2",
-                "readback_fnv1a64": "769ccdf7a67c27d2",
+                "source_fnv1a64": "67df2d96d8758a4a",
+                "readback_fnv1a64": "67df2d96d8758a4a",
                 "matched": true
               },
               "attn_state_score": {
                 "bytes": 32768,
-                "source_fnv1a64": "b523cf02c541d50d",
-                "readback_fnv1a64": "b523cf02c541d50d",
+                "source_fnv1a64": "29dcde5f74a39893",
+                "readback_fnv1a64": "29dcde5f74a39893",
                 "matched": true
               },
               "indexer_compressed_rows": {
                 "bytes": 71680,
-                "source_fnv1a64": "134aa628628b8328",
-                "readback_fnv1a64": "134aa628628b8328",
+                "source_fnv1a64": "236af05665b113db",
+                "readback_fnv1a64": "236af05665b113db",
                 "matched": true
               },
               "index_state_kv": {
                 "bytes": 8192,
-                "source_fnv1a64": "bbc49df3384c27e0",
-                "readback_fnv1a64": "bbc49df3384c27e0",
+                "source_fnv1a64": "77c7d221dce53573",
+                "readback_fnv1a64": "77c7d221dce53573",
                 "matched": true
               },
               "index_state_score": {
                 "bytes": 8192,
-                "source_fnv1a64": "ac32a39d621b1f69",
-                "readback_fnv1a64": "ac32a39d621b1f69",
+                "source_fnv1a64": "6ce30a8c580d030d",
+                "readback_fnv1a64": "6ce30a8c580d030d",
                 "matched": true
               }
             }
@@ -2644,7 +2746,7 @@
         "id": "snapshot_continuation",
         "path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
         "payload_bytes": 31688272,
-        "file_fnv1a64": "d44f7587fca9e3d3",
+        "file_fnv1a64": "153476badb47bab1",
         "ok": true,
         "error": "",
         "parsed": {
@@ -2676,108 +2778,108 @@
           "graph_restored": true,
           "checkpoint_tokens": 561,
           "checkpoint_fnv1a64": "07a12363340cd346",
-          "logits_fnv1a64": "5d9c78fee4ff7198",
+          "logits_fnv1a64": "dc2a526a243b58ba",
           "selected_token": 61446,
           "top_logprobs": [
             {
               "id": 61446,
-              "logit": 28.45740509,
-              "logprob": -0.422913104
+              "logit": 28.866994858,
+              "logprob": -0.352298319
             },
             {
               "id": 43,
-              "logit": 27.345458984,
-              "logprob": -1.53485918
+              "logit": 27.621810913,
+              "logprob": -1.597482204
             },
             {
               "id": 62010,
-              "logit": 25.943624496,
-              "logprob": -2.936693668
+              "logit": 25.794372559,
+              "logprob": -3.424920559
             },
             {
               "id": 47626,
-              "logit": 24.66280365,
-              "logprob": -4.217514515
+              "logit": 24.899265289,
+              "logprob": -4.320027828
             },
             {
               "id": 19837,
-              "logit": 24.144947052,
-              "logprob": -4.735371113
-            },
-            {
-              "id": 4989,
-              "logit": 23.943941116,
-              "logprob": -4.936377048
-            },
-            {
-              "id": 9544,
-              "logit": 23.59552002,
-              "logprob": -5.284798145
-            },
-            {
-              "id": 2107,
-              "logit": 23.226016998,
-              "logprob": -5.654301167
-            },
-            {
-              "id": 52659,
-              "logit": 23.213022232,
-              "logprob": -5.667295933
-            },
-            {
-              "id": 81418,
-              "logit": 23.168638229,
-              "logprob": -5.711679935
-            },
-            {
-              "id": 9854,
-              "logit": 23.033721924,
-              "logprob": -5.846596241
+              "logit": 24.694820404,
+              "logprob": -4.524472713
             },
             {
               "id": 77,
-              "logit": 22.943096161,
-              "logprob": -5.937222004
+              "logit": 24.238664627,
+              "logprob": -4.98062849
             },
             {
-              "id": 18,
-              "logit": 22.869590759,
-              "logprob": -6.010727406
+              "id": 4989,
+              "logit": 23.940013885,
+              "logprob": -5.279279232
+            },
+            {
+              "id": 9544,
+              "logit": 23.84205246,
+              "logprob": -5.377240658
+            },
+            {
+              "id": 2107,
+              "logit": 23.082374573,
+              "logprob": -6.136918545
             },
             {
               "id": 671,
-              "logit": 22.738740921,
-              "logprob": -6.141577244
+              "logit": 22.81375885,
+              "logprob": -6.405534267
+            },
+            {
+              "id": 9854,
+              "logit": 22.745628357,
+              "logprob": -6.473664761
+            },
+            {
+              "id": 81418,
+              "logit": 22.582263947,
+              "logprob": -6.637029171
             },
             {
               "id": 45,
-              "logit": 22.371673584,
-              "logprob": -6.508644581
-            },
-            {
-              "id": 35789,
-              "logit": 22.28080368,
-              "logprob": -6.599514484
-            },
-            {
-              "id": 1613,
-              "logit": 22.083753586,
-              "logprob": -6.796564579
-            },
-            {
-              "id": 66,
-              "logit": 21.94896698,
-              "logprob": -6.931351185
+              "logit": 22.469322205,
+              "logprob": -6.749970913
             },
             {
               "id": 66293,
-              "logit": 21.698301315,
-              "logprob": -7.18201685
+              "logit": 22.065448761,
+              "logprob": -7.153844357
+            },
+            {
+              "id": 35789,
+              "logit": 21.949321747,
+              "logprob": -7.269971371
+            },
+            {
+              "id": 7115,
+              "logit": 21.795368195,
+              "logprob": -7.423924923
+            },
+            {
+              "id": 2581,
+              "logit": 21.780488968,
+              "logprob": -7.43880415
+            },
+            {
+              "id": 6932,
+              "logit": 21.763380051,
+              "logprob": -7.455913067
+            },
+            {
+              "id": 69,
+              "logit": 21.696784973,
+              "logprob": -7.522508144
             },
             {
               "id": 61,
-              "logit": 21.647037506,
-              "logprob": -7.233280659
+              "logit": 21.671676636,
+              "logprob": -7.547616482
             }
           ],
           "post_restore_state": {
@@ -2874,6 +2976,40 @@
               0,
               140
             ]
+          },
+          "frontier_projection": {
+            "source": "restored-token-count",
+            "policy": {
+              "min_tokens": 512,
+              "cold_max_tokens": 30000,
+              "continued_interval_tokens": 10000,
+              "boundary_trim_tokens": 32,
+              "boundary_align_tokens": 2048,
+              "continued_step_tokens": 10240
+            },
+            "loaded_frontier": 561,
+            "current_live_skip": {
+              "live_tokens": 561,
+              "target": 0,
+              "reason": "restored-position-unaligned"
+            },
+            "next_continued_store": {
+              "frontier_before": 561,
+              "live_tokens": 10240,
+              "target": 10240,
+              "reason_name": "continued",
+              "reason": 2
+            },
+            "already_stored_boundary": {
+              "frontier_before": 10240,
+              "live_tokens": 10240,
+              "target": 0
+            },
+            "post_restore_shutdown": {
+              "reason_name": "shutdown",
+              "reason": 4,
+              "tokens_source": "restored-session-position"
+            }
           }
         }
       }

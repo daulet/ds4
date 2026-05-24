@@ -4857,6 +4857,16 @@ restore boundary.
   negative tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt
   --all -- --check`, `git diff --check`, and non-interactive Claude review with
   no blockers.
+- Evidence: `ds4-graph-restore-next-token` now emits a
+  `frontier_projection` object for each restored B300 graph payload. The
+  refreshed M10.7c3d summary records restored frontiers 550/561, unaligned
+  current-live skip target 0, next continued target 10240, and
+  already-stored boundary target 0 for the four disk/snapshot restore cases.
+  `compare_graph_restore_next_token.py` validates those fields against the
+  M10.7d3a contract while preserving same-capture next-token/readback checks;
+  the exact-tree B300 live run passed 4177 checks and 12 negative mutations,
+  and full local validation plus non-interactive Claude review passed with no
+  blockers.
 
 ##### M10.7d3c: Post-Restore KVC Write/Skip B300 Smoke
 

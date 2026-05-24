@@ -1050,8 +1050,9 @@ raw rows, compressed rows, attention/indexer state tensors, sampled layers, and
 post-restore counters. It still does not execute decode or claim next-token
 behavior.
 
-Compare the M10.7c3d Rust graph restore next-token summary against the
-same-capture current-C restore oracle and tensor-readback evidence:
+Compare the M10.7c3d Rust graph restore next-token summary, refreshed for
+M10.7d3b frontier projection, against the same-capture current-C restore oracle,
+tensor-readback evidence, and restore-frontier contract:
 
 ```sh
 python3 ds4-parity/compare_graph_restore_next_token.py
@@ -1067,9 +1068,9 @@ git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
   tar -xf - -C /workspace/ds4
 kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
   -n default exec ds4-rust-port-b300 -- sh -lc \
-  'set -e; cd /workspace/ds4; CUDA_ARCH=native python3 ds4-parity/compare_graph_restore_next_token.py --live --workdir /workspace/ds4 --write-summary /tmp/ds4-m107c3d-restore-next-token.json --negative-test'
+  'set -e; cd /workspace/ds4; CUDA_ARCH=native python3 ds4-parity/compare_graph_restore_next_token.py --live --workdir /workspace/ds4 --write-summary /tmp/ds4-m107d3b-restore-next-token.json --negative-test'
 kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
-  -n default cp ds4-rust-port-b300:/tmp/ds4-m107c3d-restore-next-token.json \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m107d3b-restore-next-token.json \
   ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json
 ```
 
@@ -1078,7 +1079,10 @@ payload bodies are per-capture evidence. It then checks the Rust-restored graph
 payload state over payload hashes, checkpoint length and FNV, restored-logits
 FNV, selected token, top-logprob order and scores, cache source, same-capture
 Rust readback evidence, committed M10.7c3c readback evidence, and post-restore
-graph counters.
+graph counters. For M10.7d3b it also checks each restored payload's loaded
+frontier, unaligned current-live skip, next continued-store target,
+already-stored boundary skip, and shutdown reason projection against the
+M10.7d3 restore-frontier contract.
 
 Validate the M10.7d3a graph restore continued-frontier contract:
 

@@ -3,6 +3,20 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-05-24: Field-Adding Comparator Mutations Need Missing-Path Failures
+
+- Symptom: the first M10.7d3b `compare_graph_restore_next_token.py
+  --negative-test` crashed with `KeyError: 'frontier_projection'` before the
+  B300 summary had been refreshed with the new field.
+- Root cause: the negative-test mutator assumed every mutation path already
+  existed in the candidate summary, but field-adding milestones intentionally
+  validate against a stale committed fixture until the live capture refreshes
+  it.
+- Permanent rule: comparator mutation helpers should convert missing mutation
+  paths into ordinary negative-test failures instead of uncaught exceptions.
+  That keeps stale-fixture failures readable while still requiring the new
+  field to exist after the fixture is refreshed.
+
 ## 2026-05-24: B300 Runtime Replays Need Startup Slack After Source Refresh
 
 - Symptom: the first M0.5 runtime replay refresh failed with HTTP code `000`
