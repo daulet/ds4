@@ -122,6 +122,11 @@ def run_negative_tests(expected: Any, got: Any) -> Report:
         ("reason drift", ["reason_codes", 2, "code"], -1),
         ("header byte drift", ["header_cases", 0, "header_hex"], "00"),
         ("store length drift", ["policy_cases", "store_len", 2, "store_len"], 4096),
+        (
+            "continued transition drift",
+            ["policy_cases", "continued_frontier_transitions", 2, "events", 1, "frontier"],
+            1,
+        ),
         ("eviction score drift", ["policy_cases", "eviction_score", 0, "score"], 99.0),
         ("prefix selected-token drift", ["policy_cases", "find_text_prefix", 0, "selected_tokens"], 1),
         ("M0.5 row drift", ["m0_5_header_fixture", "expected_rows", 0, "tokens"], 1),

@@ -518,6 +518,169 @@ static void write_continued_cases(FILE *fp) {
     fputs("\n    ],\n", fp);
 }
 
+static void write_continued_transition_event(FILE *fp,
+                                             const char *op,
+                                             int tokens,
+                                             bool has_tokens,
+                                             int old_frontier,
+                                             bool has_old_frontier,
+                                             int restore_old,
+                                             bool has_restore_old,
+                                             int restore_suppressed,
+                                             bool has_restore_suppressed,
+                                             int frontier,
+                                             int target_probe,
+                                             int target) {
+    fputs("{\"op\":", fp);
+    json_string(fp, op);
+    if (has_tokens) fprintf(fp, ",\"tokens\":%d", tokens);
+    if (has_old_frontier) {
+        fprintf(fp, ",\"old_frontier\":%d", old_frontier);
+    }
+    if (has_restore_old) {
+        fprintf(fp, ",\"restore_old_frontier\":%d", restore_old);
+    }
+    if (has_restore_suppressed) {
+        fprintf(fp, ",\"restore_suppressed_tokens\":%d", restore_suppressed);
+    }
+    fprintf(fp,
+            ",\"frontier\":%d,\"target_probe\":%d,\"target\":%d}",
+            frontier,
+            target_probe,
+            target);
+}
+
+static void write_continued_transition_case_begin(FILE *fp,
+                                                  const char *name,
+                                                  int initial_frontier,
+                                                  bool first) {
+    fprintf(fp, "%s      {\"name\":", first ? "" : ",\n");
+    json_string(fp, name);
+    fprintf(fp, ",\"initial_frontier\":%d,\"events\":[", initial_frontier);
+}
+
+static void write_continued_transition_cases(FILE *fp) {
+    const int probe = 10240;
+    fputs("    \"continued_frontier_transitions\": [\n", fp);
+
+    {
+        kv_policy_config cfg = config_default("note_store_grows");
+        cfg.continued_last_store_tokens = 4096;
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(fp, "note_store_grows", 4096, true);
+        ds4_kvstore_note_store(&kc, probe);
+        write_continued_transition_event(
+            fp, "note_store", probe, true, 4096, true,
+            0, false, 0, false, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputs("]}", fp);
+    }
+
+    {
+        kv_policy_config cfg = config_default("note_store_ignores_lower");
+        cfg.continued_last_store_tokens = probe;
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(fp, "note_store_ignores_lower", probe, false);
+        ds4_kvstore_note_store(&kc, 4096);
+        write_continued_transition_event(
+            fp, "note_store", 4096, true, probe, true,
+            0, false, 0, false, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputs("]}", fp);
+    }
+
+    {
+        kv_policy_config cfg = config_default("suppress_fresh_frontier");
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(fp, "suppress_fresh_frontier", 0, false);
+        int old = ds4_kvstore_suppress_continued_store(&kc, probe);
+        write_continued_transition_event(
+            fp, "suppress", probe, true, old, true,
+            0, false, 0, false, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputc(',', fp);
+        ds4_kvstore_restore_suppressed_continued(&kc, old, probe);
+        write_continued_transition_event(
+            fp, "restore_suppressed", 0, false, 0, false,
+            old, true, probe, true, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputs("]}", fp);
+    }
+
+    {
+        kv_policy_config cfg = config_default("suppress_already_stored_skip");
+        cfg.continued_last_store_tokens = probe;
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(fp, "suppress_already_stored_skip", probe, false);
+        int old = ds4_kvstore_suppress_continued_store(&kc, probe);
+        write_continued_transition_event(
+            fp, "suppress", probe, true, old, true,
+            0, false, 0, false, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputc(',', fp);
+        ds4_kvstore_restore_suppressed_continued(&kc, old, probe);
+        write_continued_transition_event(
+            fp, "restore_suppressed", 0, false, 0, false,
+            old, true, probe, true, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputs("]}", fp);
+    }
+
+    {
+        kv_policy_config cfg = config_default("suppress_unaligned_skip");
+        cfg.continued_last_store_tokens = probe;
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(fp, "suppress_unaligned_skip", probe, false);
+        int old = ds4_kvstore_suppress_continued_store(&kc, 18432);
+        write_continued_transition_event(
+            fp, "suppress", 18432, true, old, true,
+            0, false, 0, false, kc.continued_last_store_tokens, 18432,
+            ds4_kvstore_continued_store_target(&kc, 18432));
+        fputs("]}", fp);
+    }
+
+    {
+        kv_policy_config cfg = config_default("restore_ignores_mismatch");
+        cfg.continued_last_store_tokens = probe;
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(fp, "restore_ignores_mismatch", probe, false);
+        ds4_kvstore_restore_suppressed_continued(&kc, 4096, 20480);
+        write_continued_transition_event(
+            fp, "restore_suppressed", 0, false, 0, false,
+            4096, true, 20480, true, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputs("]}", fp);
+    }
+
+    {
+        kv_policy_config cfg = config_default("reset_after_miss");
+        cfg.continued_last_store_tokens = 20480;
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(fp, "reset_after_miss", 20480, false);
+        kc.continued_last_store_tokens = 0;
+        write_continued_transition_event(
+            fp, "reset_after_miss", 0, false, 0, false,
+            0, false, 0, false, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputs("]}", fp);
+    }
+
+    {
+        kv_policy_config cfg = config_default("disk_restore_records_loaded_frontier");
+        ds4_kvstore kc = make_kvstore(cfg);
+        write_continued_transition_case_begin(
+            fp, "disk_restore_records_loaded_frontier", 0, false);
+        kc.continued_last_store_tokens = 552;
+        write_continued_transition_event(
+            fp, "record_disk_load", 552, true, 0, false,
+            0, false, 0, false, kc.continued_last_store_tokens, probe,
+            ds4_kvstore_continued_store_target(&kc, probe));
+        fputs("]}", fp);
+    }
+
+    fputs("\n    ],\n", fp);
+}
+
 static void write_file_size_cases(FILE *fp) {
     kv_policy_config no_budget = config_default("no_budget");
     kv_policy_config under = config_default("under_budget");
@@ -800,6 +963,7 @@ static void write_policy_cases(FILE *fp) {
     write_store_len_cases(fp);
     write_chat_anchor_cases(fp);
     write_continued_cases(fp);
+    write_continued_transition_cases(fp);
     write_file_size_cases(fp);
     write_prefix_cases(fp);
     write_eviction_cases(fp);

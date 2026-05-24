@@ -81,6 +81,16 @@
       {"name":"align_zero_interval","enabled":true,"live_tokens":10000,"continued_last_store_tokens":0,"options":{"min_tokens":512,"cold_max_tokens":30000,"continued_interval_tokens":10000,"boundary_trim_tokens":32,"boundary_align_tokens":0},"target":10000},
       {"name":"no_interval","enabled":true,"live_tokens":10000,"continued_last_store_tokens":0,"options":{"min_tokens":512,"cold_max_tokens":30000,"continued_interval_tokens":0,"boundary_trim_tokens":32,"boundary_align_tokens":2048},"target":0}
     ],
+    "continued_frontier_transitions": [
+      {"name":"note_store_grows","initial_frontier":4096,"events":[{"op":"note_store","tokens":10240,"old_frontier":4096,"frontier":10240,"target_probe":10240,"target":0}]},
+      {"name":"note_store_ignores_lower","initial_frontier":10240,"events":[{"op":"note_store","tokens":4096,"old_frontier":10240,"frontier":10240,"target_probe":10240,"target":0}]},
+      {"name":"suppress_fresh_frontier","initial_frontier":0,"events":[{"op":"suppress","tokens":10240,"old_frontier":0,"frontier":10240,"target_probe":10240,"target":0},{"op":"restore_suppressed","restore_old_frontier":0,"restore_suppressed_tokens":10240,"frontier":0,"target_probe":10240,"target":10240}]},
+      {"name":"suppress_already_stored_skip","initial_frontier":10240,"events":[{"op":"suppress","tokens":10240,"old_frontier":-1,"frontier":10240,"target_probe":10240,"target":0},{"op":"restore_suppressed","restore_old_frontier":-1,"restore_suppressed_tokens":10240,"frontier":10240,"target_probe":10240,"target":0}]},
+      {"name":"suppress_unaligned_skip","initial_frontier":10240,"events":[{"op":"suppress","tokens":18432,"old_frontier":-1,"frontier":10240,"target_probe":18432,"target":0}]},
+      {"name":"restore_ignores_mismatch","initial_frontier":10240,"events":[{"op":"restore_suppressed","restore_old_frontier":4096,"restore_suppressed_tokens":20480,"frontier":10240,"target_probe":10240,"target":0}]},
+      {"name":"reset_after_miss","initial_frontier":20480,"events":[{"op":"reset_after_miss","frontier":0,"target_probe":10240,"target":10240}]},
+      {"name":"disk_restore_records_loaded_frontier","initial_frontier":0,"events":[{"op":"record_disk_load","tokens":552,"frontier":552,"target_probe":10240,"target":10240}]}
+    ],
     "file_size_fits": [
       {"name":"no_budget","budget_bytes":0,"text_bytes":100,"payload_bytes":200,"trailer_bytes":30,"fits":true,"file_bytes":382,"required_bytes":0},
       {"name":"under_budget_with_slack","budget_bytes":1024,"text_bytes":100,"payload_bytes":200,"trailer_bytes":30,"fits":true,"file_bytes":382,"required_bytes":386},

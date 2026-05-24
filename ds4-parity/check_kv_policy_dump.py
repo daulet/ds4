@@ -76,6 +76,126 @@ EXPECTED_CONTINUED = {
     "no_interval": 0,
 }
 
+EXPECTED_CONTINUED_TRANSITIONS = {
+    "note_store_grows": {
+        "initial_frontier": 4096,
+        "events": [
+            {
+                "op": "note_store",
+                "tokens": 10240,
+                "old_frontier": 4096,
+                "frontier": 10240,
+                "target_probe": 10240,
+                "target": 0,
+            }
+        ],
+    },
+    "note_store_ignores_lower": {
+        "initial_frontier": 10240,
+        "events": [
+            {
+                "op": "note_store",
+                "tokens": 4096,
+                "old_frontier": 10240,
+                "frontier": 10240,
+                "target_probe": 10240,
+                "target": 0,
+            }
+        ],
+    },
+    "suppress_fresh_frontier": {
+        "initial_frontier": 0,
+        "events": [
+            {
+                "op": "suppress",
+                "tokens": 10240,
+                "old_frontier": 0,
+                "frontier": 10240,
+                "target_probe": 10240,
+                "target": 0,
+            },
+            {
+                "op": "restore_suppressed",
+                "restore_old_frontier": 0,
+                "restore_suppressed_tokens": 10240,
+                "frontier": 0,
+                "target_probe": 10240,
+                "target": 10240,
+            },
+        ],
+    },
+    "suppress_already_stored_skip": {
+        "initial_frontier": 10240,
+        "events": [
+            {
+                "op": "suppress",
+                "tokens": 10240,
+                "old_frontier": -1,
+                "frontier": 10240,
+                "target_probe": 10240,
+                "target": 0,
+            },
+            {
+                "op": "restore_suppressed",
+                "restore_old_frontier": -1,
+                "restore_suppressed_tokens": 10240,
+                "frontier": 10240,
+                "target_probe": 10240,
+                "target": 0,
+            },
+        ],
+    },
+    "suppress_unaligned_skip": {
+        "initial_frontier": 10240,
+        "events": [
+            {
+                "op": "suppress",
+                "tokens": 18432,
+                "old_frontier": -1,
+                "frontier": 10240,
+                "target_probe": 18432,
+                "target": 0,
+            }
+        ],
+    },
+    "restore_ignores_mismatch": {
+        "initial_frontier": 10240,
+        "events": [
+            {
+                "op": "restore_suppressed",
+                "restore_old_frontier": 4096,
+                "restore_suppressed_tokens": 20480,
+                "frontier": 10240,
+                "target_probe": 10240,
+                "target": 0,
+            }
+        ],
+    },
+    "reset_after_miss": {
+        "initial_frontier": 20480,
+        "events": [
+            {
+                "op": "reset_after_miss",
+                "frontier": 0,
+                "target_probe": 10240,
+                "target": 10240,
+            }
+        ],
+    },
+    "disk_restore_records_loaded_frontier": {
+        "initial_frontier": 0,
+        "events": [
+            {
+                "op": "record_disk_load",
+                "tokens": 552,
+                "frontier": 552,
+                "target_probe": 10240,
+                "target": 10240,
+            }
+        ],
+    },
+}
+
 EXPECTED_FILE_SIZE = {
     "no_budget": (True, 382, 0),
     "under_budget_with_slack": (True, 382, 386),
@@ -337,6 +457,41 @@ def check_policy_cases(report: Report, root: dict[str, Any]) -> None:
     for name, expected in EXPECTED_CONTINUED.items():
         report.check(continued.get(name, {}).get("target") == expected, f"continued_store_target.{name} drift")
 
+    transitions = by_name(
+        report,
+        policy.get("continued_frontier_transitions"),
+        "policy_cases.continued_frontier_transitions",
+    )
+    report.check(
+        set(transitions) == set(EXPECTED_CONTINUED_TRANSITIONS),
+        "continued_frontier_transitions coverage drift",
+    )
+    for name, expected in EXPECTED_CONTINUED_TRANSITIONS.items():
+        obj = transitions.get(name, {})
+        report.check(
+            obj.get("initial_frontier") == expected["initial_frontier"],
+            f"continued_frontier_transitions.{name}.initial_frontier drift",
+        )
+        events = require_list(
+            report,
+            obj.get("events"),
+            f"continued_frontier_transitions.{name}.events",
+        )
+        report.check(
+            len(events) == len(expected["events"]),
+            f"continued_frontier_transitions.{name}.events length drift",
+        )
+        for idx, expected_event in enumerate(expected["events"]):
+            event = require_dict(
+                report,
+                events[idx] if idx < len(events) else None,
+                f"continued_frontier_transitions.{name}.events[{idx}]",
+            )
+            report.check(
+                event == expected_event,
+                f"continued_frontier_transitions.{name}.events[{idx}] drift",
+            )
+
     sizes = by_name(report, policy.get("file_size_fits"), "policy_cases.file_size_fits")
     report.check(set(sizes) == set(EXPECTED_FILE_SIZE), "file_size_fits coverage drift")
     for name, expected in EXPECTED_FILE_SIZE.items():
@@ -481,6 +636,13 @@ def run_negative_tests(obj: Any) -> Report:
     expect_failure(
         "store len drift",
         lambda c: c["policy_cases"]["store_len"][2].__setitem__("store_len", 4096),
+    )
+    expect_failure(
+        "continued transition drift",
+        lambda c: c["policy_cases"]["continued_frontier_transitions"][2]["events"][1].__setitem__(
+            "frontier",
+            1,
+        ),
     )
     expect_failure(
         "eviction score drift",

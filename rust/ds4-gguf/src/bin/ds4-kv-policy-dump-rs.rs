@@ -1,10 +1,11 @@
 use ds4_gguf::kv_policy::{
     byte_prefix_match, chat_anchor_pos, continued_store_target, entry_eviction_score,
-    file_size_fits, find_text_prefix, hex_bytes, key_kind, le_get32, le_put32, path_for_sha,
-    path_join, read_header, reason_code, sha1_bytes_hex, sha_hex_name, store_len, FileSizeDecision,
-    KvEntry, KvHeader, KvOptions, KvPolicyConfig, DEFAULT_MB, EXT_RESPONSES_VISIBLE,
-    EXT_THINKING_VISIBLE, EXT_TOOL_MAP, FIXED_HEADER, HIT_HALF_LIFE_SECONDS, REASON_COLD,
-    REASON_CONTINUED,
+    file_size_fits, find_text_prefix, hex_bytes, key_kind, le_get32, le_put32, note_store,
+    path_for_sha, path_join, read_header, reason_code, reset_continued_frontier,
+    restore_suppressed_continued, sha1_bytes_hex, sha_hex_name, store_len,
+    suppress_continued_store, FileSizeDecision, KvEntry, KvHeader, KvOptions, KvPolicyConfig,
+    DEFAULT_MB, EXT_RESPONSES_VISIBLE, EXT_THINKING_VISIBLE, EXT_TOOL_MAP, FIXED_HEADER,
+    HIT_HALF_LIFE_SECONDS, REASON_COLD, REASON_CONTINUED,
 };
 use std::io::{self, Write};
 
@@ -343,6 +344,7 @@ fn write_policy_cases<W: Write>(out: &mut W) -> io::Result<()> {
     write_store_len_cases(out)?;
     write_chat_anchor_cases(out)?;
     write_continued_cases(out)?;
+    write_continued_transition_cases(out)?;
     write_file_size_cases(out)?;
     write_prefix_cases(out)?;
     write_eviction_cases(out)?;
@@ -493,6 +495,250 @@ fn write_continued_cases<W: Write>(out: &mut W) -> io::Result<()> {
         )?;
     }
     writeln!(out, "\n    ],")
+}
+
+struct TransitionEvent<'a> {
+    op: &'a str,
+    tokens: Option<i32>,
+    old_frontier: Option<i32>,
+    restore_old_frontier: Option<i32>,
+    restore_suppressed_tokens: Option<i32>,
+    frontier: i32,
+    target_probe: i32,
+    target: i32,
+}
+
+fn write_transition_event<W: Write>(out: &mut W, event: TransitionEvent<'_>) -> io::Result<()> {
+    write!(out, "{{\"op\":")?;
+    write_json_string(out, event.op)?;
+    if let Some(tokens) = event.tokens {
+        write!(out, ",\"tokens\":{tokens}")?;
+    }
+    if let Some(old) = event.old_frontier {
+        write!(out, ",\"old_frontier\":{old}")?;
+    }
+    if let Some(old) = event.restore_old_frontier {
+        write!(out, ",\"restore_old_frontier\":{old}")?;
+    }
+    if let Some(tokens) = event.restore_suppressed_tokens {
+        write!(out, ",\"restore_suppressed_tokens\":{tokens}")?;
+    }
+    write!(
+        out,
+        ",\"frontier\":{},\"target_probe\":{},\"target\":{}}}",
+        event.frontier, event.target_probe, event.target
+    )
+}
+
+fn write_transition_case_begin<W: Write>(
+    out: &mut W,
+    name: &str,
+    initial_frontier: i32,
+    first: bool,
+) -> io::Result<()> {
+    if !first {
+        writeln!(out, ",")?;
+    }
+    write!(out, "      {{\"name\":")?;
+    write_json_string(out, name)?;
+    write!(out, ",\"initial_frontier\":{initial_frontier},\"events\":[")
+}
+
+fn write_continued_transition_cases<W: Write>(out: &mut W) -> io::Result<()> {
+    const PROBE: i32 = 10240;
+    writeln!(out, "    \"continued_frontier_transitions\": [")?;
+
+    let mut config = KvPolicyConfig {
+        continued_last_store_tokens: 4096,
+        ..KvPolicyConfig::default()
+    };
+    write_transition_case_begin(out, "note_store_grows", 4096, true)?;
+    note_store(&mut config, PROBE);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "note_store",
+            tokens: Some(PROBE),
+            old_frontier: Some(4096),
+            restore_old_frontier: None,
+            restore_suppressed_tokens: None,
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, "]}}")?;
+
+    let mut config = KvPolicyConfig {
+        continued_last_store_tokens: PROBE,
+        ..KvPolicyConfig::default()
+    };
+    write_transition_case_begin(out, "note_store_ignores_lower", PROBE, false)?;
+    note_store(&mut config, 4096);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "note_store",
+            tokens: Some(4096),
+            old_frontier: Some(PROBE),
+            restore_old_frontier: None,
+            restore_suppressed_tokens: None,
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, "]}}")?;
+
+    let mut config = KvPolicyConfig::default();
+    write_transition_case_begin(out, "suppress_fresh_frontier", 0, false)?;
+    let old = suppress_continued_store(&mut config, PROBE);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "suppress",
+            tokens: Some(PROBE),
+            old_frontier: Some(old),
+            restore_old_frontier: None,
+            restore_suppressed_tokens: None,
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, ",")?;
+    restore_suppressed_continued(&mut config, old, PROBE);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "restore_suppressed",
+            tokens: None,
+            old_frontier: None,
+            restore_old_frontier: Some(old),
+            restore_suppressed_tokens: Some(PROBE),
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, "]}}")?;
+
+    let mut config = KvPolicyConfig {
+        continued_last_store_tokens: PROBE,
+        ..KvPolicyConfig::default()
+    };
+    write_transition_case_begin(out, "suppress_already_stored_skip", PROBE, false)?;
+    let old = suppress_continued_store(&mut config, PROBE);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "suppress",
+            tokens: Some(PROBE),
+            old_frontier: Some(old),
+            restore_old_frontier: None,
+            restore_suppressed_tokens: None,
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, ",")?;
+    restore_suppressed_continued(&mut config, old, PROBE);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "restore_suppressed",
+            tokens: None,
+            old_frontier: None,
+            restore_old_frontier: Some(old),
+            restore_suppressed_tokens: Some(PROBE),
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, "]}}")?;
+
+    let mut config = KvPolicyConfig {
+        continued_last_store_tokens: PROBE,
+        ..KvPolicyConfig::default()
+    };
+    write_transition_case_begin(out, "suppress_unaligned_skip", PROBE, false)?;
+    let old = suppress_continued_store(&mut config, 18432);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "suppress",
+            tokens: Some(18432),
+            old_frontier: Some(old),
+            restore_old_frontier: None,
+            restore_suppressed_tokens: None,
+            frontier: config.continued_last_store_tokens,
+            target_probe: 18432,
+            target: continued_store_target(config, 18432),
+        },
+    )?;
+    write!(out, "]}}")?;
+
+    let mut config = KvPolicyConfig {
+        continued_last_store_tokens: PROBE,
+        ..KvPolicyConfig::default()
+    };
+    write_transition_case_begin(out, "restore_ignores_mismatch", PROBE, false)?;
+    restore_suppressed_continued(&mut config, 4096, 20480);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "restore_suppressed",
+            tokens: None,
+            old_frontier: None,
+            restore_old_frontier: Some(4096),
+            restore_suppressed_tokens: Some(20480),
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, "]}}")?;
+
+    let mut config = KvPolicyConfig {
+        continued_last_store_tokens: 20480,
+        ..KvPolicyConfig::default()
+    };
+    write_transition_case_begin(out, "reset_after_miss", 20480, false)?;
+    reset_continued_frontier(&mut config);
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "reset_after_miss",
+            tokens: None,
+            old_frontier: None,
+            restore_old_frontier: None,
+            restore_suppressed_tokens: None,
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    write!(out, "]}}")?;
+
+    let mut config = KvPolicyConfig::default();
+    write_transition_case_begin(out, "disk_restore_records_loaded_frontier", 0, false)?;
+    config.continued_last_store_tokens = 552;
+    write_transition_event(
+        out,
+        TransitionEvent {
+            op: "record_disk_load",
+            tokens: Some(552),
+            old_frontier: None,
+            restore_old_frontier: None,
+            restore_suppressed_tokens: None,
+            frontier: config.continued_last_store_tokens,
+            target_probe: PROBE,
+            target: continued_store_target(config, PROBE),
+        },
+    )?;
+    writeln!(out, "]}}\n    ],")
 }
 
 fn write_file_size_cases<W: Write>(out: &mut W) -> io::Result<()> {

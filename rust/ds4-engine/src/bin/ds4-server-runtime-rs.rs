@@ -1831,6 +1831,36 @@ mod tests {
     }
 
     #[test]
+    fn runtime_cache_state_resets_continued_frontier_after_miss() {
+        let dir = unique_temp_dir("continued-frontier-reset");
+        let mut cache = RuntimeCacheState::new(RuntimeCacheConfig {
+            disk_dir: Some(dir.to_string_lossy().into_owned()),
+            ..RuntimeCacheConfig::default()
+        });
+
+        cache.note_store(20_480);
+        assert_eq!(
+            cache
+                .disk
+                .as_ref()
+                .expect("disk cache enabled")
+                .continued_last_store_tokens(),
+            20_480
+        );
+        cache.reset_continued_frontier();
+        assert_eq!(
+            cache
+                .disk
+                .as_ref()
+                .expect("disk cache enabled")
+                .continued_last_store_tokens(),
+            0
+        );
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
     fn runtime_cache_state_restores_tool_map_before_prompt_render() {
         let dir = unique_temp_dir("tool-map-restore");
         let sampled_dsml = "\n\n<｜DSML｜tool_calls>\n\

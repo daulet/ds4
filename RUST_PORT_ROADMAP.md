@@ -4677,6 +4677,25 @@ restore boundary.
 - Validation gate: policy comparator with negative tests, targeted Rust tests,
   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
   and non-interactive Claude review with no blockers.
+- Evidence: added C/Rust `continued_frontier_transitions` oracle rows for
+  note-store growth, lower-note skip, fresh-frontier suppression/restore,
+  already-stored suppression skip, unaligned suppression skip,
+  mismatch-restore ignore, reset-after-miss, and disk-restore loaded frontier
+  state. Refreshed M7.2 and M7.7 fixtures/manifests so replay preconditions
+  track the new M7.2 policy artifact. Rust adds `reset_continued_frontier`,
+  focused policy tests, and a runtime cache-state reset test. Validation passed
+  `python3 ds4-parity/check_kv_policy_dump.py --negative-test` with 521 schema
+  checks, 11 manifest checks, and 8 negative checks; `python3
+  ds4-parity/compare_kv_policy.py --negative-test` with 1725 comparator checks
+  and 9 negative checks; `python3 ds4-parity/compare_kv_replay.py
+  --negative-test`; `python3 ds4-parity/run_kv_parity_report.py` with 9
+  passed, 1 skipped, and 0 failed; `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed; targeted Rust tests for continued-store policy and runtime reset;
+  `cargo test --workspace`; `cargo fmt --all -- --check`; `git diff --check`;
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 55
+  passed, 40 skipped, and 0 failed; and non-interactive Claude review with no
+  blockers.
 
 ##### M10.7d2: Runtime Continued-Store Replay Decisions
 

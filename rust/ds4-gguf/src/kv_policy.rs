@@ -671,6 +671,10 @@ pub fn restore_suppressed_continued(
     }
 }
 
+pub fn reset_continued_frontier(config: &mut KvPolicyConfig) {
+    config.continued_last_store_tokens = 0;
+}
+
 pub fn file_size_fits(
     budget_bytes: u64,
     text_bytes: u64,
@@ -1055,6 +1059,10 @@ mod tests {
         restore_suppressed_continued(&mut config, old, 10240);
         assert_eq!(config.continued_last_store_tokens, 4096);
         assert_eq!(continued_store_target(config, 10240), 10240);
+
+        reset_continued_frontier(&mut config);
+        assert_eq!(config.continued_last_store_tokens, 0);
+        assert_eq!(continued_store_target(config, 10240), 10240);
     }
 
     #[test]
@@ -1072,6 +1080,14 @@ mod tests {
         assert_eq!(config.continued_last_store_tokens, 10240);
         restore_suppressed_continued(&mut config, 4096, 20480);
         assert_eq!(config.continued_last_store_tokens, 10240);
+    }
+
+    #[test]
+    fn continued_store_disk_restore_records_loaded_frontier() {
+        let mut config = KvPolicyConfig::default();
+        config.continued_last_store_tokens = 552;
+        assert_eq!(continued_store_target(config, 552), 0);
+        assert_eq!(continued_store_target(config, 10240), 10240);
     }
 
     #[test]

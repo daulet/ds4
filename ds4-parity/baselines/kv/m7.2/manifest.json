@@ -3,8 +3,8 @@
   "milestone": "M7.2",
   "artifact": {
     "path": "current-c.json",
-    "sha256": "f908b4bf059db500c1de6b4265491719083224d2bab703169ba0e585e9de6bcb",
-    "size_bytes": 12719
+    "sha256": "ce2ab3fc8ef002a7f85a3f7b770b84ea0bf6e56514c410d5411c10142aaab7d7",
+    "size_bytes": 14470
   },
   "oracle": "current C ds4_kvstore no-model header and policy helpers",
   "fixture": {
@@ -14,7 +14,7 @@
   "comparator": "python3 ds4-parity/check_kv_policy_dump.py --negative-test",
   "acceptance": [
     "KVC header bytes and decoded fields match the current C helpers",
-    "KV reason, key kind, SHA, path, little-endian, size-budget, store-boundary, continued-store, eviction, and text-prefix policies are deterministic",
+    "KV reason, key kind, SHA, path, little-endian, size-budget, store-boundary, continued-store, continued-frontier transition, eviction, and text-prefix policies are deterministic",
     "Committed M0.5 parsed KVC header rows still match the M7.2 fixture references",
     "Negative tests detect schema, byte, policy, and M0.5 fixture drift"
   ],

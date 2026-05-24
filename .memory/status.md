@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d1 Continued-Frontier Policy Transition Matrix
-- Last validated source before the active item: M10.7c3d Rust Graph Tensor
-  Restore Next-Token Smoke.
+- Active item: M10.7d2 Runtime Continued-Store Replay Decisions
+- Last validated source before the active item: M10.7d1 Continued-Frontier
+  Policy Transition Matrix.
+- Earlier M10.7d1 Continued-Frontier Policy Transition Matrix.
 - M10.7c3 Rust Graph Tensor Restore Next-Token Smoke is split into M10.7c3a
   through M10.7c3d before tensor restore or next-token claims.
 - Earlier M10.7c3c Rust Graph Tensor Restore Readback Smoke.
@@ -37,6 +38,29 @@
 
 ## Last Evidence
 
+- M10.7d1 adds a C/Rust `continued_frontier_transitions` policy matrix covering
+  note-store growth, lower-note skip, fresh-frontier suppression/restore,
+  already-stored suppression skip, unaligned suppression skip,
+  mismatch-restore ignore, reset-after-miss, and disk-restore loaded frontier
+  state. The M7.2 policy oracle and M7.7 replay precondition fixtures were
+  refreshed to track the new C policy artifact.
+- M10.7d1 adds Rust `reset_continued_frontier`, extends continued-store policy
+  tests for reset and disk-loaded frontiers, and adds a
+  `RuntimeCacheState` reset-after-miss test so the runtime cache wrapper
+  exposes the same reset state as current C before M10.7d2 runtime replay work.
+- M10.7d1 validation passed `python3
+  ds4-parity/check_kv_policy_dump.py --negative-test` with 521 schema checks,
+  11 manifest checks, and 8 negative checks; `python3
+  ds4-parity/compare_kv_policy.py --negative-test` with 1725 comparator checks
+  and 9 negative checks; `python3 ds4-parity/compare_kv_replay.py
+  --negative-test`; `python3 ds4-parity/run_kv_parity_report.py` with 9
+  passed, 1 skipped, and 0 failed; `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed; targeted Rust tests for continued-store policy and runtime reset;
+  Python syntax checks; `cargo test --workspace`; `cargo fmt --all --
+  --check`; `git diff --check`; `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 55 passed, 40 skipped, and 0 failed; and
+  non-interactive Claude review with `NO BLOCKERS`.
 - M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
   restores the four C-written disk payload and memory snapshot bodies into
   Rust graph state, computes selected token and top-logprob slices from the
@@ -58,9 +82,9 @@
   non-interactive Claude review with `NO BLOCKERS`.
 - M10.7d is split before implementation into M10.7d1 continued-frontier policy
   transition matrix, M10.7d2 runtime continued-store replay decisions, and
-  M10.7d3 graph restore continued-frontier B300 smoke. M10.7d1 is the active
-  next item so the policy/reset/suppression state machine is comparator-closed
-  before runtime or graph restore changes.
+  M10.7d3 graph restore continued-frontier B300 smoke. M10.7d1 closed the
+  policy/reset/suppression state machine before runtime or graph restore
+  changes.
 - M10.7c3c adds `ds4-graph-restore-readback`, a B300 Rust GPU smoke that reads
   the four M7.8 disk payload and memory snapshot raw bodies, writes graph
   sections into Rust-owned `ds4_gpu::Tensor` allocations, and reads the written

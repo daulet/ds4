@@ -5324,7 +5324,7 @@
 
 ### M10.7d1: Continued-Frontier Policy Transition Matrix
 
-- Status: active
+- Status: done
 - Goal: make the Rust continued-frontier policy matrix cover C target
   selection, note-store updates, cold-store suppression, failed-store restore,
   already-stored skips, disabled policy, and reset-after-miss behavior before
@@ -5344,15 +5344,24 @@
   case names, and reset/suppression/restore transitions are exact.
 - Review gate: ask Claude to review the policy matrix for missing C
   transition cases.
-- Validation needed: policy comparator with negative tests, targeted Rust
-  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
-  --check`, and non-interactive Claude review with no blockers.
+- Validation passed: `python3 ds4-parity/check_kv_policy_dump.py
+  --negative-test` with 521 schema checks, 11 manifest checks, and 8 negative
+  checks; `python3 ds4-parity/compare_kv_policy.py --negative-test` with 1725
+  comparator checks and 9 negative checks; `python3
+  ds4-parity/compare_kv_replay.py --negative-test`; `python3
+  ds4-parity/run_kv_parity_report.py` with 9 passed, 1 skipped, and 0 failed;
+  `python3 ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped,
+  and 0 failed; targeted Rust tests for continued-store policy and runtime
+  reset; Python syntax checks; `cargo test --workspace`; `cargo fmt --all --
+  --check`; `git diff --check`; `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 55 passed, 40 skipped, and 0 failed; and
+  non-interactive Claude review with no blockers.
 - Owner path: Rust KV policy dump/comparator, Rust runtime cache-state tests,
   `.memory/status.md`.
 
 ### M10.7d2: Runtime Continued-Store Replay Decisions
 
-- Status: pending
+- Status: active
 - Goal: wire continued-frontier accounting through the Rust runtime request
   path so fresh misses, memory hits, disk restores, continuation restores, cold
   stores, and decode-time continued stores produce C-equivalent store decisions.

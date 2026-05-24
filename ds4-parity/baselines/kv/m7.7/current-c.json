@@ -94,7 +94,7 @@
     },
     {
       "path": "ds4-parity/baselines/kv/m7.2/current-c.json",
-      "sha256": "f908b4bf059db500c1de6b4265491719083224d2bab703169ba0e585e9de6bcb",
+      "sha256": "ce2ab3fc8ef002a7f85a3f7b770b84ea0bf6e56514c410d5411c10142aaab7d7",
       "role": "replay-fixture"
     },
     {
