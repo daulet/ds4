@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7c2 Rust Disk KV Payload Byte Import Smoke
-- Last validated source before the active item: M10.7c1 Rust Restore Payload
-  Header Contract.
+- Active item: M10.7c3 Rust Graph Tensor Restore Next-Token Smoke
+- Last validated source before the active item: M10.7c2 Rust Disk KV Payload
+  Byte Import Smoke.
+- Earlier M10.7c1 Rust Restore Payload Header Contract.
 - Earlier M10.7b Rust Graph Session Payload Reader And Writer.
 - Earlier M10.7a Rust Graph Session Payload Layout Plan.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
@@ -30,6 +31,34 @@
 
 ## Last Evidence
 
+- M10.7c2 adds `ds4-session-payload-dump-rs --graph-file-probe <id:path>`,
+  which reads C-written graph payload bytes from disk and runs the Rust
+  `read_graph_payload` parser over the actual file contents. The probe reports
+  file byte length, FNV, C-compatible acceptance/rejection code, parsed raw-ring
+  positions, section byte totals, and compressed/index row counts without
+  restoring tensors into graph memory.
+- M10.7c2 adds the hash-only B300 summary
+  `ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json` for the M7.8
+  `disk_seed_payload` and `disk_continuation_payload` raw bodies. The summary
+  records only metadata: payload SHA256, byte counts, FNVs, Rust reader
+  acceptance, parsed graph layout, and B300 source context; the raw payload
+  bodies remain on the B300 workspace and are not committed.
+- M10.7c2 adds `ds4-parity/compare_graph_payload_raw_import.py`, which compares
+  the B300 Rust summary to `ds4-parity/baselines/kv/m7.8/current-c.json` over
+  disk case order, payload SHA256 and byte counts, exact Rust reader acceptance,
+  decoded DSV4 header-derived raw ring positions, ratio-4 and ratio-128 row
+  counts, all section byte totals, hash-only policy, and the exact B300 rerun
+  command. The live B300 run passed 104 checks and negative tests rejected 7
+  mutations; the local summary check passed 100 checks and the same 7 mutation
+  tests.
+- M10.7c2 validation passed B300 live raw import with summary writeback,
+  `python3 ds4-parity/compare_graph_payload_raw_import.py --negative-test`,
+  `python3 -m py_compile ds4-parity/compare_graph_payload_raw_import.py
+  ds4-parity/run_parity_report.py`, `cargo test -p ds4-gguf session_payload`,
+  `git diff --check`, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 51 passed, 37 skipped, and 0 failed, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and non-interactive Claude review
+  with `NO BLOCKERS`.
 - M10.7c1 adds `ds4-session-payload-dump-rs --restore-header-plan`, a
   hash-only Rust restore payload header plan over the committed M7.8 current-C
   restore oracle. It emits the four seed/continuation disk-payload and

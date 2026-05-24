@@ -15,7 +15,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
-  M10.7b, and M10.7c1.
+  M10.7b, M10.7c1, and M10.7c2.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -449,6 +449,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.7c2 Rust raw graph payload import comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_graph_payload_raw_import.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -854,6 +862,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "backend linkage"
             ),
             rerun_command=b300_prefill_resumed_oracle_command(),
+        ),
+        ReportItem(
+            name="M10.7c2 B300 Rust raw graph payload import rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Raw graph payload import requires the B300 pod because the "
+                "M7.8 disk payload bodies are hash-only and remain in "
+                "/workspace/ds4"
+            ),
+            rerun_command=b300_rust_raw_graph_payload_import_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1738,6 +1757,36 @@ def b300_prefill_resumed_oracle_command() -> str:
         "--candidate /tmp/ds4-m106d-prefill-resumed-chunked-rust.json"
     )
     return f"{source_refresh} && {smoke}"
+
+
+def b300_rust_raw_graph_payload_import_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    summary = "/tmp/ds4-m107c2-raw-import.json"
+    smoke = b300_exec(
+        "python3 ds4-parity/compare_graph_payload_raw_import.py "
+        f"--live --workdir {B300_WORKDIR} --write-summary {summary} --negative-test"
+    )
+    copy_back = shell_join(
+        prefix
+        + [
+            "cp",
+            f"{KUBE_POD}:{summary}",
+            "ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json",
+        ]
+    )
+    return f"{source_refresh} && {smoke} && {copy_back}"
 
 
 def b300_exec(script: str) -> str:

@@ -941,6 +941,34 @@ DSV4 header bytes, graph caps, raw-live rows, payload/snapshot byte counts, and
 the hash-only raw-body policy. It does not require raw restore bodies or claim
 tensor restore behavior.
 
+Compare the M10.7c2 Rust raw graph payload import summary against the committed
+M7.8 disk-payload oracle:
+
+```sh
+python3 ds4-parity/compare_graph_payload_raw_import.py
+python3 ds4-parity/compare_graph_payload_raw_import.py --negative-test
+```
+
+Recapture the Rust raw import summary on the B300 pod, where the hash-only raw
+payload bodies remain:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; python3 ds4-parity/compare_graph_payload_raw_import.py --live --workdir /workspace/ds4 --write-summary /tmp/ds4-m107c2-raw-import.json --negative-test'
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m107c2-raw-import.json \
+  ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json
+```
+
+The comparator verifies the disk seed and continuation raw payload SHA256
+values, byte counts, Rust graph-reader acceptance, parsed header fields,
+raw-ring mapping, section byte plan, compressed/index row counts, and hash-only
+raw-body policy. It does not restore tensors into graph memory.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

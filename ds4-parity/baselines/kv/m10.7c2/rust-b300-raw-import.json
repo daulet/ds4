@@ -1,0 +1,101 @@
+{
+  "schema": "ds4.rust_graph_payload_raw_import.v1",
+  "source": "rust-b300-raw-payload-import",
+  "oracle": "ds4-parity/baselines/kv/m7.8/current-c.json",
+  "raw_body_policy": "hash-only; raw restore bodies remain on B300 and are not committed",
+  "b300": {
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4"
+  },
+  "rust_probe": {
+    "schema": "ds4.rust_graph_payload_file_probe.v1",
+    "source": "rust-graph-payload-file-probe",
+    "runtime": {
+      "ctx": 32768,
+      "kind": "default-graph"
+    }
+  },
+  "cases": [
+    {
+      "id": "disk_seed_payload",
+      "kind": "disk-payload",
+      "prompt_case": "seed",
+      "payload_file": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
+      "payload_bytes": 31526948,
+      "payload_sha256": "eec10e160f9092399eb77d8376bda173916efdaeae55b95a68ea8030834391ad",
+      "rust": {
+        "id": "disk_seed_payload",
+        "path": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
+        "payload_bytes": 31526948,
+        "fnv1a64": "f51209d39d9c8195",
+        "ok": true,
+        "code": "ok",
+        "error": "",
+        "parsed": {
+          "token_count": 550,
+          "raw_first_pos": 422,
+          "raw_last_pos": 549,
+          "raw_first_phys": 422,
+          "raw_last_phys": 549,
+          "payload_bytes": 31526948,
+          "ratio4_rows": 137,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 137,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2200,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6055936,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1473024,
+            "indexer_state": 344064
+          }
+        }
+      }
+    },
+    {
+      "id": "disk_continuation_payload",
+      "kind": "disk-payload",
+      "prompt_case": "continuation",
+      "payload_file": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
+      "payload_bytes": 31688272,
+      "payload_sha256": "794d4df3fe8847c48098d50b2bdfced578e66da1016dc7755965d7457fd5ed71",
+      "rust": {
+        "id": "disk_continuation_payload",
+        "path": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
+        "payload_bytes": 31688272,
+        "fnv1a64": "8218f9cf17a4e2f4",
+        "ok": true,
+        "code": "ok",
+        "error": "",
+        "parsed": {
+          "token_count": 561,
+          "raw_first_pos": 433,
+          "raw_last_pos": 560,
+          "raw_first_phys": 433,
+          "raw_last_phys": 560,
+          "payload_bytes": 31688272,
+          "ratio4_rows": 140,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 140,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2244,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6184960,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1505280,
+            "indexer_state": 344064
+          }
+        }
+      }
+    }
+  ]
+}

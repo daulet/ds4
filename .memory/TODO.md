@@ -5102,7 +5102,8 @@
 
 ### M10.7c: Rust Disk KV Payload Restore Smoke
 
-- Status: split into M10.7c1-M10.7c3 before implementation; M10.7c1 done.
+- Status: split into M10.7c1-M10.7c3 before implementation; M10.7c1 and
+  M10.7c2 done; M10.7c3 active.
 - Goal: advance disk and memory restore parity in slices: committed restore
   metadata first, raw B300 payload bytes second, and tensor restore behavior
   third.
@@ -5146,7 +5147,7 @@
 
 ### M10.7c2: Rust Disk KV Payload Byte Import Smoke
 
-- Status: active
+- Status: done
 - Goal: on B300, feed the raw C-written disk KVC restore payload bytes into the
   Rust graph payload reader and prove Rust accepts the bytes with the recorded
   hashes and section plan.
@@ -5161,15 +5162,22 @@
 - Drift policy: raw payload hashes, lengths, header fields, count tables, and
   section offsets are exact.
 - Review gate: ask Claude to review raw-byte bounds checks and B300 evidence.
-- Validation needed: B300 raw payload reader smoke, local comparator negative
-  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
-  --check`, and non-interactive Claude review with no blockers.
+- Validation passed: B300 live raw import with summary writeback passed 104
+  checks and rejected 7 mutations; `python3
+  ds4-parity/compare_graph_payload_raw_import.py --negative-test` passed 100
+  checks and rejected 7 mutations; `python3 -m py_compile
+  ds4-parity/compare_graph_payload_raw_import.py
+  ds4-parity/run_parity_report.py`; `cargo test -p ds4-gguf
+  session_payload`; `git diff --check`; `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` reported 51 passed, 37
+  skipped, and 0 failed; `cargo test --workspace`; `cargo fmt --all --
+  --check`; and non-interactive Claude review with `NO BLOCKERS`.
 - Owner path: Rust graph payload byte reader, B300 raw payload comparator,
   `.memory/status.md`.
 
 ### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
 
-- Status: pending
+- Status: active
 - Goal: restore C-written disk and memory snapshot payloads into Rust graph
   session state on B300 and prove next-token behavior matches current C.
 - Oracle: current C M7.8 restore oracle on B300.

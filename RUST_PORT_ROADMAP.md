@@ -4485,6 +4485,17 @@ restore boundary.
 - Validation gate: B300 raw payload reader smoke, local comparator negative
   tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
   --check`, and non-interactive Claude review with no blockers.
+- Evidence: implemented Rust `--graph-file-probe <id:path>` and
+  `ds4-parity/compare_graph_payload_raw_import.py`, then ran the comparator on
+  the B300 pod against the M7.8 hash-only raw disk payload bodies. The live run
+  passed 104 checks over disk case order, payload SHA256 and byte counts, Rust
+  reader acceptance, raw-ring positions, section byte totals, ratio row counts,
+  and hash-only policy; negative tests rejected 7 mutations. The committed
+  summary `ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json` contains
+  only hashes/FNVs/parsed metadata, not raw payload bodies. Full local
+  validation passed the unified parity report with 51 passed, 37 skipped, and
+  0 failed, full `cargo test --workspace`, format/diff checks, and
+  non-interactive Claude review with `NO BLOCKERS`.
 
 ###### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
 

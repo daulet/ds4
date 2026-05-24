@@ -7,45 +7,58 @@ use ds4_gguf::session_payload::{
     IO_CHUNK_BYTES, MAGIC, N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB, U32_FIELDS,
     VERSION,
 };
+use std::fs;
 use std::io::{self, Write};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+const USAGE: &str = "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan|--graph-file-probe <id:path>...]";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum DumpMode {
     Shape,
     GraphPlan,
     GraphProbe,
     RestoreHeaderPlan,
+    GraphFileProbe(Vec<GraphFileProbeInput>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GraphFileProbeInput {
+    id: String,
+    path: String,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut out = io::BufWriter::new(io::stdout());
     let mut mode = DumpMode::Shape;
-    for arg in std::env::args().skip(1) {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
         if arg == "--graph-plan" {
             if mode != DumpMode::Shape {
-                return Err(
-                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe]".into(),
-                );
+                return Err(USAGE.into());
             }
             mode = DumpMode::GraphPlan;
         } else if arg == "--graph-probe" {
             if mode != DumpMode::Shape {
-                return Err(
-                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan]".into(),
-                );
+                return Err(USAGE.into());
             }
             mode = DumpMode::GraphProbe;
         } else if arg == "--restore-header-plan" {
             if mode != DumpMode::Shape {
-                return Err(
-                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan]".into(),
-                );
+                return Err(USAGE.into());
             }
             mode = DumpMode::RestoreHeaderPlan;
+        } else if arg == "--graph-file-probe" {
+            let spec = args
+                .next()
+                .ok_or("usage: --graph-file-probe requires <id:path>")?;
+            let input = parse_graph_file_probe_input(&spec)?;
+            match &mut mode {
+                DumpMode::Shape => mode = DumpMode::GraphFileProbe(vec![input]),
+                DumpMode::GraphFileProbe(inputs) => inputs.push(input),
+                _ => return Err(USAGE.into()),
+            }
         } else {
-            return Err(
-                "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan]".into(),
-            );
+            return Err(USAGE.into());
         }
     }
     match mode {
@@ -53,8 +66,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         DumpMode::GraphPlan => write_graph_plan_dump(&mut out)?,
         DumpMode::GraphProbe => write_graph_probe_dump(&mut out)?,
         DumpMode::RestoreHeaderPlan => write_restore_header_plan_dump(&mut out)?,
+        DumpMode::GraphFileProbe(inputs) => write_graph_file_probe_dump(&mut out, &inputs)?,
     }
     Ok(())
+}
+
+fn parse_graph_file_probe_input(
+    spec: &str,
+) -> Result<GraphFileProbeInput, Box<dyn std::error::Error>> {
+    let (id, path) = spec
+        .split_once(':')
+        .ok_or("usage: --graph-file-probe requires <id:path>")?;
+    if id.is_empty() || path.is_empty() {
+        return Err("usage: --graph-file-probe requires non-empty <id:path>".into());
+    }
+    Ok(GraphFileProbeInput {
+        id: id.to_owned(),
+        path: path.to_owned(),
+    })
 }
 
 fn write_dump<W: Write>(out: &mut W) -> io::Result<()> {
@@ -582,6 +611,57 @@ fn write_graph_probe_parsed<W: Write>(out: &mut W, parsed: &GraphPayloadRead) ->
         parsed.n_index_comp[2]
     )?;
     write_graph_section_bytes(out, parsed.sections)?;
+    write!(out, "}}")
+}
+
+fn write_graph_file_probe_dump<W: Write>(
+    out: &mut W,
+    inputs: &[GraphFileProbeInput],
+) -> io::Result<()> {
+    writeln!(out, "{{")?;
+    writeln!(
+        out,
+        "  \"schema\": \"ds4.rust_graph_payload_file_probe.v1\","
+    )?;
+    writeln!(out, "  \"source\": \"rust-graph-payload-file-probe\",")?;
+    writeln!(
+        out,
+        "  \"runtime\": {{\"ctx\": 32768, \"kind\": \"default-graph\"}},"
+    )?;
+    writeln!(out, "  \"cases\": [")?;
+    let runtime = default_graph_payload_runtime(32_768);
+    for (idx, input) in inputs.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_graph_file_probe_case(out, input, runtime)?;
+    }
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")
+}
+
+fn write_graph_file_probe_case<W: Write>(
+    out: &mut W,
+    input: &GraphFileProbeInput,
+    runtime: ds4_gguf::session_payload::GraphPayloadRuntime,
+) -> io::Result<()> {
+    let bytes = fs::read(&input.path)?;
+    let result = read_graph_payload(&bytes, runtime);
+    let (ok, code, error) = result_fields_graph(result.as_ref().map(|_| ()), result.as_ref().err());
+    write!(out, "    {{\"id\": ")?;
+    write_json_string(out, &input.id)?;
+    write!(out, ", \"path\": ")?;
+    write_json_string(out, &input.path)?;
+    write!(out, ", \"payload_bytes\": {}, \"fnv1a64\": ", bytes.len())?;
+    write_json_string(out, &fnv1a64_hex(&bytes))?;
+    write!(out, ", \"ok\": {}, \"code\": ", ok)?;
+    write_json_string(out, code)?;
+    write!(out, ", \"error\": ")?;
+    write_json_string(out, error)?;
+    if let Ok(parsed) = result {
+        write!(out, ", \"parsed\": ")?;
+        write_graph_probe_parsed(out, &parsed)?;
+    }
     write!(out, "}}")
 }
 
