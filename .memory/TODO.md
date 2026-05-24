@@ -5361,7 +5361,7 @@
 
 ### M10.7d2a: Runtime Continued-Frontier Ledger Contract
 
-- Status: active
+- Status: done
 - Goal: add a model-free Rust runtime cache ledger that records the
   continued-frontier decisions made around cache misses, memory hits, disk
   restores, cold-store suppression, note-store updates, failed-store restore,
@@ -5383,15 +5383,20 @@
   and frontier before/after values are exact.
 - Review gate: ask Claude to review runtime event ordering and rollback
   invariants.
-- Validation needed: targeted Rust runtime tests, KV policy comparator, `cargo
-  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
-  non-interactive Claude review with no blockers.
+- Validation passed: focused runtime ledger tests, KV policy comparator, `cargo
+  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  skip-local unified parity report, and non-interactive Claude review with no
+  blockers.
+- Evidence: Rust runtime cache state now records per-request cache decision and
+  continued-frontier events for reset, suppression, restore, note, live-prefix
+  store, current-store, and continued-store attempts without requiring a model
+  or B300.
 - Owner path: Rust runtime cache/store ledger, runtime tests,
   `.memory/status.md`.
 
 ### M10.7d2b: Runtime KV Replay Checker Closure
 
-- Status: pending
+- Status: active
 - Goal: extend the committed runtime KV replay checker/artifact contract so
   M0.5 seed miss, seed restore, continuation restore, and memory-token
   continuation validate continued-frontier ledger fields in addition to cache

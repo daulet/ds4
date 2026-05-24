@@ -269,6 +269,21 @@ struct RuntimeCacheState {
     config: RuntimeCacheConfig,
     disk: Option<KvDiskCache>,
     tool_memory: ToolMemory,
+    ledger: Vec<RuntimeCacheLedgerEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeCacheLedgerEvent {
+    name: &'static str,
+    cache_source: Option<&'static str>,
+    reason: Option<&'static str>,
+    tokens: i32,
+    cached_tokens: i32,
+    cache_write_tokens: i32,
+    disk_cached_tokens: i32,
+    frontier_before: i32,
+    frontier_after: i32,
+    success: Option<bool>,
 }
 
 impl RuntimeCacheState {
@@ -280,7 +295,72 @@ impl RuntimeCacheState {
             config,
             disk,
             tool_memory,
+            ledger: Vec::new(),
         }
+    }
+
+    fn begin_request_ledger(&mut self) {
+        self.ledger.clear();
+    }
+
+    #[cfg(test)]
+    fn ledger_events(&self) -> &[RuntimeCacheLedgerEvent] {
+        &self.ledger
+    }
+
+    fn continued_frontier(&self) -> i32 {
+        self.disk
+            .as_ref()
+            .map_or(0, KvDiskCache::continued_last_store_tokens)
+    }
+
+    fn push_ledger_event(&mut self, event: RuntimeCacheLedgerEvent) {
+        self.ledger.push(event);
+    }
+
+    fn record_frontier_event(
+        &mut self,
+        name: &'static str,
+        reason: Option<&'static str>,
+        tokens: i32,
+        frontier_before: i32,
+        success: Option<bool>,
+    ) {
+        self.push_ledger_event(RuntimeCacheLedgerEvent {
+            name,
+            cache_source: None,
+            reason,
+            tokens,
+            cached_tokens: -1,
+            cache_write_tokens: -1,
+            disk_cached_tokens: -1,
+            frontier_before,
+            frontier_after: self.continued_frontier(),
+            success,
+        });
+    }
+
+    fn record_cache_decision(
+        &mut self,
+        cache_source: &'static str,
+        prompt_tokens: i32,
+        cached_tokens: i32,
+        cache_write_tokens: i32,
+        disk_cached_tokens: i32,
+    ) {
+        let frontier = self.continued_frontier();
+        self.push_ledger_event(RuntimeCacheLedgerEvent {
+            name: "cache_decision",
+            cache_source: Some(cache_source),
+            reason: None,
+            tokens: prompt_tokens,
+            cached_tokens,
+            cache_write_tokens,
+            disk_cached_tokens,
+            frontier_before: frontier,
+            frontier_after: frontier,
+            success: None,
+        });
     }
 
     fn prepare_chat_prompt(&mut self, request: &mut OpenAiChatRequest) -> ToolReplayStats {
@@ -315,32 +395,189 @@ impl RuntimeCacheState {
     }
 
     fn reset_continued_frontier(&mut self) {
+        let before = self.continued_frontier();
         if let Some(cache) = self.disk.as_mut() {
             cache.reset_continued_frontier();
         }
+        self.record_frontier_event("reset_continued_frontier", None, 0, before, Some(true));
     }
 
-    fn store_current(&mut self, session: &mut ServerSession<'_>, reason: &str) -> bool {
-        let RuntimeCacheState {
-            config,
-            disk,
-            tool_memory,
-        } = self;
-        let Some(cache) = disk.as_mut() else {
-            return false;
-        };
-        let mut ctx = ToolMapTrailerContext {
-            tool_memory,
-            disabled: config.disable_exact_dsml_tool_replay,
-        };
-        let hooks = tool_map_trailer_hooks(&mut ctx);
-        match session.store_current(cache, reason, Some(&hooks)) {
-            Ok(stored) => stored,
-            Err(err) => {
-                eprintln!("ds4-server-runtime-rs: failed to store disk KV cache ({reason}): {err}");
+    fn store_current(&mut self, session: &mut ServerSession<'_>, reason: &'static str) -> bool {
+        let before = self.continued_frontier();
+        let tokens = session.position();
+        let stored = {
+            let RuntimeCacheState {
+                config,
+                disk,
+                tool_memory,
+                ledger: _,
+            } = self;
+            if let Some(cache) = disk.as_mut() {
+                let mut ctx = ToolMapTrailerContext {
+                    tool_memory,
+                    disabled: config.disable_exact_dsml_tool_replay,
+                };
+                let hooks = tool_map_trailer_hooks(&mut ctx);
+                match session.store_current(cache, reason, Some(&hooks)) {
+                    Ok(stored) => stored,
+                    Err(err) => {
+                        eprintln!(
+                            "ds4-server-runtime-rs: failed to store disk KV cache ({reason}): {err}"
+                        );
+                        false
+                    }
+                }
+            } else {
                 false
             }
+        };
+        self.record_frontier_event("store_current", Some(reason), tokens, before, Some(stored));
+        stored
+    }
+
+    fn suppress_continued_store(&mut self, tokens: i32) -> i32 {
+        let before = self.continued_frontier();
+        let old = if let Some(cache) = self.disk.as_mut() {
+            cache.suppress_continued_store(tokens)
+        } else {
+            -1
+        };
+        self.record_frontier_event(
+            "suppress_continued_store",
+            None,
+            tokens,
+            before,
+            Some(old >= 0),
+        );
+        old
+    }
+
+    fn note_store(&mut self, tokens: i32) {
+        let before = self.continued_frontier();
+        if let Some(cache) = self.disk.as_mut() {
+            cache.note_store(tokens);
         }
+        self.record_frontier_event(
+            "note_store",
+            None,
+            tokens,
+            before,
+            Some(self.continued_frontier() > before),
+        );
+    }
+
+    fn restore_suppressed_continued(&mut self, old_tokens: i32, suppressed_tokens: i32) {
+        let before = self.continued_frontier();
+        if let Some(cache) = self.disk.as_mut() {
+            cache.restore_suppressed_continued(old_tokens, suppressed_tokens);
+        }
+        self.record_frontier_event(
+            "restore_suppressed_continued",
+            None,
+            suppressed_tokens,
+            before,
+            Some(self.continued_frontier() != before),
+        );
+    }
+
+    fn store_live_prefix(
+        &mut self,
+        session: &mut ServerSession<'_>,
+        prompt: &ds4_engine::Tokens,
+        store_len: i32,
+        reason: &'static str,
+    ) -> bool {
+        let before = self.continued_frontier();
+        let stored = {
+            let RuntimeCacheState {
+                config,
+                disk,
+                tool_memory,
+                ledger: _,
+            } = self;
+            if let Some(cache) = disk.as_mut() {
+                let mut ctx = ToolMapTrailerContext {
+                    tool_memory,
+                    disabled: config.disable_exact_dsml_tool_replay,
+                };
+                let hooks = tool_map_trailer_hooks(&mut ctx);
+                match session.store_live_prefix(cache, prompt, store_len, reason, Some(&hooks)) {
+                    Ok(stored) => stored,
+                    Err(err) => {
+                        eprintln!(
+                            "ds4-server-runtime-rs: failed to store disk KV cache ({reason}): {err}"
+                        );
+                        false
+                    }
+                }
+            } else {
+                false
+            }
+        };
+        self.record_frontier_event(
+            "store_live_prefix",
+            Some(reason),
+            store_len,
+            before,
+            Some(stored),
+        );
+        stored
+    }
+
+    fn maybe_store_continued(&mut self, session: &mut ServerSession<'_>) -> bool {
+        let before = self.continued_frontier();
+        let tokens = session.position();
+        let stored = {
+            let RuntimeCacheState {
+                config,
+                disk,
+                tool_memory,
+                ledger: _,
+            } = self;
+            if let Some(cache) = disk.as_mut() {
+                let mut ctx = ToolMapTrailerContext {
+                    tool_memory,
+                    disabled: config.disable_exact_dsml_tool_replay,
+                };
+                let hooks = tool_map_trailer_hooks(&mut ctx);
+                match session.maybe_store_continued(cache, Some(&hooks)) {
+                    Ok(stored) => stored,
+                    Err(err) => {
+                        eprintln!(
+                            "ds4-server-runtime-rs: failed to store continued disk KV cache: {err}"
+                        );
+                        false
+                    }
+                }
+            } else {
+                false
+            }
+        };
+        self.record_frontier_event(
+            "maybe_store_continued",
+            Some("continued"),
+            tokens,
+            before,
+            Some(stored),
+        );
+        stored
+    }
+
+    fn remember_generated_tool_calls(&mut self, parsed: &ParsedChatGeneration) {
+        if self.config.disable_exact_dsml_tool_replay {
+            return;
+        }
+        let Some(raw_dsml) = parsed.raw_dsml.as_deref().filter(|raw| !raw.is_empty()) else {
+            return;
+        };
+        let ids: Vec<&str> = parsed
+            .calls
+            .iter()
+            .filter_map(|call| call.id.as_deref())
+            .filter(|id| !id.is_empty())
+            .collect();
+        self.tool_memory
+            .remember_ids(ids, raw_dsml, ToolMemorySource::Ram);
     }
 
     fn sync_prompt_with_stores(
@@ -353,9 +590,7 @@ impl RuntimeCacheState {
         let cold_store_len = self.cold_store_len(engine, prompt, cached_tokens);
         let mut suppressed_continued_last = -1;
         if cold_store_len >= self.config.policy.min_tokens {
-            if let Some(cache) = self.disk.as_mut() {
-                suppressed_continued_last = cache.suppress_continued_store(cold_store_len);
-            }
+            suppressed_continued_last = self.suppress_continued_store(cold_store_len);
         }
 
         if cold_store_len >= self.config.policy.min_tokens && cold_store_len < prompt.len() {
@@ -388,46 +623,6 @@ impl RuntimeCacheState {
         Ok(())
     }
 
-    fn maybe_store_continued(&mut self, session: &mut ServerSession<'_>) -> bool {
-        let RuntimeCacheState {
-            config,
-            disk,
-            tool_memory,
-        } = self;
-        let Some(cache) = disk.as_mut() else {
-            return false;
-        };
-        let mut ctx = ToolMapTrailerContext {
-            tool_memory,
-            disabled: config.disable_exact_dsml_tool_replay,
-        };
-        let hooks = tool_map_trailer_hooks(&mut ctx);
-        match session.maybe_store_continued(cache, Some(&hooks)) {
-            Ok(stored) => stored,
-            Err(err) => {
-                eprintln!("ds4-server-runtime-rs: failed to store continued disk KV cache: {err}");
-                false
-            }
-        }
-    }
-
-    fn remember_generated_tool_calls(&mut self, parsed: &ParsedChatGeneration) {
-        if self.config.disable_exact_dsml_tool_replay {
-            return;
-        }
-        let Some(raw_dsml) = parsed.raw_dsml.as_deref().filter(|raw| !raw.is_empty()) else {
-            return;
-        };
-        let ids: Vec<&str> = parsed
-            .calls
-            .iter()
-            .filter_map(|call| call.id.as_deref())
-            .filter(|id| !id.is_empty())
-            .collect();
-        self.tool_memory
-            .remember_ids(ids, raw_dsml, ToolMemorySource::Ram);
-    }
-
     fn cold_store_len(
         &self,
         engine: &Engine,
@@ -450,47 +645,6 @@ impl RuntimeCacheState {
             anchor
         } else {
             cache.store_len(prompt.len())
-        }
-    }
-
-    fn store_live_prefix(
-        &mut self,
-        session: &mut ServerSession<'_>,
-        prompt: &ds4_engine::Tokens,
-        store_len: i32,
-        reason: &str,
-    ) -> bool {
-        let RuntimeCacheState {
-            config,
-            disk,
-            tool_memory,
-        } = self;
-        let Some(cache) = disk.as_mut() else {
-            return false;
-        };
-        let mut ctx = ToolMapTrailerContext {
-            tool_memory,
-            disabled: config.disable_exact_dsml_tool_replay,
-        };
-        let hooks = tool_map_trailer_hooks(&mut ctx);
-        match session.store_live_prefix(cache, prompt, store_len, reason, Some(&hooks)) {
-            Ok(stored) => stored,
-            Err(err) => {
-                eprintln!("ds4-server-runtime-rs: failed to store disk KV cache ({reason}): {err}");
-                false
-            }
-        }
-    }
-
-    fn note_store(&mut self, tokens: i32) {
-        if let Some(cache) = self.disk.as_mut() {
-            cache.note_store(tokens);
-        }
-    }
-
-    fn restore_suppressed_continued(&mut self, old_tokens: i32, suppressed_tokens: i32) {
-        if let Some(cache) = self.disk.as_mut() {
-            cache.restore_suppressed_continued(old_tokens, suppressed_tokens);
         }
     }
 
@@ -698,6 +852,7 @@ fn route_chat_completions(
         Ok(parsed) => parsed,
         Err(err) => return format_http_error(config.enable_cors, 400, err.message()),
     };
+    state.cache.begin_request_ledger();
     let tool_replay = state.cache.prepare_chat_prompt(&mut parsed);
     let prompt = match engine.encode_chat_prompt("", &parsed.prompt_text, ThinkMode::None) {
         Ok(prompt) => prompt,
@@ -737,6 +892,22 @@ fn route_chat_completions(
     let cached_tokens = disk_load
         .as_ref()
         .map_or(memory_cached_tokens, |load| load.tokens.max(0));
+    let disk_cached_tokens = disk_load.as_ref().map_or(0, |load| load.tokens.max(0));
+    let cache_source = if disk_cached_tokens > 0 {
+        "disk-text"
+    } else if memory_cached_tokens > 0 {
+        "memory-token"
+    } else {
+        "none"
+    };
+    let cache_write_tokens = (prompt_for_generation.len() - cached_tokens).max(0);
+    state.cache.record_cache_decision(
+        cache_source,
+        prompt_for_generation.len(),
+        cached_tokens,
+        cache_write_tokens,
+        disk_cached_tokens,
+    );
     let generation_cache_probe = state.session.cache_probe(prompt_for_generation);
     if let Err(err) = state.cache.sync_prompt_with_stores(
         &mut state.session,
@@ -756,7 +927,6 @@ fn route_chat_completions(
         min_p: parsed.sampling.min_p,
         seed: parsed.seed,
     };
-    let cache_write_tokens = (prompt_for_generation.len() - cached_tokens).max(0);
     let generated = {
         let has_tools = parsed.has_tools;
         let cache = &mut state.cache;
@@ -1838,6 +2008,7 @@ mod tests {
             ..RuntimeCacheConfig::default()
         });
 
+        cache.begin_request_ledger();
         cache.note_store(20_480);
         assert_eq!(
             cache
@@ -1855,6 +2026,127 @@ mod tests {
                 .expect("disk cache enabled")
                 .continued_last_store_tokens(),
             0
+        );
+        assert_eq!(
+            cache.ledger_events(),
+            &[
+                RuntimeCacheLedgerEvent {
+                    name: "note_store",
+                    cache_source: None,
+                    reason: None,
+                    tokens: 20_480,
+                    cached_tokens: -1,
+                    cache_write_tokens: -1,
+                    disk_cached_tokens: -1,
+                    frontier_before: 0,
+                    frontier_after: 20_480,
+                    success: Some(true),
+                },
+                RuntimeCacheLedgerEvent {
+                    name: "reset_continued_frontier",
+                    cache_source: None,
+                    reason: None,
+                    tokens: 0,
+                    cached_tokens: -1,
+                    cache_write_tokens: -1,
+                    disk_cached_tokens: -1,
+                    frontier_before: 20_480,
+                    frontier_after: 0,
+                    success: Some(true),
+                },
+            ]
+        );
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn runtime_cache_ledger_records_suppress_restore_and_cache_decision() {
+        let dir = unique_temp_dir("continued-frontier-ledger");
+        let mut cache = RuntimeCacheState::new(RuntimeCacheConfig {
+            disk_dir: Some(dir.to_string_lossy().into_owned()),
+            ..RuntimeCacheConfig::default()
+        });
+
+        cache.begin_request_ledger();
+        let old = cache.suppress_continued_store(10_240);
+        assert_eq!(old, 0);
+        cache.restore_suppressed_continued(old, 10_240);
+        cache.record_cache_decision("disk-text", 561, 552, 9, 552);
+
+        assert_eq!(
+            cache.ledger_events(),
+            &[
+                RuntimeCacheLedgerEvent {
+                    name: "suppress_continued_store",
+                    cache_source: None,
+                    reason: None,
+                    tokens: 10_240,
+                    cached_tokens: -1,
+                    cache_write_tokens: -1,
+                    disk_cached_tokens: -1,
+                    frontier_before: 0,
+                    frontier_after: 10_240,
+                    success: Some(true),
+                },
+                RuntimeCacheLedgerEvent {
+                    name: "restore_suppressed_continued",
+                    cache_source: None,
+                    reason: None,
+                    tokens: 10_240,
+                    cached_tokens: -1,
+                    cache_write_tokens: -1,
+                    disk_cached_tokens: -1,
+                    frontier_before: 10_240,
+                    frontier_after: 0,
+                    success: Some(true),
+                },
+                RuntimeCacheLedgerEvent {
+                    name: "cache_decision",
+                    cache_source: Some("disk-text"),
+                    reason: None,
+                    tokens: 561,
+                    cached_tokens: 552,
+                    cache_write_tokens: 9,
+                    disk_cached_tokens: 552,
+                    frontier_before: 0,
+                    frontier_after: 0,
+                    success: None,
+                },
+            ]
+        );
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn runtime_cache_ledger_records_failed_suppress_without_mutating_frontier() {
+        let dir = unique_temp_dir("continued-frontier-ledger-failed-suppress");
+        let mut cache = RuntimeCacheState::new(RuntimeCacheConfig {
+            disk_dir: Some(dir.to_string_lossy().into_owned()),
+            ..RuntimeCacheConfig::default()
+        });
+
+        cache.note_store(10_240);
+        cache.begin_request_ledger();
+        let old = cache.suppress_continued_store(18_432);
+
+        assert_eq!(old, -1);
+        assert_eq!(cache.continued_frontier(), 10_240);
+        assert_eq!(
+            cache.ledger_events(),
+            &[RuntimeCacheLedgerEvent {
+                name: "suppress_continued_store",
+                cache_source: None,
+                reason: None,
+                tokens: 18_432,
+                cached_tokens: -1,
+                cache_write_tokens: -1,
+                disk_cached_tokens: -1,
+                frontier_before: 10_240,
+                frontier_after: 10_240,
+                success: Some(false),
+            }]
         );
 
         fs::remove_dir_all(dir).expect("remove temp dir");

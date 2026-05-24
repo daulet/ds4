@@ -3,12 +3,14 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d2a Runtime Continued-Frontier Ledger Contract
-- Last validated source before the active item: M10.7d1 Continued-Frontier
-  Policy Transition Matrix.
+- Active item: M10.7d2b Runtime KV Replay Checker Closure
+- Last validated source before the active item: M10.7d2a Runtime
+  Continued-Frontier Ledger Contract.
+- Earlier M10.7d2a Runtime Continued-Frontier Ledger Contract.
 - Earlier M10.7d1 Continued-Frontier Policy Transition Matrix.
 - M10.7c3 Rust Graph Tensor Restore Next-Token Smoke is split into M10.7c3a
   through M10.7c3d before tensor restore or next-token claims.
+- Earlier M10.7c3d Rust Graph Tensor Restore Next-Token Smoke.
 - Earlier M10.7c3c Rust Graph Tensor Restore Readback Smoke.
 - Earlier M10.7c3b Rust Graph Restore Target Mapping Contract.
 - Earlier M10.7c3a Rust Memory Snapshot Raw Body Import Smoke.
@@ -38,6 +40,22 @@
 
 ## Last Evidence
 
+- M10.7d2a adds a private Rust runtime cache ledger that is cleared per chat
+  request and records cache decisions, reset-after-miss, cold-store
+  suppression, frontier note/restore, live-prefix store attempts, shutdown or
+  eviction stores, and decode-time continued-store attempts without changing
+  cache policy decisions.
+- M10.7d2a exposes `ServerSession::position()` for runtime cache accounting and
+  adds model-free tests for reset ledger ordering, suppress/restore/cache
+  decision events, and failed suppression without frontier mutation.
+- M10.7d2a validation passed focused runtime ledger tests, `python3
+  ds4-parity/compare_kv_policy.py --negative-test` with 1725 comparator checks
+  and 9 negative checks, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, `python3
+  ds4-parity/compare_graph_restore_next_token.py --negative-test` after
+  restoring the exact M10.7c3d status marker, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 55 passed, 40
+  skipped, and 0 failed, and non-interactive Claude review with `NO BLOCKERS`.
 - M10.7d1 adds a C/Rust `continued_frontier_transitions` policy matrix covering
   note-store growth, lower-note skip, fresh-frontier suppression/restore,
   already-stored suppression skip, unaligned suppression skip,
@@ -63,9 +81,9 @@
   non-interactive Claude review with `NO BLOCKERS`.
 - M10.7d2 is split before implementation into M10.7d2a model-free runtime
   continued-frontier ledger contract, M10.7d2b runtime KV replay checker
-  closure, and M10.7d2c B300 runtime replay refresh. M10.7d2a is active so the
-  runtime event order and rollback semantics are testable before replay
-  artifacts or B300 refreshes change.
+  closure, and M10.7d2c B300 runtime replay refresh. M10.7d2a is done and
+  M10.7d2b is active, so the checked-in replay checker can consume the ledger
+  contract before B300 replay artifacts change.
 - M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
   restores the four C-written disk payload and memory snapshot bodies into
   Rust graph state, computes selected token and top-logprob slices from the

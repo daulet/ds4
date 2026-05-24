@@ -843,6 +843,10 @@ impl ChatSession<'_> {
 }
 
 impl ServerSession<'_> {
+    pub fn position(&self) -> i32 {
+        self.session.pos()
+    }
+
     pub fn cache_probe(&self, prompt: &Tokens) -> ServerCacheProbe {
         ServerCacheProbe {
             live_tokens_before: self.session.pos(),

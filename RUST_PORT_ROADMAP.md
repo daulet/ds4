@@ -4723,6 +4723,12 @@ restore boundary.
 - Validation gate: targeted Rust runtime tests, KV policy comparator, `cargo
   test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Evidence: Rust runtime cache state now records per-request cache decision and
+  continued-frontier events for reset, suppression, restore, note, live-prefix
+  store, current-store, and continued-store attempts. Validation passed focused
+  runtime ledger tests, KV policy comparator, `cargo test --workspace`, `cargo
+  fmt --all -- --check`, `git diff --check`, skip-local unified parity report,
+  and non-interactive Claude review with no blockers.
 
 ##### M10.7d2b: Runtime KV Replay Checker Closure
 
