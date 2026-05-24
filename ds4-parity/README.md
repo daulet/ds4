@@ -157,6 +157,35 @@ backend operation facade targets, graph tensor owner groups, command-boundary
 records, and the M10.2 context/MTP plan cases. Its negative test mutates an
 operation, a tensor field, a command boundary, and an MTP plan case in memory.
 
+Validate the M10.9a runtime graph closure matrix:
+
+```sh
+python3 ds4-parity/check_runtime_graph_closure_matrix.py
+python3 ds4-parity/check_runtime_graph_closure_matrix.py --negative-test
+```
+
+Refresh the B300 fixture-readiness probe used by M10.9:
+
+```sh
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; \
+  target=$(readlink -f /workspace/ds4/ds4flash.gguf); \
+  printf "resolved_model=%s\n" "$target"; \
+  stat -c "resolved_model_bytes=%s" "$target"; \
+  sha256sum tests/test-vectors/official.vec speed-bench/promessi_sposi.txt; \
+  test -f ds4-parity/baselines/bench/m0.6/csv/b300-short.csv; \
+  test -f ds4-parity/baselines/bench/m0.6/csv/b300-long.csv; \
+  python3 -m json.tool \
+    ds4-parity/baselines/bench/m0.6/logs/csv-summary.json >/dev/null; \
+  printf "m109_fixture_probe=ok\n"'
+```
+
+The matrix pins M10.9b through M10.9f to concrete oracles, fixture paths,
+artifact locations, rerun commands, claim boundaries, and drift policies. It
+forbids reporting full runtime graph parity before the route, official-vector,
+long-context, tool/server, and benchmark closure gates are all current.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

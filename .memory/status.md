@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.9a Runtime Graph Closure Matrix And Rerun Contract
-- Last validated source before the active item: M10.9 Runtime Graph End-To-End
-  And Benchmark Closure split.
+- Active item: M10.9b Rust Runtime Graph Route Switch And Preflight
+- Last validated source before the active item: M10.9a Runtime Graph Closure
+  Matrix And Rerun Contract.
+- Earlier M10.9a Runtime Graph Closure Matrix And Rerun Contract.
 - Earlier M10.9 Runtime Graph End-To-End And Benchmark Closure split into
   M10.9a through M10.9f before implementation.
 - Earlier M10.8g4b B300 End-To-End Blocker Or Support Comparator Closure.
@@ -77,6 +78,26 @@
 
 ## Last Evidence
 
+- M10.9a adds
+  `ds4-parity/baselines/graph/m10.9a/runtime-graph-closure-matrix.json`,
+  `ds4-parity/check_runtime_graph_closure_matrix.py`, README instructions,
+  unified report wiring, and an exact B300 fixture-readiness rerun hook. The
+  matrix pins M10.9b through M10.9f to concrete oracles, fixture paths,
+  artifact paths, rerun commands, comparators, acceptance rules, drift
+  policies, and claim boundaries.
+- M10.9a validation passed Python syntax, `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test` with 118
+  checks and 8 negative mutations, the live B300 fixture-readiness probe with
+  resolved model size 86,720,111,488 bytes, `official.vec` SHA
+  `0223bbe1eaa3b626be87849df389af91c3f3f6e6b0d4436baf2dbb6ed624b1ac`,
+  benchmark prompt SHA
+  `f53e0d80cb2d4492d24ebd63c7000c397b16ae70f9bf09b3763e5d8323ec209f`,
+  existing M0.6 benchmark CSV fixtures, `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 72 passed, 46 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.9 split before implementation into M10.9a closure matrix, M10.9b route
   switch, M10.9c official-vector gate, M10.9d long-context gate, M10.9e
   tool/server gate, and M10.9f benchmark/final closure. Active item is now

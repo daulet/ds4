@@ -1,0 +1,216 @@
+{
+  "schema": "ds4.runtime_graph_closure_matrix.v1",
+  "source": "m10.9-runtime-graph-closure-matrix",
+  "milestone": "M10.9a",
+  "parent": "M10.9",
+  "next_stage": "M10.9b",
+  "last_completed": "M10.8g4b",
+  "inputs": {
+    "roadmap": "RUST_PORT_ROADMAP.md",
+    "todo": ".memory/TODO.md",
+    "status": ".memory/status.md",
+    "unified_report": "ds4-parity/run_parity_report.py",
+    "readme": "ds4-parity/README.md",
+    "m10_8g4b_closure": "ds4-parity/baselines/graph/m10.8g4b/end-to-end-closure.json"
+  },
+  "b300_fixture_inventory": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "temp_kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig",
+    "model_path": "/workspace/ds4/ds4flash.gguf",
+    "resolved_model_path": "/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+    "model_sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668",
+    "model_bytes": 86720111488,
+    "official_vec": {
+      "path": "tests/test-vectors/official.vec",
+      "sha256": "0223bbe1eaa3b626be87849df389af91c3f3f6e6b0d4436baf2dbb6ed624b1ac"
+    },
+    "bench_prompt": {
+      "path": "speed-bench/promessi_sposi.txt",
+      "sha256": "f53e0d80cb2d4492d24ebd63c7000c397b16ae70f9bf09b3763e5d8323ec209f"
+    },
+    "benchmark_csvs": [
+      "ds4-parity/baselines/bench/m0.6/csv/b300-short.csv",
+      "ds4-parity/baselines/bench/m0.6/csv/b300-long.csv"
+    ]
+  },
+  "gates": [
+    {
+      "id": "M10.9b",
+      "name": "Rust Runtime Graph Route Switch And Preflight",
+      "oracle": [
+        "current Rust runtime target-stream path",
+        "M10.5 through M10.8 graph scheduling contracts",
+        "current C graph runtime option behavior"
+      ],
+      "fixtures": [
+        "one-shot runtime options",
+        "interactive runtime options",
+        "server runtime options",
+        "CUDA and non-CUDA backend selectors",
+        "unsupported graph route cases",
+        "cache/KVC preflight cases"
+      ],
+      "comparator": "ds4-parity/check_runtime_graph_route_preflight.py",
+      "artifact": "ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json",
+      "rerun_command": "python3 ds4-parity/check_runtime_graph_route_preflight.py --write-summary ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json --negative-test",
+      "acceptance": [
+        "graph route selection is explicit",
+        "default runtime behavior is unchanged",
+        "unsupported graph-runtime cases fail before stream or cache mutation"
+      ],
+      "drift_policy": [
+        "option names exact",
+        "fail-closed categories exact",
+        "output bytes exact",
+        "checkpoint/cache/KVC deltas exact",
+        "logs and timings normalized"
+      ],
+      "claim_boundary": "no model-backed Rust graph parity claim"
+    },
+    {
+      "id": "M10.9c",
+      "name": "B300 Official-Vector Rust Runtime Gate",
+      "oracle": [
+        "M0.3 current-C ./ds4_test --logprob-vectors baseline",
+        "M6 numeric tolerance policy",
+        "M10.9b Rust runtime graph route"
+      ],
+      "fixtures": [
+        "/workspace/ds4/ds4flash.gguf",
+        "tests/test-vectors/official.vec",
+        "CUDA backend",
+        "deterministic generation settings",
+        "captured Rust runtime vector output"
+      ],
+      "comparator": "ds4-parity/run_runtime_graph_official_vectors.py",
+      "artifact": "ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json",
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; CUDA_ARCH=native python3 ds4-parity/run_runtime_graph_official_vectors.py --workdir /workspace/ds4 --model /workspace/ds4/ds4flash.gguf --write-summary /tmp/ds4-m109c-official-vectors.json --negative-test' && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/tmp/ds4-m109c-official-vectors.json ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json",
+      "acceptance": [
+        "selected greedy tokens match current-C baseline exactly",
+        "numeric scores stay within M6 tolerance",
+        "current-C skipped rows remain explicit"
+      ],
+      "drift_policy": [
+        "selected token IDs exact",
+        "fixture hash exact",
+        "model hash exact",
+        "backend exact",
+        "score tolerances follow M6 policy"
+      ],
+      "claim_boundary": "official-vector gate only, not full Milestone 10 closure"
+    },
+    {
+      "id": "M10.9d",
+      "name": "B300 Long-Context Rust Runtime Gate",
+      "oracle": [
+        "current-C ./ds4_test --long-context baseline behavior",
+        "M7/M10 long-context graph checkpoint contracts",
+        "M10.9c official-vector runtime evidence"
+      ],
+      "fixtures": [
+        "long-context fact-recall prompt",
+        "/workspace/ds4/ds4flash.gguf",
+        "CUDA backend",
+        "graph route selector",
+        "retained Rust stdout/stderr/log artifacts"
+      ],
+      "comparator": "ds4-parity/run_runtime_graph_long_context.py",
+      "artifact": "ds4-parity/baselines/graph/m10.9d/runtime-long-context.json",
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; CUDA_ARCH=native python3 ds4-parity/run_runtime_graph_long_context.py --workdir /workspace/ds4 --model /workspace/ds4/ds4flash.gguf --write-summary /tmp/ds4-m109d-long-context.json --negative-test' && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/tmp/ds4-m109d-long-context.json ds4-parity/baselines/graph/m10.9d/runtime-long-context.json",
+      "acceptance": [
+        "Rust graph runtime completes long-context gate",
+        "no fallback to C host route",
+        "nondeterministic score surfaces are classified explicitly"
+      ],
+      "drift_policy": [
+        "command line exact",
+        "model/backend identity exact",
+        "context length exact",
+        "pass/fail markers exact",
+        "floating score surfaces use tolerance or nondeterminism labels"
+      ],
+      "claim_boundary": "long-context gate only, not benchmark or tool quality"
+    },
+    {
+      "id": "M10.9e",
+      "name": "Tool-Call Quality And Server Replay Rust Runtime Gate",
+      "oracle": [
+        "current-C ./ds4_test --tool-call-quality",
+        "M9 server/runtime replay",
+        "ds4-parity/run_tool_call_quality.py classifier"
+      ],
+      "fixtures": [
+        "B300 Rust server runtime binary",
+        "OpenAI tool-call request fixture",
+        "M9 server/cache request fixtures",
+        "trace output",
+        "cache/KVC directories",
+        "retained raw responses"
+      ],
+      "comparator": "ds4-parity/run_tool_call_quality.py",
+      "artifact": "ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json",
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; CUDA_ARCH=native cargo build -p ds4-engine --bin ds4-server-runtime-rs && CUDA_ARCH=native python3 ds4-parity/run_tool_call_quality.py --server-bin target/debug/ds4-server-runtime-rs --model /workspace/ds4/ds4flash.gguf --backend cuda --out-dir /tmp/ds4-m109e-tool-call-quality --ready-timeout 360 && cp /tmp/ds4-m109e-tool-call-quality/summary.json /tmp/ds4-m109e-tool-server.json' && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/tmp/ds4-m109e-tool-server.json ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json",
+      "acceptance": [
+        "tool-call classification passes through Rust graph runtime",
+        "server/runtime parity remains green",
+        "cache/KVC behavior matches M9 replay contracts"
+      ],
+      "drift_policy": [
+        "HTTP status exact",
+        "response schema exact",
+        "tool name and arguments exact",
+        "trace/cache ledger markers exact",
+        "request IDs and timings normalized"
+      ],
+      "claim_boundary": "tool/server gate only, not benchmark closure"
+    },
+    {
+      "id": "M10.9f",
+      "name": "Benchmark Comparator And Milestone 10 Closure",
+      "oracle": [
+        "M0.6 ds4-bench short/long CSV baseline",
+        "M10.9c through M10.9e quality gates",
+        "same B300 model/backend identity"
+      ],
+      "fixtures": [
+        "speed-bench/promessi_sposi.txt",
+        "/workspace/ds4/ds4flash.gguf",
+        "CUDA backend",
+        "Rust graph runtime benchmark CSVs",
+        "capture metadata"
+      ],
+      "comparator": "ds4-parity/run_runtime_graph_bench.py",
+      "artifact": "ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json",
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; CUDA_ARCH=native python3 ds4-parity/run_runtime_graph_bench.py --workdir /workspace/ds4 --model /workspace/ds4/ds4flash.gguf --output-dir /tmp/ds4-m109f-bench --write-summary /tmp/ds4-m109f-benchmark-closure.json --negative-test' && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/tmp/ds4-m109f-benchmark-closure.json ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json",
+      "acceptance": [
+        "benchmark workload shape matches exactly",
+        "throughput regression beyond threshold is documented",
+        "all M10.9 quality gates are green",
+        "Milestone 10 closure does not claim backend replacement"
+      ],
+      "drift_policy": [
+        "CSV schema exact",
+        "prompt hash exact",
+        "model hash exact",
+        "backend exact",
+        "context frontiers exact",
+        "generation-token counts exact",
+        "kvcache_bytes exact",
+        "throughput uses M0.6 regression threshold"
+      ],
+      "claim_boundary": "final Milestone 10 closure, not backend replacement"
+    }
+  ],
+  "claim_policy": {
+    "runtime_graph_parity": "blocked_until_m10.9b_through_m10.9f_pass",
+    "backend_replacement": "not_claimed_by_milestone_10",
+    "benchmark_claims": "same_b300_model_backend_only",
+    "must_not_report_as": [
+      "backend replacement",
+      "full runtime graph parity before M10.9f",
+      "model-free proof of model-backed quality"
+    ]
+  }
+}

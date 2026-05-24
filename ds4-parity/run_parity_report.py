@@ -18,7 +18,7 @@ The report has two jobs:
   M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
   M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, M10.8a, M10.8b, M10.8c,
   M10.8d, M10.8e, M10.8f, M10.8g1, M10.8g2, M10.8g3a, M10.8g3b,
-  M10.8g3c, M10.8g4a, and M10.8g4b.
+  M10.8g3c, M10.8g4a, M10.8g4b, and M10.9a.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -620,6 +620,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.9a Runtime graph closure matrix",
+                [
+                    sys.executable,
+                    "ds4-parity/check_runtime_graph_closure_matrix.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -1125,6 +1133,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "final explicit blocker closure"
             ),
             rerun_command=b300_mtp_end_to_end_closure_command(),
+        ),
+        ReportItem(
+            name="M10.9a B300 runtime graph fixture-readiness rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "M10.9 model-backed runtime graph gates require the B300 model, "
+                "official-vector fixture, benchmark prompt, and committed M0.6 "
+                "benchmark CSV fixtures"
+            ),
+            rerun_command=b300_runtime_graph_fixture_readiness_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -2284,6 +2303,19 @@ def b300_mtp_end_to_end_closure_command() -> str:
         ]
     )
     return f"{source_refresh} && {smoke} && {copy_back}"
+
+
+def b300_runtime_graph_fixture_readiness_command() -> str:
+    return b300_exec(
+        "target=$(readlink -f /workspace/ds4/ds4flash.gguf); "
+        "printf 'resolved_model=%s\\n' \"$target\"; "
+        "stat -c 'resolved_model_bytes=%s' \"$target\"; "
+        "sha256sum tests/test-vectors/official.vec speed-bench/promessi_sposi.txt; "
+        "test -f ds4-parity/baselines/bench/m0.6/csv/b300-short.csv; "
+        "test -f ds4-parity/baselines/bench/m0.6/csv/b300-long.csv; "
+        "python3 -m json.tool ds4-parity/baselines/bench/m0.6/logs/csv-summary.json >/dev/null; "
+        "printf 'm109_fixture_probe=ok\\n'"
+    )
 
 
 def b300_exec(script: str) -> str:
