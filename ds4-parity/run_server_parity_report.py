@@ -342,7 +342,7 @@ def b300_m04_runtime_replay_script() -> str:
         b300_runtime_build_command(),
         f"{server} >{root}/logs/server.log 2>&1 & pid=$!",
         "trap 'kill $pid 2>/dev/null || true' EXIT",
-        "sleep 5",
+        "sleep 20",
         " && ".join(replay_steps),
         "kill $pid",
         "(wait $pid || true)",
@@ -362,7 +362,7 @@ def b300_m05_runtime_replay_script() -> str:
         f"{b300_runtime_server_command(root=root, port='${port}', tokens=16, trace=f'{root}/traces/${{name}}.trace', kv_dir=f'{root}/kv')} "
         f">{root}/logs/${{name}}.server.log 2>&1 & pid=$!; "
         "trap 'kill $pid 2>/dev/null || true' EXIT; "
-        "sleep 5; "
+        "sleep 20; "
         "code=$(curl -sS -w '%{http_code}' "
         f"-o {root}/responses/${{name}}.json http://127.0.0.1:${{port}}/v1/chat/completions "
         "-H 'Content-Type: application/json' "

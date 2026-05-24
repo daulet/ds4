@@ -4783,6 +4783,15 @@ restore boundary.
 - Validation gate: B300 runtime replay, checker negative tests, KV replay
   comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
   diff --check`, and non-interactive Claude review with no blockers.
+- Evidence: `ds4-server-runtime-rs` now writes a stable runtime cache ledger
+  section in each trace, the M9.8f5 B300 summary records checked ledger cases
+  plus raw trace event counts/names for seed miss, seed restore, and
+  continuation restore, and the checker validates the summary and M10.7d2
+  contract with six negative mutations. The live B300 M0.5 replay passed after
+  using a 20-second startup wait for CUDA model cache initialization, and local
+  validation passed checker negative tests, KV replay comparator, server parity
+  report, workspace tests, formatting, diff check, and skip-local unified
+  parity report, plus non-interactive Claude review with no blockers.
 
 ##### M10.7d3: Graph Restore Continued-Frontier B300 Smoke
 

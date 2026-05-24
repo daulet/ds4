@@ -5428,7 +5428,7 @@
 
 ### M10.7d2c: Runtime Continued-Store B300 Replay Refresh
 
-- Status: active
+- Status: done
 - Goal: refresh the model-backed B300 Rust runtime replay so real seed miss,
   seed restore, continuation restore, and continued-store decisions include the
   M10.7d2 ledger evidence.
@@ -5445,14 +5445,21 @@
   event order, and frontier transitions are exact; paths, timestamps, and raw
   payload hashes are normalized.
 - Review gate: ask Claude to review B300 command fidelity and replay coverage.
-- Validation needed: B300 runtime replay, checker negative tests, KV replay
-  comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
-  diff --check`, and non-interactive Claude review with no blockers.
+- Validation passed: B300 runtime replay, checker negative tests, KV replay
+  comparator, server parity report, JSON/Python syntax checks, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  skip-local unified parity report, and non-interactive Claude review with no
+  blockers.
+- Evidence: runtime traces now include a stable runtime cache ledger section,
+  the M9.8f5 B300 summary records checked `ledger_cases` plus raw trace event
+  counts/names, and the checker validates six negative mutations. The live
+  B300 M0.5 replay passed after using a 20-second startup wait for CUDA model
+  cache initialization.
 - Owner path: B300 runtime replay summary/checker, `.memory/status.md`.
 
 ### M10.7d3: Graph Restore Continued-Frontier B300 Smoke
 
-- Status: pending
+- Status: active
 - Goal: prove B300 Rust graph restore and continued-frontier accounting remain
   compatible when a restored disk checkpoint is followed by further save/skip
   decisions.

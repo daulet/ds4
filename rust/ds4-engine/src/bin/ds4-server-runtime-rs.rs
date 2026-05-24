@@ -303,7 +303,6 @@ impl RuntimeCacheState {
         self.ledger.clear();
     }
 
-    #[cfg(test)]
     fn ledger_events(&self) -> &[RuntimeCacheLedgerEvent] {
         &self.ledger
     }
@@ -964,6 +963,7 @@ fn route_chat_completions(
         tool_replay,
         disk_load.as_ref(),
     );
+    let ledger_events = state.cache.ledger_events().to_vec();
     if let Some(trace) = state.trace.as_mut() {
         if let Err(err) = write_chat_trace_with_cache_decision(
             trace,
@@ -974,6 +974,7 @@ fn route_chat_completions(
             &generated_text,
             &parsed_generation,
             &cache_decision,
+            &ledger_events,
         ) {
             eprintln!("ds4-server-runtime-rs: failed to write trace: {err}");
         }
@@ -1246,6 +1247,7 @@ fn write_chat_trace<W: Write>(
         generated_text,
         parsed,
         &cache,
+        &[],
     )
 }
 
@@ -1258,6 +1260,7 @@ fn write_chat_trace_with_cache_decision<W: Write>(
     generated_text: &str,
     parsed: &ParsedChatGeneration,
     cache: &RuntimeCacheDecision,
+    ledger_events: &[RuntimeCacheLedgerEvent],
 ) -> io::Result<()> {
     writeln!(trace, "===== request {sequence} =====")?;
     writeln!(trace, "kind: chat")?;
@@ -1313,6 +1316,24 @@ fn write_chat_trace_with_cache_decision<W: Write>(
         writeln!(trace, "disk_cache_file: {path}")?;
     }
     writeln!(trace)?;
+    writeln!(trace, "--- runtime cache ledger ---")?;
+    for (index, event) in ledger_events.iter().enumerate() {
+        writeln!(
+            trace,
+            "event[{index}]: name={} cache_source={} reason={} tokens={} cached_tokens={} cache_write_tokens={} disk_cached_tokens={} frontier_before={} frontier_after={} success={}",
+            event.name,
+            event.cache_source.unwrap_or(""),
+            event.reason.unwrap_or(""),
+            event.tokens,
+            event.cached_tokens,
+            event.cache_write_tokens,
+            event.disk_cached_tokens,
+            event.frontier_before,
+            event.frontier_after,
+            optional_bool_text(event.success),
+        )?;
+    }
+    writeln!(trace)?;
     writeln!(trace, "--- raw request json ---")?;
     writeln!(trace, "{raw_body}")?;
     writeln!(trace)?;
@@ -1361,6 +1382,14 @@ fn write_chat_trace_with_cache_decision<W: Write>(
     writeln!(trace, "===== end request {sequence} =====")?;
     writeln!(trace)?;
     trace.flush()
+}
+
+fn optional_bool_text(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "true",
+        Some(false) => "false",
+        None => "",
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2614,6 +2643,18 @@ mod tests {
             "cache continued",
             &parsed_generation,
             &cache,
+            &[RuntimeCacheLedgerEvent {
+                name: "cache_decision",
+                cache_source: Some("disk-text"),
+                reason: None,
+                tokens: 50,
+                cached_tokens: 41,
+                cache_write_tokens: 9,
+                disk_cached_tokens: 41,
+                frontier_before: 552,
+                frontier_after: 552,
+                success: None,
+            }],
         )
         .unwrap();
         let trace = String::from_utf8(trace).unwrap();
@@ -2625,6 +2666,10 @@ mod tests {
         assert!(trace.contains("cached_tokens: 41\n"));
         assert!(trace.contains("disk_cached_tokens: 41\n"));
         assert!(trace.contains("disk_cache_file: /tmp/ds4-kv/abc.kv\n"));
+        assert!(trace.contains("--- runtime cache ledger ---\n"));
+        assert!(trace.contains(
+            "event[0]: name=cache_decision cache_source=disk-text reason= tokens=50 cached_tokens=41 cache_write_tokens=9 disk_cached_tokens=41 frontier_before=552 frontier_after=552 success=\n"
+        ));
     }
 
     #[test]

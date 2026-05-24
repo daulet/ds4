@@ -38,31 +38,31 @@
           "name": "suppress_continued_store",
           "tokens": 550,
           "frontier_before": 0,
-          "frontier_after": 550,
-          "success": true
+          "frontier_after": 0,
+          "success": false
         },
         {
           "name": "maybe_store_continued",
           "reason": "continued",
           "tokens": 550,
-          "frontier_before": 550,
-          "frontier_after": 550,
+          "frontier_before": 0,
+          "frontier_after": 0,
           "success": false
         },
         {
           "name": "store_live_prefix",
           "reason": "cold",
           "tokens": 550,
-          "frontier_before": 550,
-          "frontier_after": 550,
+          "frontier_before": 0,
+          "frontier_after": 0,
           "success": true
         },
         {
           "name": "note_store",
           "tokens": 550,
-          "frontier_before": 550,
+          "frontier_before": 0,
           "frontier_after": 550,
-          "success": false
+          "success": true
         }
       ]
     },

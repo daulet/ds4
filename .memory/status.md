@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d2c Runtime Continued-Store B300 Replay Refresh
-- Last validated source before the active item: M10.7d2b Runtime KV Replay
-  Checker Closure.
+- Active item: M10.7d3 Graph Restore Continued-Frontier B300 Smoke
+- Last validated source before the active item: M10.7d2c Runtime
+  Continued-Store B300 Replay Refresh.
+- Earlier M10.7d2c Runtime Continued-Store B300 Replay Refresh.
 - Earlier M10.7d2b Runtime KV Replay Checker Closure.
 - Earlier M10.7d2a Runtime Continued-Frontier Ledger Contract.
 - Earlier M10.7d1 Continued-Frontier Policy Transition Matrix.
@@ -41,6 +42,32 @@
 
 ## Last Evidence
 
+- M10.7d2c exposes the Rust runtime cache ledger in per-request traces under
+  `--- runtime cache ledger ---`, including cache source, reason, token counts,
+  cached/write/disk token counts, continued-frontier before/after values, and
+  success fields. The runtime snapshots those events before writing each trace
+  and keeps cache policy decisions unchanged.
+- M10.7d2c refreshes the M9.8f5 B300 runtime replay summary with checked
+  `ledger_cases` for seed miss, seed restore, and continuation restore. The
+  checker now validates those summary ledger cases, raw trace event
+  counts/names, the M10.7d2 contract, and six negative mutations.
+- M10.7d2c B300 replay ran on `ds4-rust-port-b300` in `hou2-prod1` after
+  syncing `HEAD` plus the runtime trace patch into `/workspace/ds4`. The first
+  replay showed a 13-second CUDA startup before listening, so the rerun used a
+  20-second startup wait and passed. The M0.5 replay reproduced seed miss,
+  seed restore, and continuation restore responses plus the three expected KV
+  files: `0ab2314538b11686a11e296b7f697651fbd17e60.kv`,
+  `4f149e59b256cc9d4ae7d1c828954ed07e2f3dcf.kv`, and
+  `a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv`.
+- M10.7d2c validation passed B300 runtime replay, `python3
+  ds4-parity/check_runtime_kv_replay_summary.py --negative-test`, `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed, `python3 ds4-parity/compare_kv_replay.py --negative-test`,
+  JSON/Python syntax checks, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 55 passed, 40
+  skipped, and 0 failed, plus non-interactive Claude review with `NO
+  BLOCKERS`.
 - M10.7d2b adds
   `ds4-parity/baselines/kv/m10.7d2/runtime-ledger-contract.json`, a
   model-free ledger contract for M0.5 seed miss, seed restore, continuation
@@ -101,9 +128,9 @@
   non-interactive Claude review with `NO BLOCKERS`.
 - M10.7d2 is split before implementation into M10.7d2a model-free runtime
   continued-frontier ledger contract, M10.7d2b runtime KV replay checker
-  closure, and M10.7d2c B300 runtime replay refresh. M10.7d2a and M10.7d2b are
-  done; M10.7d2c is active and owns the B300 artifact refresh against the
-  checked-in ledger contract.
+  closure, and M10.7d2c B300 runtime replay refresh. All three M10.7d2
+  subitems are done; M10.7d3 is active and owns the graph-restore
+  continued-frontier B300 smoke.
 - M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
   restores the four C-written disk payload and memory snapshot bodies into
   Rust graph state, computes selected token and top-logprob slices from the

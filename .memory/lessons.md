@@ -3,6 +3,28 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-05-24: B300 Runtime Replays Need Startup Slack After Source Refresh
+
+- Symptom: the first M0.5 runtime replay refresh failed with HTTP code `000`
+  because `curl` ran before `ds4-server-runtime-rs` was listening.
+- Root cause: after rebuilding the Rust runtime on the B300 pod, CUDA model
+  cache startup took about 13 seconds before the server bound the port.
+- Permanent rule: B300 runtime replay commands should wait at least 20 seconds,
+  or use an explicit readiness probe, before sending replay requests after a
+  fresh build or source sync.
+
+## 2026-05-24: M0.5 Seed Cold Stores Do Not Suppress Continued Frontier
+
+- Symptom: the live B300 ledger showed `suppress_continued_store` failed for
+  the 550-token M0.5 seed miss, and the frontier advanced only when the cold
+  write called `note_store`.
+- Root cause: `--kv-cache-continued-interval-tokens 0` still aligns continued
+  store targets to the configured boundary, so 550 prompt tokens is a valid
+  cold-store length but not a continued-store boundary.
+- Permanent rule: M0.5 seed-miss replay oracles should expect cold-store
+  success plus `note_store` frontier growth, not pre-cold continued-frontier
+  suppression.
+
 ## 2026-05-24: B300 Restore Payload Bodies Are Capture Metadata
 
 - Symptom: rerunning `ds4-restore-dump` on B300, including a rerun from the M7.8

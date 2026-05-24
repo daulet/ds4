@@ -127,31 +127,31 @@ EXPECTED_LEDGER_CASES: dict[str, dict[str, Any]] = {
                 "name": "suppress_continued_store",
                 "tokens": 550,
                 "frontier_before": 0,
-                "frontier_after": 550,
-                "success": True,
+                "frontier_after": 0,
+                "success": False,
             },
             {
                 "name": "maybe_store_continued",
                 "reason": "continued",
                 "tokens": 550,
-                "frontier_before": 550,
-                "frontier_after": 550,
+                "frontier_before": 0,
+                "frontier_after": 0,
                 "success": False,
             },
             {
                 "name": "store_live_prefix",
                 "reason": "cold",
                 "tokens": 550,
-                "frontier_before": 550,
-                "frontier_after": 550,
+                "frontier_before": 0,
+                "frontier_after": 0,
                 "success": True,
             },
             {
                 "name": "note_store",
                 "tokens": 550,
-                "frontier_before": 550,
+                "frontier_before": 0,
                 "frontier_after": 550,
-                "success": False,
+                "success": True,
             },
         ],
     },
@@ -267,6 +267,47 @@ EXPECTED_LEDGER_CASES: dict[str, dict[str, Any]] = {
     },
 }
 
+EXPECTED_B300_LEDGER_CASE_NAMES = (
+    "seed_miss",
+    "seed_restore",
+    "continuation_restore",
+)
+EXPECTED_B300_LEDGER_CASES: dict[str, dict[str, Any]] = {
+    name: EXPECTED_LEDGER_CASES[name] for name in EXPECTED_B300_LEDGER_CASE_NAMES
+}
+EXPECTED_B300_TRACE_EVENT_COUNTS = {
+    "seed_miss": 8,
+    "seed_restore": 5,
+    "continuation_restore": 6,
+}
+EXPECTED_B300_TRACE_EVENT_NAMES = {
+    "seed_miss": [
+        "reset_continued_frontier",
+        "cache_decision",
+        "suppress_continued_store",
+        "maybe_store_continued",
+        "store_live_prefix",
+        "note_store",
+        "maybe_store_continued",
+        "maybe_store_continued",
+    ],
+    "seed_restore": [
+        "reset_continued_frontier",
+        "cache_decision",
+        "maybe_store_continued",
+        "maybe_store_continued",
+        "maybe_store_continued",
+    ],
+    "continuation_restore": [
+        "reset_continued_frontier",
+        "cache_decision",
+        "maybe_store_continued",
+        "maybe_store_continued",
+        "maybe_store_continued",
+        "maybe_store_continued",
+    ],
+}
+
 
 def rel(path: Path) -> str:
     return path.resolve().relative_to(ROOT).as_posix()
@@ -319,6 +360,24 @@ def validate_data(
     if headers:
         check_named_records(errors, "kv_headers", headers, EXPECTED_KV_HEADERS)
 
+    summary_ledger_cases = expect_named_objects(errors, data, "ledger_cases", "name")
+    if summary_ledger_cases:
+        check_named_records(
+            errors,
+            "summary_ledger_cases",
+            summary_ledger_cases,
+            EXPECTED_B300_LEDGER_CASES,
+        )
+        validate_ledger_cases_against_summary(
+            errors,
+            "summary_ledger_cases",
+            summary_ledger_cases,
+            cases,
+            headers,
+            EXPECTED_B300_LEDGER_CASE_NAMES,
+        )
+        validate_summary_ledger_trace_metadata(errors, summary_ledger_cases)
+
     validate_ledger_contract(errors, ledger_contract, summary_path, cases, headers)
 
 
@@ -337,8 +396,26 @@ def validate_ledger_contract(
     if not cases:
         return
     check_exact_named_records(errors, "ledger_cases", cases, EXPECTED_LEDGER_CASES)
-    for name in ("seed_miss", "seed_restore", "continuation_restore"):
-        expected = cases.get(name)
+    validate_ledger_cases_against_summary(
+        errors,
+        "ledger_cases",
+        cases,
+        summary_cases,
+        headers,
+        EXPECTED_B300_LEDGER_CASE_NAMES,
+    )
+
+
+def validate_ledger_cases_against_summary(
+    errors: list[str],
+    label: str,
+    ledger_cases: dict[str, dict[str, Any]],
+    summary_cases: dict[str, dict[str, Any]],
+    headers: dict[str, dict[str, Any]],
+    case_names: tuple[str, ...],
+) -> None:
+    for name in case_names:
+        expected = ledger_cases.get(name)
         actual = summary_cases.get(name)
         if expected is None or actual is None:
             continue
@@ -353,21 +430,44 @@ def validate_ledger_contract(
         ):
             if expected.get(key) != actual.get(key):
                 errors.append(
-                    f"ledger_cases.{name}.{key}: expected summary value "
+                    f"{label}.{name}.{key}: expected summary value "
                     f"{actual.get(key)!r}, got {expected.get(key)!r}"
                 )
-    for name, case in cases.items():
+    for name, case in ledger_cases.items():
         write_file = case.get("kv_write_file")
         if write_file is None:
             continue
         header = headers.get(write_file)
         if header is None:
-            errors.append(f"ledger_cases.{name}.kv_write_file: missing header {write_file!r}")
+            errors.append(f"{label}.{name}.kv_write_file: missing header {write_file!r}")
             continue
         if case.get("kv_write_reason_name") != header.get("reason_name"):
-            errors.append(f"ledger_cases.{name}.kv_write_reason_name drift")
+            errors.append(f"{label}.{name}.kv_write_reason_name drift")
         if case.get("kv_write_tokens") != header.get("tokens"):
-            errors.append(f"ledger_cases.{name}.kv_write_tokens drift")
+            errors.append(f"{label}.{name}.kv_write_tokens drift")
+
+
+def validate_summary_ledger_trace_metadata(
+    errors: list[str],
+    ledger_cases: dict[str, dict[str, Any]],
+) -> None:
+    for name in EXPECTED_B300_LEDGER_CASE_NAMES:
+        case = ledger_cases.get(name)
+        if case is None:
+            continue
+        expect_value(errors, case, "trace_file", f"traces/{name}.trace")
+        expect_value(
+            errors,
+            case,
+            "trace_event_count",
+            EXPECTED_B300_TRACE_EVENT_COUNTS[name],
+        )
+        expect_value(
+            errors,
+            case,
+            "trace_event_names",
+            EXPECTED_B300_TRACE_EVENT_NAMES[name],
+        )
 
 
 def load_json(path: Path, errors: list[str]) -> Any:
@@ -497,7 +597,7 @@ def run_negative_tests(summary_path: Path, ledger_contract_path: Path) -> list[s
     expect_failure(
         "frontier transition drift",
         lambda _summary, contract: contract["cases"][0]["events"][2].__setitem__(
-            "frontier_after", 0
+            "frontier_after", 550
         ),
     )
     expect_failure(
@@ -507,6 +607,12 @@ def run_negative_tests(summary_path: Path, ledger_contract_path: Path) -> list[s
     expect_failure(
         "summary cross-check drift",
         lambda summary, _contract: summary["cases"][1].__setitem__("cached_tokens", 549),
+    )
+    expect_failure(
+        "summary ledger event drift",
+        lambda summary, _contract: summary["ledger_cases"][0]["events"][1].__setitem__(
+            "cache_source", "disk-text"
+        ),
     )
     return errors
 
@@ -550,9 +656,12 @@ def main(argv: list[str]) -> int:
             for error in negative_errors:
                 print(f"error: {error}", file=sys.stderr)
             return 1
-    print("summary: runtime KV replay summary passed, 3 cases, 3 kv headers, 4 ledger cases")
+    print(
+        "summary: runtime KV replay summary passed, "
+        "3 cases, 3 kv headers, 3 summary ledger cases, 4 contract ledger cases"
+    )
     if args.negative_test:
-        print("summary: runtime KV replay negative tests passed, 5 mutations")
+        print("summary: runtime KV replay negative tests passed, 6 mutations")
     return 0
 
 
