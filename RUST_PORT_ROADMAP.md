@@ -5611,6 +5611,167 @@ restore boundary.
   benchmark CSV comparator, `cargo test --workspace`, `cargo fmt --all --
   --check`, `git diff --check`, and non-interactive Claude review with no
   blockers.
+- Status: split before implementation into M10.9a through M10.9f so runtime
+  route activation, official-vector quality, long-context quality, tool/server
+  quality, benchmark comparison, and final closure remain independently
+  reviewable.
+- Evidence: split M10.9 into M10.9a closure matrix, M10.9b route switch,
+  M10.9c official-vector gate, M10.9d long-context gate, M10.9e tool/server
+  gate, and M10.9f benchmark/final closure before implementation. Validation
+  passed the B300 fixture-readiness probe for the resolved model path, model
+  size 86,720,111,488 bytes, `official.vec` SHA
+  `0223bbe1eaa3b626be87849df389af91c3f3f6e6b0d4436baf2dbb6ed624b1ac`,
+  benchmark prompt SHA
+  `f53e0d80cb2d4492d24ebd63c7000c397b16ae70f9bf09b3763e5d8323ec209f`,
+  existing M0.6 benchmark CSV fixtures, `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 71 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
+
+##### M10.9a: Runtime Graph Closure Matrix And Rerun Contract
+
+- Goal: define the exact M10.9 artifact matrix, runtime selectors, B300 rerun
+  commands, and drift policy before enabling any Rust graph runtime path.
+- Oracle: M0.3 official-vector baseline, M0.6 benchmark baseline, M9
+  server/runtime replay, M10.2 through M10.8 graph and MTP contracts, and the
+  live B300 model/prompt fixture inventory.
+- Fixture: `/workspace/ds4/ds4flash.gguf`, `tests/test-vectors/official.vec`,
+  long-context and tool-call-quality prompts, M9 server fixtures, M0.6
+  `ds4-bench` CSVs, and the exact Rust runtime binaries/options to be compared.
+- Comparator: closure-matrix checker that verifies every M10.9b through
+  M10.9f gate has a named oracle, command, artifact path, comparator, rerun
+  command, acceptance rule, and drift policy.
+- Acceptance: no later M10.9 item can claim runtime graph parity without a
+  concrete artifact and comparator; model-backed B300 checks have exact
+  temp-kubeconfig reruns and local comparator fallbacks where possible.
+- Drift policy: stage IDs, command lines, fixture paths, model identity,
+  artifact locations, and claim boundaries are exact; timings remain
+  non-semantic until benchmark comparison.
+- Review gate: ask Claude to review the closure matrix for missing gates and
+  overbroad acceptance.
+- Validation gate: matrix checker with negative tests, B300 fixture-readiness
+  probe, server/runtime parity report, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, unified parity report, and
+  non-interactive Claude review with no blockers.
+
+##### M10.9b: Rust Runtime Graph Route Switch And Preflight
+
+- Goal: add the Rust runtime graph route behind an explicit selector and prove
+  unsupported configurations fail closed before changing visible generation.
+- Oracle: current Rust runtime target-stream path, M10.5 through M10.8 graph
+  scheduling contracts, and current C graph runtime option behavior.
+- Fixture: one-shot, interactive, and server runtime options; CUDA and non-CUDA
+  backend selectors; disabled graph route; missing model; unsupported graph
+  route; and cache/KVC state preflight cases.
+- Comparator: Rust route-preflight summary checked against source anchors and
+  runtime no-drift cases for selected output, checkpoint, cache/KVC accounting,
+  and explicit fail-closed errors.
+- Acceptance: graph route selection is explicit, default behavior is unchanged,
+  and unsupported graph-runtime cases fail before stream or cache mutation.
+- Drift policy: option names, fail-closed categories, output bytes, checkpoint
+  deltas, and cache/KVC counters are exact; logs and timings are normalized.
+- Review gate: ask Claude to review route selection and fail-closed behavior.
+- Validation gate: targeted Rust tests, route-preflight comparator with
+  negative tests, server/runtime parity report, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
+  non-interactive Claude review with no blockers.
+
+##### M10.9c: B300 Official-Vector Rust Runtime Gate
+
+- Goal: run official-vector logprob cases through the Rust graph runtime path on
+  B300 and compare against the current-C M0.3 baseline.
+- Oracle: current-C `./ds4_test --logprob-vectors` B300 baseline, M6 numeric
+  tolerance policy, and the Rust runtime graph route selected in M10.9b.
+- Fixture: `/workspace/ds4/ds4flash.gguf`,
+  `tests/test-vectors/official.vec`, CUDA backend, deterministic generation
+  settings, and captured Rust runtime vector output.
+- Comparator: selected-token exact comparison plus numeric logit/logprob
+  tolerance comparison for official-vector rows, with raw Rust logs retained.
+- Acceptance: Rust runtime selected greedy tokens match the current-C baseline;
+  numeric scores stay within the existing M6 tolerance; skipped current-C rows
+  remain explicit.
+- Drift policy: selected token IDs, fixture hash, model hash, backend, and skip
+  reasons are exact; score tolerances follow the M6 policy.
+- Review gate: ask Claude to review official-vector comparison scope and skip
+  handling.
+- Validation gate: live B300 Rust runtime official-vector run, comparator with
+  negative tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, unified parity report, and non-interactive Claude review with
+  no blockers.
+
+##### M10.9d: B300 Long-Context Rust Runtime Gate
+
+- Goal: run the long-context quality gate through the Rust graph runtime path
+  and keep nondeterministic score surfaces out of exact comparisons.
+- Oracle: current-C `./ds4_test --long-context` baseline behavior, M7/M10
+  long-context graph checkpoint contracts, and the M10.9c official-vector
+  runtime evidence.
+- Fixture: long-context fact-recall prompt, B300 target model, CUDA backend,
+  graph route selector, and retained Rust stdout/stderr/log artifacts.
+- Comparator: pass/fail classification, selected behavioral markers, context
+  length, cache/KVC accounting, and graph-route evidence with raw logs retained
+  for score drift investigation.
+- Acceptance: Rust graph runtime completes the long-context gate without
+  falling back to the C host route; any known nondeterministic score surface is
+  explicitly classified instead of compared byte-for-byte.
+- Drift policy: command line, model/backend identity, context length, pass/fail
+  markers, fallback state, and cache/KVC accounting are exact; floating score
+  surfaces use documented tolerance or explicit nondeterminism labels.
+- Review gate: ask Claude to review long-context gate semantics.
+- Validation gate: live B300 Rust runtime long-context run, comparator with
+  negative tests, server/runtime parity report, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
+  non-interactive Claude review with no blockers.
+
+##### M10.9e: Tool-Call Quality And Server Replay Rust Runtime Gate
+
+- Goal: prove Rust graph runtime preserves tool-call quality and server/cache
+  request behavior on B300.
+- Oracle: current-C `./ds4_test --tool-call-quality`, M9 server/runtime replay,
+  and the existing `run_tool_call_quality.py` classifier.
+- Fixture: B300 Rust server runtime binary, OpenAI tool-call request fixture,
+  M9 server/cache request fixtures, trace output, cache/KVC directories, and
+  retained raw responses.
+- Comparator: tool-call classifier summary, HTTP response/status comparison,
+  trace/cache ledger checks, and no-fallback graph-route evidence.
+- Acceptance: tool-call classification passes through the Rust graph runtime
+  path, server/runtime parity remains green, and cache/KVC behavior matches the
+  M9 replay contracts.
+- Drift policy: HTTP status, response schema, tool name/arguments, trace/cache
+  ledger markers, and fallback state are exact; request IDs and timings are
+  normalized.
+- Review gate: ask Claude to review tool/server runtime gate coverage.
+- Validation gate: live B300 tool-call quality run, server/runtime parity
+  report, comparator negative tests, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, unified parity report, and non-interactive
+  Claude review with no blockers.
+
+##### M10.9f: Benchmark Comparator And Milestone 10 Closure
+
+- Goal: compare Rust graph runtime benchmark CSVs against the M0.6 same-B300
+  current-C benchmark baseline and close Milestone 10.
+- Oracle: M0.6 `ds4-bench` short/long CSV baseline, M10.9c through M10.9e
+  quality gates, and same B300 model/backend identity.
+- Fixture: short and long `speed-bench/promessi_sposi.txt` sweeps,
+  `/workspace/ds4/ds4flash.gguf`, CUDA backend, Rust graph runtime benchmark
+  CSVs, and capture metadata.
+- Comparator: existing benchmark CSV comparator extended or configured for Rust
+  candidate CSVs, plus final closure checker that verifies all M10.9 gates are
+  current.
+- Acceptance: benchmark workload shape matches exactly, throughput regression
+  beyond the agreed threshold is documented, all M10.9 quality gates are green,
+  and Milestone 10 closure does not claim unsupported backend replacement.
+- Drift policy: CSV schema, prompt hash, model hash, backend, context
+  frontiers, generation-token counts, `kvcache_bytes`, and gate statuses are
+  exact; throughput uses the M0.6 regression threshold.
+- Review gate: ask Claude to review benchmark comparability and final Milestone
+  10 closure claims.
+- Validation gate: live B300 Rust benchmark run, benchmark comparator with
+  negative tests, final closure checker, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, unified parity report, and
+  non-interactive Claude review with no blockers.
 
 ## Milestone 11: Agent Trace Replay
 
