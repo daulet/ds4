@@ -1,0 +1,365 @@
+{
+  "schema": "ds4.backend_boundary_inventory.v1",
+  "source": "m12.1-backend-boundary-inventory",
+  "milestone": "M12.1",
+  "parent": "M12",
+  "next_stage": "M12.2",
+  "status": "inventory-only",
+  "oracle": {
+    "operation_family_oracle": "ds4-parity/baselines/graph/m10.2/graph-plan-inventory.json",
+    "backend_header": "ds4_gpu.h",
+    "rust_sys": "rust/ds4-gpu-sys/src/lib.rs",
+    "rust_safe_facade": "rust/ds4-gpu/src/decode_backend.rs",
+    "cuda_smoke_contract": "M10.5c4c1",
+    "runtime_graph_closure": "M10.9a through M10.9f",
+    "benchmark_artifacts": "ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json"
+  },
+  "source_artifacts": [
+    {
+      "id": "m10_2_graph_plan_inventory",
+      "path": "ds4-parity/baselines/graph/m10.2/graph-plan-inventory.json",
+      "role": "current-C graph operation family oracle",
+      "sha256": "102689b6f858bd2d424cfdd0535605c0c205dff3ba89d76a1f2706efa4524d9f"
+    },
+    {
+      "id": "backend_header",
+      "path": "ds4_gpu.h",
+      "role": "public C/CUDA/Metal backend ABI",
+      "sha256": "317349630b134b86cdb7cd293f267357b969f5899bb6c55bce7cc7aab9187554"
+    },
+    {
+      "id": "rust_sys",
+      "path": "rust/ds4-gpu-sys/src/lib.rs",
+      "role": "Rust FFI declarations for the backend ABI",
+      "sha256": "4ba693fa05f4f5d13759d94705ca84cb2c4975754b95134651f566cd0df512a1"
+    },
+    {
+      "id": "rust_safe_facade",
+      "path": "rust/ds4-gpu/src/decode_backend.rs",
+      "role": "safe Rust facade over selected current backend calls",
+      "sha256": "a3e7ccb77b3a5f9050af0d7ec27ccea9cfbc59bdc87bb37b16957f3a8e313584"
+    },
+    {
+      "id": "rust_gpu_build",
+      "path": "rust/ds4-gpu/build.rs",
+      "role": "Metal and feature-gated CUDA backend build/link wiring",
+      "sha256": "ba411f880038856702541185790994cf888e1c3cf54ac42a57a5319fc8f94ee7"
+    },
+    {
+      "id": "m10_5c4c1_backend_abi_smoke",
+      "path": "rust/ds4-gpu/tests/backend_abi.rs",
+      "role": "B300-capable safe wrapper versus direct C ABI smoke",
+      "sha256": "1055bda7338013e796d22b8442e9fc984a1ca92826d40511cec7e74ae2715e2a"
+    },
+    {
+      "id": "m10_5c4c1_contract_checker",
+      "path": "ds4-parity/compare_b300_rust_backend_smoke.py",
+      "role": "M10.5c4c1 CUDA backend smoke contract checker",
+      "sha256": "c6995190ea0343df4102fc85fedc2f2aaa2e147bc58d2f82c785f582076948e9"
+    },
+    {
+      "id": "m10_9a_runtime_graph_closure",
+      "path": "ds4-parity/baselines/graph/m10.9a/runtime-graph-closure-matrix.json",
+      "role": "runtime route and B300 gate closure matrix",
+      "sha256": "8205d32b8a22bb134b63a94ffa15f4c1accf3aa43b697475538bd91b4f1dd289"
+    },
+    {
+      "id": "m10_9f_runtime_benchmark_closure",
+      "path": "ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json",
+      "role": "same-B300 current-C and Rust runtime benchmark closure",
+      "sha256": "2f15b84e76d73dc52cc74f26e8daaddb5199c814500365cf8173d2697f7483f1"
+    }
+  ],
+  "route_selectors": {
+    "cli_backends": [
+      "metal",
+      "cuda",
+      "cpu"
+    ],
+    "runtime_graph_routes": [
+      "target-stream",
+      "off",
+      "graph"
+    ],
+    "graph_backend_requires": [
+      "metal",
+      "cuda"
+    ],
+    "cpu_graph_route": "fail-closed before graph execution"
+  },
+  "b300_rerun_commands": [
+    {
+      "id": "m10_5c4c1_cuda_backend_smoke",
+      "source_function": "b300_rust_backend_smoke_command",
+      "command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; rustup default stable && CUDA_ARCH=native cargo test -p ds4-gpu --features cuda-backend --test backend_abi -- --nocapture'"
+    },
+    {
+      "id": "m10_9a_fixture_readiness_probe",
+      "source_function": "README runtime graph inventory probe",
+      "command": "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; target=$(readlink -f /workspace/ds4/ds4flash.gguf); sha256sum tests/test-vectors/official.vec speed-bench/promessi_sposi.txt; python3 -m json.tool ds4-parity/baselines/bench/m0.6/logs/csv-summary.json >/dev/null'"
+    },
+    {
+      "id": "m10_9f_benchmark_closure",
+      "source_function": "b300_runtime_graph_benchmark_closure_command",
+      "command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; CUDA_ARCH=native python3 ds4-parity/run_runtime_graph_bench.py --workdir /workspace/ds4 --model /workspace/ds4/ds4flash.gguf --output-dir /tmp/ds4-m109f-bench --write-summary /tmp/ds4-m109f-benchmark-closure.json --negative-test' && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default cp ds4-rust-port-b300:/tmp/ds4-m109f-benchmark-closure.json ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json"
+    }
+  ],
+  "claim_policy": {
+    "backend_replacement": "not_claimed",
+    "kernel_replacement": "not_claimed",
+    "removals_allowed": false,
+    "first_replacement_slice": "blocked_until_m12.4",
+    "closure_removal": "blocked_until_m12.6",
+    "must_not_report_as": [
+      "backend replacement",
+      "C/CUDA/Metal removal",
+      "Rust-owned kernel coverage",
+      "non-B300 performance claim"
+    ]
+  },
+  "operation_families": [
+    {
+      "name": "backend_lifecycle",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "none",
+      "fixture_source": "m10_2_graph_plan_inventory",
+      "comparator": "ds4-parity/compare_gpu_sys_abi.py",
+      "claim_boundary": "no-removal; current C/CUDA/Metal lifecycle remains the implementation",
+      "drift_policy": [
+        "refresh when init, cleanup, quality, or memory-report ABI changes",
+        "rerun M10.5a and M10.5c4c1 checkers before replacement planning"
+      ],
+      "operations": [
+        "ds4_gpu_init",
+        "ds4_gpu_cleanup",
+        "ds4_gpu_set_quality",
+        "ds4_gpu_print_memory_report"
+      ]
+    },
+    {
+      "name": "tensor_lifetime",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "none",
+      "fixture_source": "m10_5c4c1_backend_abi_smoke",
+      "comparator": "ds4-parity/compare_b300_rust_backend_smoke.py",
+      "claim_boundary": "no-removal; Rust owns handle safety only, not tensor allocation kernels",
+      "drift_policy": [
+        "refresh when tensor pointer, range, copy, read, write, or view ABI changes",
+        "rerun backend_abi on B300 before any tensor-lifetime replacement slice"
+      ],
+      "operations": [
+        "ds4_gpu_tensor_alloc",
+        "ds4_gpu_tensor_alloc_managed",
+        "ds4_gpu_tensor_view",
+        "ds4_gpu_tensor_free",
+        "ds4_gpu_tensor_bytes",
+        "ds4_gpu_tensor_contents",
+        "ds4_gpu_tensor_fill_f32",
+        "ds4_gpu_tensor_write",
+        "ds4_gpu_tensor_read",
+        "ds4_gpu_tensor_copy"
+      ]
+    },
+    {
+      "name": "command_buffers",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "none",
+      "fixture_source": "m10_2_graph_plan_inventory",
+      "comparator": "ds4-parity/compare_decode_backend_facade.py",
+      "claim_boundary": "no-removal; Rust guards command lifetime but current backend owns execution",
+      "drift_policy": [
+        "refresh when command begin, flush, end, synchronize, or failure behavior changes",
+        "preserve command-boundary evidence from the M10.2 oracle"
+      ],
+      "operations": [
+        "ds4_gpu_begin_commands",
+        "ds4_gpu_flush_commands",
+        "ds4_gpu_end_commands",
+        "ds4_gpu_synchronize"
+      ]
+    },
+    {
+      "name": "model_mapping",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "model map or file descriptor",
+      "fixture_source": "m10_5c4c1_backend_abi_smoke",
+      "comparator": "ds4-parity/compare_decode_model_map_bridge.py",
+      "claim_boundary": "no-removal; model mapping and accelerator cache remain current-backend behavior",
+      "drift_policy": [
+        "refresh when model-map range, fd, cache-range, or managed-KV decisions change",
+        "rerun model-map and B300 CUDA linkage checks before fixture capture"
+      ],
+      "operations": [
+        "ds4_gpu_set_model_map",
+        "ds4_gpu_set_model_fd",
+        "ds4_gpu_set_model_map_range",
+        "ds4_gpu_cache_model_range",
+        "ds4_gpu_cache_q8_f16_range",
+        "ds4_gpu_should_use_managed_kv_cache"
+      ]
+    },
+    {
+      "name": "embedding_and_indexer",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "model weights and graph tensors",
+      "fixture_source": "m10_2_graph_plan_inventory",
+      "comparator": "ds4-parity/compare_decode_backend_facade.py",
+      "claim_boundary": "no-removal; embeddings, indexer scores, top-k, and masks stay current-backend until M12.4+",
+      "drift_policy": [
+        "refresh when embedding/indexer signatures, top-k shape, or ratio-indexer semantics change",
+        "capture operation tensors in M12.2 before any replacement slice"
+      ],
+      "operations": [
+        "ds4_gpu_embed_token_hc_tensor",
+        "ds4_gpu_embed_tokens_hc_tensor",
+        "ds4_gpu_indexer_score_one_tensor",
+        "ds4_gpu_indexer_scores_prefill_tensor",
+        "ds4_gpu_indexer_scores_decode_batch_tensor",
+        "ds4_gpu_indexer_topk_tensor",
+        "ds4_gpu_dsv4_topk_mask_tensor"
+      ]
+    },
+    {
+      "name": "dense_norm_rope_kv",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "model weights, activations, and KV tensors",
+      "fixture_source": "m10_9a_runtime_graph_closure",
+      "comparator": "ds4-parity/compare_decode_backend_facade.py",
+      "claim_boundary": "no-removal; dense, norm, RoPE, and KV kernels remain current-backend until tensor fixtures exist",
+      "drift_policy": [
+        "refresh when projection, norm, RoPE, FP8/KV, or raw-cache signatures change",
+        "tie any output drift to M12.2 tensor fixtures and same-backend reruns"
+      ],
+      "operations": [
+        "ds4_gpu_matmul_q8_0_tensor",
+        "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
+        "ds4_gpu_matmul_f16_tensor",
+        "ds4_gpu_matmul_f16_pair_tensor",
+        "ds4_gpu_matmul_f32_tensor",
+        "ds4_gpu_repeat_hc_tensor",
+        "ds4_gpu_rms_norm_plain_tensor",
+        "ds4_gpu_rms_norm_plain_rows_tensor",
+        "ds4_gpu_rms_norm_weight_tensor",
+        "ds4_gpu_rms_norm_weight_rows_tensor",
+        "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
+        "ds4_gpu_head_rms_norm_tensor",
+        "ds4_gpu_dsv4_fp8_kv_quantize_tensor",
+        "ds4_gpu_dsv4_indexer_qat_tensor",
+        "ds4_gpu_rope_tail_tensor",
+        "ds4_gpu_kv_fp8_store_raw_tensor",
+        "ds4_gpu_store_raw_kv_tensor",
+        "ds4_gpu_store_raw_kv_batch_tensor"
+      ]
+    },
+    {
+      "name": "compressor_attention",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "model weights, raw KV, compressed KV, and mask tensors",
+      "fixture_source": "m10_9a_runtime_graph_closure",
+      "comparator": "ds4-parity/compare_decode_backend_facade.py",
+      "claim_boundary": "no-removal; compressor and attention kernels remain current-backend until tensor fixtures exist",
+      "drift_policy": [
+        "refresh when compressor, prefill, decode attention, or output projection signatures change",
+        "preserve M10.9 official-vector, long-context, tool/server, and benchmark evidence"
+      ],
+      "operations": [
+        "ds4_gpu_compressor_update_tensor",
+        "ds4_gpu_compressor_store_batch_tensor",
+        "ds4_gpu_compressor_prefill_tensor",
+        "ds4_gpu_compressor_prefill_ratio4_replay_tensor",
+        "ds4_gpu_compressor_prefill_state_ratio4_tensor",
+        "ds4_gpu_attention_decode_heads_tensor",
+        "ds4_gpu_attention_prefill_raw_heads_tensor",
+        "ds4_gpu_attention_decode_raw_batch_heads_tensor",
+        "ds4_gpu_attention_decode_mixed_batch_heads_tensor",
+        "ds4_gpu_attention_indexed_mixed_batch_heads_tensor",
+        "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
+        "ds4_gpu_attention_prefill_masked_mixed_heads_tensor",
+        "ds4_gpu_attention_output_q8_batch_tensor",
+        "ds4_gpu_attention_output_low_q8_tensor"
+      ]
+    },
+    {
+      "name": "routing_moe",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "router logits, expert weights, and model offsets",
+      "fixture_source": "m10_9a_runtime_graph_closure",
+      "comparator": "ds4-parity/compare_decode_backend_facade.py",
+      "claim_boundary": "no-removal; routing, shared expert, and routed MoE kernels remain current-backend until tensor fixtures exist",
+      "drift_policy": [
+        "refresh when router, hash routing, shared expert, routed MoE, add, or steering signatures change",
+        "M12.2 fixtures must record selected experts and weights before replacement"
+      ],
+      "operations": [
+        "ds4_gpu_swiglu_tensor",
+        "ds4_gpu_add_tensor",
+        "ds4_gpu_directional_steering_project_tensor",
+        "ds4_gpu_router_select_tensor",
+        "ds4_gpu_router_select_batch_tensor",
+        "ds4_gpu_routed_moe_one_tensor",
+        "ds4_gpu_routed_moe_batch_tensor"
+      ]
+    },
+    {
+      "name": "hc_output",
+      "owner_state": "ffi-wrapped",
+      "required_platforms": [
+        "macos-metal",
+        "linux-cuda"
+      ],
+      "model_requirement": "HC state, output weights, routed/shared FFN outputs, and logits tensors",
+      "fixture_source": "m10_9f_runtime_benchmark_closure",
+      "comparator": "ds4-parity/compare_decode_backend_facade.py",
+      "claim_boundary": "no-removal; HC/output kernels remain current-backend until tensor fixtures and route gates pass",
+      "drift_policy": [
+        "refresh when HC split/expand/weighted-sum, shared-down, or output-head signatures change",
+        "preserve same-B300 benchmark and quality-gate evidence for route comparisons"
+      ],
+      "operations": [
+        "ds4_gpu_hc_split_sinkhorn_tensor",
+        "ds4_gpu_hc_weighted_sum_tensor",
+        "ds4_gpu_hc_weighted_sum_split_tensor",
+        "ds4_gpu_hc_split_weighted_sum_tensor",
+        "ds4_gpu_hc_split_weighted_sum_norm_tensor",
+        "ds4_gpu_output_hc_weights_tensor",
+        "ds4_gpu_hc_expand_tensor",
+        "ds4_gpu_hc_expand_split_tensor",
+        "ds4_gpu_hc_expand_add_split_tensor",
+        "ds4_gpu_shared_down_hc_expand_q8_0_tensor",
+        "ds4_gpu_matmul_q8_0_hc_expand_tensor"
+      ]
+    }
+  ]
+}

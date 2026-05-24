@@ -397,6 +397,19 @@ parser state, deterministic tool replay, session command order, normalized
 session ids, and final visible outputs. It remains no-model and explicitly
 defers model-backed manual smoke until the live Rust agent loop is enabled.
 
+Validate the M12.1 Backend boundary inventory:
+
+```sh
+python3 ds4-parity/check_backend_boundary_inventory.py --negative-test
+```
+
+The M12.1 checker validates
+`baselines/backend/m12.1/backend-boundary-inventory.json` against the M10.2
+operation-family oracle, current backend ABI sources, M10.5c4c1 CUDA smoke
+contract, M10.9 runtime graph/benchmark artifacts, B300 rerun commands, and
+the no-removal/no-replacement claim policy. It remains inventory-only and does
+not claim Rust-owned backend kernels.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

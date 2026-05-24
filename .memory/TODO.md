@@ -6719,7 +6719,7 @@
 
 #### M12.1: Backend Boundary Inventory And Claim Matrix
 
-- Status: active.
+- Status: complete.
 - Goal: inventory current backend operation families and claim boundaries before
   any replacement implementation.
 - Oracle: current backend headers/build wiring, Rust FFI wrappers, M10.5c4c1,
@@ -6731,6 +6731,40 @@
   comparator path, and drift policy.
 - Drift policy: refresh inventory whenever C/CUDA/Metal signatures, Rust FFI
   wrappers, or route selectors change.
+- Evidence:
+  - Added `ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json`.
+  - Added `ds4-parity/check_backend_boundary_inventory.py --negative-test`.
+  - Added unified parity report item `M12.1 Backend boundary inventory`.
+- Validation passed:
+  - `python3 -m py_compile ds4-parity/check_backend_boundary_inventory.py
+    ds4-parity/check_runtime_graph_closure_matrix.py
+    ds4-parity/run_parity_report.py`
+  - `python3 -m json.tool
+    ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json`
+  - `python3 ds4-parity/check_backend_boundary_inventory.py --negative-test`
+  - `python3 ds4-parity/check_runtime_graph_closure_matrix.py
+    --negative-test`
+  - `cargo fmt --all -- --check`
+  - `git diff --check`
+  - `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 82
+    passed, 50 skipped, 0 failed.
+
+#### M12.2: Operation Tensor Fixture Capture
+
+- Status: active.
+- Goal: capture operation-level tensor inputs/outputs for the first backend
+  replacement families without changing runtime routing.
+- Oracle: current backend outputs on the same backend and model class used by
+  the target replacement slice.
+- Fixture: tensor fixture bundle with operation name, shape, dtype, backend
+  marker, model hash, prompt/vector hash, output hash, and numeric tolerance.
+- Comparator: tensor fixture checker with exact SHA checks for byte-identical
+  buffers and documented tolerances for f32/f16 output comparisons.
+- Acceptance: each selected operation has current-backend fixture coverage,
+  negative tests for shape/dtype/hash drift, and a rerun command for the same
+  hardware class.
+- Drift policy: fixture drift is accepted only with a refreshed current-backend
+  oracle, recorded model/backend identity, and comparator tolerance rationale.
 - Owner path: backend replacement split, tensor/runtime fixtures,
   `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
 

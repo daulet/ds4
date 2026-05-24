@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M12.1 Backend Boundary Inventory And Claim Matrix
-- Last validated source before the active item: M12 Backend Replacement Parity
-  Split Planning.
+- Active item: M12.2 Operation Tensor Fixture Capture
+- Last validated source before the active item: M12.1 Backend Boundary
+  Inventory And Claim Matrix.
+- Earlier M12.1 Backend Boundary Inventory And Claim Matrix.
 - Earlier M12 Backend Replacement Parity split into M12.1 through M12.6 before
   implementation.
 - Earlier M11 Agent Trace Replay split into M11.1 through M11.4 before
@@ -91,6 +92,18 @@
 
 ## Last Evidence
 
+- M12.1 adds
+  `ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json` and
+  `ds4-parity/check_backend_boundary_inventory.py --negative-test`, wiring the
+  checker into the unified parity report and README. The inventory ties each
+  M10.2 backend operation family to owner state, platform requirement, model
+  requirement, fixture source, comparator path, drift policy, B300 rerun
+  commands, and a no-removal/no-replacement claim policy. Validation passed
+  Python syntax, JSON formatting, the M12.1 checker with negative tests, the
+  runtime graph closure matrix with negative tests, `cargo fmt --all
+  -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 82 passed, 50
+  skipped, 0 failed. M12.2 Operation Tensor Fixture Capture is active.
 - M12 Backend Replacement Parity is split before implementation into M12.1
   through M12.6. Each substage now records Oracle, Fixture, Comparator,
   Acceptance, and Drift policy criteria before any backend ownership changes.

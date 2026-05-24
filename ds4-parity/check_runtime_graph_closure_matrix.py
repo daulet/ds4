@@ -479,6 +479,7 @@ def validate_static_wiring(report: Report) -> None:
         or "Active item: M11.4 Rust Agent Loop And Manual Smoke" in texts["status"]
         or "Active item: M12 Backend Replacement Parity Split Planning" in texts["status"]
         or "Active item: M12.1 Backend Boundary Inventory And Claim Matrix" in texts["status"]
+        or "Active item: M12.2 Operation Tensor Fixture Capture" in texts["status"]
     )
     report.check(status_has_m10_9a, "status M10.9a missing")
     report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c/M10.9d/M10.9e/M10.9f/M11 missing")

@@ -6050,7 +6050,7 @@ kernel execution, runtime route selection, and final removal decisions:
 
 #### M12.1: Backend Boundary Inventory And Claim Matrix
 
-- Status: active.
+- Status: complete.
 - Goal: inventory the current backend boundary and define which pieces remain
   C/CUDA/Metal sidecars versus Rust-owned behavior before any replacement
   claim.
@@ -6068,10 +6068,27 @@ kernel execution, runtime route selection, and final removal decisions:
 - Drift policy: when C/CUDA/Metal signatures, Rust FFI wrappers, or runtime
   route selectors change, refresh the inventory and rerun the checker before
   implementing an M12 replacement slice.
+- Evidence:
+  - Added `ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json`.
+  - Added `ds4-parity/check_backend_boundary_inventory.py --negative-test`.
+  - Unified parity wiring includes `M12.1 Backend boundary inventory`.
+- Validation:
+  - `python3 -m py_compile ds4-parity/check_backend_boundary_inventory.py
+    ds4-parity/check_runtime_graph_closure_matrix.py
+    ds4-parity/run_parity_report.py` passed.
+  - `python3 -m json.tool
+    ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json`
+    passed.
+  - `python3 ds4-parity/check_backend_boundary_inventory.py --negative-test`
+    passed.
+  - `python3 ds4-parity/check_runtime_graph_closure_matrix.py
+    --negative-test`, `cargo fmt --all -- --check`, `git diff --check`, and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles` passed
+    with 82 passed, 50 skipped, 0 failed.
 
 #### M12.2: Operation Tensor Fixture Capture
 
-- Status: planned.
+- Status: active.
 - Goal: capture operation-level tensor inputs/outputs for the first backend
   replacement families without changing runtime routing.
 - Oracle: current backend outputs on the same backend and model class used by
