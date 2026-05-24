@@ -6008,7 +6008,7 @@ claiming more live behavior:
 
 ## Milestone 12: Backend Replacement Parity
 
-Status: active for split planning before implementation.
+Status: split before implementation into M12.1 through M12.6.
 
 Only after Rust owns the host runtime should GPU backend replacement begin.
 
@@ -6034,6 +6034,130 @@ Acceptance:
   `./ds4_test --metal-kernels` pass where applicable.
 - Speed comparison is recorded for the same machine, backend target, model
   quant, and prompt sweep.
+
+### M12 Split
+
+M12 is split before implementation because backend replacement spans the
+operation ABI, tensor fixtures, backend facade ownership, backend-specific
+kernel execution, runtime route selection, and final removal decisions:
+
+- M12.1: Backend Boundary Inventory And Claim Matrix.
+- M12.2: Operation Tensor Fixture Capture.
+- M12.3: Rust Backend Facade Parity Harness.
+- M12.4: First Backend Replacement Slice.
+- M12.5: Runtime Backend Route Gate.
+- M12.6: Backend Replacement Closure And Removal Decision.
+
+#### M12.1: Backend Boundary Inventory And Claim Matrix
+
+- Status: active.
+- Goal: inventory the current backend boundary and define which pieces remain
+  C/CUDA/Metal sidecars versus Rust-owned behavior before any replacement
+  claim.
+- Oracle: current `ds4_gpu.h`, backend build/link scripts, Rust GPU FFI
+  wrappers, M10.5c4c1 CUDA smoke contract, M10.9 runtime graph closure matrix,
+  and committed B300 benchmark artifacts.
+- Fixture: backend-boundary inventory JSON covering operation families,
+  ownership state, required platform, model requirement, and claim boundary.
+- Comparator: inventory checker that fails on missing operation families,
+  unsupported backend overclaims, missing B300 rerun commands, or removal
+  claims before replacement gates exist.
+- Acceptance: every backend operation family has a named owner state
+  (`current-c`, `ffi-wrapped`, `rust-planned`, or `rust-owned`), a fixture
+  source, a comparator path, and a no-removal claim boundary.
+- Drift policy: when C/CUDA/Metal signatures, Rust FFI wrappers, or runtime
+  route selectors change, refresh the inventory and rerun the checker before
+  implementing an M12 replacement slice.
+
+#### M12.2: Operation Tensor Fixture Capture
+
+- Status: planned.
+- Goal: capture operation-level tensor inputs/outputs for the first backend
+  replacement families without changing runtime routing.
+- Oracle: current backend outputs on the same backend and model class used by
+  the target replacement slice.
+- Fixture: tensor fixture bundle with operation name, shape, dtype, backend
+  marker, model hash, prompt/vector hash, output hash, and numeric tolerance.
+- Comparator: tensor fixture checker with exact SHA checks for byte-identical
+  buffers and documented tolerances for f32/f16 output comparisons.
+- Acceptance: each selected operation has current-backend fixture coverage,
+  negative tests for shape/dtype/hash drift, and a rerun command for the same
+  hardware class.
+- Drift policy: fixture drift is accepted only with a refreshed current-backend
+  oracle, recorded model/backend identity, and comparator tolerance rationale.
+
+#### M12.3: Rust Backend Facade Parity Harness
+
+- Status: planned.
+- Goal: route selected backend operations through a Rust-owned facade while
+  still allowing the current backend implementation to serve as the oracle.
+- Oracle: M12.2 tensor fixtures plus existing M10.5 backend ABI/facade
+  comparators.
+- Fixture: Rust facade replay artifact showing operation order, tensor binding,
+  synchronization points, and error propagation for the selected families.
+- Comparator: facade replay comparator against the M12.2 tensor fixture bundle
+  and current ABI/facade contracts.
+- Acceptance: Rust facade calls bind the same tensors in the same order,
+  preserve current error categories, and produce fixture-matching outputs for
+  the selected operations.
+- Drift policy: any facade signature or operation-order change must update the
+  replay artifact and keep old/current backend comparison available until the
+  route gate passes.
+
+#### M12.4: First Backend Replacement Slice
+
+- Status: planned.
+- Goal: replace one bounded backend operation family in Rust or a Rust-owned
+  backend module while leaving broader runtime routing unchanged.
+- Oracle: M12.2 current-backend tensor fixtures and M12.3 facade replay.
+- Fixture: replacement-slice summary with selected operation family, supported
+  backend/platform, unsupported paths, tensor output comparisons, and explicit
+  non-goals.
+- Comparator: replacement-slice comparator that checks operation outputs,
+  unsupported-path failures, and the claim boundary.
+- Acceptance: the selected operation family matches fixture outputs within
+  tolerance, fails closed for unsupported backends, and does not claim general
+  backend replacement.
+- Drift policy: replacement output drift requires a same-hardware rerun of the
+  current-backend oracle and a comparator update that explains the tolerance or
+  expected numeric change.
+
+#### M12.5: Runtime Backend Route Gate
+
+- Status: planned.
+- Goal: expose the replacement slice through an explicit runtime route and
+  validate end-to-end behavior without replacing the default backend.
+- Oracle: current default route plus M10.9 official-vector, long-context,
+  tool/server, and benchmark gates.
+- Fixture: runtime route artifact recording route selector, backend identity,
+  official-vector results, long-context results, quality gates, and benchmark
+  deltas.
+- Comparator: runtime route comparator that checks output parity, quality-gate
+  parity, benchmark deltas, and route/preflight behavior.
+- Acceptance: replacement route passes official-vector and long-context gates,
+  preserves tool/server quality, records benchmark comparison on the same
+  machine class, and remains opt-in.
+- Drift policy: route behavior drift requires preserving current default-route
+  evidence and recording whether the change is route plumbing, numeric kernel
+  drift, or benchmark variance.
+
+#### M12.6: Backend Replacement Closure And Removal Decision
+
+- Status: planned.
+- Goal: decide whether any C/CUDA/Metal backend code can be removed, retained
+  as a sidecar, or kept as an oracle after replacement routes pass.
+- Oracle: M12.1 through M12.5 artifacts plus current removal criteria.
+- Fixture: closure matrix listing backend families, replacement status,
+  remaining sidecars, oracle coverage, runtime route status, and removal
+  decision.
+- Comparator: closure checker that rejects removal when any operation family,
+  runtime route, benchmark, or platform-specific regression gate is missing.
+- Acceptance: every replacement claim is backed by operation fixtures,
+  end-to-end route gates, benchmark evidence, and explicit retained-sidecar
+  decisions.
+- Drift policy: closure drift must keep prior oracle artifacts available until
+  the replacement route has equivalent or better coverage on each supported
+  backend class.
 
 ## Removal Criteria for C Host Code
 

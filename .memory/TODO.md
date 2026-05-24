@@ -6702,7 +6702,7 @@
 
 #### M12: Backend Replacement Parity Split Planning
 
-- Status: active.
+- Status: complete.
 - Goal: split backend replacement into replay-comparable milestones before any
   CUDA/Metal backend ownership changes.
 - Oracle: current backend implementation plus M10 runtime graph and benchmark
@@ -6713,6 +6713,24 @@
   current-C or B300 oracles.
 - Acceptance: each M12 substage has an oracle, fixture, comparator,
   acceptance criteria, and drift policy before implementation begins.
+- Evidence:
+  - Split M12 into M12.1 through M12.6 with explicit oracle, fixture,
+    comparator, acceptance, and drift-policy criteria.
+
+#### M12.1: Backend Boundary Inventory And Claim Matrix
+
+- Status: active.
+- Goal: inventory current backend operation families and claim boundaries before
+  any replacement implementation.
+- Oracle: current backend headers/build wiring, Rust FFI wrappers, M10.5c4c1,
+  M10.9 runtime closure, and B300 benchmark artifacts.
+- Fixture: backend-boundary inventory JSON.
+- Comparator: inventory checker for ownership states, fixture sources, rerun
+  commands, and no-removal/no-replacement overclaims.
+- Acceptance: every backend operation family has owner state, fixture source,
+  comparator path, and drift policy.
+- Drift policy: refresh inventory whenever C/CUDA/Metal signatures, Rust FFI
+  wrappers, or route selectors change.
 - Owner path: backend replacement split, tensor/runtime fixtures,
   `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
 

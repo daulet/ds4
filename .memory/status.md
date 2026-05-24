@@ -3,9 +3,11 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M12 Backend Replacement Parity Split Planning
-- Last validated source before the active item: M11.4 Rust Agent Loop And
-  Manual Smoke.
+- Active item: M12.1 Backend Boundary Inventory And Claim Matrix
+- Last validated source before the active item: M12 Backend Replacement Parity
+  Split Planning.
+- Earlier M12 Backend Replacement Parity split into M12.1 through M12.6 before
+  implementation.
 - Earlier M11 Agent Trace Replay split into M11.1 through M11.4 before
   implementation.
 - Earlier M11.4 Rust Agent Loop And Manual Smoke.
@@ -89,6 +91,10 @@
 
 ## Last Evidence
 
+- M12 Backend Replacement Parity is split before implementation into M12.1
+  through M12.6. Each substage now records Oracle, Fixture, Comparator,
+  Acceptance, and Drift policy criteria before any backend ownership changes.
+  M12.1 Backend Boundary Inventory And Claim Matrix is active.
 - M11.4 adds the Rust `ds4-agent-loop-smoke-rs` no-model smoke emitter,
   records `ds4-parity/baselines/agent/m11.4/loop-smoke.json`, adds
   `ds4-parity/compare_agent_loop_smoke.py --negative-test`, and wires the
