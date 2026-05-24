@@ -964,10 +964,42 @@ kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
   ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json
 ```
 
-The comparator verifies the disk seed and continuation raw payload SHA256
-values, byte counts, Rust graph-reader acceptance, parsed header fields,
-raw-ring mapping, section byte plan, compressed/index row counts, and hash-only
-raw-body policy. It does not restore tensors into graph memory.
+The comparator records the observed disk seed and continuation raw payload
+SHA256 values plus the historical oracle SHA256 values, and exact-gates byte
+counts, Rust graph-reader acceptance, parsed header fields, raw-ring mapping,
+section byte plan, compressed/index row counts, and hash-only raw-body policy.
+The raw body SHA is per-capture metadata because unused or numerically unstable
+payload bytes can drift across B300 captures; this check does not restore
+tensors into graph memory.
+
+Compare the M10.7c3a Rust raw graph snapshot import summary against the
+committed M7.8 memory-snapshot oracle:
+
+```sh
+python3 ds4-parity/compare_graph_snapshot_raw_import.py
+python3 ds4-parity/compare_graph_snapshot_raw_import.py --negative-test
+```
+
+Recapture the memory snapshot bodies and Rust import summary on the B300 pod:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; make ds4-restore-dump CUDA_ARCH=native; mkdir -p ds4-parity/baselines/kv/m7.8/raw; ./ds4-restore-dump --backend cuda -m /workspace/ds4/ds4flash.gguf --model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668 --seed-prompt ds4-parity/baselines/kv-fixtures/m7.8/restore_seed_prompt.txt --seed-assistant ds4-parity/baselines/kv-fixtures/m7.8/restore_seed_assistant.txt --continuation-user ds4-parity/baselines/kv-fixtures/m7.8/restore_continuation_user.txt --payload-dir ds4-parity/baselines/kv/m7.8/raw --snapshot-dir ds4-parity/baselines/kv/m7.8/raw -o /tmp/ds4-m107c3a-current-c-with-snapshots.json; python3 ds4-parity/check_restore_dump.py /tmp/ds4-m107c3a-current-c-with-snapshots.json --negative-test; python3 ds4-parity/compare_graph_snapshot_raw_import.py --live --workdir /workspace/ds4 --write-summary /tmp/ds4-m107c3a-snapshot-raw-import.json --negative-test'
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m107c3a-snapshot-raw-import.json \
+  ds4-parity/baselines/kv/m10.7c3a/rust-b300-snapshot-raw-import.json
+```
+
+The comparator records the observed seed and continuation memory snapshot
+SHA256 values plus the historical oracle SHA256 values, and exact-gates byte
+counts, Rust graph-reader acceptance, parsed header fields, raw-ring mapping,
+section byte plan, compressed/index row counts, and hash-only raw-body policy.
+It materializes snapshot bodies only on B300; the raw body SHA is per-capture
+metadata and the check still does not restore tensors into graph memory.
 
 ## Sampling And Logprob Parity
 

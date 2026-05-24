@@ -15,7 +15,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
-  M10.7b, M10.7c1, and M10.7c2.
+  M10.7b, M10.7c1, M10.7c2, and M10.7c3a.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -457,6 +457,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.7c3a Rust raw graph snapshot import comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_graph_snapshot_raw_import.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -873,6 +881,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "/workspace/ds4"
             ),
             rerun_command=b300_rust_raw_graph_payload_import_command(),
+        ),
+        ReportItem(
+            name="M10.7c3a B300 Rust raw graph snapshot import rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Raw graph snapshot import requires the B300 pod because the "
+                "M7.8 memory snapshot bodies are hash-only and must be "
+                "materialized in /workspace/ds4"
+            ),
+            rerun_command=b300_rust_raw_graph_snapshot_import_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1784,6 +1803,48 @@ def b300_rust_raw_graph_payload_import_command() -> str:
             "cp",
             f"{KUBE_POD}:{summary}",
             "ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json",
+        ]
+    )
+    return f"{source_refresh} && {smoke} && {copy_back}"
+
+
+def b300_rust_raw_graph_snapshot_import_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    current_c = "/tmp/ds4-m107c3a-current-c-with-snapshots.json"
+    summary = "/tmp/ds4-m107c3a-snapshot-raw-import.json"
+    raw_dir = "ds4-parity/baselines/kv/m7.8/raw"
+    smoke = b300_exec(
+        "make ds4-restore-dump CUDA_ARCH=native && "
+        f"mkdir -p {raw_dir} && "
+        "./ds4-restore-dump --backend cuda "
+        f"-m {B300_MODEL} "
+        "--model-sha256 efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668 "
+        "--seed-prompt ds4-parity/baselines/kv-fixtures/m7.8/restore_seed_prompt.txt "
+        "--seed-assistant ds4-parity/baselines/kv-fixtures/m7.8/restore_seed_assistant.txt "
+        "--continuation-user ds4-parity/baselines/kv-fixtures/m7.8/restore_continuation_user.txt "
+        f"--payload-dir {raw_dir} --snapshot-dir {raw_dir} -o {current_c} && "
+        f"python3 ds4-parity/check_restore_dump.py {current_c} --negative-test && "
+        "python3 ds4-parity/compare_graph_snapshot_raw_import.py "
+        f"--live --workdir {B300_WORKDIR} --write-summary {summary} --negative-test"
+    )
+    copy_back = shell_join(
+        prefix
+        + [
+            "cp",
+            f"{KUBE_POD}:{summary}",
+            "ds4-parity/baselines/kv/m10.7c3a/rust-b300-snapshot-raw-import.json",
         ]
     )
     return f"{source_refresh} && {smoke} && {copy_back}"

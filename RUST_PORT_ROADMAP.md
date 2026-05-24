@@ -4474,13 +4474,15 @@ restore boundary.
 - Oracle: M7.8 disk payload raw files and `payload_sha256` records on B300.
 - Fixture: seed and continuation disk restore payload bodies in the M7.8 raw
   artifact location on `/workspace/ds4`.
-- Comparator: B300 Rust payload-reader smoke over payload SHA256, header
-  fields, payload length, section byte plan, compressed/index counts, and
-  rejection of mutated raw bytes.
+- Comparator: B300 Rust payload-reader smoke over observed and historical
+  payload SHA256 metadata, header fields, payload length, section byte plan,
+  compressed/index counts, and rejection of mutated summaries.
 - Acceptance: Rust can import the same raw disk payload bytes as C at the
   reader level, without restoring tensors into graph memory yet.
-- Drift policy: raw payload hashes, lengths, header fields, count tables, and
-  section offsets are exact.
+- Drift policy: lengths, header fields, count tables, section offsets, and
+  Rust-reader acceptance are exact; raw payload hashes are recorded as
+  per-capture metadata because B300 restore bodies can drift while preserving
+  restore behavior.
 - Review gate: ask Claude to review raw-byte bounds checks and B300 evidence.
 - Validation gate: B300 raw payload reader smoke, local comparator negative
   tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
@@ -4488,9 +4490,12 @@ restore boundary.
 - Evidence: implemented Rust `--graph-file-probe <id:path>` and
   `ds4-parity/compare_graph_payload_raw_import.py`, then ran the comparator on
   the B300 pod against the M7.8 hash-only raw disk payload bodies. The live run
-  passed 104 checks over disk case order, payload SHA256 and byte counts, Rust
-  reader acceptance, raw-ring positions, section byte totals, ratio row counts,
-  and hash-only policy; negative tests rejected 7 mutations. The committed
+  passed 104 checks over disk case order, payload SHA256 metadata and byte
+  counts, Rust reader acceptance, raw-ring positions, section byte totals,
+  ratio row counts, and hash-only policy; negative tests rejected 7 mutations.
+  M10.7c3a later narrowed raw-body SHA256 to per-capture metadata after B300
+  reruns proved restore bodies are byte-unstable even when C self-restore
+  passes. The committed
   summary `ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json` contains
   only hashes/FNVs/parsed metadata, not raw payload bodies. Full local
   validation passed the unified parity report with 51 passed, 37 skipped, and
@@ -4499,9 +4504,96 @@ restore boundary.
 
 ###### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
 
+- Status: split into M10.7c3a-M10.7c3d before implementation; M10.7c3a done;
+  M10.7c3b active.
+- Goal: advance graph restore from raw memory snapshot availability, to restore
+  target mapping, to tensor readback, and finally to next-token behavior.
+- Oracle: current C M7.8 restore oracle on B300.
+- Acceptance: each subitem has a concrete raw-body or restore-state comparator
+  before claiming next-token parity.
+- Owner path: current-C restore dumper, Rust graph payload reader, Rust graph
+  restore runtime, B300 restore comparators, `ds4-parity/`, `.memory/status.md`.
+
+###### M10.7c3a: Rust Memory Snapshot Raw Body Import Smoke
+
+- Goal: materialize C-written in-memory snapshot bodies on B300 and feed them to
+  the Rust graph payload reader with the recorded snapshot hashes and section
+  plan.
+- Oracle: M7.8 `snapshot_seed` and `snapshot_continuation` records in the
+  current-C B300 restore oracle.
+- Fixture: raw memory snapshot bodies emitted by `ds4-restore-dump
+  --snapshot-dir` into `/workspace/ds4/ds4-parity/baselines/kv/m7.8/raw`.
+- Comparator: B300 Rust snapshot-reader smoke over observed and historical
+  snapshot SHA256 metadata, header fields, snapshot length, section byte plan,
+  compressed/index counts, and rejection of mutated summaries.
+- Acceptance: Rust can import the same raw memory snapshot bytes as C at the
+  reader level, without restoring tensors into graph memory yet.
+- Drift policy: lengths, header fields, count tables, section offsets, and
+  Rust-reader acceptance are exact; snapshot body hashes are recorded as
+  per-capture metadata because B300 restore bodies can drift while preserving
+  restore behavior.
+- Review gate: ask Claude to review snapshot body materialization, raw-byte
+  bounds checks, and B300 evidence.
+- Validation gate: B300 raw snapshot reader smoke, local comparator negative
+  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
+- Evidence: added `ds4-restore-dump --snapshot-dir`, B300
+  `ds4-parity/baselines/kv/m10.7c3a/rust-b300-snapshot-raw-import.json`, and
+  `ds4-parity/compare_graph_snapshot_raw_import.py`. The B300 raw disk import
+  rerun under the corrected per-capture hash policy passed 108 checks and
+  rejected 9 mutations; the B300 raw snapshot materialization/import passed 110
+  checks and rejected 9 mutations. Local validation passed both raw import
+  comparators with 104 checks and 9 negative mutations each, Python syntax
+  checks, `cargo test -p ds4-gguf session_payload`, `git diff --check`, `arch
+  -arm64 make ds4-restore-dump`, the unified parity report with 52 passed, 38
+  skipped, and 0 failed, `cargo fmt --all -- --check`, `cargo test
+  --workspace`, and non-interactive Claude review with no blockers.
+
+###### M10.7c3b: Rust Graph Restore Target Mapping Contract
+
+- Goal: map every parsed disk payload and memory snapshot section to the Rust
+  graph restore destination and counter update without moving tensor bytes yet.
+- Oracle: current C `ds4_session_load_payload` graph restore order and the M7.8
+  raw disk/snapshot payload summaries.
+- Fixture: seed and continuation disk payload and memory snapshot section plans.
+- Comparator: Rust restore-target plan vs C restore order over raw logical to
+  physical ring positions, per-layer compressed/index sections, checkpoint
+  token/logit sections, and graph counter writes.
+- Acceptance: every restore byte section has one destination and every graph
+  counter update has a documented source before GPU writes are introduced.
+- Drift policy: section order, destination names, per-layer coverage, and counter
+  values are exact.
+- Review gate: ask Claude to review that the mapping matches C graph restore
+  semantics and does not claim execution behavior.
+- Validation gate: restore-target comparator, targeted Rust tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+  non-interactive Claude review with no blockers.
+
+###### M10.7c3c: Rust Graph Tensor Restore Readback Smoke
+
+- Goal: write C disk payload and memory snapshot bytes into Rust-owned graph
+  tensor allocations on B300 and read back deterministic section hashes.
+- Oracle: M10.7c3b restore-target plan plus M7.8 raw body hashes.
+- Fixture: seed and continuation disk payload and memory snapshot raw bodies.
+- Comparator: B300 Rust restore readback summary over restored checkpoint
+  tokens, logits hash, raw-cache section hashes, compressed-cache section hashes,
+  state-tensor hashes, and graph counters.
+- Acceptance: Rust writes each restore section to the expected tensor destination
+  and readback hashes match the imported raw bytes before decode execution.
+- Drift policy: payload hashes, tensor section hashes, checkpoint length, and
+  graph counters are exact.
+- Review gate: ask Claude to review tensor write/readback bounds and B300
+  evidence.
+- Validation gate: B300 tensor readback smoke, restore-target comparator,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and non-interactive Claude review with no blockers.
+
+###### M10.7c3d: Rust Graph Tensor Restore Next-Token Smoke
+
 - Goal: restore C-written disk and memory snapshot payloads into Rust graph
   session state on B300 and prove next-token behavior matches current C.
-- Oracle: current C M7.8 restore oracle on B300.
+- Oracle: current C M7.8 restore oracle on B300 plus M10.7c3c tensor readback
+  evidence.
 - Fixture: seed disk payload restore, continuation disk payload restore, and
   in-memory snapshot restore on `/workspace/ds4/ds4flash.gguf`.
 - Comparator: B300 Rust-vs-current-C restore comparator over payload hashes,

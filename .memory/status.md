@@ -3,9 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7c3 Rust Graph Tensor Restore Next-Token Smoke
-- Last validated source before the active item: M10.7c2 Rust Disk KV Payload
-  Byte Import Smoke.
+- Active item: M10.7c3b Rust Graph Restore Target Mapping Contract
+- Last validated source before the active item: M10.7c3a Rust Memory Snapshot
+  Raw Body Import Smoke.
+- M10.7c3 Rust Graph Tensor Restore Next-Token Smoke is split into M10.7c3a
+  through M10.7c3d before tensor restore or next-token claims.
+- Earlier M10.7c2 Rust Disk KV Payload Byte Import Smoke.
 - Earlier M10.7c1 Rust Restore Payload Header Contract.
 - Earlier M10.7b Rust Graph Session Payload Reader And Writer.
 - Earlier M10.7a Rust Graph Session Payload Layout Plan.
@@ -31,6 +34,32 @@
 
 ## Last Evidence
 
+- M10.7c3a adds `ds4-restore-dump --snapshot-dir`, which writes the
+  `ds4_session_save_snapshot` memory payload bytes to B300 raw files while
+  leaving the existing restore JSON format compatible with the M7.8 checker.
+- M10.7c3a adds
+  `ds4-parity/baselines/kv/m10.7c3a/rust-b300-snapshot-raw-import.json` and
+  `ds4-parity/compare_graph_snapshot_raw_import.py`. The summary records only
+  metadata for `snapshot_seed` and `snapshot_continuation`: observed snapshot
+  SHA256, historical oracle SHA256, byte counts, FNVs, Rust reader acceptance,
+  parsed graph layout, and B300 source context. Raw snapshot bodies remain on
+  B300 and are not committed.
+- M10.7c3a discovered that B300 restore bodies are byte-unstable across
+  recaptures: rerunning current HEAD and the M7.8 capture source both produced
+  different raw disk/snapshot SHA256 values while C source-vs-restored
+  self-checks passed. `.memory/lessons.md` now records the permanent policy:
+  raw restore-body SHA256/FNV values are per-capture evidence, while exact gates
+  stay on byte counts, DSV4 headers, section layout, count tables, Rust reader
+  acceptance, and behavior comparators.
+- M10.7c3a validation passed B300 raw disk import under the corrected
+  per-capture hash policy with 108 checks and 9 negative mutations, B300 raw
+  snapshot materialization/import with 110 checks and 9 negative mutations,
+  local raw payload and snapshot import comparators with 104 checks and 9
+  negative mutations each, Python syntax checks, `cargo test -p ds4-gguf
+  session_payload`, `git diff --check`, `arch -arm64 make ds4-restore-dump`,
+  `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 52
+  passed, 38 skipped, and 0 failed, `cargo fmt --all -- --check`, `cargo test
+  --workspace`, and non-interactive Claude review with `NO BLOCKERS`.
 - M10.7c2 adds `ds4-session-payload-dump-rs --graph-file-probe <id:path>`,
   which reads C-written graph payload bytes from disk and runs the Rust
   `read_graph_payload` parser over the actual file contents. The probe reports
@@ -40,17 +69,21 @@
 - M10.7c2 adds the hash-only B300 summary
   `ds4-parity/baselines/kv/m10.7c2/rust-b300-raw-import.json` for the M7.8
   `disk_seed_payload` and `disk_continuation_payload` raw bodies. The summary
-  records only metadata: payload SHA256, byte counts, FNVs, Rust reader
-  acceptance, parsed graph layout, and B300 source context; the raw payload
-  bodies remain on the B300 workspace and are not committed.
+  records only metadata: observed payload SHA256, historical oracle SHA256, byte
+  counts, FNVs, Rust reader acceptance, parsed graph layout, and B300 source
+  context; the raw payload bodies remain on the B300 workspace and are not
+  committed. M10.7c3a discovered B300 restore bodies are byte-unstable across
+  recaptures, so raw-body SHA256 is capture evidence rather than an exact drift
+  gate.
 - M10.7c2 adds `ds4-parity/compare_graph_payload_raw_import.py`, which compares
   the B300 Rust summary to `ds4-parity/baselines/kv/m7.8/current-c.json` over
-  disk case order, payload SHA256 and byte counts, exact Rust reader acceptance,
-  decoded DSV4 header-derived raw ring positions, ratio-4 and ratio-128 row
-  counts, all section byte totals, hash-only policy, and the exact B300 rerun
-  command. The live B300 run passed 104 checks and negative tests rejected 7
-  mutations; the local summary check passed 100 checks and the same 7 mutation
-  tests.
+  disk case order, observed and historical payload SHA256 metadata, byte counts,
+  exact Rust reader acceptance, decoded DSV4 header-derived raw ring positions,
+  ratio-4 and ratio-128 row counts, all section byte totals, hash-only policy,
+  and the exact B300 rerun command. The live B300 run passed 104 checks and
+  negative tests originally rejected 7 mutations; M10.7c3a extends the
+  comparator to reject raw-hash policy drift without treating unstable raw-body
+  bytes as an oracle failure.
 - M10.7c2 validation passed B300 live raw import with summary writeback,
   `python3 ds4-parity/compare_graph_payload_raw_import.py --negative-test`,
   `python3 -m py_compile ds4-parity/compare_graph_payload_raw_import.py

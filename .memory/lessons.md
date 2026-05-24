@@ -3,6 +3,20 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-05-24: B300 Restore Payload Bodies Are Capture Metadata
+
+- Symptom: rerunning `ds4-restore-dump` on B300, including a rerun from the M7.8
+  capture source commit, produced different disk payload and memory snapshot
+  SHA256 values while `check_restore_dump.py` still passed C source-vs-restored
+  selected-token/top-logprob self-checks.
+- Root cause: the raw restore bodies include bytes that are not stable enough to
+  be treated as a cross-capture oracle, even when the restore behavior and DSV4
+  layout contract are valid.
+- Permanent rule: raw restore-body SHA256/FNV values should be recorded as
+  per-capture evidence. Parity gates should keep byte counts, DSV4 headers,
+  section layout, count tables, Rust reader acceptance, and behavior comparators
+  exact instead of failing solely on raw body SHA drift.
+
 ## 2026-05-24: Comparator Scripts Need A Live Entrypoint Check
 
 - Symptom: `compare_decode_directional_steering.py --negative-test` initially

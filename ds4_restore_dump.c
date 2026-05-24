@@ -16,6 +16,7 @@ typedef struct {
     const char *model_path;
     const char *output_path;
     const char *payload_dir;
+    const char *snapshot_dir;
     const char *seed_prompt_path;
     const char *seed_assistant_path;
     const char *continuation_user_path;
@@ -315,6 +316,13 @@ static uint8_t *read_file_bytes(const char *path, size_t *out_len) {
     return buf;
 }
 
+static void write_file_bytes(const char *path, const void *ptr, size_t len) {
+    FILE *fp = fopen(path, "wb");
+    if (!fp) die_errno("failed to create", path);
+    if (len > 0 && fwrite(ptr, 1, len, fp) != len) die_errno("failed to write", path);
+    if (fclose(fp) != 0) die_errno("failed to close", path);
+}
+
 static void write_disk_payload_case(FILE *json,
                                     ds4_engine *engine,
                                     const restore_options *opt,
@@ -386,6 +394,7 @@ static void write_disk_payload_case(FILE *json,
 
 static void write_memory_snapshot_case(FILE *json,
                                        ds4_engine *engine,
+                                       const restore_options *opt,
                                        const char *case_id,
                                        const char *prompt_case,
                                        const ds4_tokens *prompt,
@@ -413,6 +422,12 @@ static void write_memory_snapshot_case(FILE *json,
                  snap.len < RESTORE_HEADER_PREFIX ? (size_t)snap.len : RESTORE_HEADER_PREFIX,
                  header_hex,
                  sizeof(header_hex));
+    char snapshot_path[1024];
+    snapshot_path[0] = '\0';
+    if (opt->snapshot_dir) {
+        snprintf(snapshot_path, sizeof(snapshot_path), "%s/%s.dsv4", opt->snapshot_dir, case_id);
+        write_file_bytes(snapshot_path, snap.ptr, (size_t)snap.len);
+    }
 
     restore_state reference;
     restore_state restored_state;
@@ -427,8 +442,14 @@ static void write_memory_snapshot_case(FILE *json,
     fputs(",\"kind\":\"memory-snapshot\",\"prompt_case\":", json);
     json_string(json, prompt_case);
     fprintf(json,
-            ",\"ctx\":32768,\"prompt_tokens\":%d,\"raw_payload_committed\":false,\"snapshot_bytes\":%" PRIu64 ",\"snapshot_cap\":%" PRIu64 ",\"snapshot_sha256\":\"%s\",\"header_prefix_hex\":\"%s\",",
-            prompt->len,
+            ",\"ctx\":32768,\"prompt_tokens\":%d,\"raw_payload_committed\":false",
+            prompt->len);
+    if (opt->snapshot_dir) {
+        fputs(",\"snapshot_file\":", json);
+        json_string(json, snapshot_path);
+    }
+    fprintf(json,
+            ",\"snapshot_bytes\":%" PRIu64 ",\"snapshot_cap\":%" PRIu64 ",\"snapshot_sha256\":\"%s\",\"header_prefix_hex\":\"%s\",",
             snap.len,
             snap.cap,
             snapshot_sha,
@@ -455,7 +476,7 @@ static ds4_backend parse_backend(const char *s) {
 }
 
 static void usage(FILE *fp) {
-    fputs("usage: ds4-restore-dump -m MODEL -o OUTPUT.json --payload-dir DIR --seed-prompt FILE --seed-assistant FILE --continuation-user FILE --model-sha256 HEX [--backend cuda|metal|cpu]\n", fp);
+    fputs("usage: ds4-restore-dump -m MODEL -o OUTPUT.json --payload-dir DIR [--snapshot-dir DIR] --seed-prompt FILE --seed-assistant FILE --continuation-user FILE --model-sha256 HEX [--backend cuda|metal|cpu]\n", fp);
 }
 
 static restore_options parse_args(int argc, char **argv) {
@@ -477,6 +498,9 @@ static restore_options parse_args(int argc, char **argv) {
         } else if (!strcmp(arg, "--payload-dir")) {
             if (++i >= argc) die("missing payload dir");
             opt.payload_dir = argv[i];
+        } else if (!strcmp(arg, "--snapshot-dir")) {
+            if (++i >= argc) die("missing snapshot dir");
+            opt.snapshot_dir = argv[i];
         } else if (!strcmp(arg, "--seed-prompt")) {
             if (++i >= argc) die("missing seed prompt");
             opt.seed_prompt_path = argv[i];
@@ -566,9 +590,9 @@ int main(int argc, char **argv) {
 
     bool first_case = true;
     write_disk_payload_case(json, engine, &opt, "disk_seed_payload", "seed", &seed_prompt, &first_case);
-    write_memory_snapshot_case(json, engine, "snapshot_seed", "seed", &seed_prompt, &first_case);
+    write_memory_snapshot_case(json, engine, &opt, "snapshot_seed", "seed", &seed_prompt, &first_case);
     write_disk_payload_case(json, engine, &opt, "disk_continuation_payload", "continuation", &continuation_prompt, &first_case);
-    write_memory_snapshot_case(json, engine, "snapshot_continuation", "continuation", &continuation_prompt, &first_case);
+    write_memory_snapshot_case(json, engine, &opt, "snapshot_continuation", "continuation", &continuation_prompt, &first_case);
 
     fputs("\n  ]\n}\n", json);
     if (fclose(json) != 0) die_errno("failed to close output", opt.output_path);

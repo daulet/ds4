@@ -79,6 +79,15 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def is_sha256_hex(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and any(ch != "0" for ch in value)
+        and all(ch in "0123456789abcdef" for ch in value)
+    )
+
+
 def decode_header(hex_value: str) -> dict[str, int]:
     header = bytes.fromhex(hex_value)
     if len(header) != HEADER_BYTES:
@@ -206,6 +215,7 @@ def build_live_summary(oracle: dict[str, Any], workdir: Path) -> dict[str, Any]:
     cases = []
     for case in oracle_cases:
         payload_path = workdir / str(case["payload_file"])
+        payload_sha256 = sha256_file(payload_path)
         rust_case = rust_cases.get(str(case["id"]), {})
         cases.append(
             {
@@ -214,7 +224,9 @@ def build_live_summary(oracle: dict[str, Any], workdir: Path) -> dict[str, Any]:
                 "prompt_case": case["prompt_case"],
                 "payload_file": case["payload_file"],
                 "payload_bytes": int(case["payload_bytes"]),
-                "payload_sha256": sha256_file(payload_path),
+                "payload_sha256": payload_sha256,
+                "oracle_payload_sha256": case["payload_sha256"],
+                "payload_sha256_matches_oracle": payload_sha256 == case["payload_sha256"],
                 "rust": rust_case,
             }
         )
@@ -300,12 +312,18 @@ def validate_summary(
         report.check(summary_case.get("prompt_case") == oracle_case.get("prompt_case"), f"{path}.prompt_case drift")
         report.check(summary_case.get("payload_file") == oracle_case.get("payload_file"), f"{path}.payload_file drift")
         report.check(summary_case.get("payload_bytes") == oracle_case.get("payload_bytes"), f"{path}.payload_bytes drift")
-        report.check(summary_case.get("payload_sha256") == oracle_case.get("payload_sha256"), f"{path}.payload_sha drift")
+        report.check(is_sha256_hex(summary_case.get("payload_sha256")), f"{path}.payload_sha invalid")
+        report.check(summary_case.get("oracle_payload_sha256") == oracle_case.get("payload_sha256"), f"{path}.oracle_payload_sha drift")
+        report.check(
+            summary_case.get("payload_sha256_matches_oracle")
+            == (summary_case.get("payload_sha256") == oracle_case.get("payload_sha256")),
+            f"{path}.payload sha match flag drift",
+        )
         if raw_root is not None:
             raw_path = raw_root / str(oracle_case["payload_file"])
             if raw_path.exists():
                 report.check(raw_path.stat().st_size == int(oracle_case["payload_bytes"]), f"{path}.raw size drift")
-                report.check(sha256_file(raw_path) == oracle_case.get("payload_sha256"), f"{path}.raw sha drift")
+                report.check(sha256_file(raw_path) == summary_case.get("payload_sha256"), f"{path}.raw sha drift")
         rust = require_dict(report, summary_case.get("rust"), f"{path}.rust")
         report.check(rust.get("id") == case_id, f"{path}.rust.id drift")
         report.check(rust.get("path") == oracle_case.get("payload_file"), f"{path}.rust.path drift")
@@ -344,7 +362,13 @@ def run_negative_tests(oracle: dict[str, Any], summary: dict[str, Any]) -> Repor
     report = Report()
     mutations: list[tuple[str, list[str | int], Any]] = [
         ("case order drift", ["cases", 0, "id"], "disk_continuation_payload"),
-        ("payload sha drift", ["cases", 0, "payload_sha256"], "0" * 64),
+        ("payload sha format drift", ["cases", 0, "payload_sha256"], "0" * 64),
+        ("oracle payload sha drift", ["cases", 0, "oracle_payload_sha256"], "0" * 64),
+        (
+            "payload sha match flag drift",
+            ["cases", 0, "payload_sha256_matches_oracle"],
+            not summary["cases"][0]["payload_sha256_matches_oracle"],
+        ),
         ("payload byte drift", ["cases", 1, "payload_bytes"], summary["cases"][1]["payload_bytes"] + 4),
         ("rust ok drift", ["cases", 0, "rust", "ok"], False),
         ("rust parsed token drift", ["cases", 1, "rust", "parsed", "token_count"], 1),
