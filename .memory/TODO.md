@@ -6160,7 +6160,7 @@
 
 ### M10.8g4: B300 Support-Model End-To-End Comparator
 
-- Status: active
+- Status: split before implementation into M10.8g4a and M10.8g4b
 - Goal: close M10.8g with a same-B300 current-C versus Rust speculative stream
   comparator when an MTP support GGUF is available, or keep the blocker
   explicitly recorded when it is not.
@@ -6187,6 +6187,68 @@
   Claude review with no blockers.
 - Owner path: B300 MTP stream comparator, support-artifact blocker,
   `.memory/status.md`.
+- Split: M10.8g4 is split into M10.8g4a support-artifact branch decision and
+  M10.8g4b final support comparator or explicit blocker closure so the
+  currently missing support-model path does not get mixed with MTP-enabled
+  parity claims.
+- Evidence: split validation passed the live B300 support-artifact probe with
+  `/workspace/ds4/ds4flash.gguf`, absent `/workspace/ds4/missing-mtp.gguf`, and
+  empty `mtp_candidates=`, plus `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 69 passed, 43
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
+
+#### M10.8g4a: B300 Support-Artifact Branch Decision
+
+- Status: active
+- Goal: decide whether M10.8g4 can run the same-B300 support-model comparator
+  or must close with the explicit support-artifact blocker.
+- Oracle: M10.8g1 B300 support-artifact search, M10.8g3c Rust runtime
+  missing-support summary, and the B300 target-model identity.
+- Fixture: B300 `ds4-rust-port-b300`, `/workspace/ds4/ds4flash.gguf`,
+  `/workspace/ds4/missing-mtp.gguf`, and `*mtp*.gguf` or `*draft*.gguf`
+  candidate search at max depth 3.
+- Comparator: support candidate list, target model identity, missing-support
+  runtime summary linkage, and selected M10.8g4 branch.
+- Acceptance: if the support candidate list is empty, M10.8g4b must use the
+  explicit blocker closure and must not claim MTP-enabled parity; if support
+  appears, M10.8g4b must run a same-B300 current-C versus Rust comparator.
+- Drift policy: candidate paths, model identity, branch selection, and blocker
+  linkage are exact; command logs and timings are normalized.
+- Review gate: ask Claude to review branch selection and overclaim prevention.
+- Validation needed: live B300 support-artifact check, comparator with negative
+  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, unified parity report, and non-interactive Claude review with no
+  blockers.
+- Owner path: support-artifact branch selector, B300 blocker summaries,
+  `.memory/status.md`.
+
+#### M10.8g4b: B300 End-To-End Blocker Or Support Comparator Closure
+
+- Status: pending
+- Goal: close M10.8g with either a same-B300 current-C versus Rust speculative
+  stream comparator or the explicit support-artifact blocker selected by
+  M10.8g4a.
+- Oracle: current-C speculative stream behavior when a support GGUF exists,
+  otherwise M10.8g1 stream blocker plus M10.8g3c Rust runtime blocker summary.
+- Fixture: support-present cases for first-draft miss, one-token accept,
+  two-token accept, suffix full/replay accept, verifier failure, prefix1
+  commit, rollback, sequential fallback, EOS, and cache/KVC continuation; or
+  the support-absent blocker fixture from M10.8g4a.
+- Comparator: accepted stream, checkpoint/frontier state, logits/top-id,
+  `mtp_n_raw`, cache/KVC accounting, model/support identity, and explicit
+  blocker output when support is absent.
+- Acceptance: support-present runs compare current C and Rust exactly; support
+  absent records a final blocker without passing as MTP-off or MTP-enabled
+  parity.
+- Drift policy: stream state, model/support identity, and blocker output are
+  exact; timings and probe logs are normalized.
+- Review gate: ask Claude to review final closure semantics.
+- Validation needed: B300 support comparator or blocker comparator with negative
+  tests, server/runtime parity checks, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, unified parity report, and
+  non-interactive Claude review with no blockers.
+- Owner path: M10.8g final comparator or blocker closure, `.memory/status.md`.
 
 ### M10.9: Runtime Graph End-To-End And Benchmark Closure
 

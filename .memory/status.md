@@ -3,9 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g4 B300 Support-Model End-To-End Comparator
-- Last validated source before the active item: M10.8g3c B300 Missing-Support
-  Runtime Smoke.
+- Active item: M10.8g4a B300 Support-Artifact Branch Decision
+- Last validated source before the active item: M10.8g4 split into M10.8g4a
+  and M10.8g4b.
+- Earlier M10.8g4 split into M10.8g4a and M10.8g4b.
+- M10.8g4 B300 Support-Model End-To-End Comparator is split into M10.8g4a and
+  M10.8g4b before implementation.
 - Earlier M10.8g3c B300 Missing-Support Runtime Smoke.
 - Earlier M10.8g3b Runtime Target-Stream No-Drift Comparator.
 - Earlier M10.8g3a Rust Runtime MTP Guard Contract And Static Wiring.
@@ -70,6 +73,16 @@
 
 ## Last Evidence
 
+- M10.8g4 split before implementation into M10.8g4a B300 support-artifact
+  branch decision and M10.8g4b final support comparator or explicit blocker
+  closure, so the currently missing support-model path stays separate from
+  MTP-enabled parity claims.
+- M10.8g4 split validation passed the live B300 support-artifact probe with
+  `/workspace/ds4/ds4flash.gguf`, absent `/workspace/ds4/missing-mtp.gguf`, and
+  empty `mtp_candidates=`, plus `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 69 passed, 43
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8g3c adds `ds4-parity/compare_mtp_runtime_missing_support.py`,
   `ds4-parity/baselines/graph/m10.8g3c/rust-b300-missing-support-runtime.json`,
   README instructions, unified report wiring, and an exact B300 rerun hook. The
