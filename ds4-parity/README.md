@@ -1318,6 +1318,37 @@ support-artifact search, exit code, empty stdout, current-C matching stderr,
 blocked-before-stream visibility, zero checkpoint mutation, and no cache/KVC
 visibility.
 
+Check the M10.8g4a B300 support-artifact branch decision:
+
+```sh
+python3 ds4-parity/compare_mtp_support_branch.py
+python3 ds4-parity/compare_mtp_support_branch.py --negative-test
+```
+
+Refresh the live B300 branch decision:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4 && \
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; \
+  python3 ds4-parity/compare_mtp_support_branch.py \
+  --live --workdir /workspace/ds4 \
+  --write-summary /tmp/ds4-m108g4a-support-branch-decision.json \
+  --negative-test' && \
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp \
+  ds4-rust-port-b300:/tmp/ds4-m108g4a-support-branch-decision.json \
+  ds4-parity/baselines/graph/m10.8g4a/support-branch-decision.json
+```
+
+The branch decision links the M10.8g1 stream blocker and M10.8g3c Rust runtime
+blocker to the current B300 support-artifact search. With an empty candidate
+list it selects `support_absent_blocker_closure` for M10.8g4b and forbids
+reporting the result as either MTP-off success or MTP-enabled parity.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

@@ -5517,6 +5517,21 @@ restore boundary.
   tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
   --check`, unified parity report, and non-interactive Claude review with no
   blockers.
+- Evidence: added `ds4-parity/compare_mtp_support_branch.py`,
+  `ds4-parity/baselines/graph/m10.8g4a/support-branch-decision.json`, README
+  instructions, unified report wiring, and an exact B300 rerun hook. The branch
+  decision links the M10.8g1 stream blocker and M10.8g3c Rust runtime blocker
+  to the current B300 support-artifact search.
+- Evidence: live B300 branch capture passed with 48 checks and 6 negative
+  mutations, recording `/workspace/ds4/ds4flash.gguf` at 86,720,111,488 bytes,
+  absent `/workspace/ds4/missing-mtp.gguf`, empty `mtp_candidates=`, selected
+  branch `support_absent_blocker_closure`, next stage `M10.8g4b`, and a claim
+  policy forbidding `MTP-off pass` and `MTP-enabled parity`. Local validation
+  passed Python syntax, the comparator with 48 checks and 6 negative mutations,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 70
+  passed, 44 skipped, and 0 failed. Non-interactive Claude review returned
+  `NO BLOCKERS`.
 
 ##### M10.8g4b: B300 End-To-End Blocker Or Support Comparator Closure
 

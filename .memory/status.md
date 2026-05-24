@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g4a B300 Support-Artifact Branch Decision
-- Last validated source before the active item: M10.8g4 split into M10.8g4a
-  and M10.8g4b.
+- Active item: M10.8g4b B300 End-To-End Blocker Or Support Comparator Closure
+- Last validated source before the active item: M10.8g4a B300 Support-Artifact
+  Branch Decision.
+- Earlier M10.8g4a B300 Support-Artifact Branch Decision.
 - Earlier M10.8g4 split into M10.8g4a and M10.8g4b.
 - M10.8g4 B300 Support-Model End-To-End Comparator is split into M10.8g4a and
   M10.8g4b before implementation.
@@ -73,6 +74,21 @@
 
 ## Last Evidence
 
+- M10.8g4a adds `ds4-parity/compare_mtp_support_branch.py`,
+  `ds4-parity/baselines/graph/m10.8g4a/support-branch-decision.json`, README
+  instructions, unified report wiring, and an exact B300 rerun hook. The branch
+  decision links the M10.8g1 stream blocker and M10.8g3c Rust runtime blocker
+  to the current B300 support-artifact search.
+- M10.8g4a live B300 branch capture passed with 48 checks and 6 negative
+  mutations, recording `/workspace/ds4/ds4flash.gguf` at 86,720,111,488 bytes,
+  absent `/workspace/ds4/missing-mtp.gguf`, empty `mtp_candidates=`, selected
+  branch `support_absent_blocker_closure`, next stage `M10.8g4b`, and a claim
+  policy forbidding `MTP-off pass` and `MTP-enabled parity`. Local validation
+  passed Python syntax, `python3 ds4-parity/compare_mtp_support_branch.py
+  --negative-test` with 48 checks and 6 negative mutations, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 70 passed, 44
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8g4 split before implementation into M10.8g4a B300 support-artifact
   branch decision and M10.8g4b final support comparator or explicit blocker
   closure, so the currently missing support-model path stays separate from

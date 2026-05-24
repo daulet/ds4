@@ -17,8 +17,8 @@ The report has two jobs:
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
   M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
   M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, M10.8a, M10.8b, M10.8c,
-  M10.8d, M10.8e, M10.8f, M10.8g1, M10.8g2, M10.8g3a, M10.8g3b, and
-  M10.8g3c.
+  M10.8d, M10.8e, M10.8f, M10.8g1, M10.8g2, M10.8g3a, M10.8g3b,
+  M10.8g3c, and M10.8g4a.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -604,6 +604,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.8g4a B300 MTP support branch decision",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_mtp_support_branch.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -1087,6 +1095,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "artifact is absent"
             ),
             rerun_command=b300_mtp_missing_support_runtime_command(),
+        ),
+        ReportItem(
+            name="M10.8g4a B300 MTP support branch decision rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "MTP-enabled stream parity is blocked until a B300 MTP support "
+                "GGUF is present; this rerun refreshes the branch decision "
+                "that selects the final support comparator or explicit blocker"
+            ),
+            rerun_command=b300_mtp_support_branch_decision_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -2178,6 +2197,37 @@ def b300_mtp_missing_support_runtime_command() -> str:
             "cp",
             f"{KUBE_POD}:{summary}",
             "ds4-parity/baselines/graph/m10.8g3c/rust-b300-missing-support-runtime.json",
+        ]
+    )
+    return f"{source_refresh} && {smoke} && {copy_back}"
+
+
+def b300_mtp_support_branch_decision_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    summary = "/tmp/ds4-m108g4a-support-branch-decision.json"
+    smoke = b300_exec(
+        "python3 ds4-parity/compare_mtp_support_branch.py "
+        f"--live --workdir {B300_WORKDIR} "
+        f"--write-summary {summary} --negative-test"
+    )
+    copy_back = shell_join(
+        prefix
+        + [
+            "cp",
+            f"{KUBE_POD}:{summary}",
+            "ds4-parity/baselines/graph/m10.8g4a/support-branch-decision.json",
         ]
     )
     return f"{source_refresh} && {smoke} && {copy_back}"

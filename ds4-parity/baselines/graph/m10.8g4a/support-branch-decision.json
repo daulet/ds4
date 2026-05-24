@@ -1,0 +1,41 @@
+{
+  "schema": "ds4.mtp_support_branch_decision.v1",
+  "source": "b300-mtp-support-artifact-branch-decision",
+  "milestone": "M10.8g4a",
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4"
+  },
+  "inputs": {
+    "stream_contract": "ds4-parity/baselines/graph/m10.8g1/mtp-stream-parity-contract.json",
+    "runtime_missing_support_summary": "ds4-parity/baselines/graph/m10.8g3c/rust-b300-missing-support-runtime.json"
+  },
+  "support_artifacts": {
+    "base_model_path": "/workspace/ds4/ds4flash.gguf",
+    "base_model_exists": true,
+    "base_model_bytes": 86720111488,
+    "expected_mtp_path": "/workspace/ds4/missing-mtp.gguf",
+    "expected_mtp_path_exists": false,
+    "candidate_globs": [
+      "*mtp*.gguf",
+      "*draft*.gguf"
+    ],
+    "candidate_max_depth": 3,
+    "mtp_candidates": [],
+    "candidate_count": 0,
+    "candidate_search_stdout": "mtp_candidates=\n",
+    "availability": "blocked_missing_mtp_model"
+  },
+  "selected_branch": "support_absent_blocker_closure",
+  "next_stage": "M10.8g4b",
+  "claim_policy": {
+    "mtp_enabled_parity": "blocked_until_support_gguf_exists",
+    "allowed_closure": "explicit_support_artifact_blocker",
+    "must_not_report_as": [
+      "MTP-off pass",
+      "MTP-enabled parity"
+    ]
+  }
+}
