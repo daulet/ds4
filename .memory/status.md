@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate
-- Last validated source before the active item: M10.9d B300 Long-Context
-  Rust Runtime Gate.
+- Active item: M10.9f Benchmark Comparator And Milestone 10 Closure
+- Last validated source before the active item: M10.9e Tool-Call Quality And
+  Server Replay Rust Runtime Gate.
+- Earlier M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate.
 - Earlier M10.9d B300 Long-Context Rust Runtime Gate.
 - Earlier M10.9c B300 Official-Vector Rust Runtime Gate.
 - Earlier M10.9b Rust Runtime Graph Route Switch And Preflight.
@@ -81,6 +82,29 @@
 
 ## Last Evidence
 
+- M10.9e extends `ds4-parity/run_tool_call_quality.py` into a self-contained
+  Rust graph tool/server artifact comparator, wires it into the unified report
+  and README, transitions `ds4-server-runtime-rs --runtime-graph graph` to run
+  on CUDA/Metal while still rejecting CPU, refreshes the route-preflight
+  artifact for that server-specific graph behavior, and records
+  `ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json` from the B300
+  pod. The artifact records route `graph`, backend `cuda`, q2-imatrix model
+  hash
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`,
+  current-C `./ds4_test --tool-call-quality` stdout/stderr, raw Rust
+  request/response/trace/log blobs for fast and exact quality cases, HTTP 200,
+  finish `tool_calls`, tool `list_files`, arguments `{"path":"."}`, and
+  trace/cache ledger markers.
+- M10.9e validation passed the live B300 Rust server runtime tool-call capture
+  with 167 checks and 8 negative mutations; `python3
+  ds4-parity/run_tool_call_quality.py --negative-test`; `python3
+  ds4-parity/check_runtime_graph_route_preflight.py --negative-test`; `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test`; Python
+  syntax checks; `cargo test -p ds4-engine --bin ds4-server-runtime-rs`;
+  `cargo test --workspace`; `python3 ds4-parity/run_server_parity_report.py`;
+  `cargo fmt --all -- --check`; `git diff --check`; and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles`. Non-interactive
+  Claude review returned `NO BLOCKERS`.
 - M10.9d adds the Rust `ds4-runtime-long-context-rs` capture binary, adds
   `ds4-parity/run_runtime_graph_long_context.py`, wires the comparator into the
   unified report and README, and records
@@ -134,9 +158,11 @@
   `ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json`.
   The route-preflight artifact covers target-stream, disabled-route,
   invalid-selector, CUDA/non-CUDA unsupported graph-route, missing-model, and
-  server KVC preflight cases. Unsupported graph selection exits 99 before
-  model open, stream output, checkpoint/cache mutation, or server KVC directory
-  creation; target-stream and `off` keep the existing missing-model behavior.
+  server KVC preflight cases. Non-server unsupported graph selection exits 99
+  before model open, stream output, or checkpoint/cache mutation. Server CUDA
+  graph selection now reaches the missing-model path without stream output or
+  server KVC directory creation; target-stream and `off` keep the existing
+  missing-model behavior.
 - M10.9b validation passed Python syntax checks, `python3
   ds4-parity/check_runtime_graph_route_preflight.py --negative-test` with 274
   checks and 8 negative mutations, `python3

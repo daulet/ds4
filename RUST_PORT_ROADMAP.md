@@ -5816,6 +5816,21 @@ restore boundary.
   report, comparator negative tests, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, unified parity report, and non-interactive
   Claude review with no blockers.
+- Evidence: extended `ds4-parity/run_tool_call_quality.py` into a
+  self-contained Rust graph tool/server artifact comparator, wired it into the
+  unified report and README, and captured
+  `ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json` on B300. The
+  artifact records route `graph`, backend `cuda`, exact q2-imatrix model hash,
+  current-C `./ds4_test --tool-call-quality` stdout/stderr, raw Rust
+  request/response/trace/log blobs for fast and exact quality cases, HTTP 200,
+  finish `tool_calls`, tool `list_files`, arguments `{"path":"."}`, and
+  trace/cache ledger markers.
+- Validation evidence: live B300 Rust server runtime tool-call capture passed
+  with 167 checks and 8 negative mutations. Local comparator, route preflight,
+  closure matrix, Rust server-runtime tests, Python syntax checks, workspace
+  tests, server parity report, formatter check, diff check, unified parity
+  report, and non-interactive Claude review passed. Exact command evidence is
+  recorded in `.memory/status.md`.
 
 ##### M10.9f: Benchmark Comparator And Milestone 10 Closure
 

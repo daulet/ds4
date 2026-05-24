@@ -268,6 +268,41 @@ on B300: route `graph`, backend `cuda`, q2-imatrix model hash, long prompt
 hash, context length, deterministic generation settings, cache/KVC accounting,
 fact-recall output, no target-stream fallback marker, and retained raw logs.
 
+Validate the M10.9e Runtime graph tool/server gate:
+
+```sh
+python3 ds4-parity/run_tool_call_quality.py
+python3 ds4-parity/run_tool_call_quality.py --negative-test
+```
+
+Refresh the live B300 Rust runtime tool/server summary:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; CUDA_ARCH=native make ds4_test; \
+  CUDA_ARCH=native cargo build -p ds4-engine --bin ds4-server-runtime-rs; \
+  CUDA_ARCH=native python3 ds4-parity/run_tool_call_quality.py \
+    --server-bin target/debug/ds4-server-runtime-rs \
+    --model /workspace/ds4/ds4flash.gguf --backend cuda \
+    --runtime-graph graph --out-dir /tmp/ds4-m109e-tool-call-quality \
+    --ready-timeout 360 --write-summary /tmp/ds4-m109e-tool-server.json \
+    --negative-test'
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m109e-tool-server.json \
+  ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json
+```
+
+The M10.9e comparator checks the Rust `ds4-server-runtime-rs` graph-route
+tool-call quality run against current-C `./ds4_test --tool-call-quality` and
+M9 server/runtime replay contracts: route `graph`, backend `cuda`, q2-imatrix
+model hash, HTTP 200, `tool_calls`, `list_files`, `{"path":"."}`, trace
+cache ledger markers, no target-stream fallback marker, and retained raw
+request/response/header/trace/stdout/stderr artifacts.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

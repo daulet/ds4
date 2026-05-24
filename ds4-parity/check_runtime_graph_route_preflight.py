@@ -185,7 +185,7 @@ CASES = [
         1,
     ),
     CaseSpec(
-        "server_graph_unsupported_with_cache",
+        "server_graph_missing_model_with_cache",
         "ds4-server-runtime-rs",
         [
             "--runtime-graph",
@@ -201,9 +201,9 @@ CASES = [
             SERVER_CACHE_DIR,
         ],
         "graph",
-        "unsupported_graph_route",
+        "graph_route_missing_model",
         "cuda",
-        UNSUPPORTED_CODE,
+        1,
         SERVER_CACHE_DIR,
     ),
     CaseSpec(
@@ -341,7 +341,7 @@ def build_summary(workdir: Path, candidate_dir: Path, do_build: bool) -> dict[st
         "acceptance": {
             "graph_route_selection": "explicit",
             "default_behavior": "target-stream route unchanged",
-            "unsupported_route": "fails before model open, stream output, or cache directory creation",
+            "unsupported_route": "non-server graph routes fail before model open; server graph reaches model open without stream output or cache directory creation",
             "claim_boundary": "no model-backed Rust graph parity claim",
         },
     }
@@ -483,7 +483,7 @@ def validate_acceptance(report: Report, value: Any) -> None:
     report.check(value.get("default_behavior") == "target-stream route unchanged", "default acceptance drift")
     report.check(
         value.get("unsupported_route")
-        == "fails before model open, stream output, or cache directory creation",
+        == "non-server graph routes fail before model open; server graph reaches model open without stream output or cache directory creation",
         "unsupported acceptance drift",
     )
     report.check(value.get("claim_boundary") == "no model-backed Rust graph parity claim", "claim boundary drift")
@@ -510,8 +510,9 @@ def validate_static_wiring(report: Report) -> None:
     report.check('"off" | "disabled"' in text["engine"], "disabled alias missing")
     report.check("runtime_graph_route: CliRuntimeGraphRoute" in text["cli_parse"], "CLI parse route field missing")
     report.check('"--runtime-graph" | "--runtime-graph-route"' in text["cli_parse"], "CLI parse route option missing")
-    for key in ["one_shot", "interactive", "direct_interactive", "server"]:
+    for key in ["one_shot", "interactive", "direct_interactive"]:
         report.check(".fail_closed(" in text[key], f"{key} fail-closed call missing")
+    report.check("requires cuda or metal backend" in text["server"], "server graph backend guard missing")
     report.check("runtime_graph_route: RuntimeGraphRoute" in text["server"], "server route config missing")
     report.check("check_runtime_graph_route_preflight.py" in text["run_report"], "unified report entry missing")
     report.check("M10.9b Runtime graph route preflight" in text["run_report"], "unified report label missing")
@@ -552,12 +553,12 @@ def run_negative_tests(summary: dict[str, Any]) -> Report:
         lambda data: case(data, "cli_one_shot_graph_unsupported").update({"exit_code": 0}),
     )
     expect_failure(
-        "graph attempted model open",
-        lambda data: case(data, "server_graph_unsupported_with_cache").update({"model_open_attempted": True}),
+        "server graph missing model open",
+        lambda data: case(data, "server_graph_missing_model_with_cache").update({"model_open_attempted": False}),
     )
     expect_failure(
         "cache dir created",
-        lambda data: case(data, "server_graph_unsupported_with_cache").update({"cache_dir_created": True}),
+        lambda data: case(data, "server_graph_missing_model_with_cache").update({"cache_dir_created": True}),
     )
     expect_failure(
         "target missing model skipped",

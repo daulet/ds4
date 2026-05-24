@@ -18,8 +18,8 @@ The report has two jobs:
   M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
   M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, M10.8a, M10.8b, M10.8c,
   M10.8d, M10.8e, M10.8f, M10.8g1, M10.8g2, M10.8g3a, M10.8g3b,
-  M10.8g3c, M10.8g4a, M10.8g4b, M10.9a, M10.9b, M10.9c, and
-  M10.9d.
+  M10.8g3c, M10.8g4a, M10.8g4b, M10.9a, M10.9b, M10.9c, M10.9d, and
+  M10.9e.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -653,6 +653,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.9e Runtime graph tool/server gate",
+                [
+                    sys.executable,
+                    "ds4-parity/run_tool_call_quality.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -1191,6 +1199,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "pass/fail evidence, and raw Rust stdout/stderr capture"
             ),
             rerun_command=b300_runtime_graph_long_context_command(),
+        ),
+        ReportItem(
+            name="M10.9e B300 Rust runtime tool/server rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Rust runtime tool/server comparison requires the B300 pod, "
+                "the q2-imatrix GGUF, CUDA linkage, current-C tool-call "
+                "quality evidence, raw Rust responses, traces, and logs"
+            ),
+            rerun_command=b300_runtime_graph_tool_server_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -2424,6 +2443,42 @@ def b300_runtime_graph_long_context_command() -> str:
             "cp",
             f"{KUBE_POD}:{summary}",
             "ds4-parity/baselines/graph/m10.9d/runtime-long-context.json",
+        ]
+    )
+    return f"{source_refresh} && {smoke} && {copy_back}"
+
+
+def b300_runtime_graph_tool_server_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    summary = "/tmp/ds4-m109e-tool-server.json"
+    smoke = b300_exec(
+        "CUDA_ARCH=native make ds4_test && "
+        "CUDA_ARCH=native cargo build -p ds4-engine --bin ds4-server-runtime-rs && "
+        "CUDA_ARCH=native python3 ds4-parity/run_tool_call_quality.py "
+        "--server-bin target/debug/ds4-server-runtime-rs "
+        f"--model {B300_MODEL} "
+        "--backend cuda --runtime-graph graph "
+        "--out-dir /tmp/ds4-m109e-tool-call-quality "
+        f"--write-summary {summary} --ready-timeout 360 --negative-test"
+    )
+    copy_back = shell_join(
+        prefix
+        + [
+            "cp",
+            f"{KUBE_POD}:{summary}",
+            "ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json",
         ]
     )
     return f"{source_refresh} && {smoke} && {copy_back}"

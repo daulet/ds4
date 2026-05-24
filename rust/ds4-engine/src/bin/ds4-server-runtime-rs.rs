@@ -1,7 +1,8 @@
 use ds4_engine::{
     context_memory_estimate, Backend, Engine, EngineOptions, KvDiskCache, KvDiskCacheLoad,
     KvDiskCacheOptions, KvDiskCacheTrailerHooks, RuntimeGraphRoute, ServerCacheProbe,
-    ServerGenerationOptions, ServerSession, ThinkMode, RUNTIME_GRAPH_ROUTE_VALID_VALUES,
+    ServerGenerationOptions, ServerSession, ThinkMode, RUNTIME_GRAPH_ROUTE_UNSUPPORTED_CODE,
+    RUNTIME_GRAPH_ROUTE_VALID_VALUES,
 };
 use ds4_gguf::kv_policy::{
     write_tool_map_trailer, KvOptions, KvPolicyConfig, ToolMapEntry, DEFAULT_MB as KV_DEFAULT_MB,
@@ -189,14 +190,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         Ok(None) => return Ok(0),
         Err(exit) => return Ok(write_exit(exit)?),
     };
-    if let Some(exit) = config
-        .runtime_graph_route
-        .fail_closed("ds4-server-runtime-rs")
-    {
+    if config.runtime_graph_route == RuntimeGraphRoute::Graph && config.backend == Backend::Cpu {
         return Ok(write_exit(CliExit {
-            code: exit.code,
+            code: RUNTIME_GRAPH_ROUTE_UNSUPPORTED_CODE,
             stdout: String::new(),
-            stderr: exit.stderr,
+            stderr: "ds4-server-runtime-rs: --runtime-graph graph requires cuda or metal backend\n"
+                .to_string(),
         })?);
     }
 

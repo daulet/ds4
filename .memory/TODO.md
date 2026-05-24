@@ -6416,9 +6416,10 @@
   `ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json` for
   exact target-stream, disabled-route, invalid-selector, CUDA/non-CUDA
   unsupported graph-route, missing-model, and server KVC preflight outcomes.
-  Unsupported graph selection exits 99 before model open, stream output,
-  checkpoint/cache mutation, or server KVC directory creation; target-stream
-  and `off` keep the existing missing-model behavior.
+  Non-server unsupported graph selection exits 99 before model open, stream
+  output, or checkpoint/cache mutation. Server CUDA graph selection now reaches
+  the missing-model path without stream output or server KVC directory
+  creation; target-stream and `off` keep the existing missing-model behavior.
 - Validation: `python3 ds4-parity/check_runtime_graph_route_preflight.py
   --negative-test` passed with 274 checks and 8 negative mutations, `python3
   ds4-parity/check_runtime_graph_closure_matrix.py --negative-test` remained
@@ -6508,7 +6509,7 @@
 
 #### M10.9e: Tool-Call Quality And Server Replay Rust Runtime Gate
 
-- Status: active
+- Status: complete
 - Goal: prove Rust graph runtime preserves tool-call quality and server/cache
   request behavior on B300.
 - Oracle: current-C `./ds4_test --tool-call-quality`, M9 server/runtime replay,
@@ -6525,16 +6526,27 @@
   ledger markers, and fallback state are exact; request IDs and timings are
   normalized.
 - Review gate: ask Claude to review tool/server runtime gate coverage.
-- Validation needed: live B300 tool-call quality run, server/runtime parity
-  report, comparator negative tests, `cargo test --workspace`, `cargo fmt --all
-  -- --check`, `git diff --check`, unified parity report, and non-interactive
-  Claude review with no blockers.
+- Evidence: extended `ds4-parity/run_tool_call_quality.py` into a
+  self-contained Rust graph tool/server artifact comparator, wired it into the
+  unified report and README, and captured
+  `ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json` from the B300
+  pod. The artifact records route `graph`, backend `cuda`, q2-imatrix model
+  hash, current-C `./ds4_test --tool-call-quality` stdout/stderr, raw Rust
+  request/response/trace/log blobs for fast and exact quality cases, HTTP 200,
+  finish `tool_calls`, tool `list_files`, arguments `{"path":"."}`, and
+  trace/cache ledger markers.
+- Validation: live B300 Rust server runtime tool-call capture passed with 167
+  checks and 8 negative mutations. Local comparator, route preflight, closure
+  matrix, Rust server-runtime tests, Python syntax checks, workspace tests,
+  server parity report, formatter check, diff check, unified parity report, and
+  non-interactive Claude review passed. Exact command evidence is recorded in
+  `.memory/status.md`.
 - Owner path: tool-call quality runner, server/runtime replay artifacts,
   `.memory/status.md`.
 
 #### M10.9f: Benchmark Comparator And Milestone 10 Closure
 
-- Status: pending
+- Status: active
 - Goal: compare Rust graph runtime benchmark CSVs against the M0.6 same-B300
   current-C benchmark baseline and close Milestone 10.
 - Oracle: M0.6 `ds4-bench` short/long CSV baseline, M10.9c through M10.9e

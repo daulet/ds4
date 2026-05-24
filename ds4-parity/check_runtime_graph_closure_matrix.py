@@ -78,13 +78,14 @@ def m10_9e_rerun() -> str:
         "tar -xf - -C /workspace/ds4 && "
         "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 "
         "-n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; "
+        "CUDA_ARCH=native make ds4_test && "
         "CUDA_ARCH=native cargo build -p ds4-engine --bin ds4-server-runtime-rs && "
         "CUDA_ARCH=native python3 ds4-parity/run_tool_call_quality.py "
         "--server-bin target/debug/ds4-server-runtime-rs "
         "--model /workspace/ds4/ds4flash.gguf --backend cuda "
-        "--out-dir /tmp/ds4-m109e-tool-call-quality --ready-timeout 360 && "
-        "cp /tmp/ds4-m109e-tool-call-quality/summary.json "
-        "/tmp/ds4-m109e-tool-server.json' && "
+        "--runtime-graph graph "
+        "--out-dir /tmp/ds4-m109e-tool-call-quality --ready-timeout 360 "
+        "--write-summary /tmp/ds4-m109e-tool-server.json --negative-test' && "
         "kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 "
         "-n default cp ds4-rust-port-b300:/tmp/ds4-m109e-tool-server.json "
         "ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json"
@@ -469,9 +470,10 @@ def validate_static_wiring(report: Report) -> None:
         or "Active item: M10.9c B300 Official-Vector Rust Runtime Gate" in texts["status"]
         or "Active item: M10.9d B300 Long-Context Rust Runtime Gate" in texts["status"]
         or "Active item: M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate" in texts["status"]
+        or "Active item: M10.9f Benchmark Comparator And Milestone 10 Closure" in texts["status"]
     )
     report.check(status_has_m10_9a, "status M10.9a missing")
-    report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c/M10.9d/M10.9e missing")
+    report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c/M10.9d/M10.9e/M10.9f missing")
     report.check("check_runtime_graph_closure_matrix.py --negative-test" in texts["readme"], "README matrix command missing")
     report.check("M10.9a Runtime graph closure matrix" in texts["report"], "unified report M10.9a missing")
     report.check("M10.9a B300 runtime graph fixture-readiness rerun" in texts["report"], "B300 fixture-readiness rerun missing")
