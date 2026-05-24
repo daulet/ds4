@@ -1,0 +1,77 @@
+{
+  "schema": "ds4.rust_mtp_missing_support_runtime_smoke.v1",
+  "source": "rust-b300-mtp-missing-support-runtime-smoke",
+  "milestone": "M10.8g3c",
+  "guard_case": "b300_missing_mtp_support_runtime_blocker",
+  "stream_case": "b300_missing_mtp_support_model",
+  "current_c_baseline": "ds4-parity/baselines/cli/m8.12b/current-c.json:mtp_missing_model",
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4"
+  },
+  "support_artifacts": {
+    "base_model_path": "/workspace/ds4/ds4flash.gguf",
+    "base_model_exists": true,
+    "base_model_bytes": 86720111488,
+    "expected_mtp_path": "/workspace/ds4/missing-mtp.gguf",
+    "expected_mtp_path_exists": false,
+    "candidate_globs": [
+      "*mtp*.gguf",
+      "*draft*.gguf"
+    ],
+    "candidate_max_depth": 3,
+    "mtp_candidates": [],
+    "candidate_count": 0,
+    "candidate_search_stdout": "mtp_candidates=\n",
+    "availability": "blocked_missing_mtp_model"
+  },
+  "runtime": {
+    "binary": "target/debug/ds4-cli-one-shot-rs",
+    "argv": [
+      "--cuda",
+      "-m",
+      "/workspace/ds4/ds4flash.gguf",
+      "--mtp",
+      "/workspace/ds4/missing-mtp.gguf",
+      "--mtp-draft",
+      "2",
+      "--mtp-margin",
+      "3",
+      "--ctx",
+      "128",
+      "--tokens",
+      "1",
+      "--temp",
+      "0",
+      "--nothink",
+      "-p",
+      "Answer with one short noun: glacier."
+    ],
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "stdout": {
+      "base64": "",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stderr": {
+      "bytes": 198,
+      "sha256": "826268e476a14b68cf733c113b9a8517c9c3209988de7dbb3bbd98e7f64f444a",
+      "text": "ds4: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)\nds4: cannot open model '/workspace/ds4/missing-mtp.gguf': No such file or directory\n"
+    },
+    "stderr_anchors": [
+      "backend=cuda",
+      "ds4: cannot open model '/workspace/ds4/missing-mtp.gguf': No such file or directory"
+    ],
+    "target_stream_visibility": "blocked_before_stream",
+    "accepted_stream_delta": "blocked_before_stream",
+    "checkpoint_delta": "0",
+    "logits_source": "none",
+    "mtp_n_raw_keep": 0,
+    "cache_kvc_visibility": "none",
+    "fallback": "blocked_missing_mtp_model",
+    "error": "blocked_missing_mtp_model"
+  }
+}

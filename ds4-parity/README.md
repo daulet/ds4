@@ -1283,6 +1283,41 @@ MTP-off, the Rust server runtime replay still matches the M0.5 current-C
 content and cache/KVC accounting, and the B300 rerun hooks for Rust one-shot
 and server runtime replay remain documented.
 
+Check the M10.8g3c B300 missing-support runtime smoke:
+
+```sh
+python3 ds4-parity/compare_mtp_runtime_missing_support.py
+python3 ds4-parity/compare_mtp_runtime_missing_support.py --negative-test
+```
+
+Refresh the live B300 summary:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4 && \
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; \
+  export PATH=/tmp/cargo/bin:$PATH CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup; \
+  CUDA_ARCH=native cargo build -p ds4-engine --bin ds4-cli-one-shot-rs && \
+  CUDA_ARCH=native python3 ds4-parity/compare_mtp_runtime_missing_support.py \
+  --live --workdir /workspace/ds4 \
+  --candidate-binary target/debug/ds4-cli-one-shot-rs \
+  --write-summary /tmp/ds4-m108g3c-missing-support-runtime.json \
+  --negative-test' && \
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp \
+  ds4-rust-port-b300:/tmp/ds4-m108g3c-missing-support-runtime.json \
+  ds4-parity/baselines/graph/m10.8g3c/rust-b300-missing-support-runtime.json
+```
+
+The comparator pins the Rust runtime missing-MTP path to the M10.8g3a
+missing-support guard row and the M10.8g1 stream blocker. It checks the B300
+support-artifact search, exit code, empty stdout, current-C matching stderr,
+blocked-before-stream visibility, zero checkpoint mutation, and no cache/KVC
+visibility.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

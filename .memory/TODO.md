@@ -6122,7 +6122,7 @@
 
 #### M10.8g3c: B300 Missing-Support Runtime Smoke
 
-- Status: active
+- Status: done
 - Goal: run the missing-support runtime path on B300 and keep the support-model
   absence explicit without claiming MTP-enabled parity.
 - Oracle: M10.8g3a missing-support guard row, B300 support-artifact search, and
@@ -6137,16 +6137,30 @@
 - Drift policy: blocker text and candidate search output are exact; pod names,
   request IDs, and timing are normalized.
 - Review gate: ask Claude to review live missing-support smoke scope.
-- Validation needed: live B300 missing-support smoke, comparator with negative
-  tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all --
-  --check`, `git diff --check`, unified parity report, and non-interactive
-  Claude review with no blockers.
+- Evidence: added `ds4-parity/compare_mtp_runtime_missing_support.py`,
+  `ds4-parity/baselines/graph/m10.8g3c/rust-b300-missing-support-runtime.json`,
+  README instructions, unified report wiring, and an exact B300 rerun hook. The
+  comparator ties the Rust B300 missing-MTP runtime result to the M10.8g3a
+  missing-support guard row, the M10.8g1 stream blocker, and the M8.12b
+  current-C missing-MTP runtime case.
+- Evidence: live B300 smoke passed with 118 checks and 7 negative mutations,
+  recording `/workspace/ds4/ds4flash.gguf` at 86,720,111,488 bytes, absent
+  `/workspace/ds4/missing-mtp.gguf`, empty `mtp_candidates=`, exit code 1,
+  empty stdout, stderr SHA
+  `826268e476a14b68cf733c113b9a8517c9c3209988de7dbb3bbd98e7f64f444a`,
+  `blocked_before_stream` visibility, checkpoint delta 0, and no cache/KVC
+  visibility. Local validation passed Python syntax, the comparator with 118
+  checks and 7 negative mutations, targeted Rust guard test
+  `missing_support_blocks_before_stream_mutation`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 69 passed, 43
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 - Owner path: B300 missing-support runtime smoke, comparator,
   `.memory/status.md`.
 
 ### M10.8g4: B300 Support-Model End-To-End Comparator
 
-- Status: pending
+- Status: active
 - Goal: close M10.8g with a same-B300 current-C versus Rust speculative stream
   comparator when an MTP support GGUF is available, or keep the blocker
   explicitly recorded when it is not.

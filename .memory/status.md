@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g3c B300 Missing-Support Runtime Smoke
-- Last validated source before the active item: M10.8g3b Runtime Target-Stream
-  No-Drift Comparator.
+- Active item: M10.8g4 B300 Support-Model End-To-End Comparator
+- Last validated source before the active item: M10.8g3c B300 Missing-Support
+  Runtime Smoke.
+- Earlier M10.8g3c B300 Missing-Support Runtime Smoke.
 - Earlier M10.8g3b Runtime Target-Stream No-Drift Comparator.
 - Earlier M10.8g3a Rust Runtime MTP Guard Contract And Static Wiring.
 - Earlier M10.8g3 Rust Runtime Guard And Target-Stream No-Drift Smoke split
@@ -69,6 +70,25 @@
 
 ## Last Evidence
 
+- M10.8g3c adds `ds4-parity/compare_mtp_runtime_missing_support.py`,
+  `ds4-parity/baselines/graph/m10.8g3c/rust-b300-missing-support-runtime.json`,
+  README instructions, unified report wiring, and an exact B300 rerun hook. The
+  comparator ties the Rust B300 missing-MTP runtime result to the M10.8g3a
+  missing-support guard row, the M10.8g1 stream blocker, and the M8.12b
+  current-C missing-MTP runtime case.
+- M10.8g3c live B300 smoke passed with 118 checks and 7 negative mutations,
+  recording `/workspace/ds4/ds4flash.gguf` at 86,720,111,488 bytes, absent
+  `/workspace/ds4/missing-mtp.gguf`, empty `mtp_candidates=`, exit code 1,
+  empty stdout, stderr SHA
+  `826268e476a14b68cf733c113b9a8517c9c3209988de7dbb3bbd98e7f64f444a`,
+  `blocked_before_stream` visibility, checkpoint delta 0, and no cache/KVC
+  visibility. Local validation passed Python syntax, `python3
+  ds4-parity/compare_mtp_runtime_missing_support.py --negative-test` with 118
+  checks and 7 negative mutations, targeted Rust guard test
+  `missing_support_blocks_before_stream_mutation`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 69 passed, 43
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8g3b adds `ds4-parity/compare_mtp_runtime_no_drift.py` and wires it into
   `ds4-parity/run_parity_report.py` and `ds4-parity/README.md`. The comparator
   ties the M10.8g3a disabled runtime guard rows to the M8.12a current-C
