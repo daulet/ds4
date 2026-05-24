@@ -3,9 +3,9 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.6d Rust Resumed-Suffix Prefill Execution
-- Last validated source before the active item: M10.6c Rust Cold
-  Chunked-Prefill Execution.
+- Active item: M10.7 Rust Graph Session State And Payload Parity
+- Last validated source before the active item: M10.6d Rust Resumed-Suffix
+  Prefill Execution.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
@@ -3601,3 +3601,32 @@
   used the zero-prefix compressor prefill path; the final Rust path restricts
   the aligned replay branch to Ratio4 and keeps continued non-Ratio4 chunks on
   per-token compressor updates.
+- M10.6d extends the current-C prefill oracle helper and Rust
+  `ds4-prefill-whole-short` candidate to resumed-prefix execution. The covered
+  routes are a 512-token exact-prefix cache hit, a 512-to-514 short suffix that
+  falls below `metal_graph_resume_prefill_min_tokens` and decodes token by
+  token, and a 1537-to-2337 resumed suffix with chunk starts/sizes
+  `(1537,511)` and `(2048,289)`.
+- M10.6d adds `ds4-parity/compare_prefill_resumed.py`, which validates static
+  structure, live current-C oracle parity, route decisions, resume threshold,
+  decode-token count, resumed chunk boundaries, checkpoint length, final output
+  rows, raw ring rows/spans, compressed/index counters, output digests, and
+  sampled logits for cache-hit, decode-suffix, and resumed-chunked fixtures.
+- M10.6d B300 validation used pod `ds4-rust-port-b300` in `hou2-prod1` with
+  `/workspace/ds4/ds4flash.gguf` and `DS4_CUDA_MOE_NO_ATOMIC_DOWN=1`;
+  current-C oracle vs Rust candidate comparator passed 425 checks for the
+  cache-hit fixture, 425 checks for the short decode-suffix fixture, and 425
+  checks for the resumed-chunked fixture.
+- M10.6d local validation passed static resumed comparator 27 checks, negative
+  tests rejected 6 mutations, whole-prefill negative tests rejected 15
+  mutations, chunked-prefill negative tests rejected 5 mutations, unified
+  parity report with local oracles skipped reported 47 passed, 36 skipped, and
+  0 failed, `arch -arm64 make ds4-prefill-whole-short-oracle-dump`, `cargo
+  check -p ds4-gpu --bin ds4-prefill-whole-short`, full `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `python3 -m py_compile
+  ds4-parity/compare_prefill_resumed.py ds4-parity/run_parity_report.py`, and
+  `git diff --check`.
+- M10.6d non-interactive Claude review returned `NO BLOCKERS`. The review
+  questioned resumed chunk `output_row` handling for mid-block suffixes; the
+  final code documents that chunked prefill writes each chunk into dense local
+  batch rows while absolute token positions drive cache/raw-ring addressing.

@@ -4994,25 +4994,41 @@
 
 ### M10.6d: Rust Resumed-Suffix Prefill Execution
 
-- Status: pending
+- Status: done
 - Goal: execute checkpoint extension through Rust, choosing decode for short
   suffixes and chunked prefill for longer suffixes.
 - Oracle: C session checkpoint path around
   `metal_graph_resume_prefill_min_tokens` and
   `metal_graph_prefill_chunked_range`.
-- Fixture: exact-prefix cache hit, short suffix below threshold, and
-  boundary-crossing resumed suffix from a nonzero start.
-- Comparator: Rust-vs-C route decision, progress points, final logits, cache
-  checkpoint length, raw ring rows, and compressed counters.
+- Fixture: `long_memory_archive` exact-prefix cache hit at 512 tokens, short
+  512-to-514 decode suffix below the default resume-prefill threshold, and
+  boundary-crossing `long_memory_archive_1537_to_2337` resumed suffix with
+  chunks `(1537,511)` and `(2048,289)`.
+- Comparator: Rust-vs-C route decision, resume threshold, extension chunk
+  starts/sizes, decode-token count, final logits, checkpoint length, raw ring
+  rows, and compressed counters.
 - Acceptance: Rust resumed suffix behavior matches C for cache hit, decode
   fallback, and chunked extension cases.
 - Drift policy: checkpoint-prefix matching, suffix threshold, chunk alignment,
   and cache state are exact; progress timestamps are normalized.
 - Review gate: ask Claude to review resume-prefix and cache-frontier handling.
-- Validation needed: targeted B300 comparator, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
-  review with no blockers.
-- Owner path: Rust graph prefill modules, B300 comparator,
+- Validation passed: B300 `ds4-rust-port-b300` current-C oracle vs Rust
+  candidate comparator passed 425 checks for the cache-hit fixture, 425 checks
+  for the short decode-suffix fixture, and 425 checks for the resumed-chunked
+  fixture with `DS4_CUDA_MOE_NO_ATOMIC_DOWN=1`; local static comparator passed
+  27 checks; negative tests rejected 6 resumed-prefill mutations, 5
+  chunked-prefill mutations, and 15 whole-prefill mutations; unified parity
+  report with local oracles skipped reported 47 passed, 36 skipped, and 0
+  failed; `arch -arm64 make ds4-prefill-whole-short-oracle-dump`; `cargo
+  check -p ds4-gpu --bin ds4-prefill-whole-short`; full `cargo test
+  --workspace`; `cargo fmt --all -- --check`; `python3 -m py_compile
+  ds4-parity/compare_prefill_resumed.py ds4-parity/run_parity_report.py`;
+  `git diff --check`; and non-interactive Claude review with `NO BLOCKERS`.
+- Owner path: `ds4.c`, `ds4.h`,
+  `ds4_prefill_whole_short_oracle_dump.c`,
+  `rust/ds4-gpu/src/bin/ds4-prefill-whole-short.rs`,
+  `ds4-parity/compare_prefill_resumed.py`,
+  `ds4-parity/run_parity_report.py`, `ds4-parity/README.md`,
   `.memory/status.md`.
 
 ### M10.7: Rust Graph Session State And Payload Parity

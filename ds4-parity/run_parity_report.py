@@ -14,7 +14,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
-  M10.5c4d3, M10.5c4d4, M10.6a, and M10.6b.
+	  M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, and M10.6d.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -416,6 +416,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.6d Rust resumed-prefill comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_prefill_resumed.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -809,6 +817,18 @@ def b300_skip_items() -> list[ReportItem]:
                 "backend linkage"
             ),
             rerun_command=b300_prefill_chunked_oracle_command(),
+        ),
+        ReportItem(
+            name="M10.6d B300 resumed-prefill oracle rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Resumed-prefill current-C oracle comparison requires the "
+                "B300 pod, the real q2-imatrix GGUF, the long prompt fixture, "
+                "the deterministic CUDA MoE mode, and feature-gated Rust CUDA "
+                "backend linkage"
+            ),
+            rerun_command=b300_prefill_resumed_oracle_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1636,6 +1656,61 @@ def b300_prefill_chunked_oracle_command() -> str:
         "python3 ds4-parity/compare_prefill_chunked.py "
         "--oracle /tmp/ds4-m106c-prefill-chunked-long-oracle.json "
         "--candidate /tmp/ds4-m106c-prefill-chunked-long-rust.json"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_prefill_resumed_oracle_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    prompt = "tests/test-vectors/prompts/long_memory_archive.txt"
+    smoke = b300_exec(
+        "export DS4_CUDA_MOE_NO_ATOMIC_DOWN=1 && "
+        "make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native && "
+        f"./ds4-prefill-whole-short-oracle-dump --model {B300_MODEL} "
+        f"--prompt {prompt} --limit-tokens 512 --resume-prefix-tokens 512 --backend cuda "
+        "--output /tmp/ds4-m106d-prefill-resumed-cache-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-prefill-whole-short --quiet -- "
+        f"--model {B300_MODEL} --prompt {prompt} --limit-tokens 512 "
+        "--resume-prefix-tokens 512 "
+        "> /tmp/ds4-m106d-prefill-resumed-cache-rust.json && "
+        "python3 ds4-parity/compare_prefill_resumed.py "
+        "--oracle /tmp/ds4-m106d-prefill-resumed-cache-oracle.json "
+        "--candidate /tmp/ds4-m106d-prefill-resumed-cache-rust.json && "
+        f"./ds4-prefill-whole-short-oracle-dump --model {B300_MODEL} "
+        f"--prompt {prompt} --limit-tokens 514 --resume-prefix-tokens 512 --backend cuda "
+        "--output /tmp/ds4-m106d-prefill-resumed-decode-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-prefill-whole-short --quiet -- "
+        f"--model {B300_MODEL} --prompt {prompt} --limit-tokens 514 "
+        "--resume-prefix-tokens 512 "
+        "> /tmp/ds4-m106d-prefill-resumed-decode-rust.json && "
+        "python3 ds4-parity/compare_prefill_resumed.py "
+        "--oracle /tmp/ds4-m106d-prefill-resumed-decode-oracle.json "
+        "--candidate /tmp/ds4-m106d-prefill-resumed-decode-rust.json && "
+        f"./ds4-prefill-whole-short-oracle-dump --model {B300_MODEL} "
+        f"--prompt {prompt} --limit-tokens 2337 --resume-prefix-tokens 1537 --backend cuda "
+        "--output /tmp/ds4-m106d-prefill-resumed-chunked-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-prefill-whole-short --quiet -- "
+        f"--model {B300_MODEL} --prompt {prompt} --limit-tokens 2337 "
+        "--resume-prefix-tokens 1537 "
+        "> /tmp/ds4-m106d-prefill-resumed-chunked-rust.json && "
+        "python3 ds4-parity/compare_prefill_resumed.py "
+        "--oracle /tmp/ds4-m106d-prefill-resumed-chunked-oracle.json "
+        "--candidate /tmp/ds4-m106d-prefill-resumed-chunked-rust.json"
     )
     return f"{source_refresh} && {smoke}"
 

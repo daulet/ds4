@@ -25528,6 +25528,7 @@ int ds4_dump_prefill_whole_short_oracle_json(
         const char *model_path,
         const char *prompt_path,
         int limit_tokens,
+        int resume_prefix_tokens,
         ds4_backend backend,
         FILE *fp) {
     if (!model_path || !prompt_path || !fp) return 1;
@@ -25546,6 +25547,7 @@ int ds4_dump_prefill_whole_short_oracle_json(
 
     const int ctx_size = 32768;
     token_vec prompt = {0};
+    token_vec resume_prefix = {0};
     ds4_session *s = NULL;
     char err[256];
     bool ok = graph_checkpoint_prompt_tokens(e, prompt_path, &prompt);
@@ -25565,30 +25567,111 @@ int ds4_dump_prefill_whole_short_oracle_json(
         }
         prompt.len = limit_tokens;
     }
+    if (resume_prefix_tokens < 0 || resume_prefix_tokens > prompt.len) {
+        fprintf(stderr,
+                "ds4: resume prefix token count %d is outside prompt token count %d\n",
+                resume_prefix_tokens,
+                prompt.len);
+        ok = false;
+        goto done;
+    }
     if (ds4_session_create(&s, e, ctx_size) != 0 || !s) {
         ok = false;
         goto done;
     }
+    const bool resumed = resume_prefix_tokens > 0;
+    if (resumed) {
+        graph_checkpoint_copy_prefix(&prompt, resume_prefix_tokens, &resume_prefix);
+        ok = ds4_session_sync(s, &resume_prefix, err, sizeof(err)) == 0;
+        if (!ok) {
+            fprintf(stderr, "ds4: resumed-prefill prefix sync failed: %s\n", err);
+            goto done;
+        }
+    }
     ok = ds4_session_sync(s, &prompt, err, sizeof(err)) == 0;
     if (!ok) {
-        fprintf(stderr, "ds4: whole-prefill short prefill failed: %s\n", err);
+        fprintf(stderr, "ds4: prefill oracle sync failed: %s\n", err);
         goto done;
     }
-    const char *boundary =
-        prompt.len > (int)s->prefill_cap ? "metal_graph_prefill_chunked_range" : "metal_graph_prefill_layer_major";
+    const int suffix_tokens = resumed ? prompt.len - resume_prefix_tokens : prompt.len;
+    const uint32_t resume_min = metal_graph_resume_prefill_min_tokens();
+    const char *boundary;
+    if (resumed && suffix_tokens == 0) {
+        boundary = "cache_hit";
+    } else if (resumed && (uint32_t)suffix_tokens < resume_min) {
+        boundary = "decode_suffix";
+    } else if (resumed) {
+        boundary = "metal_graph_prefill_chunked_range";
+    } else {
+        boundary = prompt.len > (int)s->prefill_cap ? "metal_graph_prefill_chunked_range" : "metal_graph_prefill_layer_major";
+    }
     const bool chunked = strcmp(boundary, "metal_graph_prefill_chunked_range") == 0;
+    const bool decode_suffix = strcmp(boundary, "decode_suffix") == 0;
+    const bool cache_hit = strcmp(boundary, "cache_hit") == 0;
 
     const uint32_t prompt_tokens = (uint32_t)prompt.len;
+    const uint32_t prefix_tokens = (uint32_t)resume_prefix_tokens;
+    const uint32_t suffix_u32 = prompt_tokens - prefix_tokens;
     const uint32_t output_abs_pos = prompt_tokens - 1u;
-    const uint32_t output_row = chunked && s->graph.prefill_cap != 0
-        ? output_abs_pos % s->graph.prefill_cap
-        : output_abs_pos;
+    uint32_t output_row = output_abs_pos;
+    if (decode_suffix) {
+        output_row = 0;
+    } else if (resumed && chunked && suffix_u32 != 0u) {
+        const uint32_t start = prefix_tokens;
+        const uint32_t end = prompt_tokens;
+        uint32_t pos0 = start;
+        uint32_t last_chunk = 0;
+        uint32_t chunk_cap = s->graph.prefill_cap;
+        if (chunk_cap > s->graph.raw_cap) chunk_cap = s->graph.raw_cap;
+        while (pos0 < end) {
+            const uint32_t remaining = end - pos0;
+            uint32_t local_cap = chunk_cap;
+            if (s->graph.prefill_cap != 0) {
+                const uint32_t mod = pos0 % s->graph.prefill_cap;
+                if (mod != 0) {
+                    const uint32_t to_boundary = s->graph.prefill_cap - mod;
+                    if (to_boundary < local_cap) local_cap = to_boundary;
+                }
+            }
+            last_chunk = remaining < local_cap ? remaining : local_cap;
+            pos0 += last_chunk;
+        }
+        /* Chunked prefill writes the final batch densely from row zero;
+         * absolute token position only affects cache/raw-ring addressing. */
+        output_row = last_chunk ? last_chunk - 1u : 0u;
+    } else if (chunked && s->graph.prefill_cap != 0) {
+        output_row = output_abs_pos % s->graph.prefill_cap;
+    }
     const uint32_t raw_row = output_abs_pos % s->graph.raw_cap;
     const uint32_t n_raw = metal_graph_raw_span_for_batch(&s->graph, output_abs_pos, 1);
     const uint32_t raw_start = metal_graph_raw_start_for_span(&s->graph, output_abs_pos, n_raw);
-    const uint32_t chunk_count = chunked && s->graph.prefill_cap != 0
-        ? (prompt_tokens + s->graph.prefill_cap - 1u) / s->graph.prefill_cap
-        : 1u;
+    uint32_t chunk_count = 1u;
+    if (resumed) {
+        chunk_count = 0u;
+        if (chunked && suffix_u32 != 0u) {
+            uint32_t pos0 = prefix_tokens;
+            const uint32_t end = prompt_tokens;
+            uint32_t chunk_cap = s->graph.prefill_cap;
+            if (chunk_cap > s->graph.raw_cap) chunk_cap = s->graph.raw_cap;
+            while (pos0 < end && chunk_count < 64u) {
+                const uint32_t remaining = end - pos0;
+                uint32_t local_cap = chunk_cap;
+                if (s->graph.prefill_cap != 0) {
+                    const uint32_t mod = pos0 % s->graph.prefill_cap;
+                    if (mod != 0) {
+                        const uint32_t to_boundary = s->graph.prefill_cap - mod;
+                        if (to_boundary < local_cap) local_cap = to_boundary;
+                    }
+                }
+                const uint32_t n_chunk = remaining < local_cap ? remaining : local_cap;
+                if (n_chunk == 0) break;
+                chunk_count++;
+                pos0 += n_chunk;
+            }
+        }
+    } else if (chunked && s->graph.prefill_cap != 0) {
+        chunk_count = (prompt_tokens + s->graph.prefill_cap - 1u) / s->graph.prefill_cap;
+    }
     const uint32_t layer2 = 2;
     const uint32_t layer5 = 5;
     const uint32_t layer42 = 42;
@@ -25619,8 +25702,10 @@ int ds4_dump_prefill_whole_short_oracle_json(
     float *layer42_attn_state_kv = xmalloc((size_t)layer42_attn_state_dim * sizeof(layer42_attn_state_kv[0]));
     float *layer42_index_state_kv = xmalloc((size_t)layer42_index_state_dim * sizeof(layer42_index_state_kv[0]));
 
-    ok = ds4_gpu_tensor_read(s->graph.batch_cur_hc,
-                             (uint64_t)output_row * hc_dim * sizeof(float),
+    ds4_gpu_tensor *final_hc_tensor = decode_suffix ? s->graph.cur_hc : s->graph.batch_cur_hc;
+    const uint64_t final_hc_offset = decode_suffix ? 0 : (uint64_t)output_row * hc_dim * sizeof(float);
+    ok = ds4_gpu_tensor_read(final_hc_tensor,
+                             final_hc_offset,
                              after_layer42_hc,
                              hc_dim * sizeof(float)) != 0 &&
          ds4_gpu_tensor_read(s->graph.output_pre, 0, output_pre, (uint64_t)DS4_N_HC * sizeof(float)) != 0 &&
@@ -25674,7 +25759,16 @@ int ds4_dump_prefill_whole_short_oracle_json(
     }
 
     fputs("{\n", fp);
-    if (chunked) {
+    if (resumed) {
+        fputs("  \"schema\": \"ds4.prefill_resumed_oracle.v1\",\n", fp);
+        if (cache_hit) {
+            fputs("  \"case\": \"long_memory_archive_exact_prefix_cache_hit\",\n", fp);
+        } else if (decode_suffix) {
+            fputs("  \"case\": \"long_memory_archive_short_resume_decode_suffix\",\n", fp);
+        } else {
+            fputs("  \"case\": \"long_memory_archive_resume_chunked_boundary\",\n", fp);
+        }
+    } else if (chunked) {
         fputs("  \"schema\": \"ds4.prefill_chunked_oracle.v1\",\n", fp);
         if (prompt_tokens == 2052u) {
             fputs("  \"case\": \"long_memory_archive_2052_chunked_prefill\",\n", fp);
@@ -25693,7 +25787,61 @@ int ds4_dump_prefill_whole_short_oracle_json(
     fputs("    \"bound_layers\": 43\n", fp);
     fputs("  },\n", fp);
     fputs("  \"operation\": {\n", fp);
-    if (chunked) {
+    if (resumed) {
+        fputs("    \"name\": \"current_c_gpu_resumed_prefill\",\n", fp);
+        if (cache_hit) {
+            fputs("    \"method\": \"ds4_session_sync_prefix+ds4_session_sync_exact_prefix_cache_hit\",\n", fp);
+            fputs("    \"boundary\": \"cache_hit\",\n", fp);
+            fputs("    \"fixture\": \"long_memory_archive_prefix_512\",\n", fp);
+        } else if (decode_suffix) {
+            fputs("    \"method\": \"ds4_session_sync_prefix+metal_graph_eval_token_raw_swa_decode_suffix\",\n", fp);
+            fputs("    \"boundary\": \"decode_suffix\",\n", fp);
+            fputs("    \"fixture\": \"long_memory_archive_512_to_514\",\n", fp);
+        } else {
+            fputs("    \"method\": \"ds4_session_sync_prefix+metal_graph_prefill_chunked_range_resumed_suffix\",\n", fp);
+            fputs("    \"boundary\": \"resumed_chunked_prefill\",\n", fp);
+            fputs("    \"fixture\": \"long_memory_archive_1537_to_2337\",\n", fp);
+        }
+        fprintf(fp, "    \"prefix_tokens\": %u,\n", prefix_tokens);
+        fprintf(fp, "    \"suffix_tokens\": %u,\n", suffix_u32);
+        fprintf(fp, "    \"checkpoint_tokens_before\": %u,\n", prefix_tokens);
+        fprintf(fp, "    \"checkpoint_tokens_after\": %u,\n", prompt_tokens);
+        fprintf(fp, "    \"resume_min_tokens\": %u,\n", resume_min == UINT32_MAX ? 0u : resume_min);
+        fprintf(fp, "    \"decode_tokens\": %u,\n", decode_suffix ? suffix_u32 : 0u);
+        fprintf(fp, "    \"chunk_count\": %u,\n", chunk_count);
+        fputs("    \"chunks\": [", fp);
+        if (chunked && suffix_u32 != 0u) {
+            uint32_t pos0 = prefix_tokens;
+            const uint32_t end = prompt_tokens;
+            uint32_t emitted = 0;
+            uint32_t chunk_cap = s->graph.prefill_cap;
+            if (chunk_cap > s->graph.raw_cap) chunk_cap = s->graph.raw_cap;
+            while (pos0 < end && emitted < chunk_count) {
+                const uint32_t remaining = end - pos0;
+                uint32_t local_cap = chunk_cap;
+                if (s->graph.prefill_cap != 0) {
+                    const uint32_t mod = pos0 % s->graph.prefill_cap;
+                    if (mod != 0) {
+                        const uint32_t to_boundary = s->graph.prefill_cap - mod;
+                        if (to_boundary < local_cap) local_cap = to_boundary;
+                    }
+                }
+                const uint32_t n_chunk = remaining < local_cap ? remaining : local_cap;
+                if (emitted != 0) fputc(',', fp);
+                fprintf(fp,
+                        "{\"start\":%u,\"n_tokens\":%u,\"end\":%u}",
+                        pos0,
+                        n_chunk,
+                        pos0 + n_chunk);
+                emitted++;
+                pos0 += n_chunk;
+            }
+        }
+        fputs("],\n", fp);
+        fprintf(fp, "    \"prefix_prefill_layer_calls\": %u,\n", prefix_tokens ? (uint32_t)DS4_N_LAYER : 0u);
+        fprintf(fp, "    \"prefill_layer_calls\": %u,\n", chunk_count * (uint32_t)DS4_N_LAYER);
+        fprintf(fp, "    \"decode_layer_calls\": %u,\n", (decode_suffix ? suffix_u32 : 0u) * (uint32_t)DS4_N_LAYER);
+    } else if (chunked) {
         fputs("    \"name\": \"current_c_gpu_prefill_chunked\",\n", fp);
         fputs("    \"method\": \"metal_graph_prefill_chunked_range+metal_graph_encode_layer_batch_x43+final_row_output_head\",\n", fp);
         fputs("    \"boundary\": \"chunked_prefill\",\n", fp);
@@ -25721,13 +25869,15 @@ int ds4_dump_prefill_whole_short_oracle_json(
         fputs("    \"method\": \"metal_graph_prefill_layer_major+metal_graph_encode_layer_batch_x43+final_row_output_head\",\n", fp);
         fputs("    \"boundary\": \"whole_prefill\",\n", fp);
         fputs("    \"fixture\": \"short_italian_fact\",\n", fp);
+        fprintf(fp, "    \"prefix_prefill_layer_calls\": 0,\n");
+        fprintf(fp, "    \"decode_layer_calls\": 0,\n");
     }
     fprintf(fp, "    \"prompt_tokens\": %u,\n", prompt_tokens);
     fprintf(fp, "    \"output_abs_pos\": %u,\n", output_abs_pos);
     fprintf(fp, "    \"output_row\": %u,\n", output_row);
     fputs("    \"first_layer\": 0,\n", fp);
     fputs("    \"last_layer\": 42,\n", fp);
-    fputs("    \"prefill_layer_calls\": 43,\n", fp);
+    if (!resumed) fputs("    \"prefill_layer_calls\": 43,\n", fp);
     fputs("    \"dense_layers\": 2,\n", fp);
     fputs("    \"ratio4_layers\": 21,\n", fp);
     fputs("    \"ratio128_layers\": 20,\n", fp);
@@ -25808,6 +25958,7 @@ cleanup_buffers:
 
 done:
     if (s) ds4_session_free(s);
+    token_vec_free(&resume_prefix);
     token_vec_free(&prompt);
     ds4_engine_close(e);
     return ok ? 0 : 1;
@@ -25824,11 +25975,13 @@ int ds4_dump_prefill_whole_short_oracle_json(
         const char *model_path,
         const char *prompt_path,
         int limit_tokens,
+        int resume_prefix_tokens,
         ds4_backend backend,
         FILE *fp) {
     (void)model_path;
     (void)prompt_path;
     (void)limit_tokens;
+    (void)resume_prefix_tokens;
     (void)backend;
     (void)fp;
     fprintf(stderr, "ds4: whole-prefill short oracle requires a graph backend build\n");

@@ -27,6 +27,14 @@ const CHUNKED_2052_CASE: &str = "long_memory_archive_2052_chunked_prefill";
 const CHUNKED_FULL_CASE: &str = "long_memory_archive_chunked_prefill";
 const CHUNKED_2052_FIXTURE: &str = "long_memory_archive_2052";
 const CHUNKED_FULL_FIXTURE: &str = "long_memory_archive";
+const RESUMED_SCHEMA: &str = "ds4.prefill_resumed.v1";
+const RESUMED_CACHE_HIT_CASE: &str = "long_memory_archive_exact_prefix_cache_hit";
+const RESUMED_DECODE_SUFFIX_CASE: &str = "long_memory_archive_short_resume_decode_suffix";
+const RESUMED_CHUNKED_CASE: &str = "long_memory_archive_resume_chunked_boundary";
+const RESUMED_CACHE_HIT_FIXTURE: &str = "long_memory_archive_prefix_512";
+const RESUMED_DECODE_SUFFIX_FIXTURE: &str = "long_memory_archive_512_to_514";
+const RESUMED_CHUNKED_FIXTURE: &str = "long_memory_archive_1537_to_2337";
+const RESUME_PREFILL_MIN_TOKENS: u32 = 4;
 const CTX_SIZE: u32 = 32_768;
 const LAYER42: usize = 42;
 const PROT_READ: c_int = 0x1;
@@ -97,28 +105,67 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     .map_err(|err| format!("failed to set model map range: {err}"))?;
     let backend = DecodeBackend::new(model);
 
+    let resume_prefix_tokens = args.resume_prefix_tokens.unwrap_or(0);
+    if resume_prefix_tokens > prompt_tokens {
+        return Err(format!(
+            "--resume-prefix-tokens {resume_prefix_tokens} exceeds prompt token count {prompt_tokens}"
+        )
+        .into());
+    }
+    let resumed = resume_prefix_tokens != 0;
+    let suffix_tokens = prompt_tokens - resume_prefix_tokens;
+    let route = if resumed && suffix_tokens == 0 {
+        ExecutionRoute::CacheHit
+    } else if resumed && suffix_tokens < RESUME_PREFILL_MIN_TOKENS {
+        ExecutionRoute::DecodeSuffix
+    } else if resumed {
+        ExecutionRoute::ResumedChunked
+    } else {
+        ExecutionRoute::ColdPrefill
+    };
+
     let plan = GraphPlan::for_context(CTX_SIZE, CTX_SIZE, false);
-    let chunks = prefill_chunks(prompt_tokens, plan.prefill_cap)?;
-    let last_chunk = chunks.last().ok_or("empty prefill chunk plan")?;
     let raw_cap = plan.allocated_raw_cap;
     let raw_window = plan.raw_window;
+    let prefix_chunks = if resumed {
+        prefill_chunks(resume_prefix_tokens, plan.prefill_cap)?
+    } else {
+        Vec::new()
+    };
+    let chunks = match route {
+        ExecutionRoute::ColdPrefill => prefill_chunks(prompt_tokens, plan.prefill_cap)?,
+        ExecutionRoute::ResumedChunked => prefill_range_chunks(
+            resume_prefix_tokens,
+            suffix_tokens,
+            plan.prefill_cap,
+            raw_cap,
+        )?,
+        ExecutionRoute::CacheHit | ExecutionRoute::DecodeSuffix => Vec::new(),
+    };
+    let final_prefill_chunk = if route == ExecutionRoute::CacheHit {
+        prefix_chunks.last()
+    } else {
+        chunks.last()
+    };
     let output_abs_pos = prompt_tokens - 1;
-    let output_row = last_chunk.n_tokens - 1;
+    // Prefill writes each chunk into dense batch rows; resumed absolute
+    // positions only affect cache/raw-ring addressing.
+    let output_row = match route {
+        ExecutionRoute::DecodeSuffix => 0,
+        ExecutionRoute::CacheHit | ExecutionRoute::ColdPrefill | ExecutionRoute::ResumedChunked => {
+            final_prefill_chunk
+                .ok_or("prefill route has no final chunk")?
+                .n_tokens
+                - 1
+        }
+    };
     let final_raw_row = raw_row(output_abs_pos, raw_cap);
     let final_n_raw = raw_span_for_batch(raw_window, raw_cap, output_abs_pos, 1);
     let final_raw_start = raw_start_for_span(output_abs_pos, final_n_raw, raw_cap);
-    let report_case = report_case(prompt_tokens, chunks.len());
-    let report_fixture = report_fixture(prompt_tokens, chunks.len());
-    let report_schema = if chunks.len() == 1 {
-        WHOLE_SHORT_SCHEMA
-    } else {
-        CHUNKED_SCHEMA
-    };
-    let report_boundary = if chunks.len() == 1 {
-        "whole_prefill"
-    } else {
-        "chunked_prefill"
-    };
+    let report_case = report_case(route, prompt_tokens, chunks.len());
+    let report_fixture = report_fixture(route, prompt_tokens, chunks.len());
+    let report_schema = route.schema(chunks.len());
+    let report_boundary = route.boundary(chunks.len());
     let dims = Dims::new(&weights.layers[0])?;
     let mut state = DecodeState::allocate(plan, dims)?;
     let mut after_layer42_hc = Tensor::allocate(byte_len(dims.hc_dim)?)
@@ -147,47 +194,57 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|err| format!("failed to allocate layer42_index_comp_row: {err}"))?;
 
     let mut command_batch = CommandBatch::begin().map_err(|err| format!("begin failed: {err}"))?;
-    for (chunk_idx, chunk) in chunks.iter().enumerate() {
-        let start = usize::try_from(chunk.start)?;
-        let end = usize::try_from(chunk.start + chunk.n_tokens)?;
-        write_prefill_tokens(&mut state.prefill_tokens, &tokens[start..end])?;
-        backend
-            .embed_tokens_hc(
-                state.cur_hc.as_tensor_mut(),
-                state.prefill_tokens.as_tensor_ref(),
-                weights.token_embd.abs_offset,
-                N_VOCAB,
-                chunk.n_tokens,
-                N_EMBD,
-                N_HC,
-            )
-            .map_err(|err| format!("chunk{chunk_idx} embed_tokens_hc failed: {err}"))?;
-        for layer in 0..N_LAYER {
-            execute_prefill_layer(
+    if resumed {
+        execute_prefill_chunks(
+            backend,
+            &weights,
+            &tokens,
+            &prefix_chunks,
+            raw_cap,
+            raw_window,
+            &mut state,
+            dims,
+            if route == ExecutionRoute::CacheHit {
+                Some(output_row)
+            } else {
+                None
+            },
+            &mut after_layer42_hc,
+            &mut command_batch,
+        )?;
+    }
+    match route {
+        ExecutionRoute::ColdPrefill | ExecutionRoute::ResumedChunked => {
+            execute_prefill_chunks(
                 backend,
-                &weights.layers[layer],
-                layer,
-                chunk.start,
-                chunk.n_tokens,
+                &weights,
+                &tokens,
+                &chunks,
                 raw_cap,
                 raw_window,
                 &mut state,
                 dims,
+                Some(output_row),
+                &mut after_layer42_hc,
+                &mut command_batch,
             )?;
-            std::mem::swap(&mut state.cur_hc, &mut state.after_ffn_hc);
-            if chunk_idx + 1 == chunks.len() && layer == LAYER42 {
-                let hc_row_bytes = byte_len(dims.hc_dim)?;
-                after_layer42_hc
-                    .copy_from(
-                        &state.cur_hc,
-                        0,
-                        u64::from(output_row) * hc_row_bytes as u64,
-                        hc_row_bytes,
-                        &mut command_batch,
-                    )
-                    .map_err(|err| format!("after_layer42_hc copy failed: {err}"))?;
-            }
         }
+        ExecutionRoute::DecodeSuffix => {
+            execute_decode_suffix(
+                backend,
+                &weights,
+                &tokens,
+                resume_prefix_tokens,
+                prompt_tokens,
+                raw_cap,
+                raw_window,
+                &mut state,
+                dims,
+                &mut after_layer42_hc,
+                &mut command_batch,
+            )?;
+        }
+        ExecutionRoute::CacheHit => {}
     }
     encode_output_head(
         backend,
@@ -289,13 +346,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         report_case,
         report_fixture,
         report_boundary,
+        route,
         &gguf,
         &weights,
         header_bytes_read,
         mapped.size,
         plan,
+        &prefix_chunks,
         &chunks,
         prompt_tokens,
+        resume_prefix_tokens,
+        suffix_tokens,
         output_abs_pos,
         output_row,
         final_raw_row,
@@ -314,48 +375,259 @@ struct PrefillChunk {
     n_tokens: u32,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ExecutionRoute {
+    ColdPrefill,
+    CacheHit,
+    DecodeSuffix,
+    ResumedChunked,
+}
+
+impl ExecutionRoute {
+    fn schema(self, chunk_count: usize) -> &'static str {
+        match self {
+            Self::ColdPrefill if chunk_count == 1 => WHOLE_SHORT_SCHEMA,
+            Self::ColdPrefill => CHUNKED_SCHEMA,
+            Self::CacheHit | Self::DecodeSuffix | Self::ResumedChunked => RESUMED_SCHEMA,
+        }
+    }
+
+    fn boundary(self, chunk_count: usize) -> &'static str {
+        match self {
+            Self::ColdPrefill if chunk_count == 1 => "whole_prefill",
+            Self::ColdPrefill => "chunked_prefill",
+            Self::CacheHit => "cache_hit",
+            Self::DecodeSuffix => "decode_suffix",
+            Self::ResumedChunked => "resumed_chunked_prefill",
+        }
+    }
+
+    fn operation_name(self) -> &'static str {
+        match self {
+            Self::ColdPrefill => "rust_gpu_prefill",
+            Self::CacheHit | Self::DecodeSuffix | Self::ResumedChunked => {
+                "rust_gpu_resumed_prefill"
+            }
+        }
+    }
+
+    fn method(self, chunk_count: usize) -> &'static str {
+        match self {
+            Self::ColdPrefill if chunk_count == 1 => {
+                "render_chat_prompt_text+Ds4Tokenizer+chunked_embed_tokens_hc+prefill_facade_execute_layer_x43_per_chunk+final_row_output_head"
+            }
+            Self::ColdPrefill => {
+                "render_chat_prompt_text+Ds4Tokenizer+chunked_embed_tokens_hc+prefill_facade_execute_layer_x43_per_chunk+final_row_output_head"
+            }
+            Self::CacheHit => {
+                "render_chat_prompt_text+Ds4Tokenizer+prefix_prefill+exact_prefix_cache_hit"
+            }
+            Self::DecodeSuffix => {
+                "render_chat_prompt_text+Ds4Tokenizer+prefix_prefill+decode_suffix_execute_layer_x43_per_token+final_row_output_head"
+            }
+            Self::ResumedChunked => {
+                "render_chat_prompt_text+Ds4Tokenizer+prefix_prefill+resumed_chunked_prefill_execute_layer_x43_per_chunk+final_row_output_head"
+            }
+        }
+    }
+}
+
 fn prefill_chunks(
     prompt_tokens: u32,
     prefill_cap: u32,
 ) -> Result<Vec<PrefillChunk>, Box<dyn std::error::Error>> {
-    if prompt_tokens == 0 {
+    prefill_range_chunks(0, prompt_tokens, prefill_cap, prefill_cap)
+}
+
+fn prefill_range_chunks(
+    start: u32,
+    n_tokens: u32,
+    prefill_cap: u32,
+    raw_cap: u32,
+) -> Result<Vec<PrefillChunk>, Box<dyn std::error::Error>> {
+    if n_tokens == 0 {
         return Err("prefill chunk plan requires tokens".into());
     }
     if prefill_cap == 0 {
         return Err("prefill chunk plan requires nonzero prefill cap".into());
     }
+    let mut chunk_cap = prefill_cap;
+    if start != 0 && chunk_cap > raw_cap {
+        chunk_cap = raw_cap;
+    }
+    if chunk_cap == 0 {
+        return Err("prefill range chunk plan requires nonzero chunk cap".into());
+    }
     let mut chunks = Vec::new();
-    let mut pos = 0u32;
-    while pos < prompt_tokens {
-        let remaining = prompt_tokens - pos;
-        let n_tokens = remaining.min(prefill_cap);
+    let mut pos = start;
+    let end = start + n_tokens;
+    while pos < end {
+        let remaining = end - pos;
+        let mut local_cap = chunk_cap;
+        if start != 0 {
+            let mod_pos = pos % prefill_cap;
+            if mod_pos != 0 {
+                let to_boundary = prefill_cap - mod_pos;
+                if to_boundary < local_cap {
+                    local_cap = to_boundary;
+                }
+            }
+        }
+        let chunk_tokens = remaining.min(local_cap);
+        if chunk_tokens == 0 {
+            return Err("prefill range chunk plan produced an empty chunk".into());
+        }
         chunks.push(PrefillChunk {
             start: pos,
-            n_tokens,
+            n_tokens: chunk_tokens,
         });
-        pos += n_tokens;
+        pos += chunk_tokens;
     }
     Ok(chunks)
 }
 
-fn report_case(prompt_tokens: u32, n_chunks: usize) -> &'static str {
-    if n_chunks == 1 {
-        WHOLE_SHORT_CASE
-    } else if prompt_tokens == 2052 {
-        CHUNKED_2052_CASE
-    } else {
-        CHUNKED_FULL_CASE
+fn report_case(route: ExecutionRoute, prompt_tokens: u32, n_chunks: usize) -> &'static str {
+    match route {
+        ExecutionRoute::CacheHit => RESUMED_CACHE_HIT_CASE,
+        ExecutionRoute::DecodeSuffix => RESUMED_DECODE_SUFFIX_CASE,
+        ExecutionRoute::ResumedChunked => RESUMED_CHUNKED_CASE,
+        ExecutionRoute::ColdPrefill if n_chunks == 1 => WHOLE_SHORT_CASE,
+        ExecutionRoute::ColdPrefill if prompt_tokens == 2052 => CHUNKED_2052_CASE,
+        ExecutionRoute::ColdPrefill => CHUNKED_FULL_CASE,
     }
 }
 
-fn report_fixture(prompt_tokens: u32, n_chunks: usize) -> &'static str {
-    if n_chunks == 1 {
-        WHOLE_SHORT_FIXTURE
-    } else if prompt_tokens == 2052 {
-        CHUNKED_2052_FIXTURE
-    } else {
-        CHUNKED_FULL_FIXTURE
+fn report_fixture(route: ExecutionRoute, prompt_tokens: u32, n_chunks: usize) -> &'static str {
+    match route {
+        ExecutionRoute::CacheHit => RESUMED_CACHE_HIT_FIXTURE,
+        ExecutionRoute::DecodeSuffix => RESUMED_DECODE_SUFFIX_FIXTURE,
+        ExecutionRoute::ResumedChunked => RESUMED_CHUNKED_FIXTURE,
+        ExecutionRoute::ColdPrefill if n_chunks == 1 => WHOLE_SHORT_FIXTURE,
+        ExecutionRoute::ColdPrefill if prompt_tokens == 2052 => CHUNKED_2052_FIXTURE,
+        ExecutionRoute::ColdPrefill => CHUNKED_FULL_FIXTURE,
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_prefill_chunks(
+    backend: DecodeBackend<'_>,
+    weights: &Ds4Weights,
+    tokens: &[u32],
+    chunks: &[PrefillChunk],
+    raw_cap: u32,
+    raw_window: u32,
+    state: &mut DecodeState,
+    dims: Dims,
+    capture_output_row: Option<u32>,
+    after_layer42_hc: &mut Tensor,
+    command_batch: &mut CommandBatch,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (chunk_idx, chunk) in chunks.iter().enumerate() {
+        let start = usize::try_from(chunk.start)?;
+        let end = usize::try_from(chunk.start + chunk.n_tokens)?;
+        write_prefill_tokens(&mut state.prefill_tokens, &tokens[start..end])?;
+        backend
+            .embed_tokens_hc(
+                state.cur_hc.as_tensor_mut(),
+                state.prefill_tokens.as_tensor_ref(),
+                weights.token_embd.abs_offset,
+                N_VOCAB,
+                chunk.n_tokens,
+                N_EMBD,
+                N_HC,
+            )
+            .map_err(|err| format!("chunk{chunk_idx} embed_tokens_hc failed: {err}"))?;
+        for layer in 0..N_LAYER {
+            execute_prefill_layer(
+                backend,
+                &weights.layers[layer],
+                layer,
+                chunk.start,
+                chunk.n_tokens,
+                raw_cap,
+                raw_window,
+                state,
+                dims,
+            )?;
+            std::mem::swap(&mut state.cur_hc, &mut state.after_ffn_hc);
+            if chunk_idx + 1 == chunks.len() && layer == LAYER42 {
+                if let Some(output_row) = capture_output_row {
+                    let hc_row_bytes = byte_len(dims.hc_dim)?;
+                    after_layer42_hc
+                        .copy_from(
+                            &state.cur_hc,
+                            0,
+                            u64::from(output_row) * hc_row_bytes as u64,
+                            hc_row_bytes,
+                            command_batch,
+                        )
+                        .map_err(|err| format!("after_layer42_hc copy failed: {err}"))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_decode_suffix(
+    backend: DecodeBackend<'_>,
+    weights: &Ds4Weights,
+    tokens: &[u32],
+    start: u32,
+    end: u32,
+    raw_cap: u32,
+    raw_window: u32,
+    state: &mut DecodeState,
+    dims: Dims,
+    after_layer42_hc: &mut Tensor,
+    command_batch: &mut CommandBatch,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for position in start..end {
+        let token = *tokens
+            .get(usize::try_from(position)?)
+            .ok_or("decode suffix token index out of range")?;
+        let raw_row = raw_row(position, raw_cap);
+        let n_raw = raw_span_for_batch(raw_window, raw_cap, position, 1);
+        let raw_start = raw_start_for_span(position, n_raw, raw_cap);
+        backend
+            .embed_token_hc(
+                state.cur_hc.as_tensor_mut(),
+                weights.token_embd.abs_offset,
+                N_VOCAB,
+                token,
+                N_EMBD,
+                N_HC,
+            )
+            .map_err(|err| format!("position {position} embed_token_hc failed: {err}"))?;
+        for layer in 0..N_LAYER {
+            execute_layer(
+                backend,
+                &weights.layers[layer],
+                layer,
+                token,
+                position,
+                raw_cap,
+                raw_row,
+                n_raw,
+                raw_start,
+                state,
+                dims,
+            )?;
+            std::mem::swap(&mut state.cur_hc, &mut state.after_ffn_hc);
+            if layer == 3 {
+                command_batch
+                    .flush()
+                    .map_err(|err| format!("position {position} split flush failed: {err}"))?;
+            }
+            if position + 1 == end && layer == LAYER42 {
+                after_layer42_hc
+                    .copy_from(&state.cur_hc, 0, 0, byte_len(dims.hc_dim)?, command_batch)
+                    .map_err(|err| format!("after_layer42_hc copy failed: {err}"))?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2065,6 +2337,8 @@ fn execute_layer(
         .map_err(|err| format!("layer{layer} kv_fp8_store_raw failed: {err}"))?;
 
     let mut n_comp = 0u32;
+    let mut use_indexed_attention = false;
+    let mut n_selected = 0u32;
     if compressed {
         let ratio = compression.ratio();
         let coeff = compression_coeff(compression);
@@ -2249,33 +2523,139 @@ fn execute_layer(
             }
         }
         n_comp = state.layer_n_comp[layer];
-        if n_comp > N_INDEXER_TOP_K {
-            return Err(format!(
-                "indexed attention is deferred to M10.5c4d3, layer {layer} has {n_comp} compressed rows"
-            )
-            .into());
+        if compression == LayerCompression::Ratio4 && n_comp > N_INDEXER_TOP_K {
+            let indexer_q_dim = u64::from(N_INDEXER_HEAD) * u64::from(N_INDEXER_HEAD_DIM);
+            backend
+                .matmul_f16(
+                    state.batch_indexer_q.as_tensor_mut(),
+                    layer_weights
+                        .indexer_attn_q_b
+                        .as_ref()
+                        .ok_or("indexer_attn_q_b missing")?
+                        .abs_offset,
+                    dims.q_rank,
+                    indexer_q_dim,
+                    state.qr_norm.as_tensor_ref(),
+                    1,
+                )
+                .map_err(|err| format!("layer{layer} indexer q matmul_f16 failed: {err}"))?;
+            backend
+                .rope_tail(
+                    state.batch_indexer_q.as_tensor_mut(),
+                    1,
+                    N_INDEXER_HEAD,
+                    N_INDEXER_HEAD_DIM,
+                    N_ROT,
+                    position,
+                    n_ctx_orig,
+                    false,
+                    freq_base,
+                    freq_scale,
+                    ext_factor,
+                    attn_factor,
+                    ROPE_YARN_BETA_FAST,
+                    ROPE_YARN_BETA_SLOW,
+                )
+                .map_err(|err| format!("layer{layer} indexer q rope_tail failed: {err}"))?;
+            backend
+                .dsv4_indexer_qat(
+                    state.batch_indexer_q.as_tensor_mut(),
+                    N_INDEXER_HEAD,
+                    N_INDEXER_HEAD_DIM,
+                )
+                .map_err(|err| format!("layer{layer} indexer q qat failed: {err}"))?;
+            backend
+                .matmul_f16(
+                    state.batch_indexer_weights.as_tensor_mut(),
+                    layer_weights
+                        .indexer_proj
+                        .as_ref()
+                        .ok_or("indexer_proj missing")?
+                        .abs_offset,
+                    u64::from(N_EMBD),
+                    u64::from(N_INDEXER_HEAD),
+                    state.attn_norm.as_tensor_ref(),
+                    1,
+                )
+                .map_err(|err| format!("layer{layer} indexer weights matmul_f16 failed: {err}"))?;
+            let index_scale = 1.0f32 / ((N_INDEXER_HEAD_DIM * N_INDEXER_HEAD) as f32).sqrt();
+            backend
+                .indexer_score_one(
+                    state.indexer_scores.as_tensor_mut(),
+                    state.batch_indexer_q.as_tensor_ref(),
+                    state.batch_indexer_weights.as_tensor_ref(),
+                    state.layer_index_comp_cache[layer]
+                        .as_ref()
+                        .ok_or("index comp cache missing")?
+                        .as_tensor_ref(),
+                    state.layer_n_index_comp[layer],
+                    N_INDEXER_HEAD,
+                    N_INDEXER_HEAD_DIM,
+                    index_scale,
+                )
+                .map_err(|err| format!("layer{layer} indexer_score_one failed: {err}"))?;
+            backend
+                .indexer_topk(
+                    state.comp_selected.as_tensor_mut(),
+                    state.indexer_scores.as_tensor_ref(),
+                    state.layer_n_index_comp[layer],
+                    1,
+                    N_INDEXER_TOP_K,
+                )
+                .map_err(|err| format!("layer{layer} indexer_topk failed: {err}"))?;
+            n_selected = N_INDEXER_TOP_K.min(state.layer_n_index_comp[layer]);
+            use_indexed_attention = n_selected != 0;
         }
     }
 
-    backend
-        .attention_decode_heads(
-            state.heads.as_tensor_mut(),
-            layer_weights.attn_sinks.abs_offset,
-            state.q.as_tensor_ref(),
-            state.raw_cache[layer].as_tensor_ref(),
-            n_raw,
-            raw_cap,
-            raw_start,
-            state.layer_attn_comp_cache[layer]
-                .as_ref()
-                .map(|tensor| tensor.as_tensor_ref()),
-            n_comp,
-            None,
-            0,
-            N_HEAD,
-            N_HEAD_DIM,
-        )
-        .map_err(|err| format!("layer{layer} attention_decode_heads failed: {err}"))?;
+    if use_indexed_attention {
+        backend
+            .attention_indexed_mixed_batch_heads(
+                state.heads.as_tensor_mut(),
+                layer_weights.attn_sinks.abs_offset,
+                state.q.as_tensor_ref(),
+                state.raw_cache[layer].as_tensor_ref(),
+                state.layer_attn_comp_cache[layer]
+                    .as_ref()
+                    .ok_or("attn comp cache missing")?
+                    .as_tensor_ref(),
+                state.comp_selected.as_tensor_ref(),
+                1,
+                position,
+                n_raw,
+                raw_cap,
+                raw_start,
+                n_comp,
+                n_selected,
+                128,
+                compression.ratio(),
+                N_HEAD,
+                N_HEAD_DIM,
+            )
+            .map_err(|err| {
+                format!("layer{layer} attention_indexed_mixed_batch_heads failed: {err}")
+            })?;
+    } else {
+        backend
+            .attention_decode_heads(
+                state.heads.as_tensor_mut(),
+                layer_weights.attn_sinks.abs_offset,
+                state.q.as_tensor_ref(),
+                state.raw_cache[layer].as_tensor_ref(),
+                n_raw,
+                raw_cap,
+                raw_start,
+                state.layer_attn_comp_cache[layer]
+                    .as_ref()
+                    .map(|tensor| tensor.as_tensor_ref()),
+                n_comp,
+                None,
+                0,
+                N_HEAD,
+                N_HEAD_DIM,
+            )
+            .map_err(|err| format!("layer{layer} attention_decode_heads failed: {err}"))?;
+    }
     backend
         .rope_tail(
             state.heads.as_tensor_mut(),
@@ -2458,6 +2838,7 @@ struct Args {
     model: PathBuf,
     prompt: PathBuf,
     limit_tokens: Option<u32>,
+    resume_prefix_tokens: Option<u32>,
 }
 
 impl Args {
@@ -2465,6 +2846,7 @@ impl Args {
         let mut model = None;
         let mut prompt = None;
         let mut limit_tokens = None;
+        let mut resume_prefix_tokens = None;
         let mut args = std::env::args_os().skip(1);
         while let Some(arg) = args.next() {
             if arg == "--model" {
@@ -2487,22 +2869,32 @@ impl Args {
                     .parse::<u32>()
                     .map_err(|err| format!("invalid --limit-tokens: {err}"))?;
                 limit_tokens = Some(value);
+            } else if arg == "--resume-prefix-tokens" {
+                let Some(value) = args.next() else {
+                    return Err("--resume-prefix-tokens requires a count".into());
+                };
+                let value = value
+                    .to_str()
+                    .ok_or("--resume-prefix-tokens must be valid UTF-8")?
+                    .parse::<u32>()
+                    .map_err(|err| format!("invalid --resume-prefix-tokens: {err}"))?;
+                resume_prefix_tokens = Some(value);
             } else {
                 return Err(
-                    "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N]"
+                    "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N] [--resume-prefix-tokens N]"
                         .into(),
                 );
             }
         }
         let Some(model) = model else {
             return Err(
-                "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N]"
+                "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N] [--resume-prefix-tokens N]"
                     .into(),
             );
         };
         let Some(prompt) = prompt else {
             return Err(
-                "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N]"
+                "usage: ds4-prefill-whole-short --model FILE --prompt FILE [--limit-tokens N] [--resume-prefix-tokens N]"
                     .into(),
             );
         };
@@ -2510,6 +2902,7 @@ impl Args {
             model,
             prompt,
             limit_tokens,
+            resume_prefix_tokens,
         })
     }
 }
@@ -3021,13 +3414,17 @@ fn write_report(
     case: &str,
     fixture: &str,
     boundary: &str,
+    route: ExecutionRoute,
     gguf: &Gguf,
     weights: &Ds4Weights,
     header_bytes_read: u64,
     mapped_size: u64,
     plan: GraphPlan,
+    prefix_chunks: &[PrefillChunk],
     chunks: &[PrefillChunk],
     prompt_tokens: u32,
+    prefix_tokens: u32,
+    suffix_tokens: u32,
     output_abs_pos: u32,
     output_row: u32,
     raw_row: u32,
@@ -3048,13 +3445,26 @@ fn write_report(
     println!("    \"bound_layers\": {}", weights.layers.len());
     println!("  }},");
     println!("  \"operation\": {{");
-    println!("    \"name\": \"rust_gpu_prefill\",");
-    println!("    \"method\": \"render_chat_prompt_text+Ds4Tokenizer+chunked_embed_tokens_hc+prefill_facade_execute_layer_x43_per_chunk+final_row_output_head\",");
+    println!("    \"name\": \"{}\",", route.operation_name());
+    println!("    \"method\": \"{}\",", route.method(chunks.len()));
     println!("    \"command_batch\": true,");
     println!("    \"synchronized\": true,");
     println!("    \"boundary\": \"{boundary}\",");
     println!("    \"fixture\": \"{fixture}\",");
     println!("    \"prompt_tokens\": {prompt_tokens},");
+    println!("    \"prefix_tokens\": {prefix_tokens},");
+    println!("    \"suffix_tokens\": {suffix_tokens},");
+    println!("    \"checkpoint_tokens_before\": {prefix_tokens},");
+    println!("    \"checkpoint_tokens_after\": {prompt_tokens},");
+    println!("    \"resume_min_tokens\": {RESUME_PREFILL_MIN_TOKENS},");
+    println!(
+        "    \"decode_tokens\": {},",
+        if route == ExecutionRoute::DecodeSuffix {
+            suffix_tokens
+        } else {
+            0
+        }
+    );
     println!("    \"chunk_count\": {},", chunks.len());
     println!("    \"chunks\": [");
     for (idx, chunk) in chunks.iter().enumerate() {
@@ -3074,7 +3484,26 @@ fn write_report(
     println!("    \"output_row\": {output_row},");
     println!("    \"first_layer\": 0,");
     println!("    \"last_layer\": 42,");
-    println!("    \"prefill_layer_calls\": {N_LAYER},");
+    println!(
+        "    \"prefix_prefill_layer_calls\": {},",
+        prefix_chunks.len() * N_LAYER
+    );
+    println!(
+        "    \"prefill_layer_calls\": {},",
+        if route == ExecutionRoute::ColdPrefill {
+            N_LAYER
+        } else {
+            chunks.len() * N_LAYER
+        }
+    );
+    println!(
+        "    \"decode_layer_calls\": {},",
+        if route == ExecutionRoute::DecodeSuffix {
+            usize::try_from(suffix_tokens).unwrap_or(0) * N_LAYER
+        } else {
+            0
+        }
+    );
     println!("    \"dense_layers\": {},", plan.layer_counts.dense);
     println!("    \"ratio4_layers\": {},", plan.layer_counts.ratio4);
     println!("    \"ratio128_layers\": {},", plan.layer_counts.ratio128);

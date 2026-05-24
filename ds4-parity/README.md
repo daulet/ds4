@@ -813,6 +813,70 @@ The comparator checks the 2048+4 and 2048+1305 chunk schedules, absolute raw
 ring rows, per-layer compressed counters, final-row output head dimensions, and
 exact output digests/samples against the current-C chunked oracle.
 
+Compare the M10.6d Rust resumed-suffix prefill execution against the current-C
+`ds4_session_sync` oracle. On CUDA, run both sides with
+`DS4_CUDA_MOE_NO_ATOMIC_DOWN=1` for exact digest comparison:
+
+```sh
+python3 ds4-parity/compare_prefill_resumed.py
+python3 ds4-parity/compare_prefill_resumed.py --negative-test
+export DS4_CUDA_MOE_NO_ATOMIC_DOWN=1
+make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native
+./ds4-prefill-whole-short-oracle-dump --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 512 \
+  --resume-prefix-tokens 512 \
+  --backend cuda \
+  --output /tmp/ds4-m106d-prefill-resumed-cache-oracle.json
+CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend \
+  --bin ds4-prefill-whole-short --quiet -- \
+  --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 512 \
+  --resume-prefix-tokens 512 \
+  > /tmp/ds4-m106d-prefill-resumed-cache-rust.json
+python3 ds4-parity/compare_prefill_resumed.py \
+  --oracle /tmp/ds4-m106d-prefill-resumed-cache-oracle.json \
+  --candidate /tmp/ds4-m106d-prefill-resumed-cache-rust.json
+./ds4-prefill-whole-short-oracle-dump --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 514 \
+  --resume-prefix-tokens 512 \
+  --backend cuda \
+  --output /tmp/ds4-m106d-prefill-resumed-decode-oracle.json
+CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend \
+  --bin ds4-prefill-whole-short --quiet -- \
+  --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 514 \
+  --resume-prefix-tokens 512 \
+  > /tmp/ds4-m106d-prefill-resumed-decode-rust.json
+python3 ds4-parity/compare_prefill_resumed.py \
+  --oracle /tmp/ds4-m106d-prefill-resumed-decode-oracle.json \
+  --candidate /tmp/ds4-m106d-prefill-resumed-decode-rust.json
+./ds4-prefill-whole-short-oracle-dump --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 2337 \
+  --resume-prefix-tokens 1537 \
+  --backend cuda \
+  --output /tmp/ds4-m106d-prefill-resumed-chunked-oracle.json
+CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend \
+  --bin ds4-prefill-whole-short --quiet -- \
+  --model /path/to/ds4flash.gguf \
+  --prompt tests/test-vectors/prompts/long_memory_archive.txt \
+  --limit-tokens 2337 \
+  --resume-prefix-tokens 1537 \
+  > /tmp/ds4-m106d-prefill-resumed-chunked-rust.json
+python3 ds4-parity/compare_prefill_resumed.py \
+  --oracle /tmp/ds4-m106d-prefill-resumed-chunked-oracle.json \
+  --candidate /tmp/ds4-m106d-prefill-resumed-chunked-rust.json
+```
+
+The comparator checks exact-prefix cache-hit, decode-suffix, and resumed
+chunked-prefill route decisions, resume threshold handling, extension chunk
+boundaries, decode-token counts, raw ring rows, compressed counters, and exact
+output digests/samples.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
