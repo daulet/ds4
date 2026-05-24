@@ -3,9 +3,9 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.6 Rust Layer-Major Prefill And Chunking
-- Last validated source before the active item: M10.5c4d4 Rust
-  Directional-Steering Decode Coverage.
+- Active item: M10.6b Rust Whole-Prefill Short Execution
+- Last validated source before the active item: M10.6a Rust Prefill
+  Scheduling Plan.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
@@ -28,6 +28,39 @@
 
 ## Last Evidence
 
+- M10.6a splits M10.6 into `M10.6a` scheduling-plan parity, `M10.6b`
+  short whole-prefill execution, `M10.6c` cold chunked-prefill execution, and
+  `M10.6d` resumed-suffix execution so each slice has a concrete oracle,
+  comparator, and acceptance boundary.
+- M10.6a adds `rust/ds4-gpu/src/prefill_plan.rs` and
+  `ds4-prefill-plan`, which emit `ds4.prefill_plan.v1` for the current-C
+  default scheduling policy. The Rust plan mirrors default
+  `ds4_default_prefill_cap_for_prompt`, `metal_graph_prefill_layer_major`,
+  `metal_graph_prefill_chunked_range`, and
+  `metal_graph_resume_prefill_min_tokens` behavior for six fixtures covering
+  cold whole prefill, the 2048-token cap boundary, a 2052-token cold chunked
+  prompt, resumed suffix alignment from token `1537`, short resumed decode
+  fallback, and exact-prefix cache hit.
+- M10.6a adds `ds4-parity/compare_prefill_plan_rust.py`, which validates six
+  cases, six chunks, six progress points, the route, prefill cap, raw cap,
+  chunk cap, first chunk, chunk starts/sizes, final output batch row, output
+  absolute position, progress points, and layer-batch call counts. Candidate
+  JSON validation passed against `/tmp/ds4-m106a-prefill-plan.json`, and the
+  negative tests rejected 10 mutations.
+- M10.6a validation passed `cargo test -p ds4-gpu prefill_plan`, `python3 -m
+  py_compile ds4-parity/compare_prefill_plan_rust.py
+  ds4-parity/run_parity_report.py`, `python3
+  ds4-parity/compare_prefill_plan_rust.py`, `python3
+  ds4-parity/compare_prefill_plan_rust.py --negative-test`, `cargo run -p
+  ds4-gpu --bin ds4-prefill-plan --quiet >
+  /tmp/ds4-m106a-prefill-plan.json`, `python3 -m json.tool
+  /tmp/ds4-m106a-prefill-plan.json`, `python3
+  ds4-parity/compare_prefill_plan_rust.py --candidate
+  /tmp/ds4-m106a-prefill-plan.json`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 44 passed, 33
+  skipped, and 0 failed, `cargo fmt --all -- --check`, `git diff --check`,
+  touched-file NUL scan, `cargo test --workspace`, and non-interactive Claude
+  review with `NO BLOCKERS`.
 - M10.5c4d4 adds `ds4-directional-steering-oracle-dump` and
   `ds4_dump_directional_steering_decode_oracle_json`, which emit
   `ds4.directional_steering_decode_oracle.v1` for B300 `ds4flash.gguf`, token

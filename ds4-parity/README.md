@@ -730,6 +730,22 @@ python3 ds4-parity/compare_decode_directional_steering.py \
   --candidate /tmp/ds4-c4d4-directional-steering-rust.json
 ```
 
+Compare the M10.6a Rust prefill scheduling plan before executing prefill GPU
+kernels:
+
+```sh
+python3 ds4-parity/compare_prefill_plan_rust.py
+python3 ds4-parity/compare_prefill_plan_rust.py --negative-test
+cargo run -p ds4-gpu --bin ds4-prefill-plan --quiet > /tmp/ds4-m106a-prefill-plan.json
+python3 ds4-parity/compare_prefill_plan_rust.py \
+  --candidate /tmp/ds4-m106a-prefill-plan.json
+```
+
+The comparator checks that Rust mirrors the current-C default prefill cap,
+whole-vs-chunked routing, resumed-suffix threshold, absolute prefill-cap chunk
+alignment, final output batch row, progress points, and layer-batch call counts
+for the M10.6a fixtures.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

@@ -4895,27 +4895,104 @@
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 
-### M10.6: Rust Layer-Major Prefill And Chunking
+### M10.6a: Rust Prefill Scheduling Plan
+
+- Status: done
+- Goal: move the C prefill routing and chunk-boundary plan into Rust without
+  executing GPU kernels.
+- Oracle: C `ds4_default_prefill_cap_for_prompt`,
+  `metal_graph_prefill_layer_major`, `metal_graph_prefill_chunked_range`, and
+  `metal_graph_resume_prefill_min_tokens`.
+- Fixture: cold 22-token whole prefill, cold 2048-token boundary whole prefill,
+  cold 2052-token chunked prefill, resumed suffix from token `1537` for `800`
+  tokens, short resumed suffix below the prefill threshold, and exact-prefix
+  cache hit.
+- Comparator: `ds4-parity/compare_prefill_plan_rust.py --negative-test` plus
+  `ds4-prefill-plan` JSON candidate validation.
+- Acceptance: Rust plan matches current-C route, prefill cap, raw cap, chunk
+  starts/sizes, first chunk, final output batch row, progress points, and
+  layer-batch call count for every fixture.
+- Drift policy: env override behavior is out of scope for this default-plan
+  slice; default cap/chunk/resume constants and boundary math are exact.
+- Review gate: ask Claude to review chunk boundary and resume-prefix handling.
+- Validation gate: comparator and negative tests, `cargo test -p ds4-gpu
+  prefill_plan`, `cargo run -p ds4-gpu --bin ds4-prefill-plan`, `cargo fmt
+  --all -- --check`, `git diff --check`, and non-interactive Claude review
+  with no blockers.
+- Validation passed: six static cases, six chunks, and six progress points
+  matched the embedded oracle; JSON candidate validation passed; negative
+  tests rejected 10 mutations; `run_parity_report.py --skip-local-oracles`
+  reported 44 passed, 33 skipped, and 0 failed; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, touched-file NUL scan,
+  and non-interactive Claude review passed.
+- Owner path: `rust/ds4-gpu/src/prefill_plan.rs`, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M10.6b: Rust Whole-Prefill Short Execution
 
 - Status: active
-- Goal: move layer-major and chunked prefill scheduling into Rust while keeping
-  backend operations FFI-backed.
-- Oracle: M10.4 prefill checkpoints plus C
-  `metal_graph_prefill_layer_major` and `metal_graph_prefill_chunked_range`.
-- Fixture: short whole-prefill prompt, boundary-crossing resume suffix, 2k+
-  chunked prompt, and long-context prompt slice.
-- Comparator: Rust-vs-C prefill tensor checkpoints, final logits, raw ring
-  physical/logical row mapping, compressed row counters, and progress/chunk
-  boundary traces.
-- Acceptance: Rust prefill matches C for whole, chunked, and resumed suffix
-  paths, including output-row selection and cache state after the final chunk.
-- Drift policy: chunk boundaries, raw ring mapping, compressed counters, and
-  selected logits are exact within M10.4 tolerances; progress timestamps are
-  normalized.
-- Review gate: ask Claude to review chunk boundary and resume-prefix handling.
-- Validation needed: targeted prefill comparator on B300, `cargo test
-  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
-  non-interactive Claude review with no blockers.
+- Goal: execute a short whole-prompt layer-major prefill through the Rust safe
+  facade.
+- Oracle: C `metal_graph_prefill_layer_major` on B300 for a short prompt that
+  fits in one prefill cap.
+- Fixture: deterministic short prompt tokens under the default prefill cap.
+- Comparator: Rust-vs-C prefill tensor checkpoints and final logits for the
+  short whole-prefill path.
+- Acceptance: Rust whole-prefill matches current-C checkpoints, final logits,
+  output row, and raw/compressed counters within M10.4 tolerances.
+- Drift policy: prompt tokens, output row, raw/cache counters, and selected
+  tensor digest set are exact.
+- Review gate: ask Claude to review layer-major command ordering and output-row
+  selection.
+- Validation needed: targeted B300 comparator, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+- Owner path: Rust graph prefill modules, B300 comparator,
+  `.memory/status.md`.
+
+### M10.6c: Rust Cold Chunked-Prefill Execution
+
+- Status: pending
+- Goal: execute cold chunked prefill through Rust for prompts larger than the
+  default prefill cap.
+- Oracle: C `metal_graph_prefill_chunked` and
+  `metal_graph_prefill_chunked_range` with `start=0`.
+- Fixture: a 2052-token cap-crossing prompt and a longer context slice that
+  emits multiple chunk boundaries.
+- Comparator: Rust-vs-C chunk boundary trace, progress points, selected
+  per-chunk logits, final logits, raw ring rows, and compressed counters.
+- Acceptance: Rust cold chunked prefill matches current-C chunk schedule and
+  final cache/logit state.
+- Drift policy: chunk starts/sizes, final batch row, progress positions, raw
+  ring mapping, compressed counters, and selected logits are exact within M10.4
+  tolerances.
+- Review gate: ask Claude to review chunk loop state and final-row handling.
+- Validation needed: targeted B300 comparator, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
+- Owner path: Rust graph prefill modules, B300 comparator,
+  `.memory/status.md`.
+
+### M10.6d: Rust Resumed-Suffix Prefill Execution
+
+- Status: pending
+- Goal: execute checkpoint extension through Rust, choosing decode for short
+  suffixes and chunked prefill for longer suffixes.
+- Oracle: C session checkpoint path around
+  `metal_graph_resume_prefill_min_tokens` and
+  `metal_graph_prefill_chunked_range`.
+- Fixture: exact-prefix cache hit, short suffix below threshold, and
+  boundary-crossing resumed suffix from a nonzero start.
+- Comparator: Rust-vs-C route decision, progress points, final logits, cache
+  checkpoint length, raw ring rows, and compressed counters.
+- Acceptance: Rust resumed suffix behavior matches C for cache hit, decode
+  fallback, and chunked extension cases.
+- Drift policy: checkpoint-prefix matching, suffix threshold, chunk alignment,
+  and cache state are exact; progress timestamps are normalized.
+- Review gate: ask Claude to review resume-prefix and cache-frontier handling.
+- Validation needed: targeted B300 comparator, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, and non-interactive Claude
+  review with no blockers.
 - Owner path: Rust graph prefill modules, B300 comparator,
   `.memory/status.md`.
 

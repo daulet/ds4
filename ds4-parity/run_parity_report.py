@@ -14,7 +14,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
-  M10.5c4d3, and M10.5c4d4.
+  M10.5c4d3, M10.5c4d4, and M10.6a.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -389,6 +389,14 @@ class ParityReport:
                 [
                     sys.executable,
                     "ds4-parity/compare_decode_directional_steering.py",
+                    "--negative-test",
+                ],
+            ),
+            (
+                "M10.6a Rust prefill scheduling plan comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_prefill_plan_rust.py",
                     "--negative-test",
                 ],
             ),
