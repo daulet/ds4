@@ -1,0 +1,326 @@
+{
+  "schema": "ds4.mtp_stream_parity_contract.v1",
+  "milestone": "M10.8g1",
+  "source": "current-c-model-free-mtp-stream-parity-contract",
+  "source_files": [
+    "ds4.c",
+    "ds4-parity/baselines/graph/m10.8a/mtp-state-machine-contract.json"
+  ],
+  "b300": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "base_model_path": "/workspace/ds4/ds4flash.gguf",
+    "expected_mtp_path": "/workspace/ds4/missing-mtp.gguf",
+    "candidate_globs": [
+      "*mtp*.gguf",
+      "*draft*.gguf"
+    ],
+    "candidate_max_depth": 3,
+    "candidate_count": 0,
+    "checked_utc": "2026-05-24",
+    "availability": "blocked_missing_mtp_model"
+  },
+  "support_artifacts": {
+    "mtp": {
+      "path": "/workspace/ds4/missing-mtp.gguf",
+      "available": false,
+      "candidate_count": 0,
+      "blocker": "no MTP GGUF is present in the B300 workspace"
+    }
+  },
+  "stream_invariants": {
+    "target_stream_owner": "target model logits define every visible token",
+    "first_token_commit": "ds4_session_eval commits first_token before speculative suffix work",
+    "unavailable_mtp": "disabled or unavailable MTP returns the first-token accept only",
+    "first_draft_guard": "drafts[0] must match target first-token logits before suffix verification",
+    "verified_prefix_only": "only target-verified draft prefixes may be appended to the visible stream",
+    "rollback": "misses and verifier failures restore checkpoint/frontier state before fallback or error",
+    "mtp_raw_frontier": "DS4_MTP_KEEP_ACCEPTED hides future MTP raw rows by counter rewind",
+    "cache_kvc_visibility": "cache and KVC accounting observe only visible target checkpoint state",
+    "support_blocker": "B300 MTP-enabled stream parity remains blocked until a support GGUF exists"
+  },
+  "function_anchors": [
+    {
+      "name": "ds4_session_eval_internal",
+      "required_snippets": [
+        "static int ds4_session_eval_internal(ds4_session *s, int token, bool probe_mtp,",
+        "probe_mtp && e->mtp_ready && s->mtp_logits",
+        "metal_graph_eval_token_raw_swa(&s->graph, &e->model, &e->weights,",
+        "metal_graph_eval_mtp_draft(&s->graph,"
+      ]
+    },
+    {
+      "name": "ds4_session_eval_speculative_argmax",
+      "required_snippets": [
+        "int ds4_session_eval_speculative_argmax(ds4_session *s, int first_token,",
+        "if (ds4_session_eval(s, first_token, err, errlen) != 0) return -1;",
+        "accepted[n_accept++] = first_token;",
+        "if (!e->mtp_ready || !s->mtp_draft_valid || e->mtp_draft_tokens <= 1) return n_accept;"
+      ]
+    },
+    {
+      "name": "first_draft_guard",
+      "required_snippets": [
+        "if (sample_argmax(s->logits, DS4_N_VOCAB) != drafts[0]) {",
+        "return n_accept;"
+      ]
+    },
+    {
+      "name": "mtp_keep_accepted",
+      "required_snippets": [
+        "#define DS4_MTP_KEEP_ACCEPTED(n_) do {",
+        "uint32_t keep_ = mtp_base_raw + (uint32_t)(n_);",
+        "s->graph.mtp_n_raw = keep_;",
+        "DS4_MTP_KEEP_ACCEPTED(verified);"
+      ]
+    },
+    {
+      "name": "exact_decode2_stream_paths",
+      "required_snippets": [
+        "const bool use_decode2_exact =",
+        "metal_graph_verify_decode2_exact(&s->graph,",
+        "spec_frontier_commit_prefix1(s);",
+        "(void)spec_frontier_restore(&frontier, s);"
+      ]
+    },
+    {
+      "name": "suffix_stream_paths",
+      "required_snippets": [
+        "metal_graph_verify_suffix_tops(&s->graph,",
+        "int commit_drafts = 1;",
+        "metal_graph_read_spec_logits_row(&s->graph,",
+        "ok = have_frontier && spec_frontier_restore(&frontier, s);"
+      ]
+    },
+    {
+      "name": "sequential_safety_fallback",
+      "required_snippets": [
+        "Safety fallback: if the production microbatch verifier fails",
+        "metal_graph_eval_token_raw_swa_top(&s->graph,",
+        "accepted[n_accept++] = drafts[i];",
+        "ds4_gpu_tensor_read(s->graph.logits,"
+      ]
+    }
+  ],
+  "stream_cases": [
+    {
+      "id": "b300_missing_mtp_support_model",
+      "source_case": "b300_missing_mtp_support_model",
+      "path": "availability_blocker",
+      "trigger": "B300 support-artifact search finds no MTP GGUF",
+      "accepted_suffix": 0,
+      "accepted_stream_delta": "blocked_before_stream",
+      "checkpoint_delta": "0",
+      "logits_source": "none",
+      "frontier_ops": [],
+      "mtp_n_raw_keep": 0,
+      "cache_kvc_visibility": "none",
+      "fallback": "blocked_missing_mtp_model",
+      "error": "blocked_missing_mtp_model",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "mtp_disabled_after_first_token",
+      "source_case": "mtp_disabled_after_first_token",
+      "path": "guard",
+      "trigger": "!e->mtp_ready || !s->mtp_draft_valid || e->mtp_draft_tokens <= 1",
+      "accepted_suffix": 0,
+      "accepted_stream_delta": "first_token",
+      "checkpoint_delta": "1",
+      "logits_source": "target first-token logits",
+      "frontier_ops": [],
+      "mtp_n_raw_keep": 0,
+      "cache_kvc_visibility": "first_token checkpoint only",
+      "fallback": "return first-token accept",
+      "error": "none",
+      "live_status": "model_free"
+    },
+    {
+      "id": "first_draft_miss",
+      "source_case": "first_draft_miss",
+      "path": "draft_miss",
+      "trigger": "sample_argmax(s->logits) != drafts[0]",
+      "accepted_suffix": 0,
+      "accepted_stream_delta": "first_token",
+      "checkpoint_delta": "1",
+      "logits_source": "target first-token logits",
+      "frontier_ops": [],
+      "mtp_n_raw_keep": 0,
+      "cache_kvc_visibility": "first_token checkpoint only",
+      "fallback": "skip speculative work",
+      "error": "none",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "margin_skip_single_target_replay",
+      "source_case": "margin_skip_single_target_replay",
+      "path": "margin_skip",
+      "trigger": "!strict_mtp && draft_n == 2 && margin < threshold",
+      "accepted_suffix": 1,
+      "accepted_stream_delta": "first_token + drafts[0]",
+      "checkpoint_delta": "2",
+      "logits_source": "target decode logits for drafts[0]",
+      "frontier_ops": [
+        "keep_accepted"
+      ],
+      "mtp_n_raw_keep": 1,
+      "cache_kvc_visibility": "two-token target checkpoint",
+      "fallback": "margin-skip",
+      "error": "none",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "exact_decode2_full_accept",
+      "source_case": "exact_decode2_full_accept",
+      "path": "exact_decode2",
+      "trigger": "strict N=2 verifier accepts both draft tokens",
+      "accepted_suffix": 2,
+      "accepted_stream_delta": "first_token + drafts[0..1]",
+      "checkpoint_delta": "3",
+      "logits_source": "decode2 logits1",
+      "frontier_ops": [
+        "snapshot",
+        "keep_accepted"
+      ],
+      "mtp_n_raw_keep": 2,
+      "cache_kvc_visibility": "three-token target checkpoint",
+      "fallback": "none",
+      "error": "none",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "exact_decode2_prefix1_accept",
+      "source_case": "exact_decode2_prefix1_accept",
+      "path": "exact_decode2",
+      "trigger": "strict N=2 verifier accepts drafts[0] only",
+      "accepted_suffix": 1,
+      "accepted_stream_delta": "first_token + drafts[0]",
+      "checkpoint_delta": "2",
+      "logits_source": "decode2 logits0",
+      "frontier_ops": [
+        "snapshot",
+        "commit_prefix1",
+        "keep_accepted"
+      ],
+      "mtp_n_raw_keep": 1,
+      "cache_kvc_visibility": "two-token target checkpoint",
+      "fallback": "none",
+      "error": "none",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "exact_decode2_failure_restore_then_sequential",
+      "source_case": "exact_decode2_failure_restore_then_sequential",
+      "path": "exact_decode2_failure",
+      "trigger": "strict N=2 verifier or prefix commit fails",
+      "accepted_suffix": "verified_by_sequential_fallback",
+      "accepted_stream_delta": "first_token + sequentially verified drafts",
+      "checkpoint_delta": "1 + verified_by_sequential_fallback",
+      "logits_source": "sequential target decode",
+      "frontier_ops": [
+        "snapshot",
+        "restore"
+      ],
+      "mtp_n_raw_keep": "verified_by_sequential_fallback",
+      "cache_kvc_visibility": "sequential target checkpoint only",
+      "fallback": "sequential safety fallback",
+      "error": "none unless sequential decode fails",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "suffix_full_accept",
+      "source_case": "suffix_full_accept",
+      "path": "suffix_verifier",
+      "trigger": "microbatch suffix verifier accepts draft_n tokens",
+      "accepted_suffix": "draft_n",
+      "accepted_stream_delta": "first_token + drafts[0..draft_n-1]",
+      "checkpoint_delta": "1 + draft_n",
+      "logits_source": "spec logits row draft_n - 1",
+      "frontier_ops": [
+        "keep_accepted"
+      ],
+      "mtp_n_raw_keep": "draft_n",
+      "cache_kvc_visibility": "verified suffix checkpoint only",
+      "fallback": "none",
+      "error": "none",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "suffix_prefix1_accept",
+      "source_case": "suffix_prefix1_accept",
+      "path": "suffix_verifier",
+      "trigger": "microbatch suffix verifier accepts drafts[0] with prefix1 capture",
+      "accepted_suffix": 1,
+      "accepted_stream_delta": "first_token + drafts[0]",
+      "checkpoint_delta": "2",
+      "logits_source": "spec logits row 0",
+      "frontier_ops": [
+        "commit_prefix1",
+        "keep_accepted"
+      ],
+      "mtp_n_raw_keep": 1,
+      "cache_kvc_visibility": "two-token target checkpoint",
+      "fallback": "none",
+      "error": "none",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "suffix_restore_replay_accept",
+      "source_case": "suffix_restore_replay_accept",
+      "path": "suffix_verifier_replay",
+      "trigger": "microbatch verifier accepts a prefix that requires restore/replay",
+      "accepted_suffix": "commit_drafts",
+      "accepted_stream_delta": "first_token + drafts[0..commit_drafts-1]",
+      "checkpoint_delta": "1 + commit_drafts",
+      "logits_source": "target replay logits",
+      "frontier_ops": [
+        "snapshot",
+        "restore",
+        "keep_accepted"
+      ],
+      "mtp_n_raw_keep": "commit_drafts",
+      "cache_kvc_visibility": "restored then replayed target checkpoint only",
+      "fallback": "target replay",
+      "error": "none unless replay fails",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "suffix_failure_restore_or_error",
+      "source_case": "suffix_failure_restore_or_error",
+      "path": "suffix_verifier_failure",
+      "trigger": "microbatch verifier, replay, or logits read fails",
+      "accepted_suffix": "verified_by_sequential_fallback_or_error",
+      "accepted_stream_delta": "first_token + sequential fallback or hard error",
+      "checkpoint_delta": "1 + verified_by_sequential_fallback_or_error",
+      "logits_source": "sequential target decode or none on hard error",
+      "frontier_ops": [
+        "restore_or_error"
+      ],
+      "mtp_n_raw_keep": "verified_by_sequential_fallback_or_zero",
+      "cache_kvc_visibility": "restored checkpoint, sequential fallback, or invalidated session",
+      "fallback": "sequential safety fallback or MTP verifier failed",
+      "error": "MTP verifier failed if mutated state lacks a snapshot",
+      "live_status": "blocked_missing_mtp_model"
+    },
+    {
+      "id": "sequential_safety_fallback",
+      "source_case": "sequential_safety_fallback",
+      "path": "sequential_fallback",
+      "trigger": "fast verifier cannot prove the suffix",
+      "accepted_suffix": "verified",
+      "accepted_stream_delta": "first_token + verified drafts",
+      "checkpoint_delta": "1 + verified",
+      "logits_source": "normal target decode logits",
+      "frontier_ops": [
+        "keep_accepted"
+      ],
+      "mtp_n_raw_keep": "verified",
+      "cache_kvc_visibility": "sequential target checkpoint only",
+      "fallback": "target sequential verifier",
+      "error": "none unless target decode or logits readback fails",
+      "live_status": "blocked_missing_mtp_model"
+    }
+  ]
+}

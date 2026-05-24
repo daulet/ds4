@@ -1226,6 +1226,20 @@ counter handling, `mtp_n_raw` save/restore, ratio-4 index frontier copies,
 prefix1 commit counter rewinds, invisible speculative-row policy, and ties the
 plan back to M10.7d3 restored-frontier evidence.
 
+Check the M10.8g1 current-C MTP stream parity contract before composing the
+Rust stream outcome planner:
+
+```sh
+python3 ds4-parity/check_mtp_stream_parity_contract.py
+python3 ds4-parity/check_mtp_stream_parity_contract.py --negative-test
+```
+
+The checker pins the end-to-end speculative stream outcomes from
+`ds4_session_eval_speculative_argmax`: disabled or missing MTP, first-draft
+miss, exact N=2 full/prefix/failure, suffix full/prefix/replay/failure,
+sequential fallback, frontier restore/commit, `mtp_n_raw` keep policy, visible
+cache/KVC state, and the explicit B300 missing-support blocker.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

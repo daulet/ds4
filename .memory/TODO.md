@@ -5932,7 +5932,7 @@
 
 ### M10.8g1: MTP Stream Parity Contract And Blocker
 
-- Status: active
+- Status: done
 - Goal: capture the final current-C speculative stream contract and live B300
   support-model blocker before any Rust end-to-end MTP stream path is trusted.
 - Oracle: `ds4_session_eval_speculative_argmax`, `ds4_session_eval_internal`,
@@ -5959,10 +5959,21 @@
   no blockers.
 - Owner path: M10.8g stream contract, B300 support-artifact check,
   `.memory/status.md`.
+- Evidence: added
+  `ds4-parity/baselines/graph/m10.8g1/mtp-stream-parity-contract.json` and
+  `ds4-parity/check_mtp_stream_parity_contract.py`, a stream-level current-C
+  contract checker for disabled/missing MTP, first-draft miss, exact N=2
+  full/prefix/failure, suffix full/prefix/replay/failure, sequential fallback,
+  frontier restore/commit, `mtp_n_raw` keep policy, visible cache/KVC state,
+  and the B300 missing-MTP blocker. Validation passed JSON syntax, Python
+  syntax, the checker with 12 cases, 368 checks, and 8 negative mutations, the
+  live B300 missing-MTP blocker command, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, and unified parity with 65 passed, 42
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 
 ### M10.8g2: Rust MTP Stream Outcome Planner
 
-- Status: pending
+- Status: active
 - Goal: compose the Rust draft, verifier, suffix, and frontier plans into a
   Rust-owned stream outcome planner without executing GPU kernels.
 - Oracle: M10.8g1 stream contract plus M10.8b through M10.8f Rust plan outputs.

@@ -5265,6 +5265,16 @@ restore boundary.
   B300 support-artifact blocker command, `cargo fmt --all -- --check`, `git
   diff --check`, unified parity report, and non-interactive Claude review with
   no blockers.
+- Evidence: added
+  `ds4-parity/baselines/graph/m10.8g1/mtp-stream-parity-contract.json` and
+  `ds4-parity/check_mtp_stream_parity_contract.py`, a stream-level contract
+  checker that links 12 end-to-end speculative outcomes to the M10.8a decision
+  rows and current-C `ds4_session_eval_speculative_argmax` anchors. Validation
+  passed JSON syntax, Python syntax, the checker with 12 cases, 368 checks, and
+  8 negative mutations, the live B300 missing-MTP blocker command, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and unified
+  parity with 65 passed, 42 skipped, and 0 failed. Non-interactive Claude
+  review returned `NO BLOCKERS`.
 
 ##### M10.8g2: Rust MTP Stream Outcome Planner
 
