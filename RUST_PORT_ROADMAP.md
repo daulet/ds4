@@ -5296,6 +5296,16 @@ restore boundary.
   parsing, Python syntax, `cargo test --workspace`, `cargo fmt --all --
   --check`, `git diff --check`, unified parity report, and non-interactive
   Claude review with no blockers.
+- Evidence: added `rust/ds4-gpu/src/mtp_stream_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-stream-plan.rs`, and
+  `ds4-parity/compare_mtp_stream_plan.py`, a Rust model-free stream outcome
+  planner that composes M10.8b through M10.8f subplans against the M10.8g1
+  stream contract. Validation passed targeted Rust stream-plan tests, JSON
+  output parsing, Python syntax, the comparator with 12 cases, 369 checks, and
+  8 negative mutations, the live B300 missing-MTP blocker command, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and unified
+  parity with 66 passed, 42 skipped, and 0 failed. Non-interactive Claude
+  review returned `NO BLOCKERS`.
 
 ##### M10.8g3: Rust Runtime Guard And Target-Stream No-Drift Smoke
 

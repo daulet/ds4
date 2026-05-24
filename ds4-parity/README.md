@@ -1240,6 +1240,20 @@ miss, exact N=2 full/prefix/failure, suffix full/prefix/replay/failure,
 sequential fallback, frontier restore/commit, `mtp_n_raw` keep policy, visible
 cache/KVC state, and the explicit B300 missing-support blocker.
 
+Compare the M10.8g2 Rust MTP stream outcome planner against the M10.8g1
+current-C stream contract:
+
+```sh
+python3 ds4-parity/compare_mtp_stream_plan.py
+python3 ds4-parity/compare_mtp_stream_plan.py --negative-test
+```
+
+The comparator runs `ds4-mtp-stream-plan`, checks final accepted stream deltas,
+checkpoint deltas, logits ownership, frontier operations, `mtp_n_raw` keep
+policy, cache/KVC visibility, fallback/error state, and verifies every selected
+draft, verifier, suffix, and frontier sub-plan ID is present in the Rust plan
+sources.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

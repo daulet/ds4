@@ -5973,7 +5973,7 @@
 
 ### M10.8g2: Rust MTP Stream Outcome Planner
 
-- Status: active
+- Status: done
 - Goal: compose the Rust draft, verifier, suffix, and frontier plans into a
   Rust-owned stream outcome planner without executing GPU kernels.
 - Oracle: M10.8g1 stream contract plus M10.8b through M10.8f Rust plan outputs.
@@ -5993,10 +5993,20 @@
   --check`, `git diff --check`, unified parity report, and non-interactive
   Claude review with no blockers.
 - Owner path: Rust MTP stream planner, comparator, `.memory/status.md`.
+- Evidence: added `rust/ds4-gpu/src/mtp_stream_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-stream-plan.rs`, and
+  `ds4-parity/compare_mtp_stream_plan.py`, a Rust model-free stream outcome
+  planner that composes M10.8b through M10.8f subplans against the M10.8g1
+  stream contract. Validation passed targeted Rust stream-plan tests, JSON
+  output parsing, Python syntax, the comparator with 12 cases, 369 checks, and
+  8 negative mutations, the live B300 missing-MTP blocker command, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and unified
+  parity with 66 passed, 42 skipped, and 0 failed. Non-interactive Claude
+  review returned `NO BLOCKERS`.
 
 ### M10.8g3: Rust Runtime Guard And Target-Stream No-Drift Smoke
 
-- Status: pending
+- Status: active
 - Goal: wire the Rust runtime surface through the MTP stream guard for disabled
   and missing-support cases while proving the non-speculative target stream is
   unchanged.

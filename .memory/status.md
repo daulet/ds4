@@ -3,8 +3,11 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g2 Rust MTP Stream Outcome Planner
-- Last validated source before the active item: M10.8g1 MTP Stream Parity
+- Active item: M10.8g3 Rust Runtime Guard And Target-Stream No-Drift Smoke
+- Last validated source before the active item: M10.8g2 Rust MTP Stream
+  Outcome Planner.
+- Earlier M10.8g2 Rust MTP Stream Outcome Planner.
+- Earlier M10.8g1 MTP Stream Parity
   Contract And Blocker.
 - Earlier M10.8g1 MTP Stream Parity Contract And Blocker.
 - Earlier M10.8g Rust MTP End-To-End Stream Parity split into M10.8g1 through
@@ -63,6 +66,21 @@
 
 ## Last Evidence
 
+- M10.8g2 adds `rust/ds4-gpu/src/mtp_stream_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-stream-plan.rs`, and
+  `ds4-parity/compare_mtp_stream_plan.py`, a Rust model-free stream outcome
+  planner that composes M10.8b through M10.8f subplans against the M10.8g1
+  stream contract. It pins final accepted stream deltas, checkpoint deltas,
+  logits ownership, selected subplan IDs, frontier operations, `mtp_n_raw`
+  keep policy, cache/KVC visibility, fallback/error state, and missing-MTP
+  blocker semantics for 12 stream rows.
+- M10.8g2 validation passed targeted Rust stream-plan tests, JSON output
+  parsing, Python syntax, `python3 ds4-parity/compare_mtp_stream_plan.py
+  --negative-test` with 12 cases, 369 checks, and 8 negative mutations, the
+  live B300 missing-MTP blocker command, `cargo test --workspace`, `cargo fmt
+  --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 66 passed, 42
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8g1 adds
   `ds4-parity/baselines/graph/m10.8g1/mtp-stream-parity-contract.json` and
   `ds4-parity/check_mtp_stream_parity_contract.py`, a stream-level current-C
