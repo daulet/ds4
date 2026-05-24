@@ -5396,7 +5396,7 @@
 
 ### M10.7d2b: Runtime KV Replay Checker Closure
 
-- Status: active
+- Status: done
 - Goal: extend the committed runtime KV replay checker/artifact contract so
   M0.5 seed miss, seed restore, continuation restore, and memory-token
   continuation validate continued-frontier ledger fields in addition to cache
@@ -5414,16 +5414,21 @@
   source, token counts, reason fields, event order, and frontier transitions
   are exact.
 - Review gate: ask Claude to review checker coverage and artifact semantics.
-- Validation needed: runtime KV replay checker with negative tests, KV replay
+- Validation passed: runtime KV replay checker with negative tests, KV replay
   comparator, targeted Rust runtime tests, `cargo test --workspace`, `cargo
-  fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
-  with no blockers.
+  fmt --all -- --check`, `git diff --check`, skip-local unified parity report,
+  and non-interactive Claude review with no blockers.
+- Evidence: `check_runtime_kv_replay_summary.py` now validates the M9.8f5 B300
+  replay summary plus a model-free M10.7d2 ledger contract covering seed miss,
+  seed restore, continuation restore, and memory-token continuation event
+  order/frontier transitions; `run_server_parity_report.py` runs the checker
+  with negative tests.
 - Owner path: runtime KV replay checker/summary contract,
   `.memory/status.md`.
 
 ### M10.7d2c: Runtime Continued-Store B300 Replay Refresh
 
-- Status: pending
+- Status: active
 - Goal: refresh the model-backed B300 Rust runtime replay so real seed miss,
   seed restore, continuation restore, and continued-store decisions include the
   M10.7d2 ledger evidence.

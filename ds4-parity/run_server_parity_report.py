@@ -215,8 +215,8 @@ def comparator_commands() -> list[tuple[str, list[str]]]:
             [sys.executable, "ds4-parity/compare_kv_replay.py", "--negative-test"],
         ),
         (
-            "M9.8f5 B300 Rust runtime replay summary",
-            [sys.executable, "ds4-parity/check_runtime_kv_replay_summary.py"],
+            "M9.8f5 B300 Rust runtime replay summary and M10.7d2 ledger contract",
+            [sys.executable, "ds4-parity/check_runtime_kv_replay_summary.py", "--negative-test"],
         ),
     ]
 

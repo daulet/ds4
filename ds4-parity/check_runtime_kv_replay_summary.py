@@ -12,6 +12,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SUMMARY = ROOT / "ds4-parity/baselines/kv/m9.8f5/runtime-rust-b300-summary.json"
+DEFAULT_LEDGER_CONTRACT = (
+    ROOT / "ds4-parity/baselines/kv/m10.7d2/runtime-ledger-contract.json"
+)
 
 EXPECTED_CASES: dict[str, dict[str, Any]] = {
     "seed_miss": {
@@ -90,13 +93,203 @@ EXPECTED_KV_HEADERS: dict[str, dict[str, Any]] = {
     },
 }
 
+EXPECTED_LEDGER_CASES: dict[str, dict[str, Any]] = {
+    "seed_miss": {
+        "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_seed.json",
+        "cache_source": "none",
+        "prompt_tokens": 550,
+        "cached_tokens": 0,
+        "cache_write_tokens": 550,
+        "disk_cached_tokens": 0,
+        "disk_cache_file": None,
+        "kv_write_file": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+        "kv_write_reason_name": "cold",
+        "kv_write_tokens": 550,
+        "events": [
+            {
+                "name": "reset_continued_frontier",
+                "tokens": 0,
+                "frontier_before": 0,
+                "frontier_after": 0,
+                "success": True,
+            },
+            {
+                "name": "cache_decision",
+                "cache_source": "none",
+                "tokens": 550,
+                "cached_tokens": 0,
+                "cache_write_tokens": 550,
+                "disk_cached_tokens": 0,
+                "frontier_before": 0,
+                "frontier_after": 0,
+            },
+            {
+                "name": "suppress_continued_store",
+                "tokens": 550,
+                "frontier_before": 0,
+                "frontier_after": 550,
+                "success": True,
+            },
+            {
+                "name": "maybe_store_continued",
+                "reason": "continued",
+                "tokens": 550,
+                "frontier_before": 550,
+                "frontier_after": 550,
+                "success": False,
+            },
+            {
+                "name": "store_live_prefix",
+                "reason": "cold",
+                "tokens": 550,
+                "frontier_before": 550,
+                "frontier_after": 550,
+                "success": True,
+            },
+            {
+                "name": "note_store",
+                "tokens": 550,
+                "frontier_before": 550,
+                "frontier_after": 550,
+                "success": False,
+            },
+        ],
+    },
+    "seed_restore": {
+        "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_seed.json",
+        "cache_source": "disk-text",
+        "prompt_tokens": 550,
+        "cached_tokens": 550,
+        "cache_write_tokens": 0,
+        "disk_cached_tokens": 550,
+        "disk_cache_file": "0ab2314538b11686a11e296b7f697651fbd17e60.kv",
+        "kv_write_file": None,
+        "kv_write_reason_name": None,
+        "kv_write_tokens": None,
+        "events": [
+            {
+                "name": "reset_continued_frontier",
+                "tokens": 0,
+                "frontier_before": 0,
+                "frontier_after": 0,
+                "success": True,
+            },
+            {
+                "name": "cache_decision",
+                "cache_source": "disk-text",
+                "tokens": 550,
+                "cached_tokens": 550,
+                "cache_write_tokens": 0,
+                "disk_cached_tokens": 550,
+                "frontier_before": 550,
+                "frontier_after": 550,
+            },
+            {
+                "name": "maybe_store_continued",
+                "reason": "continued",
+                "tokens": 550,
+                "frontier_before": 550,
+                "frontier_after": 550,
+                "success": False,
+            },
+        ],
+    },
+    "continuation_restore": {
+        "fixture": "ds4-parity/baselines/kv-fixtures/m0.5/kv_continuation.json",
+        "cache_source": "disk-text",
+        "prompt_tokens": 561,
+        "cached_tokens": 552,
+        "cache_write_tokens": 9,
+        "disk_cached_tokens": 552,
+        "disk_cache_file": "a0cac6ff193696ccb5d7e9ae151d7255d39cf161.kv",
+        "kv_write_file": None,
+        "kv_write_reason_name": None,
+        "kv_write_tokens": None,
+        "events": [
+            {
+                "name": "reset_continued_frontier",
+                "tokens": 0,
+                "frontier_before": 0,
+                "frontier_after": 0,
+                "success": True,
+            },
+            {
+                "name": "cache_decision",
+                "cache_source": "disk-text",
+                "tokens": 561,
+                "cached_tokens": 552,
+                "cache_write_tokens": 9,
+                "disk_cached_tokens": 552,
+                "frontier_before": 552,
+                "frontier_after": 552,
+            },
+            {
+                "name": "maybe_store_continued",
+                "reason": "continued",
+                "tokens": 561,
+                "frontier_before": 552,
+                "frontier_after": 552,
+                "success": False,
+            },
+        ],
+    },
+    "memory_token_continuation": {
+        "fixture": "ds4-parity/baselines/server-fixtures/m0.4/chat_cache_continuation.json",
+        "cache_source": "memory-token",
+        "prompt_tokens": 50,
+        "cached_tokens": 41,
+        "cache_write_tokens": 9,
+        "disk_cached_tokens": 0,
+        "disk_cache_file": None,
+        "kv_write_file": None,
+        "kv_write_reason_name": None,
+        "kv_write_tokens": None,
+        "events": [
+            {
+                "name": "cache_decision",
+                "cache_source": "memory-token",
+                "tokens": 50,
+                "cached_tokens": 41,
+                "cache_write_tokens": 9,
+                "disk_cached_tokens": 0,
+                "frontier_before": 0,
+                "frontier_after": 0,
+            },
+            {
+                "name": "maybe_store_continued",
+                "reason": "continued",
+                "tokens": 50,
+                "frontier_before": 0,
+                "frontier_after": 0,
+                "success": False,
+            },
+        ],
+    },
+}
 
-def validate(summary_path: Path) -> list[str]:
+
+def rel(path: Path) -> str:
+    return path.resolve().relative_to(ROOT).as_posix()
+
+
+def validate(summary_path: Path, ledger_contract_path: Path) -> list[str]:
     errors: list[str] = []
     data = load_json(summary_path, errors)
+    ledger_contract = load_json(ledger_contract_path, errors)
     if not isinstance(data, dict):
         return errors or ["summary root is not an object"]
+    if not isinstance(ledger_contract, dict):
+        return errors or ["ledger contract root is not an object"]
+    validate_data(errors, data, ledger_contract, summary_path)
+    return errors
 
+
+def validate_data(
+    errors: list[str],
+    data: dict[str, Any],
+    ledger_contract: dict[str, Any],
+    summary_path: Path,
+) -> None:
     expect_value(errors, data, "schema", "ds4.runtime_kv_replay_summary.v1")
     expect_value(errors, data, "milestone", "M9.8f5")
     expect_value(errors, data, "source", "rust-runtime-b300-replay")
@@ -126,7 +319,55 @@ def validate(summary_path: Path) -> list[str]:
     if headers:
         check_named_records(errors, "kv_headers", headers, EXPECTED_KV_HEADERS)
 
-    return errors
+    validate_ledger_contract(errors, ledger_contract, summary_path, cases, headers)
+
+
+def validate_ledger_contract(
+    errors: list[str],
+    contract: dict[str, Any],
+    summary_path: Path,
+    summary_cases: dict[str, dict[str, Any]],
+    headers: dict[str, dict[str, Any]],
+) -> None:
+    expect_value(errors, contract, "schema", "ds4.runtime_kv_replay_ledger_contract.v1")
+    expect_value(errors, contract, "milestone", "M10.7d2b")
+    expect_value(errors, contract, "source", "model-free-runtime-ledger-contract")
+    expect_value(errors, contract, "summary_path", rel(summary_path))
+    cases = expect_named_objects(errors, contract, "cases", "name")
+    if not cases:
+        return
+    check_exact_named_records(errors, "ledger_cases", cases, EXPECTED_LEDGER_CASES)
+    for name in ("seed_miss", "seed_restore", "continuation_restore"):
+        expected = cases.get(name)
+        actual = summary_cases.get(name)
+        if expected is None or actual is None:
+            continue
+        for key in (
+            "fixture",
+            "cache_source",
+            "prompt_tokens",
+            "cached_tokens",
+            "cache_write_tokens",
+            "disk_cached_tokens",
+            "disk_cache_file",
+        ):
+            if expected.get(key) != actual.get(key):
+                errors.append(
+                    f"ledger_cases.{name}.{key}: expected summary value "
+                    f"{actual.get(key)!r}, got {expected.get(key)!r}"
+                )
+    for name, case in cases.items():
+        write_file = case.get("kv_write_file")
+        if write_file is None:
+            continue
+        header = headers.get(write_file)
+        if header is None:
+            errors.append(f"ledger_cases.{name}.kv_write_file: missing header {write_file!r}")
+            continue
+        if case.get("kv_write_reason_name") != header.get("reason_name"):
+            errors.append(f"ledger_cases.{name}.kv_write_reason_name drift")
+        if case.get("kv_write_tokens") != header.get("tokens"):
+            errors.append(f"ledger_cases.{name}.kv_write_tokens drift")
 
 
 def load_json(path: Path, errors: list[str]) -> Any:
@@ -207,6 +448,73 @@ def check_named_records(
                 )
 
 
+def check_exact_named_records(
+    errors: list[str],
+    label: str,
+    actual: dict[str, dict[str, Any]],
+    expected: dict[str, dict[str, Any]],
+) -> None:
+    check_named_records(errors, label, actual, expected)
+    for name, expected_record in expected.items():
+        record = actual.get(name)
+        if record is None:
+            continue
+        expected_keys = set(expected_record) | {"name"}
+        if set(record) != expected_keys:
+            errors.append(
+                f"{label}.{name}: expected keys {sorted(expected_keys)}, "
+                f"got {sorted(record)}"
+            )
+
+
+def run_negative_tests(summary_path: Path, ledger_contract_path: Path) -> list[str]:
+    errors: list[str] = []
+    load_errors: list[str] = []
+    summary = load_json(summary_path, load_errors)
+    contract = load_json(ledger_contract_path, load_errors)
+    if load_errors:
+        return load_errors
+    if not isinstance(summary, dict) or not isinstance(contract, dict):
+        return ["negative tests require object summary and ledger contract"]
+
+    def expect_failure(label: str, mutator: Any) -> None:
+        mutated_summary = copy_json(summary)
+        mutated_contract = copy_json(contract)
+        mutator(mutated_summary, mutated_contract)
+        trial_errors: list[str] = []
+        validate_data(trial_errors, mutated_summary, mutated_contract, summary_path)
+        if not trial_errors:
+            errors.append(f"negative test did not fail: {label}")
+
+    expect_failure(
+        "missing ledger event",
+        lambda _summary, contract: contract["cases"][0]["events"].pop(),
+    )
+    expect_failure(
+        "ledger event order drift",
+        lambda _summary, contract: contract["cases"][0]["events"].reverse(),
+    )
+    expect_failure(
+        "frontier transition drift",
+        lambda _summary, contract: contract["cases"][0]["events"][2].__setitem__(
+            "frontier_after", 0
+        ),
+    )
+    expect_failure(
+        "memory-token source drift",
+        lambda _summary, contract: contract["cases"][3].__setitem__("cache_source", "none"),
+    )
+    expect_failure(
+        "summary cross-check drift",
+        lambda summary, _contract: summary["cases"][1].__setitem__("cached_tokens", 549),
+    )
+    return errors
+
+
+def copy_json(obj: Any) -> Any:
+    return json.loads(json.dumps(obj))
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -215,17 +523,36 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=DEFAULT_SUMMARY,
         help="runtime replay summary JSON to validate",
     )
+    parser.add_argument(
+        "--ledger-contract",
+        type=Path,
+        default=DEFAULT_LEDGER_CONTRACT,
+        help="runtime replay ledger contract JSON to validate",
+    )
+    parser.add_argument(
+        "--negative-test",
+        action="store_true",
+        help="run checker self-tests that mutate summary and ledger fields",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    errors = validate(args.summary)
+    errors = validate(args.summary, args.ledger_contract)
     if errors:
         for error in errors:
             print(f"error: {error}", file=sys.stderr)
         return 1
-    print("summary: runtime KV replay summary passed, 3 cases, 3 kv headers")
+    if args.negative_test:
+        negative_errors = run_negative_tests(args.summary, args.ledger_contract)
+        if negative_errors:
+            for error in negative_errors:
+                print(f"error: {error}", file=sys.stderr)
+            return 1
+    print("summary: runtime KV replay summary passed, 3 cases, 3 kv headers, 4 ledger cases")
+    if args.negative_test:
+        print("summary: runtime KV replay negative tests passed, 5 mutations")
     return 0
 
 

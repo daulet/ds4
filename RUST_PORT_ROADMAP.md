@@ -4753,6 +4753,14 @@ restore boundary.
   comparator, targeted Rust runtime tests, `cargo test --workspace`, `cargo
   fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
   with no blockers.
+- Evidence: `check_runtime_kv_replay_summary.py` now validates the M9.8f5 B300
+  replay summary plus a model-free M10.7d2 ledger contract covering seed miss,
+  seed restore, continuation restore, and memory-token continuation event
+  order/frontier transitions. `run_server_parity_report.py` runs the checker
+  with negative tests, and validation passed the runtime checker, KV replay
+  comparator, server parity report, workspace tests, formatting, diff check, and
+  skip-local unified parity report, plus non-interactive Claude review with no
+  blockers.
 
 ##### M10.7d2c: Runtime Continued-Store B300 Replay Refresh
 
