@@ -353,6 +353,21 @@ save/list/switch/history/new operations, final visible output, and manifest
 hashes. This is the first M11 gate; it defines replay fixtures before claiming
 Rust ownership of the live agent loop.
 
+Validate the M11.2 Agent rendered-context replay:
+
+```sh
+cargo run --quiet -p ds4-gguf --bin ds4-agent-rendered-context-rs \
+  > ds4-parity/baselines/agent/m11.2/rendered-context.json
+python3 ds4-parity/compare_agent_rendered_context.py --negative-test
+```
+
+The M11.2 comparator replays the M11.1 scripted fixture through Rust prompt
+rendering and checks normalized rendered context: system/user/assistant/tool
+role boundaries, assistant EOS insertion, raw DSML preservation, tool-result
+tags, final visible assistant text, and absence of live session commands in
+the prompt. It remains model-free and does not claim Rust ownership of tool
+execution or the live agent loop.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

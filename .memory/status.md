@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M11.2 Rust Agent Rendered Context Replay
-- Last validated source before the active item: M11.1 Agent Trace Replay
-  Oracle And Fixture Contract.
+- Active item: M11.3 Deterministic Tool Stub And Session Command Replay
+- Last validated source before the active item: M11.2 Rust Agent Rendered
+  Context Replay.
 - Earlier M11 Agent Trace Replay split into M11.1 through M11.4 before
   implementation.
+- Earlier M11.2 Rust Agent Rendered Context Replay.
 - Earlier M11.1 Agent Trace Replay Oracle And Fixture Contract.
 - Earlier M10.9f Benchmark Comparator And Milestone 10 Closure.
 - Earlier M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate.
@@ -86,6 +87,19 @@
 
 ## Last Evidence
 
+- M11.2 adds the Rust `ds4-agent-rendered-context-rs` artifact emitter,
+  records `ds4-parity/baselines/agent/m11.2/rendered-context.json`, adds
+  `ds4-parity/compare_agent_rendered_context.py --negative-test`, and wires
+  the comparator into the unified parity report and README. The artifact
+  replays M11.1 scripted cases through Rust prompt rendering and records
+  normalized prompt text, role boundaries, marker counts, raw DSML preservation,
+  tool-result tags, and final visible assistant text without live model
+  sampling.
+- M11.2 validation passed `cargo run --quiet -p ds4-gguf --bin
+  ds4-agent-rendered-context-rs >
+  ds4-parity/baselines/agent/m11.2/rendered-context.json` and `python3
+  ds4-parity/compare_agent_rendered_context.py --negative-test` with 178
+  checks.
 - M11.1 adds a no-model current-C `./ds4-agent --dump-agent-trace-oracle`
   replay oracle, records
   `ds4-parity/baselines/agent/m11.1/current-c.json`, adds the Rust

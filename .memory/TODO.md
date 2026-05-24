@@ -6631,14 +6631,37 @@
 
 #### M11.2: Rust Agent Rendered Context Replay
 
-- Status: active.
+- Status: complete.
 - Goal: replay the scripted M11.1 events into Rust prompt/context rendering
   before adding deterministic tool execution or the live agent loop.
 - Oracle: M11.1 current-C replay fixture and existing prompt/DSML contracts.
 - Fixture: M11.1 `single_tool_round` and `session_switching_commands` events.
-- Comparator: rendered-context replay with normalized workspace/session markers.
+- Comparator: `ds4-parity/compare_agent_rendered_context.py --negative-test`.
 - Acceptance: system/user/assistant/tool/assistant boundaries, assistant EOS
   insertion, final visible output, and no-live-model behavior match fixture
+  expectations.
+- Evidence:
+  - Added Rust `ds4-agent-rendered-context-rs` artifact emitter.
+  - Added `ds4-parity/baselines/agent/m11.2/rendered-context.json` and
+    `manifest.json`.
+  - Added unified parity report item `M11.2 Agent rendered-context replay`.
+- Validation passed:
+  - `cargo run --quiet -p ds4-gguf --bin ds4-agent-rendered-context-rs >
+    ds4-parity/baselines/agent/m11.2/rendered-context.json`
+  - `python3 ds4-parity/compare_agent_rendered_context.py --negative-test`
+    (`178 checks`)
+
+#### M11.3: Deterministic Tool Stub And Session Command Replay
+
+- Status: active.
+- Goal: replay deterministic tool stubs and session commands from the M11.1
+  fixture without live model sampling.
+- Oracle: M11.1 current-C replay fixture and M11.2 rendered-context artifact.
+- Fixture: `single_tool_round` tool stub plus `session_switching_commands`.
+- Comparator: Rust replay of tool outputs and save/list/switch/history/new
+  command effects against normalized fixture expectations.
+- Acceptance: tool output insertion, session operation order, normalized
+  session ids, history text, and final visible command output match fixture
   expectations.
 - Owner path: agent trace fixtures, replay comparator, Rust agent loop,
   `.memory/status.md`.

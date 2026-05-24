@@ -1,0 +1,23 @@
+{
+  "schema": "ds4.agent_rendered_context_baseline.v1",
+  "milestone": "M11.2",
+  "oracles": {
+    "m11_1_current_c": {
+      "path": "../m11.1/current-c.json",
+      "sha256": "fb62ec8be6cd6568b5a64a0915ac98f966709ca861d4789038a4e87b14deed31"
+    }
+  },
+  "dumps": {
+    "rendered_context": {
+      "path": "rendered-context.json",
+      "size_bytes": 2181,
+      "sha256": "95d4cdfc838e78fb817de48277504949d538cec61b01c5742a3daa89fb83f715",
+      "producer": "rust-agent-rendered-context-replay",
+      "command": "cargo run --quiet -p ds4-gguf --bin ds4-agent-rendered-context-rs > ds4-parity/baselines/agent/m11.2/rendered-context.json"
+    }
+  },
+  "validation": [
+    "cargo run --quiet -p ds4-gguf --bin ds4-agent-rendered-context-rs > ds4-parity/baselines/agent/m11.2/rendered-context.json",
+    "python3 ds4-parity/compare_agent_rendered_context.py --negative-test"
+  ]
+}

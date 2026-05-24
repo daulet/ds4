@@ -475,6 +475,7 @@ def validate_static_wiring(report: Report) -> None:
         or "Active item: M11 Agent Trace Replay" in texts["status"]
         or "Active item: M11.1 Agent Trace Replay Oracle And Fixture Contract" in texts["status"]
         or "Active item: M11.2 Rust Agent Rendered Context Replay" in texts["status"]
+        or "Active item: M11.3 Deterministic Tool Stub And Session Command Replay" in texts["status"]
     )
     report.check(status_has_m10_9a, "status M10.9a missing")
     report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c/M10.9d/M10.9e/M10.9f/M11 missing")

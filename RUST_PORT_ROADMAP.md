@@ -5945,17 +5945,36 @@ claiming more live behavior:
 
 #### M11.2: Rust Agent Rendered Context Replay
 
-- Status: active.
+- Status: complete.
 - Goal: replay the M11.1 scripted events into the Rust prompt/context renderer
   and compare normalized rendered-message boundaries before tool execution is
   ported.
 - Oracle: M11.1 current-C replay fixture plus existing chat/DSML prompt
   rendering contracts.
 - Fixture: M11.1 scripted model events and expected transcript roles.
-- Comparator: Rust rendered-context replay against fixture expectations with
-  normalized paths/session ids and no live model sampling.
+- Comparator: `ds4-parity/compare_agent_rendered_context.py --negative-test`.
 - Acceptance: rendered system/user/assistant/tool/assistant boundaries,
   assistant EOS insertion, and visible final output match the fixture.
+- Validation evidence:
+  - `cargo run --quiet -p ds4-gguf --bin ds4-agent-rendered-context-rs >
+    ds4-parity/baselines/agent/m11.2/rendered-context.json` regenerated the
+    rendered-context artifact.
+  - `python3 ds4-parity/compare_agent_rendered_context.py --negative-test`
+    passed with 178 checks.
+  - Unified parity wiring includes `M11.2 Agent rendered-context replay`.
+
+#### M11.3: Deterministic Tool Stub And Session Command Replay
+
+- Status: active.
+- Goal: replay deterministic tool stubs and session commands from the M11.1
+  fixture without live model sampling.
+- Oracle: M11.1 current-C replay fixture and M11.2 rendered-context artifact.
+- Fixture: `single_tool_round` tool stub plus `session_switching_commands`.
+- Comparator: Rust replay of tool outputs and save/list/switch/history/new
+  command effects against normalized fixture expectations.
+- Acceptance: tool output insertion, session operation order, normalized
+  session ids, history text, and final visible command output match fixture
+  expectations.
 
 ## Milestone 12: Backend Replacement Parity
 

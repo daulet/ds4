@@ -1,3 +1,4 @@
+use crate::prompt::{render_chat_prompt_text, ChatMessage, ThinkMode, ToolArgument, ToolCall};
 use std::io::{self, Write};
 
 const TOOL_DSML: &str = "<｜DSML｜tool_calls>\n\
@@ -39,6 +40,39 @@ pub fn write_agent_trace_replay_oracle<W: Write>(out: &mut W) -> io::Result<()> 
     write_single_tool_round(out)?;
     writeln!(out, ",")?;
     write_session_switching_commands(out)?;
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")?;
+    Ok(())
+}
+
+pub fn write_agent_rendered_context_replay<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "{{")?;
+    writeln!(
+        out,
+        "  \"schema\": \"ds4.agent_rendered_context_replay.v1\","
+    )?;
+    writeln!(out, "  \"milestone\": \"M11.2\",")?;
+    writeln!(out, "  \"source\": \"rust-agent-rendered-context-replay\",")?;
+    writeln!(
+        out,
+        "  \"oracle\": \"M11.1 current-C trace replay fixture plus Rust prompt/DSML rendering contracts\","
+    )?;
+    writeln!(out, "  \"cases\": [")?;
+    write_rendered_context_case(
+        out,
+        "single_tool_round",
+        &single_tool_messages(),
+        &["system", "user", "assistant", "tool", "assistant"],
+        FINAL_ANSWER,
+    )?;
+    writeln!(out, ",")?;
+    write_rendered_context_case(
+        out,
+        "session_switching_commands",
+        &session_command_messages(),
+        &["system", "user", "assistant"],
+        "Noted: alpha was inspected.",
+    )?;
     writeln!(out, "\n  ]")?;
     writeln!(out, "}}")?;
     Ok(())
@@ -173,6 +207,115 @@ fn write_session_switching_commands<W: Write>(out: &mut W) -> io::Result<()> {
     Ok(())
 }
 
+fn write_rendered_context_case<W: Write>(
+    out: &mut W,
+    id: &str,
+    messages: &[ChatMessage],
+    roles: &[&str],
+    final_visible_output: &str,
+) -> io::Result<()> {
+    let prompt = render_chat_prompt_text(messages, None, ThinkMode::None);
+    let dsml_count = count_matches(&prompt, "<｜DSML｜tool_calls>");
+    let tool_result_count = count_matches(&prompt, "<tool_result>");
+    writeln!(out, "    {{")?;
+    write!(out, "      \"id\": ")?;
+    write_json_string(out, id)?;
+    writeln!(out, ",")?;
+    writeln!(out, "      \"replay_source\": \"M11.1\",")?;
+    writeln!(out, "      \"think_mode\": \"none\",")?;
+    writeln!(out, "      \"message_roles\": [")?;
+    for (idx, role) in roles.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write!(out, "        ")?;
+        write_json_string(out, role)?;
+    }
+    writeln!(out, "\n      ],")?;
+    writeln!(out, "      \"markers\": {{")?;
+    writeln!(
+        out,
+        "        \"begin_sentence\": {},",
+        count_matches(&prompt, "<｜begin▁of▁sentence｜>")
+    )?;
+    writeln!(
+        out,
+        "        \"user\": {},",
+        count_matches(&prompt, "<｜User｜>")
+    )?;
+    writeln!(
+        out,
+        "        \"assistant\": {},",
+        count_matches(&prompt, "<｜Assistant｜>")
+    )?;
+    writeln!(
+        out,
+        "        \"end_sentence\": {},",
+        count_matches(&prompt, "<｜end▁of▁sentence｜>")
+    )?;
+    writeln!(out, "        \"tool_result\": {tool_result_count},")?;
+    writeln!(out, "        \"dsml_tool_calls\": {dsml_count}")?;
+    writeln!(out, "      }},")?;
+    writeln!(
+        out,
+        "      \"raw_tool_dsml_preserved\": {},",
+        if id == "single_tool_round" {
+            dsml_count == 1 && prompt.contains(TOOL_DSML)
+        } else {
+            false
+        }
+    )?;
+    writeln!(
+        out,
+        "      \"contains_final_visible_output\": {},",
+        prompt.contains(final_visible_output)
+    )?;
+    write!(out, "      \"final_visible_output\": ")?;
+    write_json_string(out, final_visible_output)?;
+    writeln!(out, ",")?;
+    write!(out, "      \"prompt_text\": ")?;
+    write_json_string(out, &prompt)?;
+    writeln!(out)?;
+    write!(out, "    }}")?;
+    Ok(())
+}
+
+fn single_tool_messages() -> Vec<ChatMessage> {
+    vec![
+        ChatMessage::new(
+            "system",
+            "You are a helpful coding assistant running inside ds4-agent.",
+        ),
+        ChatMessage::new(
+            "user",
+            "List the root files, then answer with the two names you used.",
+        ),
+        ChatMessage::new("assistant", "")
+            .with_raw_tool_calls_dsml(TOOL_DSML)
+            .with_tool_calls(vec![ToolCall::new(
+                "list",
+                vec![ToolArgument::string("path", ".")],
+            )]),
+        ChatMessage::new("tool", TOOL_OUTPUT),
+        ChatMessage::new("assistant", FINAL_ANSWER),
+    ]
+}
+
+fn session_command_messages() -> Vec<ChatMessage> {
+    vec![
+        ChatMessage::new(
+            "system",
+            "You are a helpful coding assistant running inside ds4-agent.",
+        ),
+        ChatMessage::new("user", "Remember that alpha was inspected."),
+        ChatMessage::new("assistant", "Noted: alpha was inspected."),
+    ]
+}
+
+fn count_matches(text: &str, needle: &str) -> usize {
+    text.match_indices(needle).count()
+}
+
 fn write_json_string<W: Write>(out: &mut W, value: &str) -> io::Result<()> {
     write!(out, "\"")?;
     for c in value.chars() {
@@ -213,5 +356,16 @@ mod tests {
         assert!(text.contains("\"cwd\": \"<WORKSPACE>\""));
         assert!(!text.contains("/Users/"));
         assert!(!text.contains("/workspace/ds4"));
+    }
+
+    #[test]
+    fn rendered_context_preserves_tool_boundaries() {
+        let mut bytes = Vec::new();
+        write_agent_rendered_context_replay(&mut bytes).expect("write replay");
+        let text = String::from_utf8(bytes).expect("utf8");
+        assert!(text.contains("\"schema\": \"ds4.agent_rendered_context_replay.v1\""));
+        assert!(text.contains("\"dsml_tool_calls\": 1"));
+        assert!(text.contains("\"tool_result\": 1"));
+        assert!(text.contains(FINAL_ANSWER));
     }
 }

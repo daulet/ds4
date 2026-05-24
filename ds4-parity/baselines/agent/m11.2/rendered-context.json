@@ -1,0 +1,54 @@
+{
+  "schema": "ds4.agent_rendered_context_replay.v1",
+  "milestone": "M11.2",
+  "source": "rust-agent-rendered-context-replay",
+  "oracle": "M11.1 current-C trace replay fixture plus Rust prompt/DSML rendering contracts",
+  "cases": [
+    {
+      "id": "single_tool_round",
+      "replay_source": "M11.1",
+      "think_mode": "none",
+      "message_roles": [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant"
+      ],
+      "markers": {
+        "begin_sentence": 1,
+        "user": 2,
+        "assistant": 2,
+        "end_sentence": 2,
+        "tool_result": 1,
+        "dsml_tool_calls": 1
+      },
+      "raw_tool_dsml_preserved": true,
+      "contains_final_visible_output": true,
+      "final_visible_output": "README.md and ds4_agent.c are visible.",
+      "prompt_text": "<｜begin▁of▁sentence｜>You are a helpful coding assistant running inside ds4-agent.<｜User｜>List the root files, then answer with the two names you used.<｜Assistant｜></think><｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"list\">\n<｜DSML｜parameter name=\"path\" string=\"true\">.</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls><｜end▁of▁sentence｜><｜User｜><tool_result>Tool result for list path=\".\":\nREADME.md\nds4_agent.c\n</tool_result><｜Assistant｜></think>README.md and ds4_agent.c are visible.<｜end▁of▁sentence｜>"
+    },
+    {
+      "id": "session_switching_commands",
+      "replay_source": "M11.1",
+      "think_mode": "none",
+      "message_roles": [
+        "system",
+        "user",
+        "assistant"
+      ],
+      "markers": {
+        "begin_sentence": 1,
+        "user": 1,
+        "assistant": 1,
+        "end_sentence": 1,
+        "tool_result": 0,
+        "dsml_tool_calls": 0
+      },
+      "raw_tool_dsml_preserved": false,
+      "contains_final_visible_output": true,
+      "final_visible_output": "Noted: alpha was inspected.",
+      "prompt_text": "<｜begin▁of▁sentence｜>You are a helpful coding assistant running inside ds4-agent.<｜User｜>Remember that alpha was inspected.<｜Assistant｜></think>Noted: alpha was inspected.<｜end▁of▁sentence｜>"
+    }
+  ]
+}
