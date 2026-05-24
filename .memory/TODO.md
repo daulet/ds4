@@ -6969,22 +6969,34 @@
 
 #### M13.1: Embedding/Indexer Expansion Fixture Matrix
 
-- Status: active.
+- Status: complete.
 - Goal: create the operation-by-operation fixture matrix for all six remaining
   `embedding_and_indexer` operations.
 - Oracle: M13.0 decision, M12.6 remaining-operation list, M12.1 inventory,
   M10.2 graph inventory, and existing prefill/indexed-attention comparators.
-- Fixture: embedding/indexer expansion matrix with one row per remaining
-  operation.
+- Fixture:
+  `ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json`.
 - Comparator: `ds4-parity/check_backend_expansion_matrix.py --negative-test`.
 - Acceptance: covered operations reference executable comparators; gap
   operations remain blocked; no route/default-route/removal claim changes.
 - Drift policy: operation-list drift requires refreshing current-backend
   inventory and preserving the M13.0 decision artifact.
+- Evidence:
+  - Added
+    `ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json`.
+  - Added `ds4-parity/check_backend_expansion_matrix.py --negative-test`.
+  - Classified the six remaining operations into pair-comparator-ready and
+    fixture-gap rows without changing route/default-route/removal claims.
+- Validation passed:
+  - `python3 ds4-parity/check_backend_expansion_matrix.py --negative-test`
+    with 186 checks.
+  - Python syntax, JSON formatting, `cargo fmt --all -- --check`, `git diff
+    --check`, and `python3 ds4-parity/run_parity_report.py
+    --skip-local-oracles` with 89 passed, 50 skipped, 0 failed.
 
 #### M13.2: Batched Embedding Replacement Slice
 
-- Status: pending.
+- Status: active.
 - Goal: add an opt-in replacement slice for
   `ds4_gpu_embed_tokens_hc_tensor`.
 - Oracle: current-C whole/chunked/resumed prefill output comparators.

@@ -20,7 +20,7 @@ The report has two jobs:
   M10.8d, M10.8e, M10.8f, M10.8g1, M10.8g2, M10.8g3a, M10.8g3b,
   M10.8g3c, M10.8g4a, M10.8g4b, M10.9a, M10.9b, M10.9c, M10.9d,
   M10.9e, M10.9f, M11.1, M11.2, M11.3, M11.4, M12.1, M12.2, M12.3, M12.4,
-  M12.5, M12.6, and M13.0.
+  M12.5, M12.6, M13.0, and M13.1.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -755,6 +755,14 @@ class ParityReport:
                 [
                     sys.executable,
                     "ds4-parity/check_backend_expansion_decision.py",
+                    "--negative-test",
+                ],
+            ),
+            (
+                "M13.1 Backend expansion matrix",
+                [
+                    sys.executable,
+                    "ds4-parity/check_backend_expansion_matrix.py",
                     "--negative-test",
                 ],
             ),

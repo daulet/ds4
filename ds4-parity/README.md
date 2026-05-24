@@ -495,6 +495,20 @@ operations to be assigned to M13.1 through M13.5 work, and keeps removals,
 default-route replacement, general backend replacement, and kernel replacement
 claims false. The current M13.0 fixture passes with 186 checker assertions.
 
+Validate the M13.1 Backend expansion matrix:
+
+```sh
+python3 ds4-parity/check_backend_expansion_matrix.py --negative-test
+```
+
+The M13.1 checker validates
+`baselines/backend/m13.1/embedding-indexer-expansion-matrix.json` against the
+M13.0 decision, M12.6 remaining-operation list, M12.1 backend inventory, and
+M10.2 graph inventory. It checks current-C anchors, Rust facade or graph-plan
+anchors, comparator paths, route-candidate stages, fixture-gap rows, and the
+no-route-change/no-removal claim policy for every remaining embedding/indexer
+operation. The current M13.1 fixture passes with 186 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

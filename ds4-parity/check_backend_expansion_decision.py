@@ -282,8 +282,8 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check("M13.1: Embedding/Indexer Expansion Fixture Matrix" in texts["roadmap"], "roadmap M13.1 missing")
     report.check("Earlier M13.0 Backend Expansion Decision" in texts["status"], "status M13.0 previous item missing")
     report.check(
-        "Active item: M13.1 Embedding/Indexer Expansion Fixture Matrix" in texts["status"],
-        "status M13.1 active item missing",
+        "Active item: M13" in texts["status"],
+        "status M13 active item missing",
     )
     report.check("#### M13.0: Backend Expansion Decision" in texts["todo"], "TODO M13.0 missing")
     report.check("#### M13.1: Embedding/Indexer Expansion Fixture Matrix" in texts["todo"], "TODO M13.1 missing")

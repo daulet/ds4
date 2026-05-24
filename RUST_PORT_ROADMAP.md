@@ -6343,14 +6343,14 @@ Drift policy:
 
 #### M13.1: Embedding/Indexer Expansion Fixture Matrix
 
-- Status: active.
+- Status: complete.
 - Goal: turn the M13.0 decision into an operation-by-operation matrix that
   identifies existing fixture coverage and fixture gaps for every remaining
   `embedding_and_indexer` operation.
 - Oracle: M13.0 decision, M12.6 remaining-operation list, M12.1 inventory,
   M10.2 graph inventory, and existing prefill/indexed-attention comparators.
-- Fixture: M13.1 embedding/indexer expansion matrix with one row per remaining
-  operation, coverage status, comparator path, and next owner stage.
+- Fixture:
+  `ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json`.
 - Comparator: `ds4-parity/check_backend_expansion_matrix.py --negative-test`.
 - Acceptance: all six remaining operations are present, covered operations
   reference an executable comparator, gap operations stay explicitly blocked,
@@ -6358,10 +6358,25 @@ Drift policy:
 - Drift policy: operation-list drift must be accepted only by refreshing the
   current C/CUDA/Metal inventory and preserving the previous M13.0 decision as
   a historical oracle.
+- Evidence:
+  - Added
+    `ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json`.
+  - Added `ds4-parity/check_backend_expansion_matrix.py --negative-test`.
+  - The matrix classifies `ds4_gpu_embed_tokens_hc_tensor`,
+    `ds4_gpu_indexer_score_one_tensor`, and `ds4_gpu_indexer_topk_tensor` as
+    pair-comparator-ready; keeps `ds4_gpu_indexer_scores_prefill_tensor`,
+    `ds4_gpu_indexer_scores_decode_batch_tensor`, and
+    `ds4_gpu_dsv4_topk_mask_tensor` as fixture-gap operations for M13.4; and
+    keeps all route/default-route/removal claims unchanged.
+  - `python3 ds4-parity/check_backend_expansion_matrix.py --negative-test`
+    passed with 186 checks.
+  - Python syntax, JSON formatting, `cargo fmt --all -- --check`, `git diff
+    --check`, and `python3 ds4-parity/run_parity_report.py
+    --skip-local-oracles` passed with 89 passed, 50 skipped, 0 failed.
 
 #### M13.2: Batched Embedding Replacement Slice
 
-- Status: pending.
+- Status: active.
 - Goal: add an opt-in replacement slice for
   `ds4_gpu_embed_tokens_hc_tensor`.
 - Oracle: current-C whole/chunked/resumed prefill output comparators.

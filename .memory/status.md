@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M13.1 Embedding/Indexer Expansion Fixture Matrix
-- Last validated source before the active item: M13.0 Backend Expansion
-  Decision.
+- Active item: M13.2 Batched Embedding Replacement Slice
+- Last validated source before the active item: M13.1 Embedding/Indexer
+  Expansion Fixture Matrix.
+- Earlier M13.1 Embedding/Indexer Expansion Fixture Matrix.
 - Earlier M13.0 Backend Expansion Decision.
 - Earlier M12.6 Backend Replacement Closure And Removal Decision.
 - Earlier M12.5 Runtime Backend Route Gate.
@@ -98,6 +99,24 @@
 
 ## Last Evidence
 
+- M13.1 adds
+  `ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json`
+  and `ds4-parity/check_backend_expansion_matrix.py --negative-test`. The
+  matrix compares the six remaining M12.6 `embedding_and_indexer` operations
+  against the M13.0 decision, M12.1 inventory, M12.6 closure, M10.2 graph
+  inventory, current-C anchors, Rust facade or graph-plan anchors, and existing
+  comparator paths. It marks `ds4_gpu_embed_tokens_hc_tensor`,
+  `ds4_gpu_indexer_score_one_tensor`, and `ds4_gpu_indexer_topk_tensor` as
+  pair-comparator-ready while keeping `ds4_gpu_indexer_scores_prefill_tensor`,
+  `ds4_gpu_indexer_scores_decode_batch_tensor`, and
+  `ds4_gpu_dsv4_topk_mask_tensor` as fixture-gap operations. Route,
+  default-route, removal, general backend replacement, and kernel replacement
+  claims remain unchanged. Validation passed `python3
+  ds4-parity/check_backend_expansion_matrix.py --negative-test` with 186
+  checks, Python syntax, JSON formatting, `cargo fmt --all -- --check`, `git
+  diff --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 89 passed, 50 skipped, 0 failed. M13.2 Batched
+  Embedding Replacement Slice is active.
 - M13.0 adds
   `ds4-parity/baselines/backend/m13.0/backend-expansion-decision.json` and
   `ds4-parity/check_backend_expansion_decision.py --negative-test`. The

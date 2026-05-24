@@ -1,0 +1,165 @@
+{
+  "schema": "ds4.backend_expansion_matrix.v1",
+  "source": "m13.1-embedding-indexer-expansion-matrix",
+  "milestone": "M13.1",
+  "parent": "M13",
+  "previous_stage": "M13.0",
+  "next_stage": "M13.2",
+  "status": "fixture-matrix",
+  "operation_family": "embedding_and_indexer",
+  "source_artifacts": {
+    "expansion_decision": "ds4-parity/baselines/backend/m13.0/backend-expansion-decision.json",
+    "backend_replacement_closure": "ds4-parity/baselines/backend/m12.6/backend-replacement-closure.json",
+    "boundary_inventory": "ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json",
+    "graph_plan_inventory": "ds4-parity/baselines/graph/m10.2/graph-plan-inventory.json"
+  },
+  "claim_policy": {
+    "runtime_route_change": false,
+    "default_route_unchanged": true,
+    "replacement_route_opt_in_only": true,
+    "default_route_replacement_active": false,
+    "general_backend_replacement": false,
+    "kernel_replacement": false,
+    "removals_allowed": false,
+    "current_backend_retained_as_oracle": true,
+    "current_backend_retained_as_sidecar": true
+  },
+  "coverage_levels": {
+    "pair-comparator-ready": "existing current-C/Rust pair comparator covers this operation's output surface closely enough to start a replacement slice",
+    "surface-covered-needs-fixture-extraction": "existing comparator reaches this operation but M13 must extract an operation-specific fixture before route expansion",
+    "inventory-only": "operation is known in the backend inventory but still needs a current-C fixture and Rust facade coverage before replacement"
+  },
+  "matrix": [
+    {
+      "operation": "ds4_gpu_embed_tokens_hc_tensor",
+      "method": "embed_tokens_hc",
+      "coverage_level": "pair-comparator-ready",
+      "rust_safe_wrapper": true,
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_embed_tokens_hc_tensor(out_hc",
+      "rust_source": "rust/ds4-gpu/src/decode_backend.rs",
+      "rust_anchor": "pub fn embed_tokens_hc",
+      "comparators": [
+        "ds4-parity/compare_prefill_whole_short.py",
+        "ds4-parity/compare_prefill_chunked.py",
+        "ds4-parity/compare_prefill_resumed.py"
+      ],
+      "covered_outputs": [
+        "after_layer42_hc",
+        "logits"
+      ],
+      "route_candidate_stage": "M13.2 Batched Embedding Replacement Slice",
+      "fixture_gap": false,
+      "route_status": "not-route-gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "operation": "ds4_gpu_indexer_score_one_tensor",
+      "method": "indexer_score_one",
+      "coverage_level": "pair-comparator-ready",
+      "rust_safe_wrapper": true,
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_indexer_score_one_tensor(g->indexer_scores",
+      "rust_source": "rust/ds4-gpu/src/decode_backend.rs",
+      "rust_anchor": "pub fn indexer_score_one",
+      "comparators": [
+        "ds4-parity/compare_decode_long_indexed_attention.py"
+      ],
+      "covered_outputs": [
+        "layer2_indexer_scores"
+      ],
+      "route_candidate_stage": "M13.3 Indexed Decode Selection Replacement Slice",
+      "fixture_gap": false,
+      "route_status": "not-route-gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "operation": "ds4_gpu_indexer_scores_prefill_tensor",
+      "method": "indexer_scores_prefill",
+      "coverage_level": "inventory-only",
+      "rust_safe_wrapper": false,
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_indexer_scores_prefill_tensor(g->indexer_scores",
+      "rust_source": "rust/ds4-gpu/src/graph_plan.rs",
+      "rust_anchor": "ds4_gpu_indexer_scores_prefill_tensor",
+      "comparators": [],
+      "covered_outputs": [],
+      "route_candidate_stage": "M13.4 Batch Indexer Fixture Gap Closure",
+      "fixture_gap": true,
+      "route_status": "not-route-gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "operation": "ds4_gpu_indexer_scores_decode_batch_tensor",
+      "method": "indexer_scores_decode_batch",
+      "coverage_level": "surface-covered-needs-fixture-extraction",
+      "rust_safe_wrapper": true,
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_indexer_scores_decode_batch_tensor(g->indexer_scores",
+      "rust_source": "rust/ds4-gpu/src/decode_backend.rs",
+      "rust_anchor": "pub fn indexer_scores_decode_batch",
+      "comparators": [
+        "ds4-parity/compare_prefill_chunked.py"
+      ],
+      "covered_outputs": [
+        "chunked prefill final outputs"
+      ],
+      "route_candidate_stage": "M13.4 Batch Indexer Fixture Gap Closure",
+      "fixture_gap": true,
+      "route_status": "not-route-gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "operation": "ds4_gpu_indexer_topk_tensor",
+      "method": "indexer_topk",
+      "coverage_level": "pair-comparator-ready",
+      "rust_safe_wrapper": true,
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_indexer_topk_tensor(g->comp_selected",
+      "rust_source": "rust/ds4-gpu/src/decode_backend.rs",
+      "rust_anchor": "pub fn indexer_topk",
+      "comparators": [
+        "ds4-parity/compare_decode_long_indexed_attention.py"
+      ],
+      "covered_outputs": [
+        "layer2_comp_selected"
+      ],
+      "route_candidate_stage": "M13.3 Indexed Decode Selection Replacement Slice",
+      "fixture_gap": false,
+      "route_status": "not-route-gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "operation": "ds4_gpu_dsv4_topk_mask_tensor",
+      "method": "dsv4_topk_mask",
+      "coverage_level": "inventory-only",
+      "rust_safe_wrapper": false,
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_dsv4_topk_mask_tensor(g->comp_mask",
+      "rust_source": "rust/ds4-gpu/src/graph_plan.rs",
+      "rust_anchor": "ds4_gpu_dsv4_topk_mask_tensor",
+      "comparators": [],
+      "covered_outputs": [],
+      "route_candidate_stage": "M13.4 Batch Indexer Fixture Gap Closure",
+      "fixture_gap": true,
+      "route_status": "not-route-gated",
+      "removal_decision": "retain_current_backend"
+    }
+  ],
+  "summary": {
+    "total_remaining_operations": 6,
+    "pair_comparator_ready": [
+      "ds4_gpu_embed_tokens_hc_tensor",
+      "ds4_gpu_indexer_score_one_tensor",
+      "ds4_gpu_indexer_topk_tensor"
+    ],
+    "fixture_gap_operations": [
+      "ds4_gpu_indexer_scores_prefill_tensor",
+      "ds4_gpu_indexer_scores_decode_batch_tensor",
+      "ds4_gpu_dsv4_topk_mask_tensor"
+    ],
+    "next_route_candidate": "M13.2 Batched Embedding Replacement Slice",
+    "next_gap_closure": "M13.4 Batch Indexer Fixture Gap Closure",
+    "removals_allowed": false
+  }
+}
