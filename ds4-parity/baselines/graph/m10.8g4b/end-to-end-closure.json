@@ -1,0 +1,45 @@
+{
+  "schema": "ds4.mtp_end_to_end_stream_closure.v1",
+  "source": "b300-mtp-end-to-end-stream-closure",
+  "milestone": "M10.8g4b",
+  "inputs": {
+    "branch_decision": "ds4-parity/baselines/graph/m10.8g4a/support-branch-decision.json",
+    "stream_contract": "ds4-parity/baselines/graph/m10.8g1/mtp-stream-parity-contract.json",
+    "runtime_missing_support_summary": "ds4-parity/baselines/graph/m10.8g3c/rust-b300-missing-support-runtime.json"
+  },
+  "selected_branch": "support_absent_blocker_closure",
+  "closure_status": "blocked_missing_mtp_model",
+  "next_stage": "M10.9",
+  "support_present_comparator": {
+    "status": "not_run",
+    "reason": "support_artifact_absent",
+    "required_branch": "support_present_end_to_end_comparator"
+  },
+  "explicit_blocker": {
+    "result": "blocked_missing_mtp_model",
+    "reason": "no B300 MTP support GGUF is present",
+    "target_model_path": "/workspace/ds4/ds4flash.gguf",
+    "target_model_bytes": 86720111488,
+    "expected_mtp_path": "/workspace/ds4/missing-mtp.gguf",
+    "mtp_candidates": [],
+    "candidate_search_stdout": "mtp_candidates=\n",
+    "stream_case": "b300_missing_mtp_support_model",
+    "runtime_guard_case": "b300_missing_mtp_support_runtime_blocker",
+    "target_stream_visibility": "blocked_before_stream",
+    "accepted_stream_delta": "blocked_before_stream",
+    "checkpoint_delta": "0",
+    "logits_source": "none",
+    "cache_kvc_visibility": "none",
+    "fallback": "blocked_missing_mtp_model",
+    "error": "blocked_missing_mtp_model"
+  },
+  "claim_policy": {
+    "mtp_enabled_parity": "blocked_until_support_gguf_exists",
+    "allowed_closure": "explicit_support_artifact_blocker",
+    "must_not_report_as": [
+      "MTP-off pass",
+      "MTP-enabled parity"
+    ]
+  },
+  "closure_statement": "M10.8g closes with an explicit support-artifact blocker; MTP-enabled current-C versus Rust stream parity is not claimed."
+}

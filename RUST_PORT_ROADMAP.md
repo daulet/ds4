@@ -5229,15 +5229,18 @@ restore boundary.
   server/runtime parity checks, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, unified parity report, and non-interactive
   Claude review with no blockers.
-- Status: split before implementation into M10.8g1 through M10.8g4 so the
-  stream-level contract, Rust outcome planner, runtime no-drift guard, and live
-  B300 support-model comparator can be validated independently.
+- Status: done.
 - Evidence: split before implementation after inspecting
   `ds4_session_eval_speculative_argmax` and the completed M10.8a through
   M10.8f contracts. Validation passed the live B300 support-artifact blocker
   command, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
   --check`, and unified parity with 64 passed, 42 skipped, and 0 failed.
   Non-interactive Claude review returned `NO BLOCKERS`.
+- Evidence: M10.8g closes with the M10.8g4b explicit support-artifact blocker
+  closure because no B300 MTP support GGUF is present. The final closure
+  records `support_absent_blocker_closure`, `support_present_comparator`
+  `not_run` due to `support_artifact_absent`, `blocked_missing_mtp_model`,
+  empty `mtp_candidates=`, and no MTP-off or MTP-enabled parity claim.
 
 ##### M10.8g1: MTP Stream Parity Contract And Blocker
 
@@ -5484,9 +5487,10 @@ restore boundary.
   server/runtime parity checks, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, unified parity report, and non-interactive
   Claude review with no blockers.
-- Split: this stage is split into M10.8g4a and M10.8g4b before implementation
-  so the B300 support-artifact branch decision stays separate from the final
-  support-model comparator or explicit blocker closure.
+- Status: done.
+- Split: this stage was split into M10.8g4a and M10.8g4b before
+  implementation so the B300 support-artifact branch decision stayed separate
+  from the final support-model comparator or explicit blocker closure.
 - Evidence: split M10.8g4 into M10.8g4a B300 support-artifact branch decision
   and M10.8g4b final support comparator or explicit blocker closure. The live
   B300 support-artifact probe still recorded `/workspace/ds4/ds4flash.gguf`,
@@ -5495,6 +5499,11 @@ restore boundary.
   `git diff --check`, and `python3 ds4-parity/run_parity_report.py
   --skip-local-oracles` with 69 passed, 43 skipped, and 0 failed.
   Non-interactive Claude review returned `NO BLOCKERS`.
+- Evidence: M10.8g4b closed this parent through the support-absent branch. The
+  final B300 closure artifact records the target model identity, absent
+  `/workspace/ds4/missing-mtp.gguf`, empty support candidates, not-run
+  support-present comparator, explicit `blocked_missing_mtp_model` result, and
+  the claim policy forbidding `MTP-off pass` and `MTP-enabled parity`.
 
 ##### M10.8g4a: B300 Support-Artifact Branch Decision
 
@@ -5557,6 +5566,25 @@ restore boundary.
   tests, server/runtime parity checks, `cargo test --workspace`, `cargo fmt
   --all -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
+- Evidence: added `ds4-parity/compare_mtp_end_to_end_closure.py`,
+  `ds4-parity/baselines/graph/m10.8g4b/end-to-end-closure.json`, README
+  instructions, unified report wiring, and an exact B300 rerun hook. The
+  closure consumes the M10.8g4a support-branch decision, M10.8g1 stream
+  blocker, and M10.8g3c Rust runtime blocker.
+- Evidence: live B300 closure validation passed with 58 checks and 7 negative
+  mutations after refreshing the M10.8g4a branch decision. The artifact records
+  `support_absent_blocker_closure`, `support_present_comparator` `not_run` due
+  to `support_artifact_absent`, `/workspace/ds4/ds4flash.gguf` at
+  86,720,111,488 bytes, absent `/workspace/ds4/missing-mtp.gguf`, empty
+  `mtp_candidates=`, `blocked_before_stream` visibility, checkpoint delta 0,
+  no cache/KVC visibility, `blocked_missing_mtp_model`, next stage `M10.9`,
+  and no MTP-enabled parity claim. Local validation passed Python syntax, the
+  comparator with 58 checks and 7 negative mutations, `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 71 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 
 #### M10.9: Runtime Graph End-To-End And Benchmark Closure
 

@@ -5899,7 +5899,7 @@
 
 ### M10.8g: Rust MTP End-To-End Stream Parity
 
-- Status: split before implementation into M10.8g1 through M10.8g4
+- Status: done
 - Goal: integrate Rust MTP draft/verifier/frontier orchestration into the
   runtime path and compare accepted tokens against current C.
 - Oracle: current-C speculative decode on the same B300 model/support-model
@@ -5927,6 +5927,12 @@
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and unified
   parity with 64 passed, 42 skipped, and 0 failed. Non-interactive Claude
   review returned `NO BLOCKERS`.
+- Evidence: M10.8g closed through M10.8g4b with the explicit support-artifact
+  blocker because no B300 MTP support GGUF is present. The final closure
+  records `support_absent_blocker_closure`, support-present comparator
+  `not_run` due to `support_artifact_absent`, `blocked_missing_mtp_model`,
+  empty `mtp_candidates=`, next stage `M10.9`, and no MTP-off or MTP-enabled
+  parity claim.
 - Owner path: Rust runtime MTP integration, B300 comparator,
   `.memory/status.md`.
 
@@ -6006,7 +6012,7 @@
 
 ### M10.8g3: Rust Runtime Guard And Target-Stream No-Drift Smoke
 
-- Status: active
+- Status: done
 - Goal: wire the Rust runtime surface through the MTP stream guard for disabled
   and missing-support cases while proving the non-speculative target stream is
   unchanged.
@@ -6160,7 +6166,7 @@
 
 ### M10.8g4: B300 Support-Model End-To-End Comparator
 
-- Status: split before implementation into M10.8g4a and M10.8g4b
+- Status: done
 - Goal: close M10.8g with a same-B300 current-C versus Rust speculative stream
   comparator when an MTP support GGUF is available, or keep the blocker
   explicitly recorded when it is not.
@@ -6197,6 +6203,12 @@
   --check`, `git diff --check`, and `python3
   ds4-parity/run_parity_report.py --skip-local-oracles` with 69 passed, 43
   skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
+- Evidence: M10.8g4b closed this parent through the support-absent branch. The
+  final closure artifact records the target model identity, absent
+  `/workspace/ds4/missing-mtp.gguf`, empty support candidates, not-run
+  support-present comparator, explicit `blocked_missing_mtp_model`, next stage
+  `M10.9`, and the claim policy forbidding `MTP-off pass` and `MTP-enabled
+  parity`.
 
 #### M10.8g4a: B300 Support-Artifact Branch Decision
 
@@ -6240,7 +6252,7 @@
 
 #### M10.8g4b: B300 End-To-End Blocker Or Support Comparator Closure
 
-- Status: active
+- Status: done
 - Goal: close M10.8g with either a same-B300 current-C versus Rust speculative
   stream comparator or the explicit support-artifact blocker selected by
   M10.8g4a.
@@ -6264,10 +6276,29 @@
   --all -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
 - Owner path: M10.8g final comparator or blocker closure, `.memory/status.md`.
+- Evidence: added `ds4-parity/compare_mtp_end_to_end_closure.py`,
+  `ds4-parity/baselines/graph/m10.8g4b/end-to-end-closure.json`, README
+  instructions, unified report wiring, and an exact B300 rerun hook. The
+  closure consumes the M10.8g4a support-branch decision, M10.8g1 stream
+  blocker, and M10.8g3c Rust runtime blocker.
+- Evidence: live B300 closure validation passed with 58 checks and 7 negative
+  mutations after refreshing the M10.8g4a branch decision. The artifact records
+  `support_absent_blocker_closure`, support-present comparator `not_run` due to
+  `support_artifact_absent`, `/workspace/ds4/ds4flash.gguf` at 86,720,111,488
+  bytes, absent `/workspace/ds4/missing-mtp.gguf`, empty `mtp_candidates=`,
+  `blocked_before_stream` visibility, checkpoint delta 0, no cache/KVC
+  visibility, `blocked_missing_mtp_model`, next stage `M10.9`, and no
+  MTP-enabled parity claim. Local validation passed Python syntax, the
+  comparator with 58 checks and 7 negative mutations, `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 71 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 
 ### M10.9: Runtime Graph End-To-End And Benchmark Closure
 
-- Status: pending
+- Status: active
 - Goal: close Milestone 10 by routing the Rust runtime path through Rust-owned
   graph scheduling and comparing end-to-end quality, long-context behavior, and
   throughput.

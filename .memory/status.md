@@ -3,13 +3,13 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g4b B300 End-To-End Blocker Or Support Comparator Closure
-- Last validated source before the active item: M10.8g4a B300 Support-Artifact
-  Branch Decision.
+- Active item: M10.9 Runtime Graph End-To-End And Benchmark Closure
+- Last validated source before the active item: M10.8g4b B300 End-To-End
+  Blocker Or Support Comparator Closure.
+- Earlier M10.8g4b B300 End-To-End Blocker Or Support Comparator Closure.
 - Earlier M10.8g4a B300 Support-Artifact Branch Decision.
-- Earlier M10.8g4 split into M10.8g4a and M10.8g4b.
-- M10.8g4 B300 Support-Model End-To-End Comparator is split into M10.8g4a and
-  M10.8g4b before implementation.
+- Earlier M10.8g4 B300 Support-Model End-To-End Comparator.
+- Earlier M10.8g Rust MTP End-To-End Stream Parity.
 - Earlier M10.8g3c B300 Missing-Support Runtime Smoke.
 - Earlier M10.8g3b Runtime Target-Stream No-Drift Comparator.
 - Earlier M10.8g3a Rust Runtime MTP Guard Contract And Static Wiring.
@@ -74,6 +74,28 @@
 
 ## Last Evidence
 
+- M10.8g4b adds `ds4-parity/compare_mtp_end_to_end_closure.py`,
+  `ds4-parity/baselines/graph/m10.8g4b/end-to-end-closure.json`, README
+  instructions, unified report wiring, and an exact B300 rerun hook. The
+  closure consumes the M10.8g4a support-branch decision, M10.8g1 stream
+  blocker, and M10.8g3c Rust runtime blocker.
+- M10.8g4b live B300 closure validation passed with 58 checks and 7 negative
+  mutations after refreshing the M10.8g4a branch decision. The artifact records
+  `support_absent_blocker_closure`, support-present comparator `not_run` due to
+  `support_artifact_absent`, `/workspace/ds4/ds4flash.gguf` at 86,720,111,488
+  bytes, absent `/workspace/ds4/missing-mtp.gguf`, empty `mtp_candidates=`,
+  `blocked_before_stream` visibility, checkpoint delta 0, no cache/KVC
+  visibility, `blocked_missing_mtp_model`, next stage `M10.9`, and no
+  MTP-enabled parity claim. Local validation passed Python syntax, `python3
+  ds4-parity/compare_mtp_end_to_end_closure.py --negative-test` with 58 checks
+  and 7 negative mutations, `python3 ds4-parity/run_server_parity_report.py`
+  with 10 passed, 3 skipped, and 0 failed, `cargo test --workspace`, `cargo
+  fmt --all -- --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 71 passed, 45
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
+- M10.8g4 and M10.8g are closed through the explicit support-artifact blocker;
+  MTP-enabled current-C versus Rust stream parity is not claimed until a B300
+  MTP support GGUF exists.
 - M10.8g4a adds `ds4-parity/compare_mtp_support_branch.py`,
   `ds4-parity/baselines/graph/m10.8g4a/support-branch-decision.json`, README
   instructions, unified report wiring, and an exact B300 rerun hook. The branch
