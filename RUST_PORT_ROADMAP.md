@@ -5162,6 +5162,17 @@ restore boundary.
   comparator with negative tests, targeted Rust tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Evidence: added `rust/ds4-gpu/src/mtp_suffix_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-suffix-plan.rs`, and
+  `ds4-parity/compare_mtp_suffix_plan.py`. The Rust suffix verifier plan pins
+  full accept, prefix1 accept, restore/replay, exact replay debug, failure
+  restore-or-error behavior, row-top/readback roles, and the explicit
+  missing-MTP live blocker. Validation passed targeted Rust suffix-plan tests,
+  the comparator with 6 cases, 179 checks, and 8 negative mutations, JSON output
+  parsing, Python syntax, the live B300 missing-MTP blocker command, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, unified
+  parity with 63 passed, 42 skipped, and 0 failed, and non-interactive Claude
+  review with `NO BLOCKERS`.
 
 ##### M10.8f: Rust Spec Frontier Snapshot Restore And Prefix1 Commit
 

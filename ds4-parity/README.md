@@ -1199,6 +1199,20 @@ readback roles, full-accept versus prefix1 logits source, prefix1 frontier
 commit, failure restore behavior, and records the live B300 exact-N=2 smoke as
 blocked until an MTP support GGUF is present.
 
+Compare the M10.8e Rust MTP suffix verifier orchestration plan against
+current-C suffix verifier anchors:
+
+```sh
+python3 ds4-parity/compare_mtp_suffix_plan.py
+python3 ds4-parity/compare_mtp_suffix_plan.py --negative-test
+```
+
+The comparator runs `ds4-mtp-suffix-plan`, checks row-top sequence semantics,
+full-accept last-row logits, prefix1 captured-frontier commit, restore/replay
+fallbacks, exact replay debug behavior, suffix verifier failure
+restore-or-error handling, and records the live B300 suffix smoke as blocked
+until an MTP support GGUF is present.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
