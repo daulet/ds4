@@ -6030,6 +6030,94 @@
   no blockers.
 - Owner path: Rust runtime MTP guard, server/runtime comparators,
   `.memory/status.md`.
+- Split: this stage is split into M10.8g3a through M10.8g3c before
+  implementation so static guard wiring, no-drift runtime comparison, and live
+  missing-support smoke stay independently reviewable.
+- Evidence: split M10.8g3 into M10.8g3a Rust runtime MTP guard contract and
+  static wiring, M10.8g3b runtime target-stream no-drift comparator, and
+  M10.8g3c B300 missing-support runtime smoke. Validation passed the live B300
+  missing-support artifact check with empty `mtp_candidates=`, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and unified
+  parity with 66 passed, 42 skipped, and 0 failed. Non-interactive Claude
+  review returned `NO BLOCKERS`.
+
+#### M10.8g3a: Rust Runtime MTP Guard Contract And Static Wiring
+
+- Status: active
+- Goal: define the Rust-owned runtime MTP guard contract for disabled,
+  first-draft-miss, and missing-support paths without launching model-backed
+  runtime generation.
+- Oracle: M10.8g2 unavailable stream outcomes, Rust `EngineOptions` defaults,
+  Rust CLI/server MTP flag parsing, and current-C runtime guard anchors.
+- Fixture: MTP off, `--mtp` path configured with no support artifact,
+  first-token eval with no valid draft, one-shot/interactive/server runtime
+  option mapping, and the argmax/session runtime surfaces that intentionally
+  remain non-MTP.
+- Comparator: Rust JSON guard plan checked against M10.8g2 stream rows plus
+  static source anchors for `EngineOptions`, `ds4-gguf` CLI parsing, runtime
+  binaries, and current-C speculative dispatch guards.
+- Acceptance: disabled and unavailable MTP paths are classified before any
+  speculative stream mutation and expose only target-stream state or the
+  explicit missing-support blocker.
+- Drift policy: surface names, source anchors, selected M10.8g2 rows, stream
+  deltas, checkpoint deltas, cache/KVC visibility, fallback/error names, and
+  blocker text are exact.
+- Review gate: ask Claude to review static runtime guard coverage and fail-closed
+  semantics.
+- Validation needed: comparator with negative tests, targeted Rust tests, JSON
+  parsing, Python syntax, live B300 missing-support blocker check, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, unified
+  parity report, and non-interactive Claude review with no blockers.
+- Owner path: Rust runtime MTP guard plan, comparator, `.memory/status.md`.
+
+#### M10.8g3b: Runtime Target-Stream No-Drift Comparator
+
+- Status: pending
+- Goal: compare real Rust runtime no-MTP output against current-C target-stream
+  output for the disabled guard path.
+- Oracle: current-C one-token target decode, existing Rust runtime non-spec
+  output, and the M10.8g3a disabled-MTP guard row.
+- Fixture: one-shot runtime, server runtime request replay, MTP off, short
+  first-token generation, and cache/KVC ledger probes.
+- Comparator: accepted text bytes, accepted token IDs, checkpoint length,
+  logits/top-id ownership, cache/KVC accounting, and guard state.
+- Acceptance: enabling the runtime guard with MTP unavailable or disabled cannot
+  change target-stream bytes, token IDs, checkpoint length, logits ownership, or
+  cache/KVC accounting.
+- Drift policy: target-stream bytes, token IDs, checkpoint length, cache/KVC
+  counts, and guard state are exact; request IDs, timing, and logs are
+  normalized.
+- Review gate: ask Claude to review target-stream no-drift runtime comparison.
+- Validation needed: runtime comparator with negative tests, server/runtime
+  parity checks, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, unified parity report, and non-interactive
+  Claude review with no blockers.
+- Owner path: runtime no-drift comparator, server/runtime fixtures,
+  `.memory/status.md`.
+
+#### M10.8g3c: B300 Missing-Support Runtime Smoke
+
+- Status: pending
+- Goal: run the missing-support runtime path on B300 and keep the support-model
+  absence explicit without claiming MTP-enabled parity.
+- Oracle: M10.8g3a missing-support guard row, B300 support-artifact search, and
+  current runtime missing-MTP behavior.
+- Fixture: B300 `ds4-rust-port-b300`, `/workspace/ds4/ds4flash.gguf`,
+  absent `/workspace/ds4/missing-mtp.gguf`, and candidate search for
+  `*mtp*.gguf` or `*draft*.gguf`.
+- Comparator: missing-support blocker text, stream visibility, checkpoint
+  mutation, cache/KVC visibility, and recorded candidate search output.
+- Acceptance: the B300 runtime path fails closed before speculative stream
+  mutation and records `mtp_candidates=` as empty until a support GGUF exists.
+- Drift policy: blocker text and candidate search output are exact; pod names,
+  request IDs, and timing are normalized.
+- Review gate: ask Claude to review live missing-support smoke scope.
+- Validation needed: live B300 missing-support smoke, comparator with negative
+  tests, targeted Rust tests, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, unified parity report, and non-interactive
+  Claude review with no blockers.
+- Owner path: B300 missing-support runtime smoke, comparator,
+  `.memory/status.md`.
 
 ### M10.8g4: B300 Support-Model End-To-End Comparator
 

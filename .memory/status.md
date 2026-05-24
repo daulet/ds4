@@ -3,9 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g3 Rust Runtime Guard And Target-Stream No-Drift Smoke
-- Last validated source before the active item: M10.8g2 Rust MTP Stream
-  Outcome Planner.
+- Active item: M10.8g3a Rust Runtime MTP Guard Contract And Static Wiring
+- Last validated source before the active item: M10.8g3 Rust Runtime Guard And
+  Target-Stream No-Drift Smoke split.
+- Earlier M10.8g3 Rust Runtime Guard And Target-Stream No-Drift Smoke split
+  into M10.8g3a through M10.8g3c before implementation.
+- Earlier M10.8g2 Rust MTP Stream Outcome Planner.
 - Earlier M10.8g2 Rust MTP Stream Outcome Planner.
 - Earlier M10.8g1 MTP Stream Parity
   Contract And Blocker.
@@ -66,6 +69,17 @@
 
 ## Last Evidence
 
+- M10.8g3 is split before implementation into M10.8g3a Rust runtime MTP guard
+  contract and static wiring, M10.8g3b runtime target-stream no-drift
+  comparator, and M10.8g3c B300 missing-support runtime smoke. The split keeps
+  disabled-MTP, missing-support, first-draft-miss, server/runtime request
+  replay, cache/KVC ledger, and target-stream no-drift coverage separate before
+  the support-model end-to-end comparator.
+- M10.8g3 split validation passed the live B300 missing-support artifact check
+  with empty `mtp_candidates=`, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 66 passed, 42
+  skipped, and 0 failed. Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8g2 adds `rust/ds4-gpu/src/mtp_stream_plan.rs`,
   `rust/ds4-gpu/src/bin/ds4-mtp-stream-plan.rs`, and
   `ds4-parity/compare_mtp_stream_plan.py`, a Rust model-free stream outcome
