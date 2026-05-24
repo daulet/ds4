@@ -15,7 +15,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b2b1, M10.5c4c2b2b2b2b2b2b2b2a,
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
-  M10.7b, M10.7c1, M10.7c2, M10.7c3a, and M10.7c3b.
+  M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, and M10.7c3c.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -473,6 +473,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.7c3c Rust graph restore readback comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_graph_restore_readback.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -900,6 +908,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "materialized in /workspace/ds4"
             ),
             rerun_command=b300_rust_raw_graph_snapshot_import_command(),
+        ),
+        ReportItem(
+            name="M10.7c3c B300 Rust graph restore readback rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Graph restore readback requires the B300 pod because the "
+                "M7.8 disk payload and memory snapshot raw bodies are "
+                "hash-only and remain in /workspace/ds4"
+            ),
+            rerun_command=b300_rust_graph_restore_readback_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1853,6 +1872,36 @@ def b300_rust_raw_graph_snapshot_import_command() -> str:
             "cp",
             f"{KUBE_POD}:{summary}",
             "ds4-parity/baselines/kv/m10.7c3a/rust-b300-snapshot-raw-import.json",
+        ]
+    )
+    return f"{source_refresh} && {smoke} && {copy_back}"
+
+
+def b300_rust_graph_restore_readback_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    summary = "/tmp/ds4-m107c3c-restore-readback.json"
+    smoke = b300_exec(
+        "python3 ds4-parity/compare_graph_restore_readback.py "
+        f"--live --workdir {B300_WORKDIR} --write-summary {summary} --negative-test"
+    )
+    copy_back = shell_join(
+        prefix
+        + [
+            "cp",
+            f"{KUBE_POD}:{summary}",
+            "ds4-parity/baselines/kv/m10.7c3c/rust-b300-restore-readback.json",
         ]
     )
     return f"{source_refresh} && {smoke} && {copy_back}"

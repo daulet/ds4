@@ -1,0 +1,1402 @@
+{
+  "schema": "ds4.rust_graph_restore_readback_summary.v1",
+  "source": "rust-b300-graph-restore-readback",
+  "oracle": "ds4-parity/baselines/kv/m7.8/current-c.json",
+  "raw_body_policy": "hash-only; raw disk payload and memory snapshot bodies remain on B300 and are not committed",
+  "b300": {
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4"
+  },
+  "rust_readback": {
+    "schema": "ds4.rust_graph_restore_readback.v1",
+    "source": "rust-graph-restore-readback",
+    "runtime": {
+      "ctx": 32768,
+      "kind": "default-graph",
+      "backend": "ds4-gpu"
+    }
+  },
+  "cases": [
+    {
+      "id": "disk_seed_payload",
+      "kind": "disk-payload",
+      "prompt_case": "seed",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
+      "raw_bytes": 31526948,
+      "raw_sha256": "543dc7eb779f1eb3372d1354f1bef3ba53c9dea14df60eefb9911331bb60a1e5",
+      "oracle_raw_sha256": "eec10e160f9092399eb77d8376bda173916efdaeae55b95a68ea8030834391ad",
+      "raw_sha256_matches_oracle": false,
+      "rust": {
+        "id": "disk_seed_payload",
+        "path": "ds4-parity/baselines/kv/m7.8/raw/disk_seed_payload.dsv4",
+        "payload_bytes": 31526948,
+        "file_fnv1a64": "03982f305b2cea0d",
+        "ok": true,
+        "error": "",
+        "parsed": {
+          "token_count": 550,
+          "raw_first_pos": 422,
+          "raw_last_pos": 549,
+          "raw_first_phys": 422,
+          "raw_last_phys": 549,
+          "payload_bytes": 31526948,
+          "ratio4_rows": 137,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 137,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2200,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6055936,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1473024,
+            "indexer_state": 344064
+          }
+        },
+        "readback": {
+          "checkpoint": {
+            "bytes": 2200,
+            "source_fnv1a64": "658b58c6d38f0c74",
+            "readback_fnv1a64": "658b58c6d38f0c74",
+            "matched": true
+          },
+          "logits": {
+            "bytes": 517120,
+            "source_fnv1a64": "92edba3734a3827f",
+            "readback_fnv1a64": "92edba3734a3827f",
+            "matched": true
+          },
+          "attn_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "1bab04c7bc51554c",
+            "readback_fnv1a64": "1bab04c7bc51554c",
+            "matched": true
+          },
+          "index_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "55d09d28179fa84c",
+            "readback_fnv1a64": "55d09d28179fa84c",
+            "matched": true
+          },
+          "raw_rows": {
+            "bytes": 11272192,
+            "source_fnv1a64": "c0b4112bc95ca742",
+            "readback_fnv1a64": "c0b4112bc95ca742",
+            "matched": true
+          },
+          "attn_compressed_rows": {
+            "bytes": 6055936,
+            "source_fnv1a64": "ae3cd29821bf69df",
+            "readback_fnv1a64": "ae3cd29821bf69df",
+            "matched": true
+          },
+          "attn_state_kv": {
+            "bytes": 5931008,
+            "source_fnv1a64": "ad227dd4e0a01f31",
+            "readback_fnv1a64": "ad227dd4e0a01f31",
+            "matched": true
+          },
+          "attn_state_score": {
+            "bytes": 5931008,
+            "source_fnv1a64": "4641601bba1c187e",
+            "readback_fnv1a64": "4641601bba1c187e",
+            "matched": true
+          },
+          "indexer_compressed_rows": {
+            "bytes": 1473024,
+            "source_fnv1a64": "7dc6532d624dee55",
+            "readback_fnv1a64": "7dc6532d624dee55",
+            "matched": true
+          },
+          "index_state_kv": {
+            "bytes": 172032,
+            "source_fnv1a64": "957a89b8c14fec2c",
+            "readback_fnv1a64": "957a89b8c14fec2c",
+            "matched": true
+          },
+          "index_state_score": {
+            "bytes": 172032,
+            "source_fnv1a64": "6ffa5819b9d184d9",
+            "readback_fnv1a64": "6ffa5819b9d184d9",
+            "matched": true
+          },
+          "samples": [
+            {
+              "layer": 0,
+              "ratio": 0,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "426672a7c59dc373",
+                "readback_fnv1a64": "426672a7c59dc373",
+                "matched": true
+              },
+              "attn_compressed_rows": null,
+              "attn_state_kv": null,
+              "attn_state_score": null,
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 2,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "692475281a19ee70",
+                "readback_fnv1a64": "692475281a19ee70",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 280576,
+                "source_fnv1a64": "e4b623fd745c6d12",
+                "readback_fnv1a64": "e4b623fd745c6d12",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "9c52e552ebe2a101",
+                "readback_fnv1a64": "9c52e552ebe2a101",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "f376cb4e8b6c057a",
+                "readback_fnv1a64": "f376cb4e8b6c057a",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 70144,
+                "source_fnv1a64": "c12e2bc392cc9865",
+                "readback_fnv1a64": "c12e2bc392cc9865",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "a217c6a9ba3f32f3",
+                "readback_fnv1a64": "a217c6a9ba3f32f3",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "04cbbff3973e9b91",
+                "readback_fnv1a64": "04cbbff3973e9b91",
+                "matched": true
+              }
+            },
+            {
+              "layer": 3,
+              "ratio": 128,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "1698eb61113ea122",
+                "readback_fnv1a64": "1698eb61113ea122",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 8192,
+                "source_fnv1a64": "cab06b9af11ce158",
+                "readback_fnv1a64": "cab06b9af11ce158",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 262144,
+                "source_fnv1a64": "0d0b615ba32bfef0",
+                "readback_fnv1a64": "0d0b615ba32bfef0",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 262144,
+                "source_fnv1a64": "974f3330251f2775",
+                "readback_fnv1a64": "974f3330251f2775",
+                "matched": true
+              },
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 42,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "111aa4c111678289",
+                "readback_fnv1a64": "111aa4c111678289",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 280576,
+                "source_fnv1a64": "7151caac4377224b",
+                "readback_fnv1a64": "7151caac4377224b",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "67ada881e7ebcfc1",
+                "readback_fnv1a64": "67ada881e7ebcfc1",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "ae7b033e18ae9d30",
+                "readback_fnv1a64": "ae7b033e18ae9d30",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 70144,
+                "source_fnv1a64": "14226a31803fa4b2",
+                "readback_fnv1a64": "14226a31803fa4b2",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "cadf599a968a1538",
+                "readback_fnv1a64": "cadf599a968a1538",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "a7155196148719a5",
+                "readback_fnv1a64": "a7155196148719a5",
+                "matched": true
+              }
+            }
+          ],
+          "post_restore_state": {
+            "checkpoint_valid": true,
+            "mtp_draft_valid": false,
+            "mtp_n_raw": 0,
+            "layer_n_comp": [
+              0,
+              0,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137
+            ],
+            "layer_n_index_comp": [
+              0,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "snapshot_seed",
+      "kind": "memory-snapshot",
+      "prompt_case": "seed",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
+      "raw_bytes": 31526948,
+      "raw_sha256": "4a5ed1844d523f735df567c8f99e4ddac0f0a7ffb49d36c8635928b6860f0916",
+      "oracle_raw_sha256": "46b8e3694a7c160e96e2b39292fc852eb34c5c0eb321da6c4c994ba766a39533",
+      "raw_sha256_matches_oracle": false,
+      "rust": {
+        "id": "snapshot_seed",
+        "path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_seed.dsv4",
+        "payload_bytes": 31526948,
+        "file_fnv1a64": "c3f819ec594d00a1",
+        "ok": true,
+        "error": "",
+        "parsed": {
+          "token_count": 550,
+          "raw_first_pos": 422,
+          "raw_last_pos": 549,
+          "raw_first_phys": 422,
+          "raw_last_phys": 549,
+          "payload_bytes": 31526948,
+          "ratio4_rows": 137,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 137,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2200,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6055936,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1473024,
+            "indexer_state": 344064
+          }
+        },
+        "readback": {
+          "checkpoint": {
+            "bytes": 2200,
+            "source_fnv1a64": "658b58c6d38f0c74",
+            "readback_fnv1a64": "658b58c6d38f0c74",
+            "matched": true
+          },
+          "logits": {
+            "bytes": 517120,
+            "source_fnv1a64": "532e10897a46f2d4",
+            "readback_fnv1a64": "532e10897a46f2d4",
+            "matched": true
+          },
+          "attn_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "1bab04c7bc51554c",
+            "readback_fnv1a64": "1bab04c7bc51554c",
+            "matched": true
+          },
+          "index_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "55d09d28179fa84c",
+            "readback_fnv1a64": "55d09d28179fa84c",
+            "matched": true
+          },
+          "raw_rows": {
+            "bytes": 11272192,
+            "source_fnv1a64": "da812d33ceaf4050",
+            "readback_fnv1a64": "da812d33ceaf4050",
+            "matched": true
+          },
+          "attn_compressed_rows": {
+            "bytes": 6055936,
+            "source_fnv1a64": "bfd12e84f1617407",
+            "readback_fnv1a64": "bfd12e84f1617407",
+            "matched": true
+          },
+          "attn_state_kv": {
+            "bytes": 5931008,
+            "source_fnv1a64": "de13d2e0a5b57d68",
+            "readback_fnv1a64": "de13d2e0a5b57d68",
+            "matched": true
+          },
+          "attn_state_score": {
+            "bytes": 5931008,
+            "source_fnv1a64": "7b52299dc0b8f7dd",
+            "readback_fnv1a64": "7b52299dc0b8f7dd",
+            "matched": true
+          },
+          "indexer_compressed_rows": {
+            "bytes": 1473024,
+            "source_fnv1a64": "fc8cd968d45a263f",
+            "readback_fnv1a64": "fc8cd968d45a263f",
+            "matched": true
+          },
+          "index_state_kv": {
+            "bytes": 172032,
+            "source_fnv1a64": "68e247d1a21903ea",
+            "readback_fnv1a64": "68e247d1a21903ea",
+            "matched": true
+          },
+          "index_state_score": {
+            "bytes": 172032,
+            "source_fnv1a64": "5c2b070900e99272",
+            "readback_fnv1a64": "5c2b070900e99272",
+            "matched": true
+          },
+          "samples": [
+            {
+              "layer": 0,
+              "ratio": 0,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "426672a7c59dc373",
+                "readback_fnv1a64": "426672a7c59dc373",
+                "matched": true
+              },
+              "attn_compressed_rows": null,
+              "attn_state_kv": null,
+              "attn_state_score": null,
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 2,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "e443581eeeb34236",
+                "readback_fnv1a64": "e443581eeeb34236",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 280576,
+                "source_fnv1a64": "291cd76158e0c86b",
+                "readback_fnv1a64": "291cd76158e0c86b",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "456a373f1d217680",
+                "readback_fnv1a64": "456a373f1d217680",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "fbe1ee2971bf4081",
+                "readback_fnv1a64": "fbe1ee2971bf4081",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 70144,
+                "source_fnv1a64": "795080a0a3f700c5",
+                "readback_fnv1a64": "795080a0a3f700c5",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "5d8a8aacc6c22165",
+                "readback_fnv1a64": "5d8a8aacc6c22165",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "71bf3c0e8458b954",
+                "readback_fnv1a64": "71bf3c0e8458b954",
+                "matched": true
+              }
+            },
+            {
+              "layer": 3,
+              "ratio": 128,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "572a5ecef9f57e31",
+                "readback_fnv1a64": "572a5ecef9f57e31",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 8192,
+                "source_fnv1a64": "f65123ef4db68737",
+                "readback_fnv1a64": "f65123ef4db68737",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 262144,
+                "source_fnv1a64": "ec56459f67dcc747",
+                "readback_fnv1a64": "ec56459f67dcc747",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 262144,
+                "source_fnv1a64": "909162a7d5b75722",
+                "readback_fnv1a64": "909162a7d5b75722",
+                "matched": true
+              },
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 42,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "84a0b40ddfb8dc34",
+                "readback_fnv1a64": "84a0b40ddfb8dc34",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 280576,
+                "source_fnv1a64": "45f59b1bb722c4c2",
+                "readback_fnv1a64": "45f59b1bb722c4c2",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "45b354b3c3124e11",
+                "readback_fnv1a64": "45b354b3c3124e11",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "bf327e5601a68a02",
+                "readback_fnv1a64": "bf327e5601a68a02",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 70144,
+                "source_fnv1a64": "241d5a40234d74c5",
+                "readback_fnv1a64": "241d5a40234d74c5",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "b45daea3dde842ec",
+                "readback_fnv1a64": "b45daea3dde842ec",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "35b9770098a6457f",
+                "readback_fnv1a64": "35b9770098a6457f",
+                "matched": true
+              }
+            }
+          ],
+          "post_restore_state": {
+            "checkpoint_valid": true,
+            "mtp_draft_valid": false,
+            "mtp_n_raw": 0,
+            "layer_n_comp": [
+              0,
+              0,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137,
+              4,
+              137
+            ],
+            "layer_n_index_comp": [
+              0,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137,
+              0,
+              137
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "disk_continuation_payload",
+      "kind": "disk-payload",
+      "prompt_case": "continuation",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
+      "raw_bytes": 31688272,
+      "raw_sha256": "9cdc6ffe424cc35414d17f18610c591ba19e61289d950c66add44c1ebc76b9cf",
+      "oracle_raw_sha256": "794d4df3fe8847c48098d50b2bdfced578e66da1016dc7755965d7457fd5ed71",
+      "raw_sha256_matches_oracle": false,
+      "rust": {
+        "id": "disk_continuation_payload",
+        "path": "ds4-parity/baselines/kv/m7.8/raw/disk_continuation_payload.dsv4",
+        "payload_bytes": 31688272,
+        "file_fnv1a64": "d56dad7f1b579ea4",
+        "ok": true,
+        "error": "",
+        "parsed": {
+          "token_count": 561,
+          "raw_first_pos": 433,
+          "raw_last_pos": 560,
+          "raw_first_phys": 433,
+          "raw_last_phys": 560,
+          "payload_bytes": 31688272,
+          "ratio4_rows": 140,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 140,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2244,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6184960,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1505280,
+            "indexer_state": 344064
+          }
+        },
+        "readback": {
+          "checkpoint": {
+            "bytes": 2244,
+            "source_fnv1a64": "07a12363340cd346",
+            "readback_fnv1a64": "07a12363340cd346",
+            "matched": true
+          },
+          "logits": {
+            "bytes": 517120,
+            "source_fnv1a64": "d937f22af7e25f8e",
+            "readback_fnv1a64": "d937f22af7e25f8e",
+            "matched": true
+          },
+          "attn_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "c8c0b2d075d20fd9",
+            "readback_fnv1a64": "c8c0b2d075d20fd9",
+            "matched": true
+          },
+          "index_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "63dcc8ba9fc558d9",
+            "readback_fnv1a64": "63dcc8ba9fc558d9",
+            "matched": true
+          },
+          "raw_rows": {
+            "bytes": 11272192,
+            "source_fnv1a64": "07d8b9e1faa1de04",
+            "readback_fnv1a64": "07d8b9e1faa1de04",
+            "matched": true
+          },
+          "attn_compressed_rows": {
+            "bytes": 6184960,
+            "source_fnv1a64": "995f8bfae2421ad8",
+            "readback_fnv1a64": "995f8bfae2421ad8",
+            "matched": true
+          },
+          "attn_state_kv": {
+            "bytes": 5931008,
+            "source_fnv1a64": "516117e1536dd420",
+            "readback_fnv1a64": "516117e1536dd420",
+            "matched": true
+          },
+          "attn_state_score": {
+            "bytes": 5931008,
+            "source_fnv1a64": "980e3844fb129b28",
+            "readback_fnv1a64": "980e3844fb129b28",
+            "matched": true
+          },
+          "indexer_compressed_rows": {
+            "bytes": 1505280,
+            "source_fnv1a64": "4f0db65084212372",
+            "readback_fnv1a64": "4f0db65084212372",
+            "matched": true
+          },
+          "index_state_kv": {
+            "bytes": 172032,
+            "source_fnv1a64": "8cc9c55f53e0b7ec",
+            "readback_fnv1a64": "8cc9c55f53e0b7ec",
+            "matched": true
+          },
+          "index_state_score": {
+            "bytes": 172032,
+            "source_fnv1a64": "0a40c997f3b93899",
+            "readback_fnv1a64": "0a40c997f3b93899",
+            "matched": true
+          },
+          "samples": [
+            {
+              "layer": 0,
+              "ratio": 0,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "e83dccfc9350ff23",
+                "readback_fnv1a64": "e83dccfc9350ff23",
+                "matched": true
+              },
+              "attn_compressed_rows": null,
+              "attn_state_kv": null,
+              "attn_state_score": null,
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 2,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "de68bcf41ba49b8c",
+                "readback_fnv1a64": "de68bcf41ba49b8c",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 286720,
+                "source_fnv1a64": "219daaa740befc64",
+                "readback_fnv1a64": "219daaa740befc64",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "8cf18cc51d5892d5",
+                "readback_fnv1a64": "8cf18cc51d5892d5",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "cdebf584c0a9da14",
+                "readback_fnv1a64": "cdebf584c0a9da14",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 71680,
+                "source_fnv1a64": "7d30f4f54d55b97b",
+                "readback_fnv1a64": "7d30f4f54d55b97b",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "41164096f1d867f7",
+                "readback_fnv1a64": "41164096f1d867f7",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "32aa7ddf00a7465c",
+                "readback_fnv1a64": "32aa7ddf00a7465c",
+                "matched": true
+              }
+            },
+            {
+              "layer": 3,
+              "ratio": 128,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "b6aca52206b78c02",
+                "readback_fnv1a64": "b6aca52206b78c02",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 8192,
+                "source_fnv1a64": "81a91afb867be832",
+                "readback_fnv1a64": "81a91afb867be832",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 262144,
+                "source_fnv1a64": "fe05e4af35ae7af7",
+                "readback_fnv1a64": "fe05e4af35ae7af7",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 262144,
+                "source_fnv1a64": "bc3bb6a9fc248ac7",
+                "readback_fnv1a64": "bc3bb6a9fc248ac7",
+                "matched": true
+              },
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 42,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "9c1fec176a0d89b2",
+                "readback_fnv1a64": "9c1fec176a0d89b2",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 286720,
+                "source_fnv1a64": "900f3a6876d26666",
+                "readback_fnv1a64": "900f3a6876d26666",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "58f0f2d7a7a1dca7",
+                "readback_fnv1a64": "58f0f2d7a7a1dca7",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "4de41ccddd01a77b",
+                "readback_fnv1a64": "4de41ccddd01a77b",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 71680,
+                "source_fnv1a64": "380526b55839ae05",
+                "readback_fnv1a64": "380526b55839ae05",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "eb6dabda1e2c62b2",
+                "readback_fnv1a64": "eb6dabda1e2c62b2",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "56dd50e2b9889ba4",
+                "readback_fnv1a64": "56dd50e2b9889ba4",
+                "matched": true
+              }
+            }
+          ],
+          "post_restore_state": {
+            "checkpoint_valid": true,
+            "mtp_draft_valid": false,
+            "mtp_n_raw": 0,
+            "layer_n_comp": [
+              0,
+              0,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140
+            ],
+            "layer_n_index_comp": [
+              0,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "snapshot_continuation",
+      "kind": "memory-snapshot",
+      "prompt_case": "continuation",
+      "raw_file": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
+      "raw_bytes": 31688272,
+      "raw_sha256": "58670a8b8e476e211286edc0a4620f990831bdf9a1241959ce19306e04ce6059",
+      "oracle_raw_sha256": "998fbd3d12dc2cc9cf1ddf9b40f8d6d32a9db6b5ca66e5da78240a987d2936e3",
+      "raw_sha256_matches_oracle": false,
+      "rust": {
+        "id": "snapshot_continuation",
+        "path": "ds4-parity/baselines/kv/m7.8/raw/snapshot_continuation.dsv4",
+        "payload_bytes": 31688272,
+        "file_fnv1a64": "a1318aa76639d87e",
+        "ok": true,
+        "error": "",
+        "parsed": {
+          "token_count": 561,
+          "raw_first_pos": 433,
+          "raw_last_pos": 560,
+          "raw_first_phys": 433,
+          "raw_last_phys": 560,
+          "payload_bytes": 31688272,
+          "ratio4_rows": 140,
+          "ratio128_rows": 4,
+          "layer2_n_index_comp": 140,
+          "section_bytes": {
+            "header": 52,
+            "tokens": 2244,
+            "logits": 517120,
+            "attn_counts": 172,
+            "index_counts": 172,
+            "raw_rows": 11272192,
+            "attn_compressed_rows": 6184960,
+            "attn_state": 11862016,
+            "indexer_compressed_rows": 1505280,
+            "indexer_state": 344064
+          }
+        },
+        "readback": {
+          "checkpoint": {
+            "bytes": 2244,
+            "source_fnv1a64": "07a12363340cd346",
+            "readback_fnv1a64": "07a12363340cd346",
+            "matched": true
+          },
+          "logits": {
+            "bytes": 517120,
+            "source_fnv1a64": "064c0b4ef054773b",
+            "readback_fnv1a64": "064c0b4ef054773b",
+            "matched": true
+          },
+          "attn_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "c8c0b2d075d20fd9",
+            "readback_fnv1a64": "c8c0b2d075d20fd9",
+            "matched": true
+          },
+          "index_counts": {
+            "bytes": 172,
+            "source_fnv1a64": "63dcc8ba9fc558d9",
+            "readback_fnv1a64": "63dcc8ba9fc558d9",
+            "matched": true
+          },
+          "raw_rows": {
+            "bytes": 11272192,
+            "source_fnv1a64": "83c6b806581c6de3",
+            "readback_fnv1a64": "83c6b806581c6de3",
+            "matched": true
+          },
+          "attn_compressed_rows": {
+            "bytes": 6184960,
+            "source_fnv1a64": "4dec915d38102b6e",
+            "readback_fnv1a64": "4dec915d38102b6e",
+            "matched": true
+          },
+          "attn_state_kv": {
+            "bytes": 5931008,
+            "source_fnv1a64": "a31d3d8756522cf2",
+            "readback_fnv1a64": "a31d3d8756522cf2",
+            "matched": true
+          },
+          "attn_state_score": {
+            "bytes": 5931008,
+            "source_fnv1a64": "2e88dea6a5465fc6",
+            "readback_fnv1a64": "2e88dea6a5465fc6",
+            "matched": true
+          },
+          "indexer_compressed_rows": {
+            "bytes": 1505280,
+            "source_fnv1a64": "0eebfbeb3459deb2",
+            "readback_fnv1a64": "0eebfbeb3459deb2",
+            "matched": true
+          },
+          "index_state_kv": {
+            "bytes": 172032,
+            "source_fnv1a64": "050cf53742b5c443",
+            "readback_fnv1a64": "050cf53742b5c443",
+            "matched": true
+          },
+          "index_state_score": {
+            "bytes": 172032,
+            "source_fnv1a64": "647ff478f1a73628",
+            "readback_fnv1a64": "647ff478f1a73628",
+            "matched": true
+          },
+          "samples": [
+            {
+              "layer": 0,
+              "ratio": 0,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "e83dccfc9350ff23",
+                "readback_fnv1a64": "e83dccfc9350ff23",
+                "matched": true
+              },
+              "attn_compressed_rows": null,
+              "attn_state_kv": null,
+              "attn_state_score": null,
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 2,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "0ba325161a698799",
+                "readback_fnv1a64": "0ba325161a698799",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 286720,
+                "source_fnv1a64": "e5da9930122c2487",
+                "readback_fnv1a64": "e5da9930122c2487",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "895125e2b55da45a",
+                "readback_fnv1a64": "895125e2b55da45a",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "166f03a1ad91998d",
+                "readback_fnv1a64": "166f03a1ad91998d",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 71680,
+                "source_fnv1a64": "0b94a9b8021d8c65",
+                "readback_fnv1a64": "0b94a9b8021d8c65",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "255ab2fa30f11563",
+                "readback_fnv1a64": "255ab2fa30f11563",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "d8514985e948171c",
+                "readback_fnv1a64": "d8514985e948171c",
+                "matched": true
+              }
+            },
+            {
+              "layer": 3,
+              "ratio": 128,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "1208a78da8588adc",
+                "readback_fnv1a64": "1208a78da8588adc",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 8192,
+                "source_fnv1a64": "75f3471cb5c67032",
+                "readback_fnv1a64": "75f3471cb5c67032",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 262144,
+                "source_fnv1a64": "81e8a1a2c1bcfeb0",
+                "readback_fnv1a64": "81e8a1a2c1bcfeb0",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 262144,
+                "source_fnv1a64": "234cc32fb3e5df0d",
+                "readback_fnv1a64": "234cc32fb3e5df0d",
+                "matched": true
+              },
+              "indexer_compressed_rows": null,
+              "index_state_kv": null,
+              "index_state_score": null
+            },
+            {
+              "layer": 42,
+              "ratio": 4,
+              "raw": {
+                "bytes": 262144,
+                "source_fnv1a64": "9263722437efbe8e",
+                "readback_fnv1a64": "9263722437efbe8e",
+                "matched": true
+              },
+              "attn_compressed_rows": {
+                "bytes": 286720,
+                "source_fnv1a64": "1bae6a2ef5478173",
+                "readback_fnv1a64": "1bae6a2ef5478173",
+                "matched": true
+              },
+              "attn_state_kv": {
+                "bytes": 32768,
+                "source_fnv1a64": "e3a0577be905c06b",
+                "readback_fnv1a64": "e3a0577be905c06b",
+                "matched": true
+              },
+              "attn_state_score": {
+                "bytes": 32768,
+                "source_fnv1a64": "0d766324084a3c36",
+                "readback_fnv1a64": "0d766324084a3c36",
+                "matched": true
+              },
+              "indexer_compressed_rows": {
+                "bytes": 71680,
+                "source_fnv1a64": "2009372acb02d6f5",
+                "readback_fnv1a64": "2009372acb02d6f5",
+                "matched": true
+              },
+              "index_state_kv": {
+                "bytes": 8192,
+                "source_fnv1a64": "585061e1856bd981",
+                "readback_fnv1a64": "585061e1856bd981",
+                "matched": true
+              },
+              "index_state_score": {
+                "bytes": 8192,
+                "source_fnv1a64": "dafbaf173112bbef",
+                "readback_fnv1a64": "dafbaf173112bbef",
+                "matched": true
+              }
+            }
+          ],
+          "post_restore_state": {
+            "checkpoint_valid": true,
+            "mtp_draft_valid": false,
+            "mtp_n_raw": 0,
+            "layer_n_comp": [
+              0,
+              0,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140,
+              4,
+              140
+            ],
+            "layer_n_index_comp": [
+              0,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140,
+              0,
+              140
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

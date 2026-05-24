@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7c3c Rust Graph Tensor Restore Readback Smoke
-- Last validated source before the active item: M10.7c3b Rust Graph Restore
-  Target Mapping Contract.
+- Active item: M10.7c3d Rust Graph Tensor Restore Next-Token Smoke
+- Last validated source before the active item: M10.7c3c Rust Graph Tensor
+  Restore Readback Smoke.
 - M10.7c3 Rust Graph Tensor Restore Next-Token Smoke is split into M10.7c3a
   through M10.7c3d before tensor restore or next-token claims.
+- Earlier M10.7c3b Rust Graph Restore Target Mapping Contract.
 - Earlier M10.7c3a Rust Memory Snapshot Raw Body Import Smoke.
 - Earlier M10.7c2 Rust Disk KV Payload Byte Import Smoke.
 - Earlier M10.7c1 Rust Restore Payload Header Contract.
@@ -35,6 +36,25 @@
 
 ## Last Evidence
 
+- M10.7c3c adds `ds4-graph-restore-readback`, a B300 Rust GPU smoke that reads
+  the four M7.8 disk payload and memory snapshot raw bodies, writes graph
+  sections into Rust-owned `ds4_gpu::Tensor` allocations, and reads the written
+  spans back before any decode execution or next-token claim.
+- M10.7c3c adds `ds4-parity/compare_graph_restore_readback.py` and
+  `ds4-parity/baselines/kv/m10.7c3c/rust-b300-restore-readback.json`. The
+  summary records hash-only B300 evidence for checkpoint tokens, logits, count
+  tables, raw rows, attention compressed rows, attention state tensors, ratio-4
+  indexer rows and state tensors, sampled layer sections, and post-restore
+  counters while leaving raw bodies on B300.
+- M10.7c3c validation passed B300 live restore readback with 1365 checks and 8
+  negative mutations, local `python3
+  ds4-parity/compare_graph_restore_readback.py --negative-test` with 1365
+  checks and 8 negative mutations, Python syntax checks, `cargo test -p
+  ds4-gpu --bin ds4-graph-restore-readback`, `cargo check -p ds4-gpu --bin
+  ds4-graph-restore-readback`, `cargo fmt --all -- --check`, `git diff
+  --check`, the unified parity report with 54 passed, 39 skipped, and 0 failed,
+  `cargo test --workspace`, and non-interactive Claude review with
+  `NO BLOCKERS`.
 - M10.7c3b adds `ds4-session-payload-dump-rs --restore-target-plan`, a
   no-tensor-write Rust graph restore target plan for the four M7.8 disk payload
   and memory snapshot cases.

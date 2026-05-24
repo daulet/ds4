@@ -1020,6 +1020,36 @@ per-layer compressed-cache and state-tensor targets, ratio-4 indexer targets,
 and post-restore counter state. It uses parsed metadata only and does not move
 bytes into graph tensors.
 
+Compare the M10.7c3c Rust graph restore tensor readback summary against the
+current B300 raw-body summaries:
+
+```sh
+python3 ds4-parity/compare_graph_restore_readback.py
+python3 ds4-parity/compare_graph_restore_readback.py --negative-test
+```
+
+Recapture the Rust graph restore readback summary on the B300 pod, where the
+hash-only disk payload and memory snapshot bodies remain:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; python3 ds4-parity/compare_graph_restore_readback.py --live --workdir /workspace/ds4 --write-summary /tmp/ds4-m107c3c-restore-readback.json --negative-test'
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m107c3c-restore-readback.json \
+  ds4-parity/baselines/kv/m10.7c3c/rust-b300-restore-readback.json
+```
+
+The comparator checks that Rust writes the four M7.8 raw disk/snapshot payloads
+into Rust-owned graph tensors, reads the written spans back in C restore order,
+and matches source/readback FNVs for checkpoint tokens, logits, count tables,
+raw rows, compressed rows, attention/indexer state tensors, sampled layers, and
+post-restore counters. It still does not execute decode or claim next-token
+behavior.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
