@@ -4505,7 +4505,7 @@ restore boundary.
 ###### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
 
 - Status: split into M10.7c3a-M10.7c3d before implementation; M10.7c3a,
-  M10.7c3b, and M10.7c3c done; M10.7c3d active.
+  M10.7c3b, M10.7c3c, and M10.7c3d done.
 - Goal: advance graph restore from raw memory snapshot availability, to restore
   target mapping, to tensor readback, and finally to next-token behavior.
 - Oracle: current C M7.8 restore oracle on B300.
@@ -4629,11 +4629,29 @@ restore boundary.
 - Acceptance: Rust-restored sessions produce the same next-token state as the
   C restore oracle for the committed fixtures.
 - Drift policy: payload body hashes, restored checkpoint length, selected
-  token, top-logprob order, cache source, and graph counters are exact.
+  token, top-logprob order, cache source, and graph counters are exact. Raw
+  body SHA256 values are per-capture metadata, so exact top-logprob scores
+  compare against the same-capture current-C restore oracle.
 - Review gate: ask Claude to review restore invariants and B300 evidence.
 - Validation gate: B300 restore smoke, session payload comparator, KV replay
   comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
   diff --check`, and non-interactive Claude review with no blockers.
+- Evidence: added `ds4-graph-restore-next-token`,
+  `ds4-parity/compare_graph_restore_next_token.py`, and
+  `ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json`. The
+  B300 live comparator recaptures current C restore output and raw payload
+  bodies, runs same-capture Rust tensor readback, restores the same payloads
+  into Rust graph state, and checks restored checkpoint/logits FNVs, selected
+  token, top-logprob order and scores, cache source, and post-restore graph
+  counters. Validation passed the B300 live comparator with 4030 checks and 11
+  negative mutations, local `python3
+  ds4-parity/compare_graph_restore_next_token.py --negative-test` with 4030
+  checks and 11 negative mutations, Python syntax checks, `cargo check -p
+  ds4-gpu --bin ds4-graph-restore-next-token`, `cargo test -p ds4-gpu --bin
+  ds4-graph-restore-next-token`, `cargo fmt --all -- --check`, `git diff
+  --check`, the unified parity report with 55 passed, 40 skipped, and 0
+  failed, `cargo test --workspace`, and non-interactive Claude review with no
+  blockers.
 
 ##### M10.7d: Rust Continued-Frontier Save And Restore Policy
 

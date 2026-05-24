@@ -5104,7 +5104,7 @@
 
 - Status: split into M10.7c1-M10.7c3 before implementation; M10.7c1 and
   M10.7c2 done; M10.7c3 split into M10.7c3a-M10.7c3d before tensor restore;
-  M10.7c3a, M10.7c3b, and M10.7c3c done; M10.7c3d active.
+  M10.7c3a, M10.7c3b, M10.7c3c, and M10.7c3d done; M10.7d active.
 - Goal: advance disk and memory restore parity in slices: committed restore
   metadata first, raw B300 payload bytes second, and tensor restore behavior
   third.
@@ -5180,7 +5180,7 @@
 ### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
 
 - Status: split into M10.7c3a-M10.7c3d before implementation; M10.7c3a,
-  M10.7c3b, and M10.7c3c done; M10.7c3d active.
+  M10.7c3b, M10.7c3c, and M10.7c3d done.
 - Goal: advance graph restore from raw memory snapshot availability, to restore
   target mapping, to tensor readback, and finally to next-token behavior.
 - Oracle: current C M7.8 restore oracle on B300.
@@ -5290,7 +5290,7 @@
 
 ### M10.7c3d: Rust Graph Tensor Restore Next-Token Smoke
 
-- Status: active
+- Status: done
 - Goal: restore C-written disk and memory snapshot payloads into Rust graph
   session state on B300 and prove next-token behavior matches current C.
 - Oracle: current C M7.8 restore oracle on B300 plus M10.7c3c tensor readback
@@ -5303,17 +5303,28 @@
 - Acceptance: Rust-restored sessions produce the same next-token state as the C
   restore oracle for the committed fixtures.
 - Drift policy: payload body hashes, restored checkpoint length, selected token,
-  top-logprob order, cache source, and graph counters are exact.
+  top-logprob order, cache source, and graph counters are exact. Raw body
+  SHA256 values are per-capture metadata, so exact top-logprob scores compare
+  against the same-capture current-C restore oracle.
 - Review gate: ask Claude to review restore invariants and B300 evidence.
-- Validation needed: B300 restore smoke, session payload comparator, KV replay
-  comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
-  --check`, and non-interactive Claude review with no blockers.
+- Validation passed: B300 live `python3
+  ds4-parity/compare_graph_restore_next_token.py --live --workdir
+  /workspace/ds4 --write-summary /tmp/ds4-m107c3d-restore-next-token.json
+  --negative-test` passed 4030 checks and rejected 11 mutations; local
+  `python3 ds4-parity/compare_graph_restore_next_token.py --negative-test`
+  passed 4030 checks and rejected 11 mutations; `python3 -m py_compile
+  ds4-parity/compare_graph_restore_next_token.py ds4-parity/run_parity_report.py`;
+  `cargo check -p ds4-gpu --bin ds4-graph-restore-next-token`; `cargo test -p
+  ds4-gpu --bin ds4-graph-restore-next-token`; `cargo fmt --all -- --check`;
+  `git diff --check`; `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` reported 55 passed, 40 skipped, and 0 failed; `cargo
+  test --workspace`; and non-interactive Claude review with no blockers.
 - Owner path: Rust graph restore runtime, B300 restore comparator,
   `.memory/status.md`.
 
 ### M10.7d: Rust Continued-Frontier Save And Restore Policy
 
-- Status: pending
+- Status: active
 - Goal: port continued-frontier cache accounting around save suppression,
   store targets, and restore decisions into the Rust graph runtime.
 - Oracle: M9.8 runtime KV replay artifacts, M7.7 KV replay comparator, and

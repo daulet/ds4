@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7c3d Rust Graph Tensor Restore Next-Token Smoke
-- Last validated source before the active item: M10.7c3c Rust Graph Tensor
-  Restore Readback Smoke.
+- Active item: M10.7d Rust Continued-Frontier Save And Restore Policy
+- Last validated source before the active item: M10.7c3d Rust Graph Tensor
+  Restore Next-Token Smoke.
 - M10.7c3 Rust Graph Tensor Restore Next-Token Smoke is split into M10.7c3a
   through M10.7c3d before tensor restore or next-token claims.
+- Earlier M10.7c3c Rust Graph Tensor Restore Readback Smoke.
 - Earlier M10.7c3b Rust Graph Restore Target Mapping Contract.
 - Earlier M10.7c3a Rust Memory Snapshot Raw Body Import Smoke.
 - Earlier M10.7c2 Rust Disk KV Payload Byte Import Smoke.
@@ -36,6 +37,25 @@
 
 ## Last Evidence
 
+- M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
+  restores the four C-written disk payload and memory snapshot bodies into
+  Rust graph state, computes selected token and top-logprob slices from the
+  restored session logits, and reports restored checkpoint/logits FNVs, cache
+  source, same-capture readback evidence, and post-restore graph counters.
+- M10.7c3d adds `ds4-parity/compare_graph_restore_next_token.py` and
+  `ds4-parity/baselines/kv/m10.7c3d/rust-b300-restore-next-token.json`. The
+  live comparator recaptures the current-C restore oracle first because raw
+  payload bodies are per-capture evidence, then compares Rust against that same
+  capture while also validating the committed M10.7c3c readback summary.
+- M10.7c3d validation passed B300 live restore next-token comparison with 4030
+  checks and 11 negative mutations, local `python3
+  ds4-parity/compare_graph_restore_next_token.py --negative-test` with 4030
+  checks and 11 negative mutations, Python syntax checks, `cargo check -p
+  ds4-gpu --bin ds4-graph-restore-next-token`, `cargo test -p ds4-gpu --bin
+  ds4-graph-restore-next-token`, `cargo fmt --all -- --check`, `git diff
+  --check`, `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+  with 55 passed, 40 skipped, and 0 failed, `cargo test --workspace`, and
+  non-interactive Claude review with `NO BLOCKERS`.
 - M10.7c3c adds `ds4-graph-restore-readback`, a B300 Rust GPU smoke that reads
   the four M7.8 disk payload and memory snapshot raw bodies, writes graph
   sections into Rust-owned `ds4_gpu::Tensor` allocations, and reads the written
