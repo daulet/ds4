@@ -4697,30 +4697,78 @@ restore boundary.
   passed, 40 skipped, and 0 failed; and non-interactive Claude review with no
   blockers.
 
-##### M10.7d2: Runtime Continued-Store Replay Decisions
+##### M10.7d2a: Runtime Continued-Frontier Ledger Contract
 
-- Goal: wire continued-frontier accounting through the Rust runtime request
-  path so fresh misses, memory hits, disk restores, continuation restores, cold
-  stores, and decode-time continued stores produce C-equivalent store decisions.
-- Oracle: M9.8 runtime KV replay artifacts, M7.7 KV replay comparator, current
-  C `generate_job` cache/store ordering, and M9.8f5 B300 replay summary.
-- Fixture: M0.5 seed miss, exact-prefix seed restore, continuation restore,
-  memory-token continuation, cold-store frontier suppression, and failed-store
-  re-enable cases.
-- Comparator: Rust-vs-C cache source, cached token count, cache write token
-  count, disk cached tokens, KVC reason fields, continued frontier before/after
-  each runtime decision, and store/skip outcomes.
-- Acceptance: Rust runtime cache decisions match current C while using
-  Rust-owned session/cache state and existing C KVC file operations.
-- Drift policy: cache source, cached tokens, write tokens, disk tokens, reason
-  names/codes, and frontier transitions are exact; paths, timestamps, and raw
-  payload hashes stay normalized.
-- Review gate: ask Claude to review runtime cache/store ordering and failure
-  rollback.
-- Validation gate: KV replay comparator, targeted Rust runtime tests,
-  `python3 ds4-parity/check_runtime_kv_replay_summary.py`, `cargo test
-  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+- Goal: add a model-free Rust runtime cache ledger that records the
+  continued-frontier decisions made around cache misses, memory hits, disk
+  restores, cold-store suppression, note-store updates, failed-store restore,
+  and decode-time continued-store attempts without changing graph tensors.
+- Oracle: current C `generate_job` ordering around
+  `kv_cache_store_current`, `kv_cache_suppress_continued_store`,
+  `kv_cache_restore_suppressed_continued`, `kv_cache_maybe_store_continued`,
+  and the M10.7d1 policy transition matrix.
+- Fixture: synthetic runtime cache probes and store outcomes for fresh miss
+  reset, memory-token hit, disk restore hit, cold prefix store success,
+  cold prefix store failure, full-prompt cold store, continued-store hit/skip,
+  and tool-call decode suppression.
+- Comparator: event order, cache source, cached tokens, cache write tokens,
+  disk cached tokens, continued frontier before/after, store reason, store
+  success, and rollback result.
+- Acceptance: Rust runtime state exposes the same decision sequence current C
+  uses, with no model or B300 dependency.
+- Drift policy: event names/order, token counts, reason names, success flags,
+  and frontier before/after values are exact.
+- Review gate: ask Claude to review runtime event ordering and rollback
+  invariants.
+- Validation gate: targeted Rust runtime tests, KV policy comparator, `cargo
+  test --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+
+##### M10.7d2b: Runtime KV Replay Checker Closure
+
+- Goal: extend the committed runtime KV replay checker/artifact contract so
+  M0.5 seed miss, seed restore, continuation restore, and memory-token
+  continuation validate continued-frontier ledger fields in addition to cache
+  source and token counts.
+- Oracle: M9.8f5 B300 runtime replay summary, M7.7 KV replay comparator, M0.5
+  current-C artifacts, and the M10.7d2a ledger contract.
+- Fixture: committed M9.8f5 summary, M0.5 KV fixtures, and a model-free
+  memory-token continuation trace.
+- Comparator: summary schema/checker fields for cache source, cached/write
+  tokens, disk cached tokens, KVC reason fields, ledger event order, and
+  continued frontier before/after.
+- Acceptance: checked-in replay evidence fails if runtime cache accounting or
+  continued-frontier ledger semantics drift.
+- Drift policy: timestamps, paths, and raw payload hashes are normalized; cache
+  source, token counts, reason fields, event order, and frontier transitions
+  are exact.
+- Review gate: ask Claude to review checker coverage and artifact semantics.
+- Validation gate: runtime KV replay checker with negative tests, KV replay
+  comparator, targeted Rust runtime tests, `cargo test --workspace`, `cargo
+  fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
+  with no blockers.
+
+##### M10.7d2c: Runtime Continued-Store B300 Replay Refresh
+
+- Goal: refresh the model-backed B300 Rust runtime replay so real seed miss,
+  seed restore, continuation restore, and continued-store decisions include the
+  M10.7d2 ledger evidence.
+- Oracle: current C runtime cache/store ordering, M9.8f5 replay commands, M0.5
+  current-C artifacts, and M10.7d2b checker contract.
+- Fixture: B300 `/workspace/ds4/ds4flash.gguf`, M0.5 seed and continuation
+  request fixtures, runtime traces, KVC headers, and ledger summary fields.
+- Comparator: B300 replay summary comparing response content, cache source,
+  cached/write tokens, disk tokens, KVC reasons, ledger events, and frontier
+  transitions.
+- Acceptance: real Rust runtime replay matches current-C store/restore
+  decisions and produces checked-in ledger evidence.
+- Drift policy: generated text, cache source, token counts, reason fields,
+  event order, and frontier transitions are exact; paths, timestamps, and raw
+  payload hashes are normalized.
+- Review gate: ask Claude to review B300 command fidelity and replay coverage.
+- Validation gate: B300 runtime replay, checker negative tests, KV replay
+  comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, and non-interactive Claude review with no blockers.
 
 ##### M10.7d3: Graph Restore Continued-Frontier B300 Smoke
 

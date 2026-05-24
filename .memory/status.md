@@ -3,7 +3,7 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7d2 Runtime Continued-Store Replay Decisions
+- Active item: M10.7d2a Runtime Continued-Frontier Ledger Contract
 - Last validated source before the active item: M10.7d1 Continued-Frontier
   Policy Transition Matrix.
 - Earlier M10.7d1 Continued-Frontier Policy Transition Matrix.
@@ -61,6 +61,11 @@
   --check`; `git diff --check`; `python3 ds4-parity/run_parity_report.py
   --skip-local-oracles` with 55 passed, 40 skipped, and 0 failed; and
   non-interactive Claude review with `NO BLOCKERS`.
+- M10.7d2 is split before implementation into M10.7d2a model-free runtime
+  continued-frontier ledger contract, M10.7d2b runtime KV replay checker
+  closure, and M10.7d2c B300 runtime replay refresh. M10.7d2a is active so the
+  runtime event order and rollback semantics are testable before replay
+  artifacts or B300 refreshes change.
 - M10.7c3d adds `ds4-graph-restore-next-token`, a B300 Rust GPU smoke that
   restores the four C-written disk payload and memory snapshot bodies into
   Rust graph state, computes selected token and top-logprob slices from the
