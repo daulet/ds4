@@ -1,0 +1,148 @@
+{
+  "schema": "ds4.backend_replacement_closure.v1",
+  "source": "m12.6-backend-replacement-closure",
+  "milestone": "M12.6",
+  "parent": "M12",
+  "previous_stage": "M12.5",
+  "next_stage": "post-M12-roadmap-decision",
+  "status": "closure-no-removal",
+  "source_artifacts": {
+    "boundary_inventory": "ds4-parity/baselines/backend/m12.1/backend-boundary-inventory.json",
+    "operation_fixture_manifest": "ds4-parity/baselines/backend/m12.2/manifest.json",
+    "facade_replay": "ds4-parity/baselines/backend/m12.3/facade-replay.json",
+    "replacement_slice": "ds4-parity/baselines/backend/m12.4/replacement-slice.json",
+    "runtime_route_gate": "ds4-parity/baselines/backend/m12.5/runtime-route-gate.json",
+    "runtime_graph_closure": "ds4-parity/baselines/graph/m10.9a/runtime-graph-closure-matrix.json",
+    "official_vectors": "ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json",
+    "long_context": "ds4-parity/baselines/graph/m10.9d/runtime-long-context.json",
+    "tool_server": "ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json",
+    "benchmark_closure": "ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json"
+  },
+  "claim_policy": {
+    "default_route_replacement_active": false,
+    "replacement_route_opt_in_only": true,
+    "general_backend_replacement": false,
+    "kernel_replacement": false,
+    "removals_allowed": false,
+    "current_backend_retained_as_oracle": true,
+    "current_backend_retained_as_sidecar": true
+  },
+  "removal_criteria": [
+    {
+      "id": "rust_default_cli_server_flows",
+      "required": "Rust path can run default CLI and server flows",
+      "status": "partial",
+      "evidence": ["M10.9 graph-route Rust runtime gates"],
+      "removal_blocker": "default CLI/server route is still current-backend unless explicitly gated"
+    },
+    {
+      "id": "official_vector_and_server_tests",
+      "required": "Official-vector and server tests pass through the Rust path",
+      "status": "satisfied_for_graph_route",
+      "evidence": ["M10.9c official vectors", "M10.9e tool/server"]
+    },
+    {
+      "id": "long_context_and_tool_quality",
+      "required": "Long-context and tool-call quality tests pass on a production backend",
+      "status": "satisfied_for_b300_graph_route",
+      "evidence": ["M10.9d long context", "M10.9e tool/server"]
+    },
+    {
+      "id": "old_code_no_longer_reference",
+      "required": "Old code path is no longer needed as a reference for active port work",
+      "status": "not_satisfied",
+      "removal_blocker": "M12 keeps current backend artifacts as active oracles"
+    },
+    {
+      "id": "docs_and_build_entrypoints",
+      "required": "Documentation and build commands clearly describe Rust entry points",
+      "status": "partial",
+      "evidence": ["ds4-parity README validation commands"],
+      "removal_blocker": "closure documents validation gates, not user-facing replacement entry points"
+    }
+  ],
+  "operation_family_decisions": [
+    {
+      "name": "backend_lifecycle",
+      "coverage": "inventory_only",
+      "replacement_status": "not_replaced",
+      "runtime_route_status": "current-backend-only",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "tensor_lifetime",
+      "coverage": "inventory_only",
+      "replacement_status": "not_replaced",
+      "runtime_route_status": "current-backend-only",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "command_buffers",
+      "coverage": "inventory_only",
+      "replacement_status": "not_replaced",
+      "runtime_route_status": "current-backend-only",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "model_mapping",
+      "coverage": "inventory_only",
+      "replacement_status": "not_replaced",
+      "runtime_route_status": "current-backend-only",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "embedding_and_indexer",
+      "coverage": "m12.2_fixture_m12.3_replay_m12.4_slice_m12.5_route_gate",
+      "replacement_status": "single_operation_route_gated",
+      "runtime_route_status": "opt-in-only",
+      "replaced_operations": ["ds4_gpu_embed_token_hc_tensor"],
+      "remaining_operations": [
+        "ds4_gpu_embed_tokens_hc_tensor",
+        "ds4_gpu_indexer_score_one_tensor",
+        "ds4_gpu_indexer_scores_prefill_tensor",
+        "ds4_gpu_indexer_scores_decode_batch_tensor",
+        "ds4_gpu_indexer_topk_tensor",
+        "ds4_gpu_dsv4_topk_mask_tensor"
+      ],
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "dense_norm_rope_kv",
+      "coverage": "m12.2_fixture_m12.3_replay",
+      "replacement_status": "fixture_only",
+      "runtime_route_status": "not_route_gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "compressor_attention",
+      "coverage": "m12.2_fixture_m12.3_replay",
+      "replacement_status": "fixture_only",
+      "runtime_route_status": "not_route_gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "routing_moe",
+      "coverage": "m12.2_fixture_m12.3_replay",
+      "replacement_status": "fixture_only",
+      "runtime_route_status": "not_route_gated",
+      "removal_decision": "retain_current_backend"
+    },
+    {
+      "name": "hc_output",
+      "coverage": "m12.2_fixture_m12.3_replay",
+      "replacement_status": "fixture_only",
+      "runtime_route_status": "not_route_gated",
+      "removal_decision": "retain_current_backend"
+    }
+  ],
+  "overall_decision": {
+    "decision": "retain_current_backend_and_oracles",
+    "removals_allowed": false,
+    "reason": "Only one embedding/indexer operation has an opt-in route-gated replacement slice; the default route remains current-backend and all other backend families are inventory-only or fixture-only.",
+    "next_required_work": [
+      "choose the next backend replacement family or broaden the embedding/indexer route",
+      "keep current backend artifacts as oracles until a full default-route replacement exists",
+      "do not remove C/CUDA/Metal backend code in M12"
+    ]
+  }
+}

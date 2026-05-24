@@ -6230,7 +6230,7 @@ kernel execution, runtime route selection, and final removal decisions:
 
 #### M12.6: Backend Replacement Closure And Removal Decision
 
-- Status: active.
+- Status: complete.
 - Goal: decide whether any C/CUDA/Metal backend code can be removed, retained
   as a sidecar, or kept as an oracle after replacement routes pass.
 - Oracle: M12.1 through M12.5 artifacts plus current removal criteria.
@@ -6245,6 +6245,22 @@ kernel execution, runtime route selection, and final removal decisions:
 - Drift policy: closure drift must keep prior oracle artifacts available until
   the replacement route has equivalent or better coverage on each supported
   backend class.
+- Evidence:
+  - Added `ds4-parity/baselines/backend/m12.6/backend-replacement-closure.json`.
+  - Added `ds4-parity/check_backend_replacement_closure.py --negative-test`.
+  - The closure matrix records all M12.1 backend operation families, the M12.2
+    tensor fixture families, M12.3 facade replay coverage, the single M12.4
+    route-gated replacement operation, and M12.5 opt-in route status.
+  - Removal decision: retain current C/CUDA/Metal backend code as both sidecar
+    and oracle. No removals are allowed in M12 because only
+    `ds4_gpu_embed_token_hc_tensor` has opt-in route-gated replacement
+    coverage, the default route remains current-backend, and current backend
+    artifacts are still active references.
+  - `python3 ds4-parity/check_backend_replacement_closure.py --negative-test`
+    passed with 147 checks.
+  - `cargo fmt --all -- --check`, `git diff --check`, and `python3
+    ds4-parity/run_parity_report.py --skip-local-oracles` passed with 87
+    passed, 50 skipped, 0 failed.
 
 ## Removal Criteria for C Host Code
 

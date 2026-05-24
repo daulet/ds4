@@ -466,6 +466,20 @@ slice and the M10.9 B300 runtime graph evidence. It also runs the Rust
 behavior, and preserves the no-general-backend-replacement/no-kernel-replacement
 claim boundary. The current M12.5 fixture passes with 135 checker assertions.
 
+Validate the M12.6 Backend replacement closure:
+
+```sh
+python3 ds4-parity/check_backend_replacement_closure.py --negative-test
+```
+
+The M12.6 checker validates
+`baselines/backend/m12.6/backend-replacement-closure.json` against M12.1
+through M12.5 backend artifacts and the M10.9 B300 route evidence. It rejects
+default-route activation, full-backend replacement claims, kernel replacement
+claims, and any C/CUDA/Metal removal decision while only one embedding/indexer
+operation has an opt-in route-gated replacement slice. The current M12.6
+fixture passes with 147 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

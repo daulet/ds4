@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M12.6 Backend Replacement Closure And Removal Decision
-- Last validated source before the active item: M12.5 Runtime Backend Route
-  Gate.
+- Active item: post-M12 roadmap decision
+- Last validated source before the active item: M12.6 Backend Replacement
+  Closure And Removal Decision.
+- Earlier M12.6 Backend Replacement Closure And Removal Decision.
 - Earlier M12.5 Runtime Backend Route Gate.
 - Earlier M12.4 First Backend Replacement Slice.
 - Earlier M12.3 Rust Backend Facade Parity Harness.
@@ -96,6 +97,22 @@
 
 ## Last Evidence
 
+- M12.6 adds
+  `ds4-parity/baselines/backend/m12.6/backend-replacement-closure.json` and
+  `ds4-parity/check_backend_replacement_closure.py --negative-test`. The
+  closure matrix records all M12.1 backend operation families, the M12.2 tensor
+  fixture families, M12.3 facade replay coverage, the single M12.4 route-gated
+  replacement operation, and M12.5 opt-in route status. Removal decision:
+  retain current C/CUDA/Metal backend code as both sidecar and oracle. No
+  removals are allowed in M12 because only `ds4_gpu_embed_token_hc_tensor` has
+  opt-in route-gated replacement coverage, the default route remains
+  current-backend, and current backend artifacts are still active references.
+  Validation passed Python syntax, JSON formatting, the M12.6 checker with 147
+  checks and negative tests, the M12.1, M12.2, M12.3, M12.4, M12.5, and runtime
+  graph closure checkers with negative tests, `cargo fmt --all -- --check`,
+  `git diff --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 87 passed, 50 skipped, 0 failed. Post-M12 roadmap
+  decision is active.
 - M12.5 adds the Rust-owned runtime backend route gate descriptor
   `rust/ds4-gpu/src/backend_route_gate.rs`, the descriptor emitter
   `rust/ds4-gpu/src/bin/ds4-backend-route-gate.rs`,
