@@ -249,5 +249,6 @@ int ds4_session_load_snapshot(ds4_session *s, const ds4_session_snapshot *snap, 
 void ds4_session_snapshot_free(ds4_session_snapshot *snap);
 int ds4_dump_session_payload_shape_json(FILE *fp);
 int ds4_dump_graph_session_payload_plan_json(FILE *fp);
+int ds4_dump_graph_session_payload_probe_json(FILE *fp);
 
 #endif

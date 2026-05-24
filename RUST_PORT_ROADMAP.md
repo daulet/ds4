@@ -4418,6 +4418,15 @@ ownership boundary.
 - Validation gate: payload reader/writer tests, comparator and negative tests,
   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
   and non-interactive Claude review with no blockers.
+- Evidence: implemented Rust graph payload runtime validation, reader summaries,
+  and writer wrappers plus `--graph-probe` dumpers on both C and Rust sides. The
+  comparator passed 375 checks across runtime constants, byte FNVs, payload
+  sizes, parsed raw-ring summaries, section byte sums, and rejection codes for
+  valid short, valid wrapped, truncated, trailing, invalid count, raw-ring,
+  context, layout, chunk-layout, and comp-cap cases; negative tests rejected 7
+  mutations. Full local validation passed the unified parity report with 49
+  passed, 36 skipped, and 0 failed, full `cargo test --workspace`, format/diff
+  checks, and non-interactive Claude review with `NO BLOCKERS`.
 
 ##### M10.7c: Rust Disk KV Payload Restore Smoke
 

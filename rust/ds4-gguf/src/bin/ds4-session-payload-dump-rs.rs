@@ -1,26 +1,46 @@
 use ds4_gguf::session_payload::{
-    append_full_payload, append_prefix_to_first_comp, append_prefix_to_first_index, compress_ratio,
-    default_cpu_runtime, default_header, graph_payload_plan, sections, validate_payload_cpu,
-    GraphPayloadPlan, PayloadError, PayloadHeader, PayloadSections, GRAPH_PAYLOAD_FIXTURES,
-    HEADER_BYTES, IO_CHUNK_BYTES, MAGIC, N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB,
-    U32_FIELDS, VERSION,
+    append_full_payload, append_graph_payload_plan, append_prefix_to_first_comp,
+    append_prefix_to_first_index, compress_ratio, default_cpu_runtime,
+    default_graph_payload_runtime, default_header, graph_payload_plan, read_graph_payload,
+    sections, validate_payload_cpu, GraphPayloadPlan, GraphPayloadRead, PayloadError,
+    PayloadHeader, PayloadSections, GRAPH_PAYLOAD_FIXTURES, HEADER_BYTES, IO_CHUNK_BYTES, MAGIC,
+    N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB, U32_FIELDS, VERSION,
 };
 use std::io::{self, Write};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DumpMode {
+    Shape,
+    GraphPlan,
+    GraphProbe,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut out = io::BufWriter::new(io::stdout());
-    let mut graph_plan_dump = false;
+    let mut mode = DumpMode::Shape;
     for arg in std::env::args().skip(1) {
         if arg == "--graph-plan" {
-            graph_plan_dump = true;
+            if mode != DumpMode::Shape {
+                return Err(
+                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe]".into(),
+                );
+            }
+            mode = DumpMode::GraphPlan;
+        } else if arg == "--graph-probe" {
+            if mode != DumpMode::Shape {
+                return Err(
+                    "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe]".into(),
+                );
+            }
+            mode = DumpMode::GraphProbe;
         } else {
-            return Err("usage: ds4-session-payload-dump-rs [--graph-plan]".into());
+            return Err("usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe]".into());
         }
     }
-    if graph_plan_dump {
-        write_graph_plan_dump(&mut out)?;
-    } else {
-        write_dump(&mut out)?;
+    match mode {
+        DumpMode::Shape => write_dump(&mut out)?,
+        DumpMode::GraphPlan => write_graph_plan_dump(&mut out)?,
+        DumpMode::GraphProbe => write_graph_probe_dump(&mut out)?,
     }
     Ok(())
 }
@@ -334,6 +354,232 @@ fn write_layer_sample<W: Write>(
         indexer_compressed_row_bytes,
         indexer_state_bytes
     )
+}
+
+fn write_graph_probe_dump<W: Write>(out: &mut W) -> io::Result<()> {
+    let runtime = default_graph_payload_runtime(32_768);
+    writeln!(out, "{{")?;
+    writeln!(
+        out,
+        "  \"schema\": \"ds4.rust_graph_session_payload_rw.v1\","
+    )?;
+    writeln!(
+        out,
+        "  \"source\": \"rust-graph-session-payload-rw-no-model\","
+    )?;
+    writeln!(out, "  \"scope\": \"graph-session-payload-read-write\",")?;
+    writeln!(
+        out,
+        "  \"runtime\": {{\"ctx_size\": {}, \"prefill_cap\": {}, \
+         \"raw_cap\": {}, \"raw_window\": {}, \"comp_cap\": {}}},",
+        runtime.ctx_size,
+        runtime.prefill_cap,
+        runtime.raw_cap,
+        runtime.raw_window,
+        runtime.comp_cap
+    )?;
+    writeln!(out, "  \"cases\": [")?;
+    let cases = graph_probe_cases();
+    for (idx, case) in cases.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_graph_probe_case(out, case, runtime)?;
+    }
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")
+}
+
+struct GraphProbeCase {
+    name: &'static str,
+    build: &'static str,
+    bytes: Vec<u8>,
+}
+
+fn graph_probe_cases() -> Vec<GraphProbeCase> {
+    let short = graph_payload_plan(GRAPH_PAYLOAD_FIXTURES[0]);
+    let wrap = graph_payload_plan(GRAPH_PAYLOAD_FIXTURES[3]);
+    let mut cases = Vec::new();
+
+    let mut bytes = Vec::new();
+    append_graph_payload_plan(&mut bytes, &short);
+    cases.push(GraphProbeCase {
+        name: "valid_short_graph_payload",
+        build: "graph plan short full zero body",
+        bytes,
+    });
+
+    let mut bytes = Vec::new();
+    append_graph_payload_plan(&mut bytes, &wrap);
+    cases.push(GraphProbeCase {
+        name: "valid_raw_wrap_graph_payload",
+        build: "graph plan raw-ring wrap full zero body",
+        bytes,
+    });
+
+    let mut bytes = Vec::new();
+    append_graph_payload_plan(&mut bytes, &short);
+    bytes.extend_from_slice(&0_u32.to_le_bytes());
+    cases.push(GraphProbeCase {
+        name: "trailing_payload_bytes",
+        build: "valid graph body plus 4 trailing bytes",
+        bytes,
+    });
+
+    let mut bytes = Vec::new();
+    append_graph_payload_plan(&mut bytes, &short);
+    bytes.pop();
+    cases.push(GraphProbeCase {
+        name: "truncated_tensor_body",
+        build: "valid graph body minus 1 byte",
+        bytes,
+    });
+
+    let mut bytes = Vec::new();
+    append_prefix_to_first_comp(&mut bytes, &short.header, short.header.comp_cap + 1);
+    cases.push(GraphProbeCase {
+        name: "n_comp_over_cap",
+        build: "graph header tokens logits first n_comp",
+        bytes,
+    });
+
+    let mut bytes = Vec::new();
+    append_prefix_to_first_index(
+        &mut bytes,
+        &short.header,
+        &short.n_comp,
+        short.header.comp_cap + 1,
+    );
+    cases.push(GraphProbeCase {
+        name: "n_index_comp_over_cap",
+        build: "graph header tokens logits n_comp_table first n_index_comp",
+        bytes,
+    });
+
+    let mut header = short.header.clone();
+    header.raw_live_rows += 1;
+    cases.push(header_only_case(
+        "raw_live_rows_not_expected",
+        "graph header raw_live_rows exceeds expected live rows",
+        &header,
+    ));
+
+    let mut header = short.header.clone();
+    header.ctx_size += 1;
+    cases.push(header_only_case(
+        "ctx_too_large",
+        "graph header ctx_size exceeds runtime context",
+        &header,
+    ));
+
+    let mut header = short.header.clone();
+    header.n_layer = N_LAYER as u32 + 1;
+    cases.push(header_only_case(
+        "layer_count_mismatch",
+        "graph header fixed layer count mismatch",
+        &header,
+    ));
+
+    let mut header = short.header.clone();
+    header.prefill_cap += 1;
+    cases.push(header_only_case(
+        "prefill_cap_mismatch",
+        "graph header prefill cap mismatch",
+        &header,
+    ));
+
+    let mut header = short.header;
+    header.comp_cap += 1;
+    cases.push(header_only_case(
+        "comp_cap_too_large",
+        "graph header comp cap exceeds runtime graph comp cap",
+        &header,
+    ));
+
+    cases
+}
+
+fn header_only_case(
+    name: &'static str,
+    build: &'static str,
+    header: &PayloadHeader,
+) -> GraphProbeCase {
+    GraphProbeCase {
+        name,
+        build,
+        bytes: header.to_bytes().to_vec(),
+    }
+}
+
+fn write_graph_probe_case<W: Write>(
+    out: &mut W,
+    case: &GraphProbeCase,
+    runtime: ds4_gguf::session_payload::GraphPayloadRuntime,
+) -> io::Result<()> {
+    let result = read_graph_payload(&case.bytes, runtime);
+    let (ok, code, error) = result_fields_graph(result.as_ref().map(|_| ()), result.as_ref().err());
+    write!(out, "    {{\"name\": ")?;
+    write_json_string(out, case.name)?;
+    write!(out, ", \"build\": ")?;
+    write_json_string(out, case.build)?;
+    write!(
+        out,
+        ", \"payload_bytes\": {}, \"fnv1a64\": ",
+        case.bytes.len()
+    )?;
+    write_json_string(out, &fnv1a64_hex(&case.bytes))?;
+    write!(out, ", \"ok\": {}, \"code\": ", ok)?;
+    write_json_string(out, code)?;
+    write!(out, ", \"error\": ")?;
+    write_json_string(out, error)?;
+    if let Ok(parsed) = result {
+        write!(out, ", \"parsed\": ")?;
+        write_graph_probe_parsed(out, &parsed)?;
+    }
+    write!(out, "}}")
+}
+
+fn result_fields_graph(
+    result: Result<(), &PayloadError>,
+    err: Option<&PayloadError>,
+) -> (&'static str, &'static str, &'static str) {
+    match result {
+        Ok(()) => ("true", "ok", ""),
+        Err(_) => {
+            let err = err.expect("graph payload error is present");
+            ("false", err.code(), err.c_error())
+        }
+    }
+}
+
+fn write_graph_probe_parsed<W: Write>(out: &mut W, parsed: &GraphPayloadRead) -> io::Result<()> {
+    write!(
+        out,
+        "{{\"token_count\": {}, \"raw_first_pos\": {}, \"raw_last_pos\": {}, \
+         \"raw_first_phys\": {}, \"raw_last_phys\": {}, \"payload_bytes\": {}, \
+         \"ratio4_rows\": {}, \"ratio128_rows\": {}, \"layer2_n_index_comp\": {}, \
+         \"section_bytes\": ",
+        parsed.header.token_count,
+        parsed.raw_first_pos,
+        parsed.raw_last_pos,
+        parsed.raw_first_phys,
+        parsed.raw_last_phys,
+        parsed.payload_bytes,
+        parsed.n_comp[2],
+        parsed.n_comp[3],
+        parsed.n_index_comp[2]
+    )?;
+    write_graph_section_bytes(out, parsed.sections)?;
+    write!(out, "}}")
+}
+
+fn fnv1a64_hex(bytes: &[u8]) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for &byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
 
 fn write_header_rejection_cases<W: Write>(out: &mut W) -> io::Result<()> {

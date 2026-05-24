@@ -5071,7 +5071,7 @@
 
 ### M10.7b: Rust Graph Session Payload Reader And Writer
 
-- Status: pending
+- Status: done
 - Goal: add Rust-owned graph session payload header/body parsing and write-plan
   helpers for live graph state snapshots.
 - Oracle: M10.7a layout plan, M7.5 session payload structural fixtures, and
@@ -5086,9 +5086,17 @@
 - Drift policy: payload bytes, section order, error classes, and count bounds
   are exact.
 - Review gate: ask Claude to review binary bounds checks and error mapping.
-- Validation needed: payload reader/writer tests, comparator and negative
-  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
-  --check`, and non-interactive Claude review with no blockers.
+- Validation passed: `arch -arm64 make ds4-session-payload-dump`; C and Rust
+  `--graph-probe` JSON parse checks; `python3
+  ds4-parity/compare_graph_session_payload_rw.py` passed 375 checks; `python3
+  ds4-parity/compare_graph_session_payload_rw.py --negative-test` passed 375
+  checks and rejected 7 mutations; `cargo test -p ds4-gguf session_payload`;
+  `python3 -m py_compile ds4-parity/compare_graph_session_payload_rw.py
+  ds4-parity/run_parity_report.py`; `git diff --check`; `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` reported 49 passed, 36
+  skipped, and 0 failed; `cargo test --workspace`; `cargo fmt --all --
+  --check`; non-interactive Claude review with `NO BLOCKERS`; and focused
+  post-review C build/comparator/Rust test reruns after the style-nit cleanup.
 - Owner path: Rust graph session payload reader/writer, C rejection probe,
   `ds4-parity/`, `.memory/status.md`.
 

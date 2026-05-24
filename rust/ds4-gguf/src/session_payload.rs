@@ -235,6 +235,29 @@ pub struct GraphPayloadPlan {
     pub n_index_comp: [u32; N_LAYER],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GraphPayloadRuntime {
+    pub ctx_size: u32,
+    pub prefill_cap: u32,
+    pub raw_cap: u32,
+    pub raw_window: u32,
+    pub comp_cap: u32,
+    pub layer_comp_cap: [u32; N_LAYER],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphPayloadRead {
+    pub header: PayloadHeader,
+    pub sections: PayloadSections,
+    pub payload_bytes: u64,
+    pub raw_first_pos: u32,
+    pub raw_last_pos: u32,
+    pub raw_first_phys: u32,
+    pub raw_last_phys: u32,
+    pub n_comp: [u32; N_LAYER],
+    pub n_index_comp: [u32; N_LAYER],
+}
+
 pub const GRAPH_PAYLOAD_FIXTURES: &[GraphPayloadFixture] = &[
     GraphPayloadFixture {
         name: "short_checkpoint_tokens3",
@@ -316,6 +339,129 @@ pub fn graph_payload_plan(fixture: GraphPayloadFixture) -> GraphPayloadPlan {
         n_comp,
         n_index_comp,
     }
+}
+
+pub fn default_graph_payload_runtime(ctx_size: u32) -> GraphPayloadRuntime {
+    let prefill_cap = default_prefill_cap(ctx_size);
+    let raw_window = default_raw_cap(ctx_size);
+    let raw_cap = graph_raw_cap(ctx_size, prefill_cap);
+    let comp_cap = cpu_comp_cap(ctx_size);
+    GraphPayloadRuntime {
+        ctx_size,
+        prefill_cap,
+        raw_cap,
+        raw_window,
+        comp_cap,
+        layer_comp_cap: [comp_cap; N_LAYER],
+    }
+}
+
+pub fn validate_header_graph(
+    header: &PayloadHeader,
+    runtime: GraphPayloadRuntime,
+) -> Result<(), PayloadError> {
+    if header.ctx_size > runtime.ctx_size || header.token_count >= runtime.ctx_size {
+        return Err(PayloadError::ContextFit);
+    }
+    if header.n_layer != N_LAYER as u32
+        || header.n_head_dim != N_HEAD_DIM
+        || header.n_indexer_head_dim != N_INDEXER_HEAD_DIM
+        || header.n_vocab != N_VOCAB
+    {
+        return Err(PayloadError::LayoutMismatch);
+    }
+    if header.prefill_cap != runtime.prefill_cap || header.raw_window != runtime.raw_window {
+        return Err(PayloadError::ChunkLayoutMismatch);
+    }
+    let expected_raw_live = header.token_count.min(header.raw_window);
+    if header.raw_cap == 0
+        || header.raw_live_rows != expected_raw_live
+        || header.raw_live_rows > header.raw_cap
+        || header.raw_live_rows > runtime.raw_cap
+    {
+        return Err(PayloadError::RawRingMismatch);
+    }
+    if header.comp_cap > runtime.comp_cap {
+        return Err(PayloadError::CompressedCapTooLarge);
+    }
+    Ok(())
+}
+
+pub fn read_graph_payload(
+    bytes: &[u8],
+    runtime: GraphPayloadRuntime,
+) -> Result<GraphPayloadRead, PayloadError> {
+    let header = read_header(bytes)?;
+    validate_header_graph(&header, runtime)?;
+    let mut pos = HEADER_BYTES;
+    consume(&mut pos, bytes.len(), u64::from(header.token_count) * 4)?;
+    consume(&mut pos, bytes.len(), u64::from(N_VOCAB) * 4)?;
+
+    let mut n_comp = [0_u32; N_LAYER];
+    let mut n_index_comp = [0_u32; N_LAYER];
+    for (layer, value) in n_comp.iter_mut().enumerate() {
+        *value = read_u32(bytes, &mut pos)?;
+        if *value > header.comp_cap || *value > runtime.layer_comp_cap[layer] {
+            return Err(PayloadError::InvalidCompressedRowCount);
+        }
+    }
+    for (layer, value) in n_index_comp.iter_mut().enumerate() {
+        *value = read_u32(bytes, &mut pos)?;
+        if *value > header.comp_cap || *value > runtime.layer_comp_cap[layer] {
+            return Err(PayloadError::InvalidIndexerRowCount);
+        }
+    }
+
+    for layer in 0..N_LAYER {
+        consume(
+            &mut pos,
+            bytes.len(),
+            u64::from(header.raw_live_rows) * u64::from(N_HEAD_DIM) * 4,
+        )?;
+        let ratio = compress_ratio(layer);
+        if ratio == 0 {
+            continue;
+        }
+        consume(
+            &mut pos,
+            bytes.len(),
+            u64::from(n_comp[layer]) * u64::from(N_HEAD_DIM) * 4,
+        )?;
+        consume(&mut pos, bytes.len(), layer_attn_state_bytes(ratio))?;
+        consume(&mut pos, bytes.len(), layer_attn_state_bytes(ratio))?;
+        if ratio == 4 {
+            consume(
+                &mut pos,
+                bytes.len(),
+                u64::from(n_index_comp[layer]) * u64::from(N_INDEXER_HEAD_DIM) * 4,
+            )?;
+            consume(&mut pos, bytes.len(), layer_index_state_bytes(ratio))?;
+            consume(&mut pos, bytes.len(), layer_index_state_bytes(ratio))?;
+        }
+    }
+    if pos != bytes.len() {
+        return Err(PayloadError::TrailingPayloadBytes);
+    }
+    let sections = sections(&header, &n_comp, &n_index_comp);
+    let raw_first_pos = header.token_count - header.raw_live_rows;
+    let raw_last_pos = header.token_count.saturating_sub(1);
+    let raw_first_phys = raw_first_pos % header.raw_cap;
+    let raw_last_phys = raw_last_pos % header.raw_cap;
+    Ok(GraphPayloadRead {
+        header,
+        sections,
+        payload_bytes: bytes.len() as u64,
+        raw_first_pos,
+        raw_last_pos,
+        raw_first_phys,
+        raw_last_phys,
+        n_comp,
+        n_index_comp,
+    })
+}
+
+pub fn append_graph_payload_plan(out: &mut Vec<u8>, plan: &GraphPayloadPlan) {
+    append_full_payload(out, &plan.header, &plan.n_comp, &plan.n_index_comp);
 }
 
 pub fn graph_raw_cap(ctx_size: u32, prefill_cap: u32) -> u32 {
@@ -672,5 +818,59 @@ mod tests {
         assert_eq!(near.ratio128_rows, 255);
         assert_eq!(near.n_index_comp[42], near.ratio4_rows);
         assert_eq!(near.n_comp[3], near.ratio128_rows);
+    }
+
+    #[test]
+    fn graph_payload_reader_roundtrips_writer_and_rejects_edges() {
+        let plan = graph_payload_plan(GRAPH_PAYLOAD_FIXTURES[0]);
+        let runtime = default_graph_payload_runtime(plan.header.ctx_size);
+        let mut bytes = Vec::new();
+        append_graph_payload_plan(&mut bytes, &plan);
+        let parsed = read_graph_payload(&bytes, runtime).unwrap();
+        assert_eq!(parsed.header, plan.header);
+        assert_eq!(parsed.n_comp, plan.n_comp);
+        assert_eq!(parsed.n_index_comp, plan.n_index_comp);
+        assert_eq!(parsed.sections, plan.sections);
+        assert_eq!(parsed.payload_bytes, plan.payload_bytes);
+
+        let mut trailing = bytes.clone();
+        trailing.extend_from_slice(&0_u32.to_le_bytes());
+        assert_eq!(
+            read_graph_payload(&trailing, runtime).unwrap_err(),
+            PayloadError::TrailingPayloadBytes
+        );
+
+        let mut truncated = bytes;
+        truncated.pop();
+        assert_eq!(
+            read_graph_payload(&truncated, runtime).unwrap_err(),
+            PayloadError::TruncatedPayload
+        );
+
+        let mut invalid_comp = Vec::new();
+        append_prefix_to_first_comp(&mut invalid_comp, &plan.header, plan.header.comp_cap + 1);
+        assert_eq!(
+            read_graph_payload(&invalid_comp, runtime).unwrap_err(),
+            PayloadError::InvalidCompressedRowCount
+        );
+
+        let mut invalid_index = Vec::new();
+        append_prefix_to_first_index(
+            &mut invalid_index,
+            &plan.header,
+            &plan.n_comp,
+            plan.header.comp_cap + 1,
+        );
+        assert_eq!(
+            read_graph_payload(&invalid_index, runtime).unwrap_err(),
+            PayloadError::InvalidIndexerRowCount
+        );
+
+        let mut header = plan.header.clone();
+        header.raw_live_rows += 1;
+        assert_eq!(
+            read_graph_payload(&header.to_bytes(), runtime).unwrap_err(),
+            PayloadError::RawRingMismatch
+        );
     }
 }

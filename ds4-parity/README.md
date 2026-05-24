@@ -899,6 +899,29 @@ caps, logical and physical raw ring order, ratio-4 and ratio-128 row counts,
 per-section byte totals, sampled per-layer row/state bytes, and final payload
 size without loading a model or restoring tensors.
 
+Compare the M10.7b Rust graph-session payload reader/writer helpers against the
+current-C no-model graph payload rejection probe:
+
+```sh
+python3 ds4-parity/compare_graph_session_payload_rw.py
+python3 ds4-parity/compare_graph_session_payload_rw.py --negative-test
+arch -arm64 make ds4-session-payload-dump
+./ds4-session-payload-dump --graph-probe \
+  > /tmp/ds4-m107b-graph-payload-rw-c.json
+cargo run -p ds4-gguf --bin ds4-session-payload-dump-rs --quiet -- \
+  --graph-probe \
+  > /tmp/ds4-m107b-graph-payload-rw-rust.json
+python3 ds4-parity/compare_graph_session_payload_rw.py \
+  --oracle /tmp/ds4-m107b-graph-payload-rw-c.json \
+  --candidate /tmp/ds4-m107b-graph-payload-rw-rust.json
+```
+
+The comparator checks byte-identical synthetic graph payload writes by FNV,
+parsed raw-ring summaries for short and wrapped payloads, section byte totals,
+and the C-compatible rejection codes for truncated, trailing, invalid
+compressed/index counts, raw-ring, context, layout, chunk-layout, and comp-cap
+boundary cases without restoring tensors.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

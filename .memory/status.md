@@ -3,8 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7b Rust Graph Session Payload Reader And Writer
-- Last validated source before the active item: M10.7a Rust Graph Session Payload
+- Active item: M10.7c Rust Disk KV Payload Restore Smoke
+- Last validated source before the active item: M10.7b Rust Graph Session Payload
+  Reader And Writer.
+- Earlier M10.7a Rust Graph Session Payload
   Layout Plan.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
@@ -28,6 +30,33 @@
 
 ## Last Evidence
 
+- M10.7b adds a graph-specific Rust payload runtime, `read_graph_payload`,
+  `append_graph_payload_plan`, parsed section summaries, and
+  `ds4-session-payload-dump-rs --graph-probe`. The reader/writer slice validates
+  graph headers, counts, section lengths, raw-ring mapping, trailing bytes, and
+  C-compatible rejection categories without restoring tensor contents.
+- M10.7b adds `ds4-session-payload-dump --graph-probe` and
+  `ds4_dump_graph_session_payload_probe_json`, a no-model C graph payload probe
+  that mirrors the C graph load checks for the same synthetic bytes before GPU
+  tensor restore. The fixtures cover valid short, valid raw-ring wrap,
+  truncated, trailing, invalid compressed count, invalid index count,
+  raw-ring mismatch, context-fit, layout, chunk-layout, and comp-cap cases.
+- M10.7b adds `ds4-parity/compare_graph_session_payload_rw.py`, which compares
+  C and Rust graph payload read/write probe reports across runtime constants,
+  byte FNVs, payload byte counts, parsed raw-ring summaries, section byte sums,
+  and rejection codes. The comparator passed 375 checks and negative tests
+  rejected 7 mutations.
+- M10.7b validation passed `arch -arm64 make ds4-session-payload-dump`, C and
+  Rust `--graph-probe` JSON parse checks, `python3
+  ds4-parity/compare_graph_session_payload_rw.py`, `python3
+  ds4-parity/compare_graph_session_payload_rw.py --negative-test`, `cargo test
+  -p ds4-gguf session_payload`, `python3 -m py_compile
+  ds4-parity/compare_graph_session_payload_rw.py ds4-parity/run_parity_report.py`,
+  `git diff --check`, `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 49 passed, 36 skipped, and 0 failed, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, non-interactive Claude review
+  with `NO BLOCKERS`, and post-review focused C build/comparator/Rust test
+  reruns after addressing the non-blocking style nit.
 - M10.7 splits broad graph session state/payload parity into M10.7a layout
   planning, M10.7b payload reader/writer, M10.7c disk KV restore smoke, and
   M10.7d continued-frontier save/restore policy so each slice has a concrete
