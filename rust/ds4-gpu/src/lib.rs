@@ -23,6 +23,7 @@ pub mod mtp_runtime_guard_plan;
 pub mod mtp_stream_plan;
 pub mod mtp_suffix_plan;
 pub mod prefill_plan;
+pub mod replacement_slice;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(transparent)]

@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M12.4 First Backend Replacement Slice
-- Last validated source before the active item: M12.3 Rust Backend Facade
-  Parity Harness.
+- Active item: M12.5 Runtime Backend Route Gate
+- Last validated source before the active item: M12.4 First Backend
+  Replacement Slice.
+- Earlier M12.4 First Backend Replacement Slice.
 - Earlier M12.3 Rust Backend Facade Parity Harness.
 - Earlier M12.2 Operation Tensor Fixture Capture.
 - Earlier M12.1 Backend Boundary Inventory And Claim Matrix.
@@ -94,6 +95,22 @@
 
 ## Last Evidence
 
+- M12.4 adds the Rust-owned slice descriptor
+  `rust/ds4-gpu/src/replacement_slice.rs`, the descriptor emitter
+  `rust/ds4-gpu/src/bin/ds4-backend-replacement-slice.rs`,
+  `ds4-parity/baselines/backend/m12.4/replacement-slice.json`, and
+  `ds4-parity/check_backend_replacement_slice.py --negative-test`. The first
+  bounded slice is `embedding_and_indexer` / `ds4_gpu_embed_token_hc_tensor`
+  against the M12.2 `first_kernel_embed_token_hc` fixture and M12.3 facade
+  replay. CPU, Metal, and default-route backend selectors fail closed before
+  runtime route changes, and general backend replacement plus kernel
+  replacement claims remain false. Validation passed Python syntax, JSON
+  formatting, the M12.4 checker with 85 checks and negative tests, the M12.1,
+  M12.2, M12.3, and runtime graph closure checkers with negative tests, `cargo
+  fmt --all -- --check`, `cargo test -p ds4-gpu replacement_slice`, `git diff
+  --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 85 passed, 50 skipped, 0 failed. M12.5 Runtime
+  Backend Route Gate is active.
 - M12.3 adds `ds4-parity/baselines/backend/m12.3/facade-replay.json` and
   `ds4-parity/check_backend_facade_replay.py --negative-test`, wiring the
   checker into the unified parity report and README. The replay artifact maps
@@ -105,7 +122,7 @@
   checks and negative tests, the runtime graph closure matrix with negative
   tests, `cargo fmt --all -- --check`, `git diff --check`, and `python3
   ds4-parity/run_parity_report.py --skip-local-oracles` with 84 passed, 50
-  skipped, 0 failed. M12.4 First Backend Replacement Slice is active.
+  skipped, 0 failed. M12.4 First Backend Replacement Slice became active.
 - M12.2 captured live B300 current-C oracle JSON and Rust facade candidate JSON
   under `ds4-parity/baselines/backend/m12.2/captures/`, adds
   `ds4-parity/baselines/backend/m12.2/manifest.json`, and adds

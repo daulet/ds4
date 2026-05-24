@@ -6814,7 +6814,7 @@
 
 #### M12.4: First Backend Replacement Slice
 
-- Status: active.
+- Status: complete.
 - Goal: replace one bounded backend operation family in Rust or a Rust-owned
   backend module while leaving broader runtime routing unchanged.
 - Oracle: M12.2 current-backend tensor fixtures and M12.3 facade replay.
@@ -6829,6 +6829,41 @@
 - Drift policy: replacement output drift requires a same-hardware rerun of the
   current-backend oracle and a comparator update that explains the tolerance or
   expected numeric change.
+- Evidence:
+  - Added Rust-owned slice descriptor
+    `rust/ds4-gpu/src/replacement_slice.rs`.
+  - Added descriptor emitter
+    `rust/ds4-gpu/src/bin/ds4-backend-replacement-slice.rs`.
+  - Added `ds4-parity/baselines/backend/m12.4/replacement-slice.json`.
+  - Added `ds4-parity/check_backend_replacement_slice.py --negative-test`.
+  - Selected the bounded `embedding_and_indexer` /
+    `ds4_gpu_embed_token_hc_tensor` slice against the M12.2
+    `first_kernel_embed_token_hc` fixture and M12.3 facade replay.
+  - CPU, Metal, and default-route backend selectors fail closed before any
+    runtime route change.
+  - `python3 ds4-parity/check_backend_replacement_slice.py --negative-test`
+    passed with 85 checks.
+  - `cargo test -p ds4-gpu replacement_slice`, `cargo fmt --all -- --check`,
+    `git diff --check`, and `python3 ds4-parity/run_parity_report.py
+    --skip-local-oracles` passed with 85 passed, 50 skipped, 0 failed.
+
+#### M12.5: Runtime Backend Route Gate
+
+- Status: active.
+- Goal: expose the replacement slice through an explicit runtime route and
+  validate end-to-end behavior without replacing the default backend.
+- Oracle: current default route plus M10.9 official-vector, long-context,
+  tool/server, and benchmark gates.
+- Fixture: runtime route artifact recording route selector, backend identity,
+  official-vector results, long-context results, quality gates, and benchmark
+  deltas.
+- Comparator: runtime route comparator that checks output parity, quality-gate
+  parity, benchmark deltas, and route/preflight behavior.
+- Acceptance: replacement route passes official-vector and long-context gates,
+  preserves tool/server quality, records benchmark comparison on the same
+  machine class, and remains opt-in.
+- Drift policy: route behavior drift requires preserving current default-route
+  evidence and rerunning the M10.9 closure gates.
 - Owner path: backend replacement split, tensor/runtime fixtures,
   `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
 

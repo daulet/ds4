@@ -438,6 +438,20 @@ error propagation through `GpuStatus::from_raw(...).into_result()`, delegated
 M12.2 output comparators, and the no-route-change/no-backend-replacement claim
 policy. The current replay harness passes with 769 checker assertions.
 
+Validate the M12.4 Backend replacement slice:
+
+```sh
+python3 ds4-parity/check_backend_replacement_slice.py --negative-test
+```
+
+The M12.4 checker validates `baselines/backend/m12.4/replacement-slice.json`
+against the M12.2 first-kernel fixture and M12.3 facade replay. It also runs
+the Rust `ds4-backend-replacement-slice` descriptor emitter, checks the
+selected B300 CUDA backend path, verifies CPU/Metal/default-route selectors
+fail closed, and keeps runtime routing, general backend replacement, and kernel
+replacement claims false. The current M12.4 fixture passes with 85 checker
+assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh
