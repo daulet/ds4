@@ -1,0 +1,795 @@
+{
+  "schema": "ds4.runtime_graph_benchmark_closure_summary.v1",
+  "source": "m10.9f-runtime-graph-benchmark-closure",
+  "milestone": "M10.9f",
+  "parent": "M10.9",
+  "next_stage": "M11",
+  "runtime_graph_route": "graph",
+  "backend": "cuda",
+  "max_regression": 0.1,
+  "model": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "resolved_path": "/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf",
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668",
+    "bytes": 86720111488,
+    "expected_sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
+  },
+  "prompt": {
+    "path": "speed-bench/promessi_sposi.txt",
+    "resolved_path": "/workspace/ds4/speed-bench/promessi_sposi.txt",
+    "sha256": "f53e0d80cb2d4492d24ebd63c7000c397b16ae70f9bf09b3763e5d8323ec209f",
+    "bytes": 1329139,
+    "expected_sha256": "f53e0d80cb2d4492d24ebd63c7000c397b16ae70f9bf09b3763e5d8323ec209f"
+  },
+  "build": {
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "ds4-engine",
+      "--release",
+      "--bin",
+      "ds4-runtime-graph-bench-rs"
+    ],
+    "result": {
+      "exit_code": 0,
+      "stdout": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "base64": ""
+      },
+      "stderr": {
+        "bytes": 62,
+        "sha256": "6bfa9e18ffdef821c711a542cfebd7db0982665615563e5a191285e489609c6f",
+        "base64": "ICAgIEZpbmlzaGVkIGByZWxlYXNlYCBwcm9maWxlIFtvcHRpbWl6ZWRdIHRhcmdldChzKSBpbiAwLjAxcwo="
+      }
+    }
+  },
+  "current_c": {
+    "build": {
+      "command": [
+        "make",
+        "ds4-bench"
+      ],
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 33,
+          "sha256": "9bd332ef67a1e8cfef64e0c7258c9a0e09065d499b8dff4f4221d19656c5560d",
+          "base64": "bWFrZTogJ2RzNC1iZW5jaCcgaXMgdXAgdG8gZGF0ZS4K"
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        }
+      }
+    },
+    "runs": [
+      {
+        "id": "short",
+        "csv": "b300-short.csv",
+        "command": [
+          "./ds4-bench",
+          "--model",
+          "/workspace/ds4/ds4flash.gguf",
+          "--prompt-file",
+          "/workspace/ds4/speed-bench/promessi_sposi.txt",
+          "--cuda",
+          "--ctx-start",
+          "2048",
+          "--ctx-max",
+          "8192",
+          "--step-incr",
+          "2048",
+          "--gen-tokens",
+          "32",
+          "--csv",
+          "/tmp/ds4-m109f-bench/current-c/csv/b300-short.csv"
+        ],
+        "result": {
+          "exit_code": 0,
+          "stdout": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "base64": ""
+          },
+          "stderr": {
+            "bytes": 672,
+            "sha256": "0398b9dfef803429577ac97f31b6c4fcd2b3f7de443c2d7959fcb6003f1ee87d",
+            "base64": "ZHM0LWJlbmNoOiBjb250ZXh0IGJ1ZmZlcnMgMzMzLjc1IE1pQiAoY3R4PTgyMjUsIGJhY2tlbmQ9Y3VkYSwgcHJlZmlsbF9jaHVuaz0yMDQ4LCByYXdfa3Zfcm93cz0yMzA0LCBjb21wcmVzc2VkX2t2X3Jvd3M9MjA1OCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuNTM1cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MK"
+          }
+        }
+      },
+      {
+        "id": "long",
+        "csv": "b300-long.csv",
+        "command": [
+          "./ds4-bench",
+          "--model",
+          "/workspace/ds4/ds4flash.gguf",
+          "--prompt-file",
+          "/workspace/ds4/speed-bench/promessi_sposi.txt",
+          "--cuda",
+          "--ctx-start",
+          "16384",
+          "--ctx-max",
+          "32768",
+          "--step-incr",
+          "8192",
+          "--gen-tokens",
+          "32",
+          "--csv",
+          "/tmp/ds4-m109f-bench/current-c/csv/b300-long.csv"
+        ],
+        "result": {
+          "exit_code": 0,
+          "stdout": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "base64": ""
+          },
+          "stderr": {
+            "bytes": 673,
+            "sha256": "767083a305f6cf2449669e41a99da7a3dbb4e0e0cebd65068c5f8627149f1274",
+            "base64": "ZHM0LWJlbmNoOiBjb250ZXh0IGJ1ZmZlcnMgNzUyLjI1IE1pQiAoY3R4PTMyODAxLCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MjA0OCwgcmF3X2t2X3Jvd3M9MjMwNCwgY29tcHJlc3NlZF9rdl9yb3dzPTgyMDIpCmRzNDogQ1VEQSBiYWNrZW5kIGluaXRpYWxpemVkIG9uIE5WSURJQSBCMzAwIFNYTTYgQUMgKHNtXzEwMykKZHM0OiBDVURBIGhvc3QgcmVnaXN0cmF0aW9uIHNraXBwZWQ6IG9wZXJhdGlvbiBub3Qgc3VwcG9ydGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgaW50byBkZXZpY2UgY2FjaGUKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAxNi4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMzIuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDQ4LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA2NC4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgODAuMDQgR2lCIGNhY2hlZApkczQ6IENVREEgc3RhcnR1cCBtb2RlbCBjYWNoZSBwcmVwYXJlZCA4MC43NiBHaUIgb2YgdGVuc29yIHNwYW5zIGluIDEyLjU5MnMKZHM0OiBjdWRhIGJhY2tlbmQgaW5pdGlhbGl6ZWQgZm9yIGdyYXBoIGRpYWdub3N0aWNzCg=="
+          }
+        }
+      }
+    ],
+    "rows": {
+      "b300-long.csv": [
+        {
+          "ctx_tokens": 16384,
+          "prefill_tokens": 16384,
+          "prefill_tps": 1419.86,
+          "gen_tokens": 32,
+          "gen_tps": 31.12,
+          "kvcache_bytes": 249505164
+        },
+        {
+          "ctx_tokens": 24576,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1328.38,
+          "gen_tokens": 32,
+          "gen_tps": 30.55,
+          "kvcache_bytes": 362259852
+        },
+        {
+          "ctx_tokens": 32768,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1271.04,
+          "gen_tokens": 32,
+          "gen_tps": 28.32,
+          "kvcache_bytes": 475014540
+        }
+      ],
+      "b300-short.csv": [
+        {
+          "ctx_tokens": 2048,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1463.15,
+          "gen_tokens": 32,
+          "gen_tps": 32.89,
+          "kvcache_bytes": 52184460
+        },
+        {
+          "ctx_tokens": 4096,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1475.73,
+          "gen_tokens": 32,
+          "gen_tps": 31.82,
+          "kvcache_bytes": 80373132
+        },
+        {
+          "ctx_tokens": 6144,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1449.99,
+          "gen_tokens": 32,
+          "gen_tps": 31.69,
+          "kvcache_bytes": 108561804
+        },
+        {
+          "ctx_tokens": 8192,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1434.22,
+          "gen_tokens": 32,
+          "gen_tps": 30.99,
+          "kvcache_bytes": 136750476
+        }
+      ]
+    },
+    "logs": {
+      "logs/long.stderr.log": {
+        "bytes": 673,
+        "sha256": "767083a305f6cf2449669e41a99da7a3dbb4e0e0cebd65068c5f8627149f1274",
+        "base64": "ZHM0LWJlbmNoOiBjb250ZXh0IGJ1ZmZlcnMgNzUyLjI1IE1pQiAoY3R4PTMyODAxLCBiYWNrZW5kPWN1ZGEsIHByZWZpbGxfY2h1bms9MjA0OCwgcmF3X2t2X3Jvd3M9MjMwNCwgY29tcHJlc3NlZF9rdl9yb3dzPTgyMDIpCmRzNDogQ1VEQSBiYWNrZW5kIGluaXRpYWxpemVkIG9uIE5WSURJQSBCMzAwIFNYTTYgQUMgKHNtXzEwMykKZHM0OiBDVURBIGhvc3QgcmVnaXN0cmF0aW9uIHNraXBwZWQ6IG9wZXJhdGlvbiBub3Qgc3VwcG9ydGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgaW50byBkZXZpY2UgY2FjaGUKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAxNi4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMzIuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDQ4LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA2NC4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgODAuMDQgR2lCIGNhY2hlZApkczQ6IENVREEgc3RhcnR1cCBtb2RlbCBjYWNoZSBwcmVwYXJlZCA4MC43NiBHaUIgb2YgdGVuc29yIHNwYW5zIGluIDEyLjU5MnMKZHM0OiBjdWRhIGJhY2tlbmQgaW5pdGlhbGl6ZWQgZm9yIGdyYXBoIGRpYWdub3N0aWNzCg=="
+      },
+      "logs/long.stdout.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "base64": ""
+      },
+      "logs/short.stderr.log": {
+        "bytes": 672,
+        "sha256": "0398b9dfef803429577ac97f31b6c4fcd2b3f7de443c2d7959fcb6003f1ee87d",
+        "base64": "ZHM0LWJlbmNoOiBjb250ZXh0IGJ1ZmZlcnMgMzMzLjc1IE1pQiAoY3R4PTgyMjUsIGJhY2tlbmQ9Y3VkYSwgcHJlZmlsbF9jaHVuaz0yMDQ4LCByYXdfa3Zfcm93cz0yMzA0LCBjb21wcmVzc2VkX2t2X3Jvd3M9MjA1OCkKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuNTM1cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MK"
+      },
+      "logs/short.stdout.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "base64": ""
+      }
+    }
+  },
+  "candidate": {
+    "binary": "/workspace/ds4/target/release/ds4-runtime-graph-bench-rs",
+    "binary_sha256": "c06d98794b6c2d12bff44bfa301ba6b9f30594a7d28c5e16cccc7153ddd9acba",
+    "output_dir": "/tmp/ds4-m109f-bench",
+    "capture_env": {
+      "bytes": 1268,
+      "sha256": "6ced2a850008b71900be8504cc1c615c3c24d4c66d50a740dfe3a7b5b77d2e20",
+      "base64": "Y2FwdHVyZV91dGM9MjAyNi0wNS0yNFQxMzo1ODoxOVoKc291cmNlX2NvbW1pdD0KbW9kZWxfcGF0aD0vd29ya3NwYWNlL2RzNC9kczRmbGFzaC5nZ3VmCnJlc29sdmVkX21vZGVsX3BhdGg9L3dvcmtzcGFjZS9kczQvZ2d1Zi9EZWVwU2Vlay1WNC1GbGFzaC1JUTJYWFMtdzJRMkstQVByb2pROC1TRXhwUTgtT3V0UTgtY2hhdC12Mi1pbWF0cml4LmdndWYKbW9kZWxfc2hhMjU2PWVmYzdlZDYwN2ZmMjcwNzZlM2U1MDFmYzNmZWZlZmEzM2MwZWQ4Y2YxZWZmNDgzYTJiN2ZkYzBjMmU2MTY2NjgKbW9kZWxfc2l6ZV9ieXRlcz04NjcyMDExMTQ4OApwcm9tcHRfcGF0aD1zcGVlZC1iZW5jaC9wcm9tZXNzaV9zcG9zaS50eHQKcHJvbXB0X3NoYTI1Nj1mNTNlMGQ4MGNiMmQ0NDkyZDI0ZWJkNjNjNzAwMGMzOTdiMTZhZTcwZjliZjA5YjM3NjNlNWQ4MzIzZWMyMDlmCnByb21wdF9zaXplX2J5dGVzPTEzMjkxMzkKcnVzdF9iZW5jaF9zaGEyNTY9YzA2ZDk4Nzk0YjZjMmQxMmJmZjQ0YmZhMzAxYmE2YjlmMzA1OTRhN2QyOGM1ZTE2Y2NjYzcxNTNkZGQ5YWNiYQpydW50aW1lX2dyYXBoX3JvdXRlPWdyYXBoCmdwdT1OVklESUEgQjMwMCBTWE02IEFDLCBHUFUtODFmNmJkMmEtMzQwNC02NDQ1LTE3ODgtMzY1MjY0MjQzYWFiLCA1ODAuMTI2LjE2LCAxMTAwLjAwCnNob3J0X2NvbW1hbmQ9L3dvcmtzcGFjZS9kczQvdGFyZ2V0L3JlbGVhc2UvZHM0LXJ1bnRpbWUtZ3JhcGgtYmVuY2gtcnMgLS1tb2RlbCAvd29ya3NwYWNlL2RzNC9kczRmbGFzaC5nZ3VmIC0tcHJvbXB0LWZpbGUgL3dvcmtzcGFjZS9kczQvc3BlZWQtYmVuY2gvcHJvbWVzc2lfc3Bvc2kudHh0IC0tY3VkYSAtLXJ1bnRpbWUtZ3JhcGggZ3JhcGggLS1jdHgtc3RhcnQgMjA0OCAtLWN0eC1tYXggODE5MiAtLXN0ZXAtaW5jciAyMDQ4IC0tZ2VuLXRva2VucyAzMiAtLWNzdiAvdG1wL2RzNC1tMTA5Zi1iZW5jaC9jc3YvYjMwMC1zaG9ydC5jc3YKbG9uZ19jb21tYW5kPS93b3Jrc3BhY2UvZHM0L3RhcmdldC9yZWxlYXNlL2RzNC1ydW50aW1lLWdyYXBoLWJlbmNoLXJzIC0tbW9kZWwgL3dvcmtzcGFjZS9kczQvZHM0Zmxhc2guZ2d1ZiAtLXByb21wdC1maWxlIC93b3Jrc3BhY2UvZHM0L3NwZWVkLWJlbmNoL3Byb21lc3NpX3Nwb3NpLnR4dCAtLWN1ZGEgLS1ydW50aW1lLWdyYXBoIGdyYXBoIC0tY3R4LXN0YXJ0IDE2Mzg0IC0tY3R4LW1heCAzMjc2OCAtLXN0ZXAtaW5jciA4MTkyIC0tZ2VuLXRva2VucyAzMiAtLWNzdiAvdG1wL2RzNC1tMTA5Zi1iZW5jaC9jc3YvYjMwMC1sb25nLmNzdgo="
+    },
+    "csv_summary": [
+      {
+        "csv": "b300-long.csv",
+        "rows": 3,
+        "ctx_tokens": [
+          16384,
+          24576,
+          32768
+        ],
+        "prefill_tokens": [
+          16384,
+          8192,
+          8192
+        ],
+        "gen_tokens": [
+          32,
+          32,
+          32
+        ],
+        "min_prefill_tps": 1271.26,
+        "max_prefill_tps": 1419.65,
+        "min_gen_tps": 28.31,
+        "max_gen_tps": 31.1,
+        "kvcache_bytes": [
+          249505164,
+          362259852,
+          475014540
+        ]
+      },
+      {
+        "csv": "b300-short.csv",
+        "rows": 4,
+        "ctx_tokens": [
+          2048,
+          4096,
+          6144,
+          8192
+        ],
+        "prefill_tokens": [
+          2048,
+          2048,
+          2048,
+          2048
+        ],
+        "gen_tokens": [
+          32,
+          32,
+          32,
+          32
+        ],
+        "min_prefill_tps": 1422.54,
+        "max_prefill_tps": 1474.72,
+        "min_gen_tps": 31.01,
+        "max_gen_tps": 32.82,
+        "kvcache_bytes": [
+          52184460,
+          80373132,
+          108561804,
+          136750476
+        ]
+      }
+    ],
+    "runs": [
+      {
+        "id": "short",
+        "csv": "b300-short.csv",
+        "command": [
+          "/workspace/ds4/target/release/ds4-runtime-graph-bench-rs",
+          "--model",
+          "/workspace/ds4/ds4flash.gguf",
+          "--prompt-file",
+          "/workspace/ds4/speed-bench/promessi_sposi.txt",
+          "--cuda",
+          "--runtime-graph",
+          "graph",
+          "--ctx-start",
+          "2048",
+          "--ctx-max",
+          "8192",
+          "--step-incr",
+          "2048",
+          "--gen-tokens",
+          "32",
+          "--csv",
+          "/tmp/ds4-m109f-bench/csv/b300-short.csv"
+        ],
+        "result": {
+          "exit_code": 0,
+          "stdout": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "base64": ""
+          },
+          "stderr": {
+            "bytes": 689,
+            "sha256": "3354a6443085250298769cd9fe378f07fe7835461bd01741071933770c7933f8",
+            "base64": "ZHM0LXJ1bnRpbWUtZ3JhcGgtYmVuY2gtcnM6IGNvbnRleHQgYnVmZmVycyAzMzMuNzUgTWlCIChjdHg9ODIyNSwgYmFja2VuZD1jdWRhLCBwcmVmaWxsX2NodW5rPTIwNDgsIHJhd19rdl9yb3dzPTIzMDQsIGNvbXByZXNzZWRfa3Zfcm93cz0yMDU4KQpkczQ6IENVREEgYmFja2VuZCBpbml0aWFsaXplZCBvbiBOVklESUEgQjMwMCBTWE02IEFDIChzbV8xMDMpCmRzNDogQ1VEQSBob3N0IHJlZ2lzdHJhdGlvbiBza2lwcGVkOiBvcGVyYXRpb24gbm90IHN1cHBvcnRlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIGludG8gZGV2aWNlIGNhY2hlCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMTYuMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDMyLjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA0OC4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNjQuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDgwLjA0IEdpQiBjYWNoZWQKZHM0OiBDVURBIHN0YXJ0dXAgbW9kZWwgY2FjaGUgcHJlcGFyZWQgODAuNzYgR2lCIG9mIHRlbnNvciBzcGFucyBpbiAxMi42ODFzCmRzNDogY3VkYSBiYWNrZW5kIGluaXRpYWxpemVkIGZvciBncmFwaCBkaWFnbm9zdGljcwo="
+          }
+        }
+      },
+      {
+        "id": "long",
+        "csv": "b300-long.csv",
+        "command": [
+          "/workspace/ds4/target/release/ds4-runtime-graph-bench-rs",
+          "--model",
+          "/workspace/ds4/ds4flash.gguf",
+          "--prompt-file",
+          "/workspace/ds4/speed-bench/promessi_sposi.txt",
+          "--cuda",
+          "--runtime-graph",
+          "graph",
+          "--ctx-start",
+          "16384",
+          "--ctx-max",
+          "32768",
+          "--step-incr",
+          "8192",
+          "--gen-tokens",
+          "32",
+          "--csv",
+          "/tmp/ds4-m109f-bench/csv/b300-long.csv"
+        ],
+        "result": {
+          "exit_code": 0,
+          "stdout": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "base64": ""
+          },
+          "stderr": {
+            "bytes": 690,
+            "sha256": "13683c72601d140e4ed72bc2f89c6aad011104faacac102234491f01b2e62627",
+            "base64": "ZHM0LXJ1bnRpbWUtZ3JhcGgtYmVuY2gtcnM6IGNvbnRleHQgYnVmZmVycyA3NTIuMjUgTWlCIChjdHg9MzI4MDEsIGJhY2tlbmQ9Y3VkYSwgcHJlZmlsbF9jaHVuaz0yMDQ4LCByYXdfa3Zfcm93cz0yMzA0LCBjb21wcmVzc2VkX2t2X3Jvd3M9ODIwMikKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuNTQ3cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MK"
+          }
+        }
+      }
+    ],
+    "csv": {
+      "b300-long.csv": {
+        "bytes": 186,
+        "sha256": "d1b0e874d89051167095ff2ff5957e834aa6a881e9b0f5487e51257052be608c",
+        "base64": "Y3R4X3Rva2VucyxwcmVmaWxsX3Rva2VucyxwcmVmaWxsX3RwcyxnZW5fdG9rZW5zLGdlbl90cHMsa3ZjYWNoZV9ieXRlcwoxNjM4NCwxNjM4NCwxNDE5LjY1LDMyLDMxLjEwLDI0OTUwNTE2NAoyNDU3Niw4MTkyLDEzMjguMjQsMzIsMzAuNTIsMzYyMjU5ODUyCjMyNzY4LDgxOTIsMTI3MS4yNiwzMiwyOC4zMSw0NzUwMTQ1NDAK"
+      },
+      "b300-short.csv": {
+        "bytes": 217,
+        "sha256": "1aa10ea9f0d210b82f0da073577df9a6ba12138ff4896ad486c8498245ad24ec",
+        "base64": "Y3R4X3Rva2VucyxwcmVmaWxsX3Rva2VucyxwcmVmaWxsX3RwcyxnZW5fdG9rZW5zLGdlbl90cHMsa3ZjYWNoZV9ieXRlcwoyMDQ4LDIwNDgsMTQyMi41NCwzMiwzMi44Miw1MjE4NDQ2MAo0MDk2LDIwNDgsMTQ3NC43MiwzMiwzMS44Myw4MDM3MzEzMgo2MTQ0LDIwNDgsMTQ0OS4zMSwzMiwzMS42OSwxMDg1NjE4MDQKODE5MiwyMDQ4LDE0MzMuMjUsMzIsMzEuMDEsMTM2NzUwNDc2Cg=="
+      }
+    },
+    "logs": {
+      "long.stderr.log": {
+        "bytes": 690,
+        "sha256": "13683c72601d140e4ed72bc2f89c6aad011104faacac102234491f01b2e62627",
+        "base64": "ZHM0LXJ1bnRpbWUtZ3JhcGgtYmVuY2gtcnM6IGNvbnRleHQgYnVmZmVycyA3NTIuMjUgTWlCIChjdHg9MzI4MDEsIGJhY2tlbmQ9Y3VkYSwgcHJlZmlsbF9jaHVuaz0yMDQ4LCByYXdfa3Zfcm93cz0yMzA0LCBjb21wcmVzc2VkX2t2X3Jvd3M9ODIwMikKZHM0OiBDVURBIGJhY2tlbmQgaW5pdGlhbGl6ZWQgb24gTlZJRElBIEIzMDAgU1hNNiBBQyAoc21fMTAzKQpkczQ6IENVREEgaG9zdCByZWdpc3RyYXRpb24gc2tpcHBlZDogb3BlcmF0aW9uIG5vdCBzdXBwb3J0ZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyBpbnRvIGRldmljZSBjYWNoZQpkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDE2LjAyIEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyAzMi4wNiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNDguMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDY0LjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA4MC4wNCBHaUIgY2FjaGVkCmRzNDogQ1VEQSBzdGFydHVwIG1vZGVsIGNhY2hlIHByZXBhcmVkIDgwLjc2IEdpQiBvZiB0ZW5zb3Igc3BhbnMgaW4gMTIuNTQ3cwpkczQ6IGN1ZGEgYmFja2VuZCBpbml0aWFsaXplZCBmb3IgZ3JhcGggZGlhZ25vc3RpY3MK"
+      },
+      "long.stdout.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "base64": ""
+      },
+      "short.stderr.log": {
+        "bytes": 689,
+        "sha256": "3354a6443085250298769cd9fe378f07fe7835461bd01741071933770c7933f8",
+        "base64": "ZHM0LXJ1bnRpbWUtZ3JhcGgtYmVuY2gtcnM6IGNvbnRleHQgYnVmZmVycyAzMzMuNzUgTWlCIChjdHg9ODIyNSwgYmFja2VuZD1jdWRhLCBwcmVmaWxsX2NodW5rPTIwNDgsIHJhd19rdl9yb3dzPTIzMDQsIGNvbXByZXNzZWRfa3Zfcm93cz0yMDU4KQpkczQ6IENVREEgYmFja2VuZCBpbml0aWFsaXplZCBvbiBOVklESUEgQjMwMCBTWE02IEFDIChzbV8xMDMpCmRzNDogQ1VEQSBob3N0IHJlZ2lzdHJhdGlvbiBza2lwcGVkOiBvcGVyYXRpb24gbm90IHN1cHBvcnRlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIGludG8gZGV2aWNlIGNhY2hlCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgMTYuMDIgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDMyLjA2IEdpQiBjYWNoZWQKZHM0OiBDVURBIGxvYWRpbmcgbW9kZWwgdGVuc29ycyA0OC4wMiBHaUIgY2FjaGVkCmRzNDogQ1VEQSBsb2FkaW5nIG1vZGVsIHRlbnNvcnMgNjQuMDYgR2lCIGNhY2hlZApkczQ6IENVREEgbG9hZGluZyBtb2RlbCB0ZW5zb3JzIDgwLjA0IEdpQiBjYWNoZWQKZHM0OiBDVURBIHN0YXJ0dXAgbW9kZWwgY2FjaGUgcHJlcGFyZWQgODAuNzYgR2lCIG9mIHRlbnNvciBzcGFucyBpbiAxMi42ODFzCmRzNDogY3VkYSBiYWNrZW5kIGluaXRpYWxpemVkIGZvciBncmFwaCBkaWFnbm9zdGljcwo="
+      },
+      "short.stdout.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "base64": ""
+      }
+    },
+    "rows": {
+      "b300-long.csv": [
+        {
+          "ctx_tokens": 16384,
+          "prefill_tokens": 16384,
+          "prefill_tps": 1419.65,
+          "gen_tokens": 32,
+          "gen_tps": 31.1,
+          "kvcache_bytes": 249505164
+        },
+        {
+          "ctx_tokens": 24576,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1328.24,
+          "gen_tokens": 32,
+          "gen_tps": 30.52,
+          "kvcache_bytes": 362259852
+        },
+        {
+          "ctx_tokens": 32768,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1271.26,
+          "gen_tokens": 32,
+          "gen_tps": 28.31,
+          "kvcache_bytes": 475014540
+        }
+      ],
+      "b300-short.csv": [
+        {
+          "ctx_tokens": 2048,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1422.54,
+          "gen_tokens": 32,
+          "gen_tps": 32.82,
+          "kvcache_bytes": 52184460
+        },
+        {
+          "ctx_tokens": 4096,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1474.72,
+          "gen_tokens": 32,
+          "gen_tps": 31.83,
+          "kvcache_bytes": 80373132
+        },
+        {
+          "ctx_tokens": 6144,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1449.31,
+          "gen_tokens": 32,
+          "gen_tps": 31.69,
+          "kvcache_bytes": 108561804
+        },
+        {
+          "ctx_tokens": 8192,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1433.25,
+          "gen_tokens": 32,
+          "gen_tps": 31.01,
+          "kvcache_bytes": 136750476
+        }
+      ]
+    }
+  },
+  "baseline": {
+    "dir": "ds4-parity/baselines/bench/m0.6",
+    "rows": {
+      "b300-long.csv": [
+        {
+          "ctx_tokens": 16384,
+          "prefill_tokens": 16384,
+          "prefill_tps": 1411.0,
+          "gen_tokens": 32,
+          "gen_tps": 35.09,
+          "kvcache_bytes": 249505164
+        },
+        {
+          "ctx_tokens": 24576,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1319.25,
+          "gen_tokens": 32,
+          "gen_tps": 34.38,
+          "kvcache_bytes": 362259852
+        },
+        {
+          "ctx_tokens": 32768,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1261.96,
+          "gen_tokens": 32,
+          "gen_tps": 32.55,
+          "kvcache_bytes": 475014540
+        }
+      ],
+      "b300-short.csv": [
+        {
+          "ctx_tokens": 2048,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1435.38,
+          "gen_tokens": 32,
+          "gen_tps": 36.87,
+          "kvcache_bytes": 52184460
+        },
+        {
+          "ctx_tokens": 4096,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1467.3,
+          "gen_tokens": 32,
+          "gen_tps": 36.17,
+          "kvcache_bytes": 80373132
+        },
+        {
+          "ctx_tokens": 6144,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1443.42,
+          "gen_tokens": 32,
+          "gen_tps": 36.05,
+          "kvcache_bytes": 108561804
+        },
+        {
+          "ctx_tokens": 8192,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1427.04,
+          "gen_tokens": 32,
+          "gen_tps": 35.28,
+          "kvcache_bytes": 136750476
+        }
+      ]
+    }
+  },
+  "comparison": {
+    "command": [
+      "/usr/bin/python3",
+      "ds4-parity/compare_bench_csv.py",
+      "--candidate-dir",
+      "/tmp/ds4-m109f-bench",
+      "--max-regression",
+      "0.1",
+      "--json"
+    ],
+    "exit_code": 1,
+    "stdout": {
+      "bytes": 1879,
+      "sha256": "b4c58f33ad3c841e3370914d7dd11c5330ee69cbf33085a828da6a077a8fd5e1",
+      "base64": "ewogICJyb290IjogIi93b3Jrc3BhY2UvZHM0IiwKICAib2siOiBmYWxzZSwKICAiYmFzZWxpbmVfZGlyIjogImRzNC1wYXJpdHkvYmFzZWxpbmVzL2JlbmNoL20wLjYiLAogICJjYW5kaWRhdGVfZGlyIjogIi90bXAvZHM0LW0xMDlmLWJlbmNoIiwKICAibWF4X3JlZ3Jlc3Npb24iOiAwLjEsCiAgInNlY3Rpb25zIjogWwogICAgewogICAgICAibmFtZSI6ICJtMC42IGJlbmNobWFyayBlbnZpcm9ubWVudCIsCiAgICAgICJvcmFjbGUiOiAiTTAuNiBCMzAwIENVREEgYmVuY2htYXJrIGNhcHR1cmUgbWV0YWRhdGEiLAogICAgICAiZml4dHVyZSI6ICJiZW5jaC9tMC42L2xvZ3MvY2FwdHVyZS1lbnYudHh0IiwKICAgICAgImNvbXBhcmF0b3IiOiAic2FtZSBtb2RlbCwgcHJvbXB0LCBDVURBIGJhY2tlbmQgbWFya2VyLCBhbmQgR1BVIG1hY2hpbmUgY2xhc3MiLAogICAgICAib2siOiB0cnVlLAogICAgICAiY2hlY2tzIjogMjgsCiAgICAgICJlcnJvcnMiOiBbXQogICAgfSwKICAgIHsKICAgICAgIm5hbWUiOiAibTAuNiBiZW5jaG1hcmsgQ1NWIGNvbXBhcmlzb24iLAogICAgICAib3JhY2xlIjogIk0wLjYgYjMwMC1zaG9ydC5jc3YgYW5kIGIzMDAtbG9uZy5jc3YiLAogICAgICAiZml4dHVyZSI6ICJiZW5jaC9tMC42L2Nzdi8qLmNzdiIsCiAgICAgICJjb21wYXJhdG9yIjogInNoYXBlIGZpZWxkcyBleGFjdDsgdGhyb3VnaHB1dCBtdXN0IHN0YXkgd2l0aGluIDEwJSByZWdyZXNzaW9uIHRocmVzaG9sZCIsCiAgICAgICJvayI6IGZhbHNlLAogICAgICAiY2hlY2tzIjogOTQsCiAgICAgICJlcnJvcnMiOiBbCiAgICAgICAgImIzMDAtc2hvcnQuY3N2OjI6IGdlbl90cHM6IHBlcmZvcm1hbmNlIHJlZ3Jlc3Npb24gMzIuODIgPCAzMy4xODMgKGJhc2VsaW5lIDM2Ljg3LCB0aHJlc2hvbGQgMTAlKSIsCiAgICAgICAgImIzMDAtc2hvcnQuY3N2OjM6IGdlbl90cHM6IHBlcmZvcm1hbmNlIHJlZ3Jlc3Npb24gMzEuODMgPCAzMi41NTMgKGJhc2VsaW5lIDM2LjE3LCB0aHJlc2hvbGQgMTAlKSIsCiAgICAgICAgImIzMDAtc2hvcnQuY3N2OjQ6IGdlbl90cHM6IHBlcmZvcm1hbmNlIHJlZ3Jlc3Npb24gMzEuNjkgPCAzMi40NDUgKGJhc2VsaW5lIDM2LjA1LCB0aHJlc2hvbGQgMTAlKSIsCiAgICAgICAgImIzMDAtc2hvcnQuY3N2OjU6IGdlbl90cHM6IHBlcmZvcm1hbmNlIHJlZ3Jlc3Npb24gMzEuMDEgPCAzMS43NTIgKGJhc2VsaW5lIDM1LjI4LCB0aHJlc2hvbGQgMTAlKSIsCiAgICAgICAgImIzMDAtbG9uZy5jc3Y6MjogZ2VuX3RwczogcGVyZm9ybWFuY2UgcmVncmVzc2lvbiAzMS4xIDwgMzEuNTgxIChiYXNlbGluZSAzNS4wOSwgdGhyZXNob2xkIDEwJSkiLAogICAgICAgICJiMzAwLWxvbmcuY3N2OjM6IGdlbl90cHM6IHBlcmZvcm1hbmNlIHJlZ3Jlc3Npb24gMzAuNTIgPCAzMC45NDIgKGJhc2VsaW5lIDM0LjM4LCB0aHJlc2hvbGQgMTAlKSIsCiAgICAgICAgImIzMDAtbG9uZy5jc3Y6NDogZ2VuX3RwczogcGVyZm9ybWFuY2UgcmVncmVzc2lvbiAyOC4zMSA8IDI5LjI5NSAoYmFzZWxpbmUgMzIuNTUsIHRocmVzaG9sZCAxMCUpIgogICAgICBdCiAgICB9LAogICAgewogICAgICAibmFtZSI6ICJtMC42IGJlbmNobWFyayBDU1Ygc3VtbWFyeSBhdWRpdCIsCiAgICAgICJvcmFjbGUiOiAiY29tbWl0dGVkIGNzdi1zdW1tYXJ5Lmpzb24gZGVyaXZlZCBmcm9tIGJlbmNobWFyayBDU1ZzIiwKICAgICAgImZpeHR1cmUiOiAiYmVuY2gvbTAuNi9sb2dzL2Nzdi1zdW1tYXJ5Lmpzb24iLAogICAgICAiY29tcGFyYXRvciI6ICJyZWNvbXB1dGUgc3VtbWFyeSBmaWVsZHMgZnJvbSBDU1Ygcm93cyIsCiAgICAgICJvayI6IHRydWUsCiAgICAgICJjaGVja3MiOiA0MCwKICAgICAgImVycm9ycyI6IFtdCiAgICB9CiAgXQp9Cg=="
+    },
+    "stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "base64": ""
+    },
+    "json": {
+      "root": "/workspace/ds4",
+      "ok": false,
+      "baseline_dir": "ds4-parity/baselines/bench/m0.6",
+      "candidate_dir": "/tmp/ds4-m109f-bench",
+      "max_regression": 0.1,
+      "sections": [
+        {
+          "name": "m0.6 benchmark environment",
+          "oracle": "M0.6 B300 CUDA benchmark capture metadata",
+          "fixture": "bench/m0.6/logs/capture-env.txt",
+          "comparator": "same model, prompt, CUDA backend marker, and GPU machine class",
+          "ok": true,
+          "checks": 28,
+          "errors": []
+        },
+        {
+          "name": "m0.6 benchmark CSV comparison",
+          "oracle": "M0.6 b300-short.csv and b300-long.csv",
+          "fixture": "bench/m0.6/csv/*.csv",
+          "comparator": "shape fields exact; throughput must stay within 10% regression threshold",
+          "ok": false,
+          "checks": 94,
+          "errors": [
+            "b300-short.csv:2: gen_tps: performance regression 32.82 < 33.183 (baseline 36.87, threshold 10%)",
+            "b300-short.csv:3: gen_tps: performance regression 31.83 < 32.553 (baseline 36.17, threshold 10%)",
+            "b300-short.csv:4: gen_tps: performance regression 31.69 < 32.445 (baseline 36.05, threshold 10%)",
+            "b300-short.csv:5: gen_tps: performance regression 31.01 < 31.752 (baseline 35.28, threshold 10%)",
+            "b300-long.csv:2: gen_tps: performance regression 31.1 < 31.581 (baseline 35.09, threshold 10%)",
+            "b300-long.csv:3: gen_tps: performance regression 30.52 < 30.942 (baseline 34.38, threshold 10%)",
+            "b300-long.csv:4: gen_tps: performance regression 28.31 < 29.295 (baseline 32.55, threshold 10%)"
+          ]
+        },
+        {
+          "name": "m0.6 benchmark CSV summary audit",
+          "oracle": "committed csv-summary.json derived from benchmark CSVs",
+          "fixture": "bench/m0.6/logs/csv-summary.json",
+          "comparator": "recompute summary fields from CSV rows",
+          "ok": true,
+          "checks": 40,
+          "errors": []
+        }
+      ]
+    },
+    "json_error": ""
+  },
+  "performance": {
+    "m0_6_threshold": "documented_regression",
+    "same_session_current_c": "pass",
+    "m0_6_max_regression": 0.1,
+    "same_session_max_regression": 0.05,
+    "m0_6_regressions": [
+      {
+        "csv": "b300-long.csv",
+        "line": 2,
+        "field": "gen_tps",
+        "baseline": 35.09,
+        "floor": 31.581000000000003,
+        "candidate": 31.1,
+        "current_c": 31.12
+      },
+      {
+        "csv": "b300-long.csv",
+        "line": 3,
+        "field": "gen_tps",
+        "baseline": 34.38,
+        "floor": 30.942000000000004,
+        "candidate": 30.52,
+        "current_c": 30.55
+      },
+      {
+        "csv": "b300-long.csv",
+        "line": 4,
+        "field": "gen_tps",
+        "baseline": 32.55,
+        "floor": 29.294999999999998,
+        "candidate": 28.31,
+        "current_c": 28.32
+      },
+      {
+        "csv": "b300-short.csv",
+        "line": 2,
+        "field": "gen_tps",
+        "baseline": 36.87,
+        "floor": 33.183,
+        "candidate": 32.82,
+        "current_c": 32.89
+      },
+      {
+        "csv": "b300-short.csv",
+        "line": 3,
+        "field": "gen_tps",
+        "baseline": 36.17,
+        "floor": 32.553000000000004,
+        "candidate": 31.83,
+        "current_c": 31.82
+      },
+      {
+        "csv": "b300-short.csv",
+        "line": 4,
+        "field": "gen_tps",
+        "baseline": 36.05,
+        "floor": 32.445,
+        "candidate": 31.69,
+        "current_c": 31.69
+      },
+      {
+        "csv": "b300-short.csv",
+        "line": 5,
+        "field": "gen_tps",
+        "baseline": 35.28,
+        "floor": 31.752000000000002,
+        "candidate": 31.01,
+        "current_c": 30.99
+      }
+    ],
+    "same_session_regressions": [],
+    "policy": "M0.6 threshold misses are accepted only when workload shape is exact, same-session current-C shows the same older-baseline drift, and Rust is within the same-session current-C threshold."
+  },
+  "quality_gates": [
+    {
+      "id": "M10.9a",
+      "command": [
+        "/usr/bin/python3",
+        "ds4-parity/check_runtime_graph_closure_matrix.py",
+        "--negative-test"
+      ],
+      "ok": true,
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 110,
+          "sha256": "2fd8d3b0f8458677f92b0a08b99526333d3ed25a5de75fb8534df9ae81c55b87",
+          "base64": "UnVudGltZSBncmFwaCBjbG9zdXJlIG1hdHJpeDogUEFTUywgMTE5IGNoZWNrcwpSdW50aW1lIGdyYXBoIGNsb3N1cmUgbWF0cml4IG5lZ2F0aXZlIHRlc3RzOiBQQVNTLCA4IG11dGF0aW9ucwo="
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        }
+      }
+    },
+    {
+      "id": "M10.9b",
+      "command": [
+        "/usr/bin/python3",
+        "ds4-parity/check_runtime_graph_route_preflight.py",
+        "--negative-test"
+      ],
+      "ok": true,
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 112,
+          "sha256": "7503589b199ab64aa7f70e1105c892d1d8d0d8daf84a9284ff82256654a37866",
+          "base64": "UnVudGltZSBncmFwaCByb3V0ZSBwcmVmbGlnaHQ6IFBBU1MsIDI3MyBjaGVja3MKUnVudGltZSBncmFwaCByb3V0ZSBwcmVmbGlnaHQgbmVnYXRpdmUgdGVzdHM6IFBBU1MsIDggbXV0YXRpb25zCg=="
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        }
+      }
+    },
+    {
+      "id": "M10.9c",
+      "command": [
+        "/usr/bin/python3",
+        "ds4-parity/run_runtime_graph_official_vectors.py",
+        "--negative-test"
+      ],
+      "ok": true,
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 172,
+          "sha256": "c5d015f9da7baf94515c74eb03ea30356682d2dbfeab7bb3e03f2145ec6a508f",
+          "base64": "UnVudGltZSBncmFwaCBvZmZpY2lhbCB2ZWN0b3JzOiBQQVNTLCAxOTU4IGNoZWNrcywgbWF4X2Fic19sb2dwcm9iX2RlbHRhPTAuNjc4MjU0NjA0ClJ1bnRpbWUgZ3JhcGggb2ZmaWNpYWwgdmVjdG9ycyBuZWdhdGl2ZSB0ZXN0czogUEFTUywgOCBjaGVja3MsIG1heF9hYnNfbG9ncHJvYl9kZWx0YT0wCg=="
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        }
+      }
+    },
+    {
+      "id": "M10.9d",
+      "command": [
+        "/usr/bin/python3",
+        "ds4-parity/run_runtime_graph_long_context.py",
+        "--negative-test"
+      ],
+      "ok": true,
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 103,
+          "sha256": "4f8599e9aebf2fd6a67f0e9f8526242d7d4bd58c546ee4b94d891ab0167ae322",
+          "base64": "UnVudGltZSBncmFwaCBsb25nLWNvbnRleHQ6IFBBU1MsIDEyNiBjaGVja3MKUnVudGltZSBncmFwaCBsb25nLWNvbnRleHQgbmVnYXRpdmUgdGVzdHM6IFBBU1MsIDggY2hlY2tzCg=="
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        }
+      }
+    },
+    {
+      "id": "M10.9e",
+      "command": [
+        "/usr/bin/python3",
+        "ds4-parity/run_tool_call_quality.py",
+        "--negative-test"
+      ],
+      "ok": true,
+      "result": {
+        "exit_code": 0,
+        "stdout": {
+          "bytes": 101,
+          "sha256": "e0aac5171f431c9bad3c1a73e45cf9aaa55eaccb52bda7b507acf51ea0eb8c28",
+          "base64": "UnVudGltZSBncmFwaCB0b29sL3NlcnZlcjogUEFTUywgMTY3IGNoZWNrcwpSdW50aW1lIGdyYXBoIHRvb2wvc2VydmVyIG5lZ2F0aXZlIHRlc3RzOiBQQVNTLCA4IGNoZWNrcwo="
+        },
+        "stderr": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "base64": ""
+        }
+      }
+    }
+  ],
+  "claim_boundary": {
+    "closed_parent": "M10",
+    "benchmark_claims": "same_b300_model_backend_only",
+    "backend_replacement": false,
+    "unsupported_claims": [
+      "not a C backend replacement claim",
+      "not a non-B300 performance claim"
+    ]
+  }
+}

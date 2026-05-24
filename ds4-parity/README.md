@@ -303,6 +303,39 @@ model hash, HTTP 200, `tool_calls`, `list_files`, `{"path":"."}`, trace
 cache ledger markers, no target-stream fallback marker, and retained raw
 request/response/header/trace/stdout/stderr artifacts.
 
+Validate the M10.9f Runtime graph benchmark closure:
+
+```sh
+python3 ds4-parity/run_runtime_graph_bench.py
+python3 ds4-parity/run_runtime_graph_bench.py --negative-test
+```
+
+Refresh the live B300 Rust runtime benchmark closure summary:
+
+```sh
+git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig \
+  --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- \
+  tar -xf - -C /workspace/ds4
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default exec ds4-rust-port-b300 -- sh -lc \
+  'set -e; cd /workspace/ds4; CUDA_ARCH=native \
+  python3 ds4-parity/run_runtime_graph_bench.py \
+    --workdir /workspace/ds4 --model /workspace/ds4/ds4flash.gguf \
+    --output-dir /tmp/ds4-m109f-bench \
+    --write-summary /tmp/ds4-m109f-benchmark-closure.json --negative-test'
+kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 \
+  -n default cp ds4-rust-port-b300:/tmp/ds4-m109f-benchmark-closure.json \
+  ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json
+```
+
+The M10.9f comparator checks Rust `ds4-runtime-graph-bench-rs` short and
+long benchmark CSVs against the M0.6 `ds4-bench` B300 baseline: route
+`graph`, backend `cuda`, q2-imatrix model hash, prompt hash, context
+frontiers, prefill intervals, generation-token counts, KVC snapshot bytes,
+throughput threshold, M10.9a through M10.9e gate status, and the explicit
+claim boundary that this closes Milestone 10 without claiming a general
+backend replacement.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

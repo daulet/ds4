@@ -442,6 +442,7 @@ def validate_static_files(report: Report) -> None:
         "ds4-parity/baselines/bench/m0.6/logs/csv-summary.json",
         "ds4-parity/run_server_parity_report.py",
         "ds4-parity/run_tool_call_quality.py",
+        "ds4-parity/run_runtime_graph_bench.py",
         "ds4-parity/compare_bench_csv.py",
         "ds4-parity/baselines/graph/m10.8g4b/end-to-end-closure.json",
     ]
@@ -471,9 +472,10 @@ def validate_static_wiring(report: Report) -> None:
         or "Active item: M10.9d B300 Long-Context Rust Runtime Gate" in texts["status"]
         or "Active item: M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate" in texts["status"]
         or "Active item: M10.9f Benchmark Comparator And Milestone 10 Closure" in texts["status"]
+        or "Active item: M11 Agent Trace Replay" in texts["status"]
     )
     report.check(status_has_m10_9a, "status M10.9a missing")
-    report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c/M10.9d/M10.9e/M10.9f missing")
+    report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c/M10.9d/M10.9e/M10.9f/M11 missing")
     report.check("check_runtime_graph_closure_matrix.py --negative-test" in texts["readme"], "README matrix command missing")
     report.check("M10.9a Runtime graph closure matrix" in texts["report"], "unified report M10.9a missing")
     report.check("M10.9a B300 runtime graph fixture-readiness rerun" in texts["report"], "B300 fixture-readiness rerun missing")

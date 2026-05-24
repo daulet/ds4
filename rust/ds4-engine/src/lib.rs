@@ -425,6 +425,15 @@ impl Engine {
         Ok(Tokens { raw })
     }
 
+    pub fn tokenize_text(&self, text: &str) -> Result<Tokens, EngineError> {
+        let text = CString::new(text)?;
+        let mut raw = RawTokens::default();
+        unsafe {
+            ds4_tokenize_text(self.raw.as_ptr(), text.as_ptr(), &mut raw);
+        }
+        Ok(Tokens { raw })
+    }
+
     pub fn generate_argmax_text(
         &self,
         prompt: &Tokens,
@@ -903,8 +912,21 @@ impl ServerSession<'_> {
         self.session.pos()
     }
 
+    pub fn context_size(&self) -> i32 {
+        self.session.ctx()
+    }
+
     pub fn argmax(&self) -> i32 {
         unsafe { ds4_session_argmax(self.session.raw.as_ptr()) as i32 }
+    }
+
+    pub fn argmax_excluding_eos(&self) -> i32 {
+        unsafe {
+            ds4_session_argmax_excluding(
+                self.session.raw.as_ptr(),
+                self.engine.token_eos() as c_int,
+            ) as i32
+        }
     }
 
     pub fn top_logprobs(&self, k: i32) -> Vec<TopLogprobScore> {
@@ -1061,6 +1083,40 @@ impl ServerSession<'_> {
     pub fn sync_prompt_prefix(&mut self, prompt: &Tokens, len: i32) -> Result<(), EngineError> {
         let prefix = prompt.prefix(len);
         self.sync_tokens(&prefix)
+    }
+
+    pub fn save_snapshot(&mut self, snapshot: &mut SessionSnapshot) -> Result<(), EngineError> {
+        let mut err = [0 as c_char; 160];
+        let rc = unsafe {
+            ds4_session_save_snapshot(
+                self.session.raw.as_ptr(),
+                &mut snapshot.raw,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(EngineError::message(c_error(&err)))
+        }
+    }
+
+    pub fn load_snapshot(&mut self, snapshot: &SessionSnapshot) -> Result<(), EngineError> {
+        let mut err = [0 as c_char; 160];
+        let rc = unsafe {
+            ds4_session_load_snapshot(
+                self.session.raw.as_ptr(),
+                &snapshot.raw,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(EngineError::message(c_error(&err)))
+        }
     }
 
     pub fn generate_synced<F>(
@@ -1232,6 +1288,29 @@ impl ServerSession<'_> {
             )
         };
         store_result(stored, &err)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct SessionSnapshot {
+    raw: RawSessionSnapshot,
+}
+
+impl SessionSnapshot {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn len(&self) -> u64 {
+        self.raw.len
+    }
+}
+
+impl Drop for SessionSnapshot {
+    fn drop(&mut self) {
+        unsafe {
+            ds4_session_snapshot_free(&mut self.raw);
+        }
     }
 }
 
@@ -1650,6 +1729,14 @@ struct RawSession {
     _private: [u8; 0],
 }
 
+#[repr(C)]
+#[derive(Debug, Default)]
+struct RawSessionSnapshot {
+    ptr: *mut u8,
+    len: u64,
+    cap: u64,
+}
+
 #[derive(Debug)]
 struct Session {
     raw: NonNull<RawSession>,
@@ -1844,6 +1931,7 @@ unsafe extern "C" {
     fn ds4_think_max_min_context() -> u32;
     fn ds4_context_memory_estimate(backend: c_int, ctx_size: c_int) -> RawContextMemory;
     fn ds4_tokenize_rendered_chat(engine: *mut RawEngine, text: *const c_char, out: *mut RawTokens);
+    fn ds4_tokenize_text(engine: *mut RawEngine, text: *const c_char, out: *mut RawTokens);
     fn ds4_encode_chat_prompt(
         engine: *mut RawEngine,
         system: *const c_char,
@@ -1899,6 +1987,7 @@ unsafe extern "C" {
         errlen: usize,
     ) -> c_int;
     fn ds4_session_argmax(session: *mut RawSession) -> c_int;
+    fn ds4_session_argmax_excluding(session: *mut RawSession, excluded_id: c_int) -> c_int;
     fn ds4_session_top_logprobs(
         session: *mut RawSession,
         out: *mut RawTokenScore,
@@ -1922,6 +2011,19 @@ unsafe extern "C" {
     fn ds4_session_common_prefix(session: *mut RawSession, prompt: *const RawTokens) -> c_int;
     fn ds4_session_pos(session: *mut RawSession) -> c_int;
     fn ds4_session_ctx(session: *mut RawSession) -> c_int;
+    fn ds4_session_save_snapshot(
+        session: *mut RawSession,
+        snapshot: *mut RawSessionSnapshot,
+        err: *mut c_char,
+        errlen: usize,
+    ) -> c_int;
+    fn ds4_session_load_snapshot(
+        session: *mut RawSession,
+        snapshot: *const RawSessionSnapshot,
+        err: *mut c_char,
+        errlen: usize,
+    ) -> c_int;
+    fn ds4_session_snapshot_free(snapshot: *mut RawSessionSnapshot);
     fn ds4_kvstore_open(
         cache: *mut RawKvStore,
         dir: *const c_char,

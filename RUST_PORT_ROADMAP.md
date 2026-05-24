@@ -5856,6 +5856,23 @@ restore boundary.
   negative tests, final closure checker, `cargo test --workspace`, `cargo fmt
   --all -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
+- Evidence: added `ds4-runtime-graph-bench-rs`, exposed Rust session snapshot
+  and EOS-excluding argmax helpers needed to mirror `ds4-bench`, added
+  `ds4-parity/run_runtime_graph_bench.py`, wired the comparator into the
+  unified report and README, and captured
+  `ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json` on B300.
+  The artifact records route `graph`, backend `cuda`, exact q2-imatrix model
+  hash, prompt hash, short/long benchmark CSV rows, exact context frontiers,
+  prefill intervals, generation-token counts, KVC snapshot bytes, and
+  M10.9a through M10.9e gate status.
+- Validation evidence: live B300 Rust benchmark closure passed with 349 checks
+  and 8 negative mutations. The artifact documents 7 older M0.6 decode
+  throughput threshold misses, reproduces the same drift with same-session
+  current-C `ds4-bench`, and verifies Rust stays within the same-session
+  current-C threshold. Local comparator, workspace tests, server parity report,
+  formatter check, diff check, unified parity report, and non-interactive
+  Claude review passed. Exact command evidence is recorded in
+  `.memory/status.md`.
 
 ## Milestone 11: Agent Trace Replay
 

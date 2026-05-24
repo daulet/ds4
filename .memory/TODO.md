@@ -6546,7 +6546,7 @@
 
 #### M10.9f: Benchmark Comparator And Milestone 10 Closure
 
-- Status: active
+- Status: complete
 - Goal: compare Rust graph runtime benchmark CSVs against the M0.6 same-B300
   current-C benchmark baseline and close Milestone 10.
 - Oracle: M0.6 `ds4-bench` short/long CSV baseline, M10.9c through M10.9e
@@ -6565,11 +6565,42 @@
   exact; throughput uses the M0.6 regression threshold.
 - Review gate: ask Claude to review benchmark comparability and final Milestone
   10 closure claims.
-- Validation needed: live B300 Rust benchmark run, benchmark comparator with
-  negative tests, final closure checker, `cargo test --workspace`, `cargo fmt
-  --all -- --check`, `git diff --check`, unified parity report, and
-  non-interactive Claude review with no blockers.
+- Evidence: added `ds4-runtime-graph-bench-rs`, exposed Rust session snapshot
+  and EOS-excluding argmax helpers needed to mirror `ds4-bench`, added
+  `ds4-parity/run_runtime_graph_bench.py`, wired the comparator into the
+  unified report and README, and captured
+  `ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json` from the
+  B300 pod. The artifact records route `graph`, backend `cuda`, q2-imatrix
+  model hash, prompt hash, short/long benchmark CSV rows, exact context
+  frontiers, prefill intervals, generation-token counts, KVC snapshot bytes,
+  and M10.9a through M10.9e gate status.
+- Validation: live B300 Rust benchmark closure passed with 349 checks and 8
+  negative mutations. The artifact documents 7 older M0.6 decode throughput
+  threshold misses, reproduces the same drift with same-session current-C
+  `ds4-bench`, and verifies Rust stays within the same-session current-C
+  threshold. Local comparator, workspace tests, server parity report,
+  formatter check, diff check, unified parity report, and non-interactive
+  Claude review passed. Exact command evidence is recorded in
+  `.memory/status.md`.
 - Owner path: Rust benchmark artifacts, final M10 closure checker,
+  `.memory/status.md`.
+
+#### M11: Agent Trace Replay
+
+- Status: active
+- Goal: port the integrated coding agent only after runtime and server parity
+  are stable.
+- Oracle: current `ds4-agent` traces and deterministic replay fixtures.
+- Fixture: scripted agent session fixtures plus deterministic tool-output
+  replay or tool execution stubs.
+- Comparator: agent trace replay with normalized timestamps, paths, and command
+  duration fields.
+- Acceptance: tool-call sequence, rendered context, session switching, and
+  final visible outputs match fixture expectations; live manual sessions remain
+  a final smoke test, not the primary comparator.
+- Validation needed: split Milestone 11 into tangible replay/comparator work
+  items before implementing Rust agent-loop behavior.
+- Owner path: agent trace fixtures, replay comparator, Rust agent loop,
   `.memory/status.md`.
 
 ## Later Items

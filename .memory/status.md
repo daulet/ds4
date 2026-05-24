@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.9f Benchmark Comparator And Milestone 10 Closure
-- Last validated source before the active item: M10.9e Tool-Call Quality And
-  Server Replay Rust Runtime Gate.
+- Active item: M11 Agent Trace Replay
+- Last validated source before the active item: M10.9f Benchmark Comparator
+  And Milestone 10 Closure.
+- Earlier M10.9f Benchmark Comparator And Milestone 10 Closure.
 - Earlier M10.9e Tool-Call Quality And Server Replay Rust Runtime Gate.
 - Earlier M10.9d B300 Long-Context Rust Runtime Gate.
 - Earlier M10.9c B300 Official-Vector Rust Runtime Gate.
@@ -82,6 +83,31 @@
 
 ## Last Evidence
 
+- M10.9f adds the Rust `ds4-runtime-graph-bench-rs` benchmark capture binary,
+  exposes Rust session snapshot and EOS-excluding argmax helpers needed to
+  mirror `ds4-bench`, adds `ds4-parity/run_runtime_graph_bench.py`, wires the
+  comparator into the unified report and README, and records
+  `ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json` from the
+  B300 pod. The artifact records route `graph`, backend `cuda`, q2-imatrix
+  model hash
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`,
+  prompt hash
+  `f53e0d80cb2d4492d24ebd63c7000c397b16ae70f9bf09b3763e5d8323ec209f`,
+  exact short/long benchmark CSV workload shape, KVC snapshot bytes matching
+  M0.6, M10.9a through M10.9e gate status, and a claim boundary that closes
+  Milestone 10 without claiming general backend replacement.
+- M10.9f validation passed the live B300 Rust benchmark closure with 349
+  checks and 8 negative mutations. The artifact documents 7 older M0.6 decode
+  throughput threshold misses, reproduces the same drift with same-session
+  current-C `ds4-bench`, and verifies Rust stays within the same-session
+  current-C threshold; `python3 ds4-parity/run_runtime_graph_bench.py
+  --negative-test`; Python syntax checks; `cargo test -p ds4-engine --bin
+  ds4-runtime-graph-bench-rs`; `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test`; `cargo
+  test --workspace`; `python3 ds4-parity/run_server_parity_report.py`; `cargo
+  fmt --all -- --check`; `git diff --check`; and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles`. Non-interactive
+  Claude review returned `NO BLOCKERS`.
 - M10.9e extends `ds4-parity/run_tool_call_quality.py` into a self-contained
   Rust graph tool/server artifact comparator, wires it into the unified report
   and README, transitions `ds4-server-runtime-rs --runtime-graph graph` to run
