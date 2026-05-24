@@ -1,0 +1,51 @@
+{
+  "schema": "ds4.agent_deterministic_replay.v1",
+  "milestone": "M11.3",
+  "source": "rust-agent-deterministic-replay",
+  "oracle": "M11.1 current-C trace replay fixture plus M11.2 rendered context artifact",
+  "live_execution": false,
+  "model_sampling": false,
+  "cases": [
+    {
+      "id": "single_tool_round",
+      "replay_sources": ["M11.1", "M11.2"],
+      "transcript_roles": ["system", "user", "assistant", "tool", "assistant"],
+      "tool_replay": {
+        "tool_sequence": [
+          {"round": 0, "name": "list", "args": [{"name": "path", "value": ".", "is_string": true}]}
+        ],
+        "stubs": [
+          {"round": 0, "name": "list", "args": [{"name": "path", "value": ".", "is_string": true}], "inserted_role": "tool", "inserted_after_round": 0, "output": "Tool result for list path=\".\":\nREADME.md\nds4_agent.c\n"}
+        ],
+        "tool_result_messages": [
+          "Tool result for list path=\".\":\nREADME.md\nds4_agent.c\n"
+        ],
+        "rendered_context_case": "single_tool_round",
+        "rendered_context_contains_tool_result": true
+      },
+      "session_replay": {"operations": []},
+      "final_visible_output": "README.md and ds4_agent.c are visible.",
+      "final_output_source": "model_event_round_1"
+    },
+    {
+      "id": "session_switching_commands",
+      "replay_sources": ["M11.1", "M11.2"],
+      "transcript_roles": ["system", "user", "assistant"],
+      "command_inputs": ["/save", "/list", "/switch <SESSION:alpha>", "/history 2", "/new"],
+      "tool_replay": {"tool_sequence": [], "stubs": [], "tool_result_messages": []},
+      "session_replay": {
+        "normalized_sessions": ["<SESSION:alpha>"],
+        "operations": [
+          {"step": 0, "input": "/save", "command": "save", "session": "<SESSION:alpha>", "visible": "saved session <SESSION:alpha> (3 turns)"},
+          {"step": 1, "input": "/list", "command": "list", "sessions": ["<SESSION:alpha>"]},
+          {"step": 2, "input": "/switch <SESSION:alpha>", "command": "switch", "session": "<SESSION:alpha>", "visible": "switched to <SESSION:alpha>"},
+          {"step": 3, "input": "/history 2", "command": "history", "turns": 2, "visible": "user: Remember that alpha was inspected."},
+          {"step": 4, "input": "/new", "command": "new", "visible": "new session started from system prompt"}
+        ]
+      },
+      "model_visible_output_before_commands": "Noted: alpha was inspected.",
+      "final_visible_output": "new session started from system prompt",
+      "final_output_source": "session_command_new"
+    }
+  ]
+}

@@ -22,7 +22,8 @@ pub use agent_dsml::{
     hex as agent_dsml_hex, AgentDsmlParser, AgentDsmlState, AgentToolArg, AgentToolCall,
 };
 pub use agent_trace_replay::{
-    write_agent_rendered_context_replay, write_agent_trace_replay_oracle,
+    write_agent_deterministic_replay, write_agent_rendered_context_replay,
+    write_agent_trace_replay_oracle,
 };
 pub use decode_policy::{
     find_stop_from, policy_cases, run_policy_case, stop_list_stream_safe_len, utf8_stream_safe_len,

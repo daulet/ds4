@@ -1,0 +1,27 @@
+{
+  "schema": "ds4.agent_deterministic_replay_baseline.v1",
+  "milestone": "M11.3",
+  "oracles": {
+    "m11_1_current_c": {
+      "path": "../m11.1/current-c.json",
+      "sha256": "fb62ec8be6cd6568b5a64a0915ac98f966709ca861d4789038a4e87b14deed31"
+    },
+    "m11_2_rendered_context": {
+      "path": "../m11.2/rendered-context.json",
+      "sha256": "95d4cdfc838e78fb817de48277504949d538cec61b01c5742a3daa89fb83f715"
+    }
+  },
+  "dumps": {
+    "deterministic_replay": {
+      "path": "deterministic-replay.json",
+      "size_bytes": 2559,
+      "sha256": "60e79d276c49014f2e8b0c68e2a27a7cb085acfc69e300403b0c3a2a2f999544",
+      "producer": "rust-agent-deterministic-replay",
+      "command": "cargo run --quiet -p ds4-gguf --bin ds4-agent-deterministic-replay-rs > ds4-parity/baselines/agent/m11.3/deterministic-replay.json"
+    }
+  },
+  "validation": [
+    "cargo run --quiet -p ds4-gguf --bin ds4-agent-deterministic-replay-rs > ds4-parity/baselines/agent/m11.3/deterministic-replay.json",
+    "python3 ds4-parity/compare_agent_deterministic_replay.py --negative-test"
+  ]
+}

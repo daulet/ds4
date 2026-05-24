@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M11.3 Deterministic Tool Stub And Session Command Replay
-- Last validated source before the active item: M11.2 Rust Agent Rendered
-  Context Replay.
+- Active item: M11.4 Rust Agent Loop And Manual Smoke
+- Last validated source before the active item: M11.3 Deterministic Tool Stub
+  And Session Command Replay.
 - Earlier M11 Agent Trace Replay split into M11.1 through M11.4 before
   implementation.
+- Earlier M11.3 Deterministic Tool Stub And Session Command Replay.
 - Earlier M11.2 Rust Agent Rendered Context Replay.
 - Earlier M11.1 Agent Trace Replay Oracle And Fixture Contract.
 - Earlier M10.9f Benchmark Comparator And Milestone 10 Closure.
@@ -87,6 +88,24 @@
 
 ## Last Evidence
 
+- M11.3 adds the Rust `ds4-agent-deterministic-replay-rs` artifact emitter,
+  records `ds4-parity/baselines/agent/m11.3/deterministic-replay.json`, adds
+  `ds4-parity/compare_agent_deterministic_replay.py --negative-test`, and
+  wires the comparator into the unified parity report and README. The artifact
+  replays the M11.1 deterministic `list` tool stub and
+  save/list/switch/history/new command effects, cross-checks the M11.2 rendered
+  tool-result boundary, and keeps `live_execution` and `model_sampling` false.
+- M11.3 validation passed `cargo run --quiet -p ds4-gguf --bin
+  ds4-agent-deterministic-replay-rs >
+  ds4-parity/baselines/agent/m11.3/deterministic-replay.json` and `python3
+  ds4-parity/compare_agent_deterministic_replay.py --negative-test` with 230
+  checks.
+  Follow-up gates also passed: Python syntax checks; `cargo fmt --all
+  -- --check`; `cargo test --workspace`; `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test`; `python3
+  ds4-parity/run_server_parity_report.py`; and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 80 passed, 50
+  skipped, 0 failed.
 - M11.2 adds the Rust `ds4-agent-rendered-context-rs` artifact emitter,
   records `ds4-parity/baselines/agent/m11.2/rendered-context.json`, adds
   `ds4-parity/compare_agent_rendered_context.py --negative-test`, and wires

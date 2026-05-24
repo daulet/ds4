@@ -368,6 +368,21 @@ tags, final visible assistant text, and absence of live session commands in
 the prompt. It remains model-free and does not claim Rust ownership of tool
 execution or the live agent loop.
 
+Validate the M11.3 Agent deterministic tool/session replay:
+
+```sh
+cargo run --quiet -p ds4-gguf --bin ds4-agent-deterministic-replay-rs \
+  > ds4-parity/baselines/agent/m11.3/deterministic-replay.json
+python3 ds4-parity/compare_agent_deterministic_replay.py --negative-test
+```
+
+The M11.3 comparator replays the M11.1 deterministic `list` tool stub and
+save/list/switch/history/new session commands against the Rust artifact. It
+checks tool output insertion, transcript roles, normalized session ids, command
+order and inputs, history text, final command-visible output, manifest hashes,
+and the M11.2 rendered-context boundary for the tool result. It remains
+model-free and does not claim live Rust agent-loop ownership.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

@@ -6653,16 +6653,42 @@
 
 #### M11.3: Deterministic Tool Stub And Session Command Replay
 
-- Status: active.
+- Status: complete.
 - Goal: replay deterministic tool stubs and session commands from the M11.1
   fixture without live model sampling.
 - Oracle: M11.1 current-C replay fixture and M11.2 rendered-context artifact.
 - Fixture: `single_tool_round` tool stub plus `session_switching_commands`.
-- Comparator: Rust replay of tool outputs and save/list/switch/history/new
-  command effects against normalized fixture expectations.
+- Comparator: `ds4-parity/compare_agent_deterministic_replay.py
+  --negative-test`.
 - Acceptance: tool output insertion, session operation order, normalized
   session ids, history text, and final visible command output match fixture
   expectations.
+- Evidence:
+  - Added Rust `ds4-agent-deterministic-replay-rs` artifact emitter.
+  - Added `ds4-parity/baselines/agent/m11.3/deterministic-replay.json` and
+    `manifest.json`.
+  - Added unified parity report item `M11.3 Agent deterministic tool/session
+    replay`.
+- Validation passed:
+  - `cargo run --quiet -p ds4-gguf --bin ds4-agent-deterministic-replay-rs >
+    ds4-parity/baselines/agent/m11.3/deterministic-replay.json`
+  - `python3 ds4-parity/compare_agent_deterministic_replay.py
+    --negative-test` (`230 checks`)
+
+#### M11.4: Rust Agent Loop And Manual Smoke
+
+- Status: active.
+- Goal: wire the replay-proven Rust prompt, tool, and session paths into a live
+  Rust agent loop while keeping manual sessions as smoke validation.
+- Oracle: M11.1 through M11.3 replay fixtures plus current-C no-model command
+  behavior.
+- Fixture: scripted no-model loop smoke covering one tool round and
+  save/list/switch/history/new commands.
+- Comparator: Rust no-model agent-loop smoke with normalized visible output and
+  transcript/session state checks.
+- Acceptance: the Rust loop consumes scripted model events, invokes
+  deterministic tool replay, applies session commands, and records visible
+  output without model sampling before any manual smoke claim.
 - Owner path: agent trace fixtures, replay comparator, Rust agent loop,
   `.memory/status.md`.
 

@@ -9,6 +9,8 @@ const TOOL_DSML: &str = "<｜DSML｜tool_calls>\n\
 
 const TOOL_OUTPUT: &str = "Tool result for list path=\".\":\nREADME.md\nds4_agent.c\n";
 const FINAL_ANSWER: &str = "README.md and ds4_agent.c are visible.";
+const SESSION_MODEL_ANSWER: &str = "Noted: alpha was inspected.";
+const SESSION_FINAL_COMMAND_OUTPUT: &str = "new session started from system prompt";
 
 pub fn write_agent_trace_replay_oracle<W: Write>(out: &mut W) -> io::Result<()> {
     writeln!(out, "{{")?;
@@ -73,6 +75,26 @@ pub fn write_agent_rendered_context_replay<W: Write>(out: &mut W) -> io::Result<
         &["system", "user", "assistant"],
         "Noted: alpha was inspected.",
     )?;
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")?;
+    Ok(())
+}
+
+pub fn write_agent_deterministic_replay<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "{{")?;
+    writeln!(out, "  \"schema\": \"ds4.agent_deterministic_replay.v1\",")?;
+    writeln!(out, "  \"milestone\": \"M11.3\",")?;
+    writeln!(out, "  \"source\": \"rust-agent-deterministic-replay\",")?;
+    writeln!(
+        out,
+        "  \"oracle\": \"M11.1 current-C trace replay fixture plus M11.2 rendered context artifact\","
+    )?;
+    writeln!(out, "  \"live_execution\": false,")?;
+    writeln!(out, "  \"model_sampling\": false,")?;
+    writeln!(out, "  \"cases\": [")?;
+    write_deterministic_single_tool_round(out)?;
+    writeln!(out, ",")?;
+    write_deterministic_session_commands(out)?;
     writeln!(out, "\n  ]")?;
     writeln!(out, "}}")?;
     Ok(())
@@ -280,6 +302,113 @@ fn write_rendered_context_case<W: Write>(
     Ok(())
 }
 
+fn write_deterministic_single_tool_round<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "    {{")?;
+    writeln!(out, "      \"id\": \"single_tool_round\",")?;
+    writeln!(out, "      \"replay_sources\": [\"M11.1\", \"M11.2\"],")?;
+    writeln!(
+        out,
+        "      \"transcript_roles\": [\"system\", \"user\", \"assistant\", \"tool\", \"assistant\"],"
+    )?;
+    writeln!(out, "      \"tool_replay\": {{")?;
+    writeln!(out, "        \"tool_sequence\": [")?;
+    writeln!(
+        out,
+        "          {{\"round\": 0, \"name\": \"list\", \"args\": [{{\"name\": \"path\", \"value\": \".\", \"is_string\": true}}]}}"
+    )?;
+    writeln!(out, "        ],")?;
+    writeln!(out, "        \"stubs\": [")?;
+    write!(
+        out,
+        "          {{\"round\": 0, \"name\": \"list\", \"args\": [{{\"name\": \"path\", \"value\": \".\", \"is_string\": true}}], \"inserted_role\": \"tool\", \"inserted_after_round\": 0, \"output\": "
+    )?;
+    write_json_string(out, TOOL_OUTPUT)?;
+    writeln!(out, "}}")?;
+    writeln!(out, "        ],")?;
+    writeln!(out, "        \"tool_result_messages\": [")?;
+    write!(out, "          ")?;
+    write_json_string(out, TOOL_OUTPUT)?;
+    writeln!(out)?;
+    writeln!(out, "        ],")?;
+    writeln!(
+        out,
+        "        \"rendered_context_case\": \"single_tool_round\","
+    )?;
+    writeln!(
+        out,
+        "        \"rendered_context_contains_tool_result\": true"
+    )?;
+    writeln!(out, "      }},")?;
+    writeln!(out, "      \"session_replay\": {{\"operations\": []}},")?;
+    write!(out, "      \"final_visible_output\": ")?;
+    write_json_string(out, FINAL_ANSWER)?;
+    writeln!(out, ",")?;
+    writeln!(
+        out,
+        "      \"final_output_source\": \"model_event_round_1\""
+    )?;
+    write!(out, "    }}")?;
+    Ok(())
+}
+
+fn write_deterministic_session_commands<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "    {{")?;
+    writeln!(out, "      \"id\": \"session_switching_commands\",")?;
+    writeln!(out, "      \"replay_sources\": [\"M11.1\", \"M11.2\"],")?;
+    writeln!(
+        out,
+        "      \"transcript_roles\": [\"system\", \"user\", \"assistant\"],"
+    )?;
+    writeln!(
+        out,
+        "      \"command_inputs\": [\"/save\", \"/list\", \"/switch <SESSION:alpha>\", \"/history 2\", \"/new\"],"
+    )?;
+    writeln!(
+        out,
+        "      \"tool_replay\": {{\"tool_sequence\": [], \"stubs\": [], \"tool_result_messages\": []}},"
+    )?;
+    writeln!(out, "      \"session_replay\": {{")?;
+    writeln!(
+        out,
+        "        \"normalized_sessions\": [\"<SESSION:alpha>\"],"
+    )?;
+    writeln!(out, "        \"operations\": [")?;
+    writeln!(
+        out,
+        "          {{\"step\": 0, \"input\": \"/save\", \"command\": \"save\", \"session\": \"<SESSION:alpha>\", \"visible\": \"saved session <SESSION:alpha> (3 turns)\"}},"
+    )?;
+    writeln!(
+        out,
+        "          {{\"step\": 1, \"input\": \"/list\", \"command\": \"list\", \"sessions\": [\"<SESSION:alpha>\"]}},"
+    )?;
+    writeln!(
+        out,
+        "          {{\"step\": 2, \"input\": \"/switch <SESSION:alpha>\", \"command\": \"switch\", \"session\": \"<SESSION:alpha>\", \"visible\": \"switched to <SESSION:alpha>\"}},"
+    )?;
+    writeln!(
+        out,
+        "          {{\"step\": 3, \"input\": \"/history 2\", \"command\": \"history\", \"turns\": 2, \"visible\": \"user: Remember that alpha was inspected.\"}},"
+    )?;
+    writeln!(
+        out,
+        "          {{\"step\": 4, \"input\": \"/new\", \"command\": \"new\", \"visible\": \"new session started from system prompt\"}}"
+    )?;
+    writeln!(out, "        ]")?;
+    writeln!(out, "      }},")?;
+    write!(out, "      \"model_visible_output_before_commands\": ")?;
+    write_json_string(out, SESSION_MODEL_ANSWER)?;
+    writeln!(out, ",")?;
+    write!(out, "      \"final_visible_output\": ")?;
+    write_json_string(out, SESSION_FINAL_COMMAND_OUTPUT)?;
+    writeln!(out, ",")?;
+    writeln!(
+        out,
+        "      \"final_output_source\": \"session_command_new\""
+    )?;
+    write!(out, "    }}")?;
+    Ok(())
+}
+
 fn single_tool_messages() -> Vec<ChatMessage> {
     vec![
         ChatMessage::new(
@@ -367,5 +496,16 @@ mod tests {
         assert!(text.contains("\"dsml_tool_calls\": 1"));
         assert!(text.contains("\"tool_result\": 1"));
         assert!(text.contains(FINAL_ANSWER));
+    }
+
+    #[test]
+    fn deterministic_replay_preserves_tool_and_session_effects() {
+        let mut bytes = Vec::new();
+        write_agent_deterministic_replay(&mut bytes).expect("write replay");
+        let text = String::from_utf8(bytes).expect("utf8");
+        assert!(text.contains("\"schema\": \"ds4.agent_deterministic_replay.v1\""));
+        assert!(text.contains("\"rendered_context_contains_tool_result\": true"));
+        assert!(text.contains("\"command\": \"history\""));
+        assert!(text.contains(SESSION_FINAL_COMMAND_OUTPUT));
     }
 }
