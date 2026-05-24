@@ -3,14 +3,17 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8g Rust MTP End-To-End Stream Parity
-- Last validated source before the active item: M10.8f Rust Spec Frontier
-  Snapshot Restore And Prefix1 Commit.
+- Active item: M10.8g1 MTP Stream Parity Contract And Blocker
+- Last validated source before the active item: M10.8g split into M10.8g1
+  through M10.8g4 before implementation.
+- Earlier M10.8g Rust MTP End-To-End Stream Parity split into M10.8g1 through
+  M10.8g4 before implementation.
 - Earlier M10.8f Rust Spec Frontier Snapshot Restore And Prefix1 Commit.
 - Earlier M10.8e Rust Suffix Verifier Orchestration Smoke.
 - Earlier M10.8d Rust Exact N=2 Verifier Orchestration Smoke.
 - M10.8 Rust MTP Draft And Verifier Orchestration is split into M10.8a through
-  M10.8g before implementation.
+  M10.8g before implementation. M10.8g is split into M10.8g1 through M10.8g4
+  before runtime stream implementation.
 - Earlier M10.8c Rust MTP Draft Kernel Orchestration Smoke.
 - Earlier M10.8b Rust MTP Decision Planner.
 - Earlier M10.8a MTP State Machine Contract And Availability Check.
@@ -59,6 +62,18 @@
 
 ## Last Evidence
 
+- M10.8g is split before implementation into M10.8g1 stream parity contract
+  and blocker, M10.8g2 Rust MTP stream outcome planner, M10.8g3 Rust runtime
+  guard and target-stream no-drift smoke, and M10.8g4 B300 support-model
+  end-to-end comparator. The split follows the current-C
+  `ds4_session_eval_speculative_argmax` stream outcomes: disabled/missing MTP,
+  first-draft miss, exact N=2 full/prefix/failure, suffix full/prefix/replay,
+  verifier failure, sequential fallback, frontier restore/commit, and
+  `mtp_n_raw` keep policy. Validation passed the live B300 support-artifact
+  blocker command, `cargo test --workspace`, `cargo fmt --all -- --check`,
+  `git diff --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 64 passed, 42 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8f adds `rust/ds4-gpu/src/mtp_frontier_plan.rs`,
   `rust/ds4-gpu/src/bin/ds4-mtp-frontier-plan.rs`, and
   `ds4-parity/compare_mtp_frontier_plan.py`, a Rust model-free frontier

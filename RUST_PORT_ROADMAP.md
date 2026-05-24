@@ -5229,6 +5229,114 @@ restore boundary.
   server/runtime parity checks, `cargo test --workspace`, `cargo fmt --all
   -- --check`, `git diff --check`, unified parity report, and non-interactive
   Claude review with no blockers.
+- Status: split before implementation into M10.8g1 through M10.8g4 so the
+  stream-level contract, Rust outcome planner, runtime no-drift guard, and live
+  B300 support-model comparator can be validated independently.
+- Evidence: split before implementation after inspecting
+  `ds4_session_eval_speculative_argmax` and the completed M10.8a through
+  M10.8f contracts. Validation passed the live B300 support-artifact blocker
+  command, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and unified parity with 64 passed, 42 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
+
+##### M10.8g1: MTP Stream Parity Contract And Blocker
+
+- Goal: capture the final current-C speculative stream contract and live B300
+  support-model blocker before any Rust end-to-end MTP stream path is trusted.
+- Oracle: `ds4_session_eval_speculative_argmax`, `ds4_session_eval_internal`,
+  M10.8a through M10.8f contracts, and the B300 support-artifact search.
+- Fixture: MTP disabled, missing support model, first-draft miss, margin-skip
+  one-token accept, exact N=2 full accept, exact N=2 prefix1 accept, exact N=2
+  verifier failure, suffix full accept, suffix prefix1 accept, suffix
+  restore/replay accept, suffix verifier failure, and sequential fallback.
+- Comparator: JSON contract plus checker that pins accepted-token deltas,
+  checkpoint length deltas, logits source, frontier snapshot/restore/commit,
+  `mtp_n_raw` keep policy, target-stream invariants, cache/KVC visibility, and
+  explicit support-artifact blocker state.
+- Acceptance: every later M10.8g stream case has a named current-C oracle row
+  and exact final stream state; absent B300 MTP support remains an explicit
+  blocker instead of silently becoming an MTP-off pass.
+- Drift policy: accepted tokens, checkpoint length, logits source, frontier
+  counters, `mtp_n_raw`, cache/KVC accounting, and blocker status are exact;
+  probe logs and timings are normalized.
+- Review gate: ask Claude to review contract coverage against current-C
+  end-to-end target-stream safety.
+- Validation gate: contract checker with negative tests, Python/JSON syntax,
+  B300 support-artifact blocker command, `cargo fmt --all -- --check`, `git
+  diff --check`, unified parity report, and non-interactive Claude review with
+  no blockers.
+
+##### M10.8g2: Rust MTP Stream Outcome Planner
+
+- Goal: compose the Rust draft, verifier, suffix, and frontier plans into a
+  Rust-owned stream outcome planner without executing GPU kernels.
+- Oracle: M10.8g1 stream contract plus M10.8b through M10.8f Rust plan outputs.
+- Fixture: the M10.8g1 stream rows, including disabled/missing-support rows,
+  first-draft miss, prefix1 commit, rollback, replay, and sequential fallback.
+- Comparator: Rust JSON plan compared exactly to the stream contract for
+  accepted tokens, checkpoint mutation, logits source, frontier operation,
+  `mtp_n_raw` keep policy, cache/KVC visibility, and fallback/error state.
+- Acceptance: Rust can fail closed for unavailable MTP and predict the same
+  final stream state as current C for every model-free MTP outcome row.
+- Drift policy: row order, selected sub-plan IDs, stream mutations, frontier
+  operations, and blocker names are exact; timings remain ignored.
+- Review gate: ask Claude to review planner composition against the M10.8
+  sub-plan contracts.
+- Validation gate: comparator with negative tests, targeted Rust tests, JSON
+  parsing, Python syntax, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, unified parity report, and non-interactive
+  Claude review with no blockers.
+
+##### M10.8g3: Rust Runtime Guard And Target-Stream No-Drift Smoke
+
+- Goal: wire the Rust runtime surface through the MTP stream guard for disabled
+  and missing-support cases while proving the non-speculative target stream is
+  unchanged.
+- Oracle: current-C one-token target decode, Rust runtime non-spec output, and
+  the M10.8g2 unavailable-MTP stream outcomes.
+- Fixture: MTP off, `--mtp` pointing at a missing support model, first-token
+  eval with no valid draft, server/runtime request replay, and cache/KVC ledger
+  probes.
+- Comparator: accepted output text, accepted token sequence, final checkpoint
+  length, logits/top-id source, runtime cache/KVC accounting, and explicit
+  blocker/error/fallback state.
+- Acceptance: unavailable or disabled MTP cannot alter the visible target
+  stream, checkpoint, logits ownership, or cache/KVC accounting.
+- Drift policy: stream bytes, token IDs, checkpoint length, cache/KVC counts,
+  and blocker text are exact; request IDs, timing, and probe logs are
+  normalized.
+- Review gate: ask Claude to review no-drift runtime guard safety.
+- Validation gate: server/runtime parity checks, targeted Rust tests, missing
+  support smoke, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, unified parity report, and non-interactive Claude review with
+  no blockers.
+
+##### M10.8g4: B300 Support-Model End-To-End Comparator
+
+- Goal: close M10.8g with a same-B300 current-C versus Rust speculative stream
+  comparator when an MTP support GGUF is available, or keep the blocker
+  explicitly recorded when it is not.
+- Oracle: current-C speculative decode on the same target GGUF, support GGUF,
+  backend, prompt, draft depth, margin, and environment gates.
+- Fixture: first-draft miss, one-token accept, two-token accept, suffix full
+  accept, suffix replay accept, verifier failure, prefix1 commit, rollback,
+  sequential fallback, EOS, and cache/KVC continuation probes.
+- Comparator: accepted token sequence, visible output stream, final checkpoint
+  length, logits/top-id parity, frontier state digest, `mtp_n_raw`, cache/KVC
+  accounting, and explicit blocker output when the support GGUF is absent.
+- Acceptance: Rust MTP never changes the non-speculative target stream,
+  commits only verified prefixes, restores graph state exactly on misses or
+  verifier failures, and has a reproducible rerun command for support-artifact
+  availability.
+- Drift policy: stream output, accepted tokens, checkpoint/frontier state,
+  logits/top-id, `mtp_n_raw`, cache/KVC accounting, model identity, and support
+  artifact identity are exact; timings and probe logs are normalized.
+- Review gate: ask Claude to review end-to-end comparator coverage and blocker
+  semantics.
+- Validation gate: B300 MTP comparator or explicit support-artifact blocker,
+  server/runtime parity checks, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, `git diff --check`, unified parity report, and non-interactive
+  Claude review with no blockers.
 
 #### M10.9: Runtime Graph End-To-End And Benchmark Closure
 
