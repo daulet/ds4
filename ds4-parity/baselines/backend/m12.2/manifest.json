@@ -1,0 +1,207 @@
+{
+  "schema": "ds4.backend_operation_fixture_bundle.v1",
+  "source": "m12.2-live-b300-operation-tensor-fixtures",
+  "milestone": "M12.2",
+  "parent": "M12",
+  "next_stage": "M12.3",
+  "status": "current-backend-fixture-capture",
+  "capture_environment": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "temp_kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig",
+    "source_commit": "5b609fdbcdf3a35f298b74c672f090e0cc7fd4b2",
+    "backend": "cuda",
+    "gpu": "NVIDIA B300 SXM6 AC",
+    "model_path": "/workspace/ds4/ds4flash.gguf",
+    "model_sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668",
+    "model_bytes": 86720111488
+  },
+  "claim_policy": {
+    "backend_replacement": "not_claimed",
+    "runtime_route_change": false,
+    "raw_tensor_bodies_committed": false,
+    "fixture_scope": "hash/sample summaries from current-C oracle and Rust facade candidate JSON",
+    "next_required_gate": "M12.3 Rust Backend Facade Parity Harness"
+  },
+  "comparison_policy": {
+    "digest": "fnv1a64 exact",
+    "samples": "existing comparator policy for each selected fixture",
+    "nonzero_elements": "exact",
+    "shape": "exact",
+    "dtype": "exact where fixture records dtype",
+    "float_tolerance": "existing comparator policy for each selected fixture"
+  },
+  "fixtures": [
+    {
+      "id": "first_kernel_embed_token_hc",
+      "operation_family": "embedding_and_indexer",
+      "operations": [
+        "ds4_gpu_embed_token_hc_tensor"
+      ],
+      "case": "embed_token_hc_token0",
+      "oracle": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/first-kernel-oracle.json",
+        "schema": "ds4.first_kernel_oracle.v1",
+        "sha256": "ecba52228869b17187b232480f10e9ef5254a91e436565ca20d1e46c3bc187c3",
+        "bytes": 1081
+      },
+      "candidate": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/first-kernel-rust.json",
+        "schema": "ds4.decode_first_kernel.v1",
+        "sha256": "84bcf93c8d829c67da49006646bdd727e8c171e83cda07a733f295f33786eb3b",
+        "bytes": 1013
+      },
+      "comparator": "ds4-parity/compare_decode_first_kernel_oracle.py",
+      "output_fields": [
+        "cur_hc"
+      ],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-first-kernel-oracle-dump CUDA_ARCH=native && ./ds4-first-kernel-oracle-dump -m /workspace/ds4/ds4flash.gguf --token 0 -o /tmp/ds4-m122-operation-fixtures/first-kernel-oracle.json && CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend --bin ds4-decode-first-kernel --quiet -- --model /workspace/ds4/ds4flash.gguf > /tmp/ds4-m122-operation-fixtures/first-kernel-rust.json && python3 ds4-parity/compare_decode_first_kernel_oracle.py --oracle /tmp/ds4-m122-operation-fixtures/first-kernel-oracle.json --candidate /tmp/ds4-m122-operation-fixtures/first-kernel-rust.json'"
+    },
+    {
+      "id": "layer0_qkv_rope",
+      "operation_family": "dense_norm_rope_kv",
+      "operations": [
+        "ds4_gpu_embed_token_hc_tensor",
+        "ds4_gpu_rms_norm_plain_tensor",
+        "ds4_gpu_matmul_f16_tensor",
+        "ds4_gpu_hc_split_weighted_sum_norm_tensor",
+        "ds4_gpu_matmul_q8_0_tensor",
+        "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
+        "ds4_gpu_head_rms_norm_tensor",
+        "ds4_gpu_rope_tail_tensor"
+      ],
+      "case": "token0_layer0_qkv_rope",
+      "oracle": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/layer0-qkv-rope-oracle.json",
+        "schema": "ds4.layer0_qkv_rope_oracle.v1",
+        "sha256": "07521b244973b03559f699198b47aa3b7b47cf075043bdd0a0d85ce72bd0b684",
+        "bytes": 5658
+      },
+      "candidate": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/layer0-qkv-rope-rust.json",
+        "schema": "ds4.decode_layer0_qkv_rope.v1",
+        "sha256": "fceea0b622b59da02504ebad3a96e7ea892206a08450432c90eb1ce6727c55d4",
+        "bytes": 5112
+      },
+      "comparator": "ds4-parity/compare_decode_layer0_qkv_rope.py",
+      "output_fields": [
+        "attn_norm",
+        "qr",
+        "kv_raw",
+        "qr_norm",
+        "q",
+        "kv"
+      ],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-layer0-qkv-rope-oracle-dump CUDA_ARCH=native && ./ds4-layer0-qkv-rope-oracle-dump -m /workspace/ds4/ds4flash.gguf --token 0 -o /tmp/ds4-m122-operation-fixtures/layer0-qkv-rope-oracle.json && CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend --bin ds4-decode-layer0-qkv-rope --quiet -- --model /workspace/ds4/ds4flash.gguf > /tmp/ds4-m122-operation-fixtures/layer0-qkv-rope-rust.json && python3 ds4-parity/compare_decode_layer0_qkv_rope.py --oracle /tmp/ds4-m122-operation-fixtures/layer0-qkv-rope-oracle.json --candidate /tmp/ds4-m122-operation-fixtures/layer0-qkv-rope-rust.json'"
+    },
+    {
+      "id": "layer0_attention_output",
+      "operation_family": "compressor_attention",
+      "operations": [
+        "ds4_gpu_kv_fp8_store_raw_tensor",
+        "ds4_gpu_attention_decode_heads_tensor",
+        "ds4_gpu_rope_tail_tensor",
+        "ds4_gpu_attention_output_low_q8_tensor",
+        "ds4_gpu_matmul_q8_0_hc_expand_tensor"
+      ],
+      "case": "token0_layer0_attn_output",
+      "oracle": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/layer0-attn-output-oracle.json",
+        "schema": "ds4.layer0_attn_output_oracle.v1",
+        "sha256": "68f986fc793dd97e1bc980394d3ac15e208eb19783679300f531f34fca850ba4",
+        "bytes": 6414
+      },
+      "candidate": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/layer0-attn-output-rust.json",
+        "schema": "ds4.decode_layer0_attn_output.v1",
+        "sha256": "f5d6a7d0865bd6c728e11d88225491c3067117786368a5d933e88406cc54590e",
+        "bytes": 5916
+      },
+      "comparator": "ds4-parity/compare_decode_layer0_attn_output.py",
+      "output_fields": [
+        "kv",
+        "raw_cache_row",
+        "heads",
+        "attn_low",
+        "attn_out",
+        "after_attn_hc"
+      ],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-layer0-attn-output-oracle-dump CUDA_ARCH=native && ./ds4-layer0-attn-output-oracle-dump -m /workspace/ds4/ds4flash.gguf --token 0 -o /tmp/ds4-m122-operation-fixtures/layer0-attn-output-oracle.json && CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend --bin ds4-decode-layer0-attn-output --quiet -- --model /workspace/ds4/ds4flash.gguf > /tmp/ds4-m122-operation-fixtures/layer0-attn-output-rust.json && python3 ds4-parity/compare_decode_layer0_attn_output.py --oracle /tmp/ds4-m122-operation-fixtures/layer0-attn-output-oracle.json --candidate /tmp/ds4-m122-operation-fixtures/layer0-attn-output-rust.json'"
+    },
+    {
+      "id": "layer0_ffn_router_moe",
+      "operation_family": "routing_moe",
+      "operations": [
+        "ds4_gpu_hc_split_weighted_sum_norm_tensor",
+        "ds4_gpu_router_select_tensor",
+        "ds4_gpu_routed_moe_one_tensor",
+        "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
+        "ds4_gpu_shared_down_hc_expand_q8_0_tensor"
+      ],
+      "case": "token0_layer0_ffn_output",
+      "oracle": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/layer0-ffn-output-oracle.json",
+        "schema": "ds4.layer0_ffn_output_oracle.v1",
+        "sha256": "42b3caae969eba6f108ae303e2635985ca9c8254dde912187d197bf5160e4c3f",
+        "bytes": 11896
+      },
+      "candidate": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/layer0-ffn-output-rust.json",
+        "schema": "ds4.decode_layer0_ffn_output.v1",
+        "sha256": "92e2286b3740825ce4f9a10f795c8e1567c0e4877e51e0189af4b591ee5b2f39",
+        "bytes": 10894
+      },
+      "comparator": "ds4-parity/compare_decode_layer0_ffn_output.py",
+      "output_fields": [
+        "after_attn_hc",
+        "ffn_cur",
+        "ffn_norm",
+        "router_logits",
+        "router_probs",
+        "router_selected",
+        "router_weights",
+        "routed_mid",
+        "routed_out",
+        "shared_mid",
+        "shared_out",
+        "after_ffn_hc"
+      ],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-layer0-ffn-output-oracle-dump CUDA_ARCH=native && ./ds4-layer0-ffn-output-oracle-dump -m /workspace/ds4/ds4flash.gguf --token 0 -o /tmp/ds4-m122-operation-fixtures/layer0-ffn-output-oracle.json && CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend --bin ds4-decode-layer0-ffn-output --quiet -- --model /workspace/ds4/ds4flash.gguf > /tmp/ds4-m122-operation-fixtures/layer0-ffn-output-rust.json && python3 ds4-parity/compare_decode_layer0_ffn_output.py --oracle /tmp/ds4-m122-operation-fixtures/layer0-ffn-output-oracle.json --candidate /tmp/ds4-m122-operation-fixtures/layer0-ffn-output-rust.json'"
+    },
+    {
+      "id": "full_output_head_logits",
+      "operation_family": "hc_output",
+      "operations": [
+        "ds4_gpu_output_hc_weights_tensor",
+        "ds4_gpu_hc_weighted_sum_tensor",
+        "ds4_gpu_rms_norm_weight_tensor",
+        "ds4_gpu_matmul_q8_0_tensor"
+      ],
+      "case": "token0_full_output_head",
+      "oracle": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/full-output-head-oracle.json",
+        "schema": "ds4.full_output_head_oracle.v1",
+        "sha256": "0377c0a6a45e8b7ee1d52d2b78e850cda41f8d4180a7ccec18d282ede5484d3b",
+        "bytes": 5147
+      },
+      "candidate": {
+        "path": "ds4-parity/baselines/backend/m12.2/captures/full-output-head-rust.json",
+        "schema": "ds4.decode_full_output_head.v1",
+        "sha256": "31fb1985b493ac60e9491fde9280f3e027b882f056991efc67995d8bbd40b988",
+        "bytes": 4843
+      },
+      "comparator": "ds4-parity/compare_decode_full_output_head.py",
+      "output_fields": [
+        "after_layer42_hc",
+        "output_pre",
+        "output_weights",
+        "output_embd",
+        "output_norm",
+        "logits"
+      ],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-full-output-head-oracle-dump CUDA_ARCH=native && ./ds4-full-output-head-oracle-dump -m /workspace/ds4/ds4flash.gguf --token 0 -o /tmp/ds4-m122-operation-fixtures/full-output-head-oracle.json && CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend --bin ds4-decode-full-output-head --quiet -- --model /workspace/ds4/ds4flash.gguf > /tmp/ds4-m122-operation-fixtures/full-output-head-rust.json && python3 ds4-parity/compare_decode_full_output_head.py --oracle /tmp/ds4-m122-operation-fixtures/full-output-head-oracle.json --candidate /tmp/ds4-m122-operation-fixtures/full-output-head-rust.json'"
+    }
+  ]
+}

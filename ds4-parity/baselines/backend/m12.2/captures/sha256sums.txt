@@ -1,0 +1,10 @@
+ecba52228869b17187b232480f10e9ef5254a91e436565ca20d1e46c3bc187c3  ds4-parity/baselines/backend/m12.2/captures/first-kernel-oracle.json
+84bcf93c8d829c67da49006646bdd727e8c171e83cda07a733f295f33786eb3b  ds4-parity/baselines/backend/m12.2/captures/first-kernel-rust.json
+0377c0a6a45e8b7ee1d52d2b78e850cda41f8d4180a7ccec18d282ede5484d3b  ds4-parity/baselines/backend/m12.2/captures/full-output-head-oracle.json
+31fb1985b493ac60e9491fde9280f3e027b882f056991efc67995d8bbd40b988  ds4-parity/baselines/backend/m12.2/captures/full-output-head-rust.json
+68f986fc793dd97e1bc980394d3ac15e208eb19783679300f531f34fca850ba4  ds4-parity/baselines/backend/m12.2/captures/layer0-attn-output-oracle.json
+f5d6a7d0865bd6c728e11d88225491c3067117786368a5d933e88406cc54590e  ds4-parity/baselines/backend/m12.2/captures/layer0-attn-output-rust.json
+42b3caae969eba6f108ae303e2635985ca9c8254dde912187d197bf5160e4c3f  ds4-parity/baselines/backend/m12.2/captures/layer0-ffn-output-oracle.json
+92e2286b3740825ce4f9a10f795c8e1567c0e4877e51e0189af4b591ee5b2f39  ds4-parity/baselines/backend/m12.2/captures/layer0-ffn-output-rust.json
+07521b244973b03559f699198b47aa3b7b47cf075043bdd0a0d85ce72bd0b684  ds4-parity/baselines/backend/m12.2/captures/layer0-qkv-rope-oracle.json
+fceea0b622b59da02504ebad3a96e7ea892206a08450432c90eb1ce6727c55d4  ds4-parity/baselines/backend/m12.2/captures/layer0-qkv-rope-rust.json

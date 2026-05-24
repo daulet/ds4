@@ -1,0 +1,229 @@
+{
+  "schema": "ds4.decode_layer0_attn_output.v1",
+  "case": "token0_layer0_attn_output",
+  "model": {
+    "mapped_size": 86720111488,
+    "header_bytes_read": 8388608,
+    "tensor_count": 1328,
+    "tensor_data_offset": 5333824,
+    "bound_layers": 43
+  },
+  "operation": {
+    "name": "ds4_gpu_layer0_attn_output_prefix",
+    "method": "qkv_rope_prefix+kv_fp8_store_raw+attention_decode_heads+rope_tail_inverse+attention_output_low_q8+matmul_q8_0_hc_expand",
+    "command_batch": true,
+    "synchronized": true,
+    "token": 0,
+    "layer": 0,
+    "position": 0,
+    "ctx_size": 32768,
+    "prefill_cap": 2048,
+    "raw_cap": 2304,
+    "raw_window": 128,
+    "raw_row": 0,
+    "raw_start": 0,
+    "n_raw": 1,
+    "n_comp": 0,
+    "use_mask": 0,
+    "n_vocab": 129280,
+    "n_embd": 4096,
+    "n_hc": 4,
+    "q_rank": 1024,
+    "q_dim": 32768,
+    "head_dim": 512,
+    "n_head": 64,
+    "n_head_kv": 1,
+    "n_rot": 64,
+    "n_groups": 8,
+    "group_heads": 8,
+    "group_dim": 4096,
+    "rank": 1024,
+    "low_dim": 8192,
+    "rope_freq_base": 10000,
+    "rope_freq_scale": 1,
+    "rope_ext_factor": 0,
+    "rope_attn_factor": 1,
+    "rope_yarn_beta_fast": 32,
+    "rope_yarn_beta_slow": 1,
+    "rms_eps": 0.000001
+  },
+  "weights": {
+    "token_embd": {
+      "role": "base.token_embd",
+      "abs_offset": 77928033088,
+      "bytes": 1059061760,
+      "type": 1,
+      "type_name": "f16"
+    },
+    "hc_attn_fn": {
+      "role": "base.layer.0.hc_attn_fn",
+      "abs_offset": 79129609376,
+      "bytes": 786432,
+      "type": 1,
+      "type_name": "f16"
+    },
+    "hc_attn_scale": {
+      "role": "base.layer.0.hc_attn_scale",
+      "abs_offset": 79130395808,
+      "bytes": 12,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "hc_attn_base": {
+      "role": "base.layer.0.hc_attn_base",
+      "abs_offset": 79129609280,
+      "bytes": 96,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "attn_norm": {
+      "role": "base.layer.0.attn_norm",
+      "abs_offset": 79100740672,
+      "bytes": 16384,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "attn_q_a": {
+      "role": "base.layer.0.attn_q_a",
+      "abs_offset": 79060632640,
+      "bytes": 4456448,
+      "type": 8,
+      "type_name": "q8_0"
+    },
+    "attn_q_a_norm": {
+      "role": "base.layer.0.attn_q_a_norm",
+      "abs_offset": 78987097152,
+      "bytes": 4096,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "attn_q_b": {
+      "role": "base.layer.0.attn_q_b",
+      "abs_offset": 79065089088,
+      "bytes": 35651584,
+      "type": 8,
+      "type_name": "q8_0"
+    },
+    "attn_kv": {
+      "role": "base.layer.0.attn_kv",
+      "abs_offset": 78987101248,
+      "bytes": 2228224,
+      "type": 8,
+      "type_name": "q8_0"
+    },
+    "attn_kv_a_norm": {
+      "role": "base.layer.0.attn_kv_a_norm",
+      "abs_offset": 78987095104,
+      "bytes": 2048,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "attn_sinks": {
+      "role": "base.layer.0.attn_sinks",
+      "abs_offset": 78987094848,
+      "bytes": 256,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "attn_output_a": {
+      "role": "base.layer.0.attn_output_a",
+      "abs_offset": 78989329472,
+      "bytes": 35651584,
+      "type": 8,
+      "type_name": "q8_0"
+    },
+    "attn_output_b": {
+      "role": "base.layer.0.attn_output_b",
+      "abs_offset": 79024981056,
+      "bytes": 35651584,
+      "type": 8,
+      "type_name": "q8_0"
+    }
+  },
+  "outputs": {
+    "kv": {
+      "field": "kv",
+      "bytes": 2048,
+      "elements": 512,
+      "nonzero_elements": 512,
+      "fnv1a64": "92463977ae7f1b2e",
+      "samples": [
+        {"index": 0, "value": 0.375},
+        {"index": 1, "value": 0.5625},
+        {"index": 256, "value": -0.5625},
+        {"index": 510, "value": 0.89923126},
+        {"index": 511, "value": 0.49033642}
+      ]
+    },
+    "raw_cache_row": {
+      "field": "raw_cache_row",
+      "bytes": 2048,
+      "elements": 512,
+      "nonzero_elements": 512,
+      "fnv1a64": "bc56a173f5dd62cf",
+      "samples": [
+        {"index": 0, "value": 0.375},
+        {"index": 1, "value": 0.5625},
+        {"index": 256, "value": -0.5625},
+        {"index": 510, "value": 0.89941406},
+        {"index": 511, "value": 0.49023438}
+      ]
+    },
+    "heads": {
+      "field": "heads",
+      "bytes": 131072,
+      "elements": 32768,
+      "nonzero_elements": 32768,
+      "fnv1a64": "4676767a2ee68e0c",
+      "samples": [
+        {"index": 0, "value": 0.16592093},
+        {"index": 1, "value": 0.24888137},
+        {"index": 16384, "value": 0.29426894},
+        {"index": 32766, "value": 0.8018743},
+        {"index": 32767, "value": 0.43706936}
+      ]
+    },
+    "attn_low": {
+      "field": "attn_low",
+      "bytes": 32768,
+      "elements": 8192,
+      "nonzero_elements": 8192,
+      "fnv1a64": "22e1bbf2f9236b99",
+      "samples": [
+        {"index": 0, "value": -0.22793765},
+        {"index": 1, "value": -0.46935812},
+        {"index": 4096, "value": -0.032616764},
+        {"index": 8190, "value": -0.5761613},
+        {"index": 8191, "value": -0.0787128}
+      ]
+    },
+    "attn_out": {
+      "field": "attn_out",
+      "bytes": 16384,
+      "elements": 4096,
+      "nonzero_elements": 4096,
+      "fnv1a64": "21c920ca48b6c7c3",
+      "samples": [
+        {"index": 0, "value": 0.31801924},
+        {"index": 1, "value": 1.3652682},
+        {"index": 2048, "value": -0.337296},
+        {"index": 4094, "value": -0.82575893},
+        {"index": 4095, "value": -0.42356217}
+      ]
+    },
+    "after_attn_hc": {
+      "field": "after_attn_hc",
+      "bytes": 65536,
+      "elements": 16384,
+      "nonzero_elements": 16384,
+      "fnv1a64": "ad09657ac6584898",
+      "samples": [
+        {"index": 0, "value": -0.09213779},
+        {"index": 1, "value": 0.04571728},
+        {"index": 8192, "value": -0.107421726},
+        {"index": 16382, "value": 0.22549017},
+        {"index": 16383, "value": -0.17290041}
+      ]
+    }
+  }
+}

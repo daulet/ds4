@@ -1,0 +1,180 @@
+{
+  "schema": "ds4.decode_full_output_head.v1",
+  "case": "token0_full_output_head",
+  "model": {
+    "mapped_size": 86720111488,
+    "header_bytes_read": 8388608,
+    "tensor_count": 1328,
+    "tensor_data_offset": 5333824,
+    "bound_layers": 43
+  },
+  "operation": {
+    "name": "rust_gpu_full_output_head",
+    "method": "decode_backend_execute_layer_x43+swap_cur_after_ffn_hc+rms_norm_plain+matmul_f16+output_hc_weights+hc_weighted_sum+rms_norm_weight+matmul_q8_0",
+    "command_batch": true,
+    "synchronized": true,
+    "token": 0,
+    "first_layer": 0,
+    "last_layer": 42,
+    "position": 0,
+    "decoded_layers": 43,
+    "dense_layers": 2,
+    "ratio4_layers": 21,
+    "ratio128_layers": 20,
+    "ctx_size": 32768,
+    "prefill_cap": 2048,
+    "raw_cap": 2304,
+    "raw_window": 128,
+    "raw_row": 0,
+    "raw_start": 0,
+    "n_raw": 1,
+    "n_comp": 0,
+    "n_selected": 0,
+    "use_mask": 0,
+    "emit_compressed_row": 0,
+    "n_vocab": 129280,
+    "vocab_dim": 129280,
+    "n_embd": 4096,
+    "n_hc": 4,
+    "hc_dim": 16384,
+    "output_pre_dim": 4,
+    "output_embd_dim": 4096,
+    "head_dim": 512,
+    "indexer_head_dim": 128,
+    "layer5_comp_cap": 258,
+    "layer5_n_comp": 0,
+    "layer42_comp_cap": 8194,
+    "layer42_n_comp": 0,
+    "layer42_n_index_comp": 0,
+    "rms_eps": 0.000001,
+    "hc_eps": 0.000001
+  },
+  "weights": {
+    "token_embd": {
+      "role": "base.token_embd",
+      "abs_offset": 77928033088,
+      "bytes": 1059061760,
+      "type": 1,
+      "type_name": "f16"
+    },
+    "output_hc_fn": {
+      "role": "base.output_hc_fn",
+      "abs_offset": 86157337440,
+      "bytes": 131072,
+      "type": 1,
+      "type_name": "f16"
+    },
+    "output_hc_scale": {
+      "role": "base.output_hc_scale",
+      "abs_offset": 86157468512,
+      "bytes": 4,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "output_hc_base": {
+      "role": "base.output_hc_base",
+      "abs_offset": 86157337408,
+      "bytes": 16,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "output_norm": {
+      "role": "base.output_norm",
+      "abs_offset": 86720095104,
+      "bytes": 16384,
+      "type": 0,
+      "type_name": "f32"
+    },
+    "output": {
+      "role": "base.output",
+      "abs_offset": 86157468544,
+      "bytes": 562626560,
+      "type": 8,
+      "type_name": "q8_0"
+    }
+  },
+  "outputs": {
+    "after_layer42_hc": {
+      "field": "after_layer42_hc",
+      "bytes": 65536,
+      "elements": 16384,
+      "nonzero_elements": 16384,
+      "fnv1a64": "cbd17b425564f63f",
+      "samples": [
+        {"index": 0, "value": -2270.517333984},
+        {"index": 1, "value": 5367.542968750},
+        {"index": 8192, "value": -4405.525878906},
+        {"index": 16382, "value": -1689.553344727},
+        {"index": 16383, "value": -1773.730712891}
+      ]
+    },
+    "output_pre": {
+      "field": "output_pre",
+      "bytes": 16,
+      "elements": 4,
+      "nonzero_elements": 4,
+      "fnv1a64": "91ea6aeb7a0a0d9f",
+      "samples": [
+        {"index": 0, "value": -1.551572204},
+        {"index": 1, "value": 5.607330799},
+        {"index": 2, "value": -2.726038694},
+        {"index": 3, "value": -7.580929756}
+      ]
+    },
+    "output_weights": {
+      "field": "output_weights",
+      "bytes": 16,
+      "elements": 4,
+      "nonzero_elements": 4,
+      "fnv1a64": "323062ce53dc6f9c",
+      "samples": [
+        {"index": 0, "value": 0.022896815},
+        {"index": 1, "value": 0.810411394},
+        {"index": 2, "value": 0.007105297},
+        {"index": 3, "value": 0.028814977}
+      ]
+    },
+    "output_embd": {
+      "field": "output_embd",
+      "bytes": 16384,
+      "elements": 4096,
+      "nonzero_elements": 4096,
+      "fnv1a64": "8788c46e4f0a1f30",
+      "samples": [
+        {"index": 0, "value": -444.787719727},
+        {"index": 1, "value": 1154.819458008},
+        {"index": 2048, "value": 360.872985840},
+        {"index": 4094, "value": -540.613403320},
+        {"index": 4095, "value": -48.750858307}
+      ]
+    },
+    "output_norm": {
+      "field": "output_norm",
+      "bytes": 16384,
+      "elements": 4096,
+      "nonzero_elements": 4096,
+      "fnv1a64": "185c73c1de55a942",
+      "samples": [
+        {"index": 0, "value": -0.155500218},
+        {"index": 1, "value": 0.370086908},
+        {"index": 2048, "value": 0.128416076},
+        {"index": 4094, "value": -0.186751381},
+        {"index": 4095, "value": -0.016434867}
+      ]
+    },
+    "logits": {
+      "field": "logits",
+      "bytes": 517120,
+      "elements": 129280,
+      "nonzero_elements": 129280,
+      "fnv1a64": "432eef0524ced3ad",
+      "samples": [
+        {"index": 0, "value": -7.231419086},
+        {"index": 1, "value": 4.567152977},
+        {"index": 64640, "value": -0.415347934},
+        {"index": 129278, "value": -20.163928986},
+        {"index": 129279, "value": -20.122430801}
+      ]
+    }
+  }
+}

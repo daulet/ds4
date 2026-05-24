@@ -1,0 +1,42 @@
+{
+  "schema": "ds4.decode_first_kernel.v1",
+  "case": "embed_token_hc_token0",
+  "model": {
+    "mapped_size": 86720111488,
+    "header_bytes_read": 8388608,
+    "tensor_count": 1328,
+    "tensor_data_offset": 5333824,
+    "bound_layers": 43
+  },
+  "operation": {
+    "name": "ds4_gpu_embed_token_hc_tensor",
+    "method": "embed_token_hc",
+    "command_batch": true,
+    "synchronized": true,
+    "token": 0,
+    "n_vocab": 129280,
+    "n_embd": 4096,
+    "n_hc": 4
+  },
+  "weight": {
+    "role": "base.token_embd",
+    "abs_offset": 77928033088,
+    "bytes": 1059061760,
+    "type": 1,
+    "type_name": "f16"
+  },
+  "output": {
+    "field": "cur_hc",
+    "bytes": 65536,
+    "elements": 16384,
+    "nonzero_elements": 16384,
+    "fnv1a64": "f76512db41f80c4d",
+    "samples": [
+      {"index": 0, "value": -0.107421875},
+      {"index": 1, "value": -0.019897461},
+      {"index": 8192, "value": -0.107421875},
+      {"index": 16382, "value": 0.22558594},
+      {"index": 16383, "value": -0.17285156}
+    ]
+  }
+}

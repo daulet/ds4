@@ -6751,7 +6751,7 @@
 
 #### M12.2: Operation Tensor Fixture Capture
 
-- Status: active.
+- Status: complete.
 - Goal: capture operation-level tensor inputs/outputs for the first backend
   replacement families without changing runtime routing.
 - Oracle: current backend outputs on the same backend and model class used by
@@ -6765,6 +6765,40 @@
   hardware class.
 - Drift policy: fixture drift is accepted only with a refreshed current-backend
   oracle, recorded model/backend identity, and comparator tolerance rationale.
+- Evidence:
+  - Captured live B300 current-C oracle and Rust facade candidate JSON under
+    `ds4-parity/baselines/backend/m12.2/captures/`.
+  - Added `ds4-parity/baselines/backend/m12.2/manifest.json`.
+  - Added `ds4-parity/check_backend_operation_fixtures.py --negative-test`.
+  - Added unified parity report item `M12.2 Backend operation tensor fixtures`.
+- Validation passed:
+  - Live B300 first-kernel comparator with 103 checks.
+  - Live B300 layer-0 QKV/RoPE comparator with 426 checks.
+  - Live B300 layer-0 attention-output comparator with 493 checks.
+  - Live B300 layer-0 FFN-output comparator with 885 checks.
+  - Live B300 full output-head comparator with 440 checks.
+  - `python3 ds4-parity/check_backend_operation_fixtures.py --negative-test`
+    with 576 checks.
+  - `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 83
+    passed, 50 skipped, 0 failed.
+
+#### M12.3: Rust Backend Facade Parity Harness
+
+- Status: active.
+- Goal: route selected backend operations through a Rust-owned facade while
+  still allowing the current backend implementation to serve as the oracle.
+- Oracle: M12.2 tensor fixtures plus existing M10.5 backend ABI/facade
+  comparators.
+- Fixture: Rust facade replay artifact showing operation order, tensor binding,
+  synchronization points, and error propagation for the selected families.
+- Comparator: facade replay comparator against the M12.2 tensor fixture bundle
+  and current ABI/facade contracts.
+- Acceptance: Rust facade calls bind the same tensors in the same order,
+  preserve current error categories, and produce fixture-matching outputs for
+  the selected operations.
+- Drift policy: any facade signature or operation-order change must update the
+  replay artifact and keep old/current backend comparison available until the
+  route gate passes.
 - Owner path: backend replacement split, tensor/runtime fixtures,
   `RUST_PORT_ROADMAP.md`, `.memory/status.md`.
 

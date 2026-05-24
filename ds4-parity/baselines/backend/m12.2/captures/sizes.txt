@@ -1,0 +1,11 @@
+ 1081 ds4-parity/baselines/backend/m12.2/captures/first-kernel-oracle.json
+ 1013 ds4-parity/baselines/backend/m12.2/captures/first-kernel-rust.json
+ 5147 ds4-parity/baselines/backend/m12.2/captures/full-output-head-oracle.json
+ 4843 ds4-parity/baselines/backend/m12.2/captures/full-output-head-rust.json
+ 6414 ds4-parity/baselines/backend/m12.2/captures/layer0-attn-output-oracle.json
+ 5916 ds4-parity/baselines/backend/m12.2/captures/layer0-attn-output-rust.json
+11896 ds4-parity/baselines/backend/m12.2/captures/layer0-ffn-output-oracle.json
+10894 ds4-parity/baselines/backend/m12.2/captures/layer0-ffn-output-rust.json
+ 5658 ds4-parity/baselines/backend/m12.2/captures/layer0-qkv-rope-oracle.json
+ 5112 ds4-parity/baselines/backend/m12.2/captures/layer0-qkv-rope-rust.json
+57974 total

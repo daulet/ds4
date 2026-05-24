@@ -1,0 +1,41 @@
+{
+  "schema": "ds4.first_kernel_oracle.v1",
+  "case": "embed_token_hc_token0",
+  "source": "current-c",
+  "model": {
+    "mapped_size": 86720111488,
+    "tensor_count": 1328,
+    "tensor_data_offset": 5333824,
+    "bound_layers": 43
+  },
+  "operation": {
+    "name": "current_c_embed_token_f16_hc_from_plain_embedding",
+    "method": "embed_token_f16+hc_from_plain_embedding",
+    "token": 0,
+    "n_vocab": 129280,
+    "n_embd": 4096,
+    "n_hc": 4
+  },
+  "weight": {
+    "role": "base.token_embd",
+    "abs_offset": 77928033088,
+    "bytes": 1059061760,
+    "type": 1,
+    "type_name": "f16"
+  },
+  "output": {
+    "field": "cur_hc",
+    "bytes": 65536,
+    "elements": 16384,
+    "nonzero_elements": 16384,
+    "sha256": "46e80d78c0dc648b773c230b37a4afd1446d7a3cc39f3a43a01a07d4ecf40dca",
+    "fnv1a64": "f76512db41f80c4d",
+    "samples": [
+      {"index": 0, "value": -0.107421875},
+      {"index": 1, "value": -0.0198974609},
+      {"index": 8192, "value": -0.107421875},
+      {"index": 16382, "value": 0.225585938},
+      {"index": 16383, "value": -0.172851562}
+    ]
+  }
+}

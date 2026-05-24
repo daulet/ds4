@@ -410,6 +410,20 @@ contract, M10.9 runtime graph/benchmark artifacts, B300 rerun commands, and
 the no-removal/no-replacement claim policy. It remains inventory-only and does
 not claim Rust-owned backend kernels.
 
+Validate the M12.2 Backend operation tensor fixtures:
+
+```sh
+python3 ds4-parity/check_backend_operation_fixtures.py --negative-test
+```
+
+The M12.2 checker validates the live B300 fixture bundle under
+`baselines/backend/m12.2/`: current-C oracle JSON and Rust facade candidate
+JSON for first-kernel embedding, layer-0 QKV/RoPE, layer-0 attention output,
+layer-0 FFN/router/MoE, and full output-head/logits. It reuses the existing
+pair comparators, checks committed hashes/sizes, and keeps runtime routing and
+backend replacement claims unchanged. The current fixture bundle passes with
+576 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

@@ -6088,7 +6088,7 @@ kernel execution, runtime route selection, and final removal decisions:
 
 #### M12.2: Operation Tensor Fixture Capture
 
-- Status: active.
+- Status: complete.
 - Goal: capture operation-level tensor inputs/outputs for the first backend
   replacement families without changing runtime routing.
 - Oracle: current backend outputs on the same backend and model class used by
@@ -6102,10 +6102,24 @@ kernel execution, runtime route selection, and final removal decisions:
   hardware class.
 - Drift policy: fixture drift is accepted only with a refreshed current-backend
   oracle, recorded model/backend identity, and comparator tolerance rationale.
+- Evidence:
+  - Captured live B300 current-C oracle and Rust facade candidate JSON under
+    `ds4-parity/baselines/backend/m12.2/captures/`.
+  - Added `ds4-parity/baselines/backend/m12.2/manifest.json`.
+  - Added `ds4-parity/check_backend_operation_fixtures.py --negative-test`.
+  - Unified parity wiring includes `M12.2 Backend operation tensor fixtures`.
+- Validation:
+  - Live B300 capture passed existing pair comparators for first-kernel
+    embedding, layer-0 QKV/RoPE, layer-0 attention output, layer-0
+    FFN/router/MoE, and full output-head/logits.
+  - `python3 ds4-parity/check_backend_operation_fixtures.py --negative-test`
+    passed with 576 checks.
+  - `python3 ds4-parity/run_parity_report.py --skip-local-oracles` passed
+    with 83 passed, 50 skipped, 0 failed.
 
 #### M12.3: Rust Backend Facade Parity Harness
 
-- Status: planned.
+- Status: active.
 - Goal: route selected backend operations through a Rust-owned facade while
   still allowing the current backend implementation to serve as the oracle.
 - Oracle: M12.2 tensor fixtures plus existing M10.5 backend ABI/facade
