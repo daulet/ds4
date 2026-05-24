@@ -687,6 +687,28 @@ python3 ds4-parity/compare_decode_ratio_boundary_output_head.py \
   --candidate /tmp/ds4-c4d2-ratio-boundary-output-head-rust.json
 ```
 
+Compare the M10.5c4d3 Rust long indexed-attention decode branch after the
+deterministic token sequence `0..2051`:
+
+```sh
+python3 ds4-parity/compare_decode_long_indexed_attention.py
+python3 ds4-parity/compare_decode_long_indexed_attention.py --negative-test
+```
+
+The comparator checks that `ds4-long-indexed-attention-oracle-dump` emits the
+current-C GPU continuation path through 2,051 production
+`metal_graph_eval_token_raw_swa` warmup calls, then manually runs token 2051
+through layer 2 so the strict ratio-4 `DS4_N_INDEXER_TOP_K` threshold is crossed
+at the first indexed layer. It records the selected top-k compressed rows,
+indexer scores, indexed-attention heads, and final layer-2 outputs. On B300,
+validate the current-C oracle and Rust readback together:
+
+```sh
+python3 ds4-parity/compare_decode_long_indexed_attention.py \
+  --oracle /tmp/ds4-c4d3-long-indexed-attention-oracle.json \
+  --candidate /tmp/ds4-c4d3-long-indexed-attention-rust.json
+```
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

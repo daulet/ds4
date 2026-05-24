@@ -1,10 +1,12 @@
 # DS4 Rust Port Status
 
-- Date: 2026-05-23 UTC
+- Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.5c4d3 Rust Long Indexed-Continuation Attention Coverage
-- Last validated source before the active item: M10.5c4d2 Rust Ratio-Boundary
+- Active item: M10.5c4d4 Rust Directional-Steering Decode Coverage
+- Last validated source before the active item: M10.5c4d3 Rust Long
+  Indexed-Continuation Attention Coverage.
+- Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
 - Active debugging ledger: none
@@ -26,6 +28,54 @@
 
 ## Last Evidence
 
+- M10.5c4d3 adds `ds4-long-indexed-attention-oracle-dump` and
+  `ds4_dump_long_indexed_attention_oracle_json`, which emit
+  `ds4.long_indexed_attention_oracle.v1` for deterministic tokens `0..2051`.
+  The current-C oracle warms up tokens `0..2050` through production
+  `metal_graph_eval_token_raw_swa`, then manually executes token `2051`
+  through layer `2` so the first ratio-4 indexed-attention branch crosses the
+  strict `DS4_N_INDEXER_TOP_K` threshold without requiring layer-major prefill.
+- M10.5c4d3 adds `ds4-decode-long-indexed-attention`, which executes the same
+  2,051 full-token Rust CUDA decode warmup, stops token `2051` after layer `2`,
+  calls the indexed mixed-attention backend with the same top-k rows, and emits
+  layer-2 HC, heads, attention output, indexer, selected-row, raw-cache, and
+  compressed-row checkpoints.
+- M10.5c4d3 makes the CUDA single-token indexed-attention fallback fill
+  `comp_rows` deterministically in top-k order instead of racing through an
+  atomic counter; this removed process-to-process FNV drift while preserving the
+  same selected rows.
+- The B300 paired long indexed-attention validator passed 644 checks before
+  digest pinning and 666 pinned checks locally against copied artifacts. It
+  matched `sequence_len=2052`, `final_position=2051`, `full_decode_tokens=2051`,
+  `final_decoded_layers=3`, `total_decode_layer_calls=88196`,
+  `raw_row=2051`, `raw_start=1924`, `n_raw=128`, `layer2_n_comp=513`,
+  `layer2_n_index_comp=513`, and `layer2_final_comp_row=512`. Full-buffer FNV
+  digests are `after_layer2_hc=8e3d1c2ef4ac4e1f`,
+  `layer2_heads=152cefad5f4521d0`,
+  `layer2_attn_out=d31399afb15f9523`,
+  `layer2_after_attn_hc=ce72c471b910e3e4`,
+  `layer2_indexer_q=e18d30079195cac8`,
+  `layer2_indexer_weights=67d5b94599c46b4e`,
+  `layer2_indexer_scores=1e190e89087c4d93`,
+  `layer2_comp_selected=96be5e90e07d5fe3`,
+  `layer2_raw_cache_row=1eccdd715c4f26b1`,
+  `layer2_attn_comp_row512=25b13ef81b3cc643`, and
+  `layer2_index_comp_row512=8bf040cdf84597fb`.
+- M10.5c4d3 validation passed static and negative long indexed-attention
+  comparator checks, local `arch -arm64 make
+  ds4-long-indexed-attention-oracle-dump`, local `cargo check -p ds4-gpu --bin
+  ds4-decode-long-indexed-attention`, B300 current-C oracle plus Rust CUDA
+  candidate validation with 644 checks, pinned local artifact validation with
+  666 checks, C4d2 artifact cross-check, `python3 -m py_compile
+  ds4-parity/compare_decode_long_indexed_attention.py
+  ds4-parity/run_parity_report.py`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 42 passed, 32
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, touched-file NUL scan, non-interactive Claude
+  review with `NO BLOCKERS`, and artifact SHA256
+  `oracle=26aab1234b7ca7527dd2aa10f522ffce199d147187e8ec05e86ed504b79b9eed`
+  and
+  `rust=3406e9f746471cad0f2cbfe4f23297d2438f857b21140bf068e6386422eb4f1d`.
 - M10.5c4d2 adds `ds4-ratio-boundary-output-head-oracle-dump` and
   `ds4_dump_ratio_boundary_output_head_oracle_json`, which emit
   `ds4.ratio_boundary_output_head_oracle.v1` for the deterministic token

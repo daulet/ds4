@@ -4189,6 +4189,30 @@ kernels:
 - Validation gate: indexed-continuation comparator on B300, targeted Rust
   checks, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
   --check`, and non-interactive Claude review with no blockers.
+- Validation evidence: static and negative long indexed-attention comparator
+  checks, local `arch -arm64 make ds4-long-indexed-attention-oracle-dump`,
+  local `cargo check -p ds4-gpu --bin ds4-decode-long-indexed-attention`, B300
+  current-C oracle plus Rust CUDA candidate validation with 644 checks, pinned
+  local artifact validation with 666 checks, C4d2 artifact cross-check, local
+  unified report with B300 rerun command coverage and 42/32/0 pass/skip/fail,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  touched-file NUL scan, non-interactive Claude review with `NO BLOCKERS`, and
+  artifact SHA256
+  `oracle=26aab1234b7ca7527dd2aa10f522ffce199d147187e8ec05e86ed504b79b9eed`
+  and
+  `rust=3406e9f746471cad0f2cbfe4f23297d2438f857b21140bf068e6386422eb4f1d`.
+- Evidence: the fixture warms deterministic tokens `0..2050` through
+  production current-C decode and stops token `2051` after layer `2`, matching
+  `sequence_len=2052`, `raw_row=2051`, `raw_start=1924`, `n_raw=128`,
+  `layer2_n_comp=513`, `layer2_n_index_comp=513`,
+  `layer2_comp_selected=96be5e90e07d5fe3`,
+  `layer2_heads=152cefad5f4521d0`,
+  `layer2_attn_out=d31399afb15f9523`,
+  `layer2_after_attn_hc=ce72c471b910e3e4`,
+  `layer2_attn_comp_row512=25b13ef81b3cc643`, and
+  `layer2_index_comp_row512=8bf040cdf84597fb`. The CUDA single-token
+  indexed-attention fallback now fills selected compressed rows
+  deterministically in top-k order.
 
 ##### M10.5c4d4: Rust Directional-Steering Decode Coverage
 

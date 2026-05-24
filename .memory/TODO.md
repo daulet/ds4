@@ -4824,7 +4824,7 @@
 
 ### M10.5c4d3: Rust Long Indexed-Continuation Attention Coverage
 
-- Status: active
+- Status: complete
 - Goal: cover the long-context ratio-4 indexed-attention branch without
   requiring Rust layer-major prefill ownership.
 - Oracle: current-C GPU decode-layer execution for the selected long indexed
@@ -4840,15 +4840,35 @@
   tolerant-sample policy.
 - Review gate: ask Claude to review indexed attention state seeding, top-k row
   ownership, and row-selection comparator coverage.
-- Validation needed: indexed-continuation comparator on B300, targeted Rust
-  checks, `cargo test --workspace`, `cargo fmt --all --check`, `git diff
-  --check`, and non-interactive Claude review with no blockers.
+- Validation passed: static and negative long indexed-attention comparator
+  checks, local `arch -arm64 make ds4-long-indexed-attention-oracle-dump`,
+  local `cargo check -p ds4-gpu --bin ds4-decode-long-indexed-attention`, B300
+  current-C oracle plus Rust CUDA candidate validation with 644 checks, pinned
+  local artifact validation with 666 checks, C4d2 artifact cross-check, local
+  unified report with B300 rerun command coverage and 42/32/0 pass/skip/fail,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  touched-file NUL scan, non-interactive Claude review with `NO BLOCKERS`, and
+  artifact SHA256
+  `oracle=26aab1234b7ca7527dd2aa10f522ffce199d147187e8ec05e86ed504b79b9eed`
+  and
+  `rust=3406e9f746471cad0f2cbfe4f23297d2438f857b21140bf068e6386422eb4f1d`.
+- Evidence: deterministic tokens `0..2051` warmed up tokens `0..2050` through
+  production current-C decode, stopped token `2051` after layer `2`, crossed
+  the strict ratio-4 indexed-attention threshold with `layer2_n_comp=513` and
+  `layer2_n_index_comp=513`, matched `layer2_comp_selected=96be5e90e07d5fe3`,
+  `layer2_heads=152cefad5f4521d0`,
+  `layer2_attn_out=d31399afb15f9523`,
+  `layer2_after_attn_hc=ce72c471b910e3e4`,
+  `layer2_raw_cache_row=1eccdd715c4f26b1`,
+  `layer2_attn_comp_row512=25b13ef81b3cc643`, and
+  `layer2_index_comp_row512=8bf040cdf84597fb`. The CUDA single-token indexed
+  fallback now fills selected compressed rows deterministically in top-k order.
 - Owner path: Rust decode execution modules, B300 comparator,
   `.memory/status.md`.
 
 ### M10.5c4d4: Rust Directional-Steering Decode Coverage
 
-- Status: pending
+- Status: active
 - Goal: validate or explicitly skip directional-steering decode execution in
   the Rust decode facade once continuation state is already comparable.
 - Oracle: C directional-steering decode branches around attention output and

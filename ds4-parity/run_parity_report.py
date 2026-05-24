@@ -375,6 +375,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M10.5c4d3 Rust long indexed attention comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_decode_long_indexed_attention.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
@@ -721,6 +729,17 @@ def b300_skip_items() -> list[ReportItem]:
                 "helper, and feature-gated Rust CUDA backend linkage"
             ),
             rerun_command=b300_ratio_boundary_output_head_oracle_command(),
+        ),
+        ReportItem(
+            name="M10.5c4d3 B300 long indexed attention oracle rerun",
+            kind="b300-oracle",
+            status="SKIP",
+            reason=(
+                "Long indexed-attention current-C oracle comparison requires "
+                "the B300 pod, the real q2-imatrix GGUF, the current-C helper, "
+                "and feature-gated Rust CUDA backend linkage"
+            ),
+            rerun_command=b300_long_indexed_attention_oracle_command(),
         ),
         ReportItem(
             name="B300 model-backed M0.3 logprob oracle rerun",
@@ -1409,6 +1428,37 @@ def b300_ratio_boundary_output_head_oracle_command() -> str:
         "python3 ds4-parity/compare_decode_ratio_boundary_output_head.py "
         "--oracle /tmp/ds4-c4d2-ratio-boundary-output-head-oracle.json "
         "--candidate /tmp/ds4-c4d2-ratio-boundary-output-head-rust.json"
+    )
+    return f"{source_refresh} && {smoke}"
+
+
+def b300_long_indexed_attention_oracle_command() -> str:
+    prefix = [
+        "kubectl",
+        "--kubeconfig",
+        KUBECONFIG,
+        "--context",
+        KUBE_CONTEXT,
+        "-n",
+        KUBE_NAMESPACE,
+    ]
+    source_refresh = (
+        "git archive HEAD | "
+        + shell_join(prefix + ["exec", "-i", KUBE_POD, "--", "tar", "-xf", "-", "-C", B300_WORKDIR])
+    )
+    smoke = b300_exec(
+        "rm -f ds4.o ds4_cuda.o ds4_long_indexed_attention_oracle_dump*.o "
+        "ds4-long-indexed-attention-oracle-dump && "
+        "make ds4-long-indexed-attention-oracle-dump CUDA_ARCH=native && "
+        f"./ds4-long-indexed-attention-oracle-dump -m {B300_MODEL} "
+        "-o /tmp/ds4-c4d3-long-indexed-attention-oracle.json && "
+        "CUDA_ARCH=native cargo run -p ds4-gpu --features cuda-backend "
+        "--bin ds4-decode-long-indexed-attention --quiet -- "
+        f"--model {B300_MODEL} "
+        "> /tmp/ds4-c4d3-long-indexed-attention-rust.json && "
+        "python3 ds4-parity/compare_decode_long_indexed_attention.py "
+        "--oracle /tmp/ds4-c4d3-long-indexed-attention-oracle.json "
+        "--candidate /tmp/ds4-c4d3-long-indexed-attention-rust.json"
     )
     return f"{source_refresh} && {smoke}"
 

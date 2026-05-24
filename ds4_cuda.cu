@@ -3094,16 +3094,16 @@ __global__ static void attention_indexed_mixed_kernel(
     for (uint32_t r = threadIdx.x; r < raw_count; r += blockDim.x) {
         raw_rows[r] = (raw_start + raw_first_idx + r) % raw_cap;
     }
-    for (uint32_t i = threadIdx.x; i < top_k; i += blockDim.x) {
-        int32_t c = topk[(uint64_t)t * top_k + i];
-        if (c >= 0 && (uint32_t)c < visible_comp) {
-            uint32_t slot = atomicAdd(&comp_count, 1u);
-            if (slot < 512u) comp_rows[slot] = (uint32_t)c;
-        }
-    }
-    __syncthreads();
+    /* Keep single-token indexed decode reproducible across processes.  The
+     * previous atomicAdd compaction preserved the selected set but could vary
+     * accumulation order enough to change full-buffer digests. */
     if (threadIdx.x == 0) {
-        if (comp_count > 512u) comp_count = 512u;
+        for (uint32_t i = 0; i < top_k && comp_count < 512u; i++) {
+            int32_t c = topk[(uint64_t)t * top_k + i];
+            if (c >= 0 && (uint32_t)c < visible_comp) {
+                comp_rows[comp_count++] = (uint32_t)c;
+            }
+        }
     }
     __syncthreads();
     uint32_t n_score = raw_count + comp_count;
