@@ -15,6 +15,7 @@ pub mod decode_runtime;
 pub mod decode_trace;
 pub mod graph_plan;
 pub mod graph_state;
+pub mod mtp_plan;
 pub mod prefill_plan;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

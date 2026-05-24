@@ -5705,7 +5705,7 @@
 
 ### M10.8b: Rust MTP Decision Planner
 
-- Status: active
+- Status: done
 - Goal: add Rust-owned model-free planning for MTP verifier selection,
   accepted-prefix decisions, fallback routing, and logits/frontier ownership
   without executing GPU kernels.
@@ -5725,11 +5725,21 @@
 - Validation needed: Rust planner tests, comparator with negative tests,
   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
   unified parity report, and non-interactive Claude review with no blockers.
+- Evidence: added `rust/ds4-gpu/src/mtp_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-decision-plan.rs`, and
+  `ds4-parity/compare_mtp_decision_plan.py`. The Rust planner emits the 12
+  model-free M10.8a decision rows with explicit accepted suffix, frontier
+  action, logits source, fallback, and fail-closed fields before GPU kernels
+  are involved. Validation passed targeted Rust planner tests, the comparator
+  with 12 cases, 194 checks, and 6 negative mutations, JSON output parsing,
+  Python syntax, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, unified parity with 60 passed, 42 skipped, and 0 failed, and
+  non-interactive Claude review with `NO BLOCKERS`.
 - Owner path: Rust MTP planner, comparator, `.memory/status.md`.
 
 ### M10.8c: Rust MTP Draft Kernel Orchestration Smoke
 
-- Status: pending
+- Status: active
 - Goal: move Rust-owned orchestration for the MTP draft graph path while
   preserving the current-C draft top-id/logits contract.
 - Oracle: `metal_graph_eval_mtp_draft`,

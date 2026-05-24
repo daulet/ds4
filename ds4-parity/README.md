@@ -1159,6 +1159,18 @@ frontier snapshot/restore/prefix1 commit, and sequential fallback. It also
 ties the MTP support-artifact blocker to the existing M8.12b CLI runtime
 baseline so later MTP-enabled B300 stages cannot pass as MTP-off silently.
 
+Compare the M10.8b Rust MTP decision planner against the M10.8a contract:
+
+```sh
+python3 ds4-parity/compare_mtp_decision_plan.py
+python3 ds4-parity/compare_mtp_decision_plan.py --negative-test
+```
+
+The comparator runs `ds4-mtp-decision-plan`, compares each model-free Rust
+planner row to the M10.8a contract, and pins fail-closed behavior for missing
+support, disabled guards, verifier failures, restore/replay paths, and the
+sequential safety fallback before any GPU MTP kernels are ported.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8b Rust MTP Decision Planner
-- Last validated source before the active item: M10.8a MTP State Machine
-  Contract And Availability Check.
+- Active item: M10.8c Rust MTP Draft Kernel Orchestration Smoke
+- Last validated source before the active item: M10.8b Rust MTP Decision
+  Planner.
 - M10.8 Rust MTP Draft And Verifier Orchestration is split into M10.8a through
   M10.8g before implementation.
+- Earlier M10.8b Rust MTP Decision Planner.
 - Earlier M10.8a MTP State Machine Contract And Availability Check.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
   through M10.7d3c before graph/KVC smoke claims.
@@ -54,6 +55,19 @@
 
 ## Last Evidence
 
+- M10.8b adds `rust/ds4-gpu/src/mtp_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-decision-plan.rs`, and
+  `ds4-parity/compare_mtp_decision_plan.py`, a Rust model-free MTP decision
+  planner that emits the same 12 accepted-prefix/frontier/logits/fallback rows
+  as the M10.8a current-C contract before any GPU MTP kernels are ported.
+- M10.8b validation passed `cargo test -p ds4-gpu mtp_plan`,
+  `python3 ds4-parity/compare_mtp_decision_plan.py --negative-test` with 12
+  cases, 194 checks, and 6 negative mutations, JSON output parsing via
+  `cargo run -p ds4-gpu --bin ds4-mtp-decision-plan --quiet | python3 -m
+  json.tool`, Python syntax, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 60 passed, 42 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.8a adds
   `ds4-parity/baselines/graph/m10.8a/mtp-state-machine-contract.json` and
   `ds4-parity/check_mtp_state_machine_contract.py`, a model-free current-C MTP

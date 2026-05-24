@@ -16,7 +16,7 @@ The report has two jobs:
   M10.5c4c2b2b2b2b2b2b2b2b, M10.5c4d1, M10.5c4d2,
   M10.5c4d3, M10.5c4d4, M10.6a, M10.6b, M10.6c, M10.6d, M10.7a,
   M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
-  M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, and M10.8a.
+  M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, M10.8a, and M10.8b.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -519,6 +519,14 @@ class ParityReport:
                 [
                     sys.executable,
                     "ds4-parity/check_mtp_state_machine_contract.py",
+                    "--negative-test",
+                ],
+            ),
+            (
+                "M10.8b Rust MTP decision planner comparator",
+                [
+                    sys.executable,
+                    "ds4-parity/compare_mtp_decision_plan.py",
                     "--negative-test",
                 ],
             ),
