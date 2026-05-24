@@ -5088,6 +5088,17 @@ restore boundary.
   comparator with negative tests, targeted Rust tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Evidence: added `rust/ds4-gpu/src/mtp_draft_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-draft-plan.rs`, and
+  `ds4-parity/compare_mtp_draft_plan.py`. The Rust draft plan pins first and
+  recursive MTP draft HC roles, command steps, readbacks, raw-frontier
+  transition, failure restoration, and the explicit missing-MTP live blocker.
+  Validation passed targeted Rust draft-plan tests, the comparator with 5
+  cases, 118 checks, and 6 negative mutations, JSON output parsing, Python
+  syntax, the live B300 missing-MTP blocker command, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, unified parity with 61
+  passed, 42 skipped, and 0 failed, and non-interactive Claude review with
+  `NO BLOCKERS`.
 
 ##### M10.8d: Rust Exact N=2 Verifier Orchestration Smoke
 

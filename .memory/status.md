@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.8c Rust MTP Draft Kernel Orchestration Smoke
-- Last validated source before the active item: M10.8b Rust MTP Decision
-  Planner.
+- Active item: M10.8d Rust Exact N=2 Verifier Orchestration Smoke
+- Last validated source before the active item: M10.8c Rust MTP Draft Kernel
+  Orchestration Smoke.
 - M10.8 Rust MTP Draft And Verifier Orchestration is split into M10.8a through
   M10.8g before implementation.
+- Earlier M10.8c Rust MTP Draft Kernel Orchestration Smoke.
 - Earlier M10.8b Rust MTP Decision Planner.
 - Earlier M10.8a MTP State Machine Contract And Availability Check.
 - M10.7d3 Graph Restore Continued-Frontier B300 Smoke is split into M10.7d3a
@@ -55,6 +56,21 @@
 
 ## Last Evidence
 
+- M10.8c adds `rust/ds4-gpu/src/mtp_draft_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-draft-plan.rs`, and
+  `ds4-parity/compare_mtp_draft_plan.py`, a Rust model-free MTP draft
+  orchestration plan that pins first-draft and recursive draft-HC roles,
+  command steps, top-id/logits readback roles, `mtp_n_raw` transition, failure
+  restoration, and the explicit B300 missing-MTP live blocker.
+- M10.8c validation passed `cargo test -p ds4-gpu mtp_draft_plan`,
+  `python3 ds4-parity/compare_mtp_draft_plan.py --negative-test` with 5
+  cases, 118 checks, and 6 negative mutations, JSON output parsing via
+  `cargo run -p ds4-gpu --bin ds4-mtp-draft-plan --quiet | python3 -m
+  json.tool`, Python syntax, the live B300 missing-MTP blocker command,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and `python3 ds4-parity/run_parity_report.py --skip-local-oracles` with 61
+  passed, 42 skipped, and 0 failed. Non-interactive Claude review returned
+  `NO BLOCKERS`.
 - M10.8b adds `rust/ds4-gpu/src/mtp_plan.rs`,
   `rust/ds4-gpu/src/bin/ds4-mtp-decision-plan.rs`, and
   `ds4-parity/compare_mtp_decision_plan.py`, a Rust model-free MTP decision

@@ -1171,6 +1171,20 @@ planner row to the M10.8a contract, and pins fail-closed behavior for missing
 support, disabled guards, verifier failures, restore/replay paths, and the
 sequential safety fallback before any GPU MTP kernels are ported.
 
+Compare the M10.8c Rust MTP draft orchestration plan against current-C draft
+anchors:
+
+```sh
+python3 ds4-parity/compare_mtp_draft_plan.py
+python3 ds4-parity/compare_mtp_draft_plan.py --negative-test
+```
+
+The comparator runs `ds4-mtp-draft-plan`, checks the wrapper and recursive
+draft-HC paths, pins the draft command sequence, HC input/output roles,
+top-id/logits readback roles, `mtp_n_raw` transition, and failure restoration
+behavior, and records the live B300 MTP draft smoke as blocked until an MTP
+support GGUF is present.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:

@@ -5739,7 +5739,7 @@
 
 ### M10.8c: Rust MTP Draft Kernel Orchestration Smoke
 
-- Status: active
+- Status: done
 - Goal: move Rust-owned orchestration for the MTP draft graph path while
   preserving the current-C draft top-id/logits contract.
 - Oracle: `metal_graph_eval_mtp_draft`,
@@ -5764,12 +5764,23 @@
   comparator with negative tests, targeted Rust tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Evidence: added `rust/ds4-gpu/src/mtp_draft_plan.rs`,
+  `rust/ds4-gpu/src/bin/ds4-mtp-draft-plan.rs`, and
+  `ds4-parity/compare_mtp_draft_plan.py`. The Rust draft plan pins first and
+  recursive MTP draft HC roles, command steps, readbacks, raw-frontier
+  transition, failure restoration, and the explicit missing-MTP live blocker.
+  Validation passed targeted Rust draft-plan tests, the comparator with 5
+  cases, 118 checks, and 6 negative mutations, JSON output parsing, Python
+  syntax, the live B300 missing-MTP blocker command, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `git diff --check`, unified parity with 61
+  passed, 42 skipped, and 0 failed, and non-interactive Claude review with
+  `NO BLOCKERS`.
 - Owner path: Rust MTP draft orchestration, B300 comparator,
   `.memory/status.md`.
 
 ### M10.8d: Rust Exact N=2 Verifier Orchestration Smoke
 
-- Status: pending
+- Status: active
 - Goal: move the exact N=2 verifier command orchestration into Rust while
   preserving the target decode kernel order and row-logits contract.
 - Oracle: `metal_graph_verify_decode2_exact`, M10.2 command boundaries, M10.4
