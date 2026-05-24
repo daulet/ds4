@@ -1,16 +1,16 @@
 use ds4_gguf::session_payload::{
     append_full_payload, append_graph_payload_plan, append_prefix_to_first_comp,
     append_prefix_to_first_index, compress_ratio, default_cpu_runtime,
-    default_graph_payload_runtime, default_header, graph_payload_plan, read_graph_payload,
-    sections, validate_payload_cpu, GraphPayloadFixture, GraphPayloadPlan, GraphPayloadRead,
-    PayloadError, PayloadHeader, PayloadSections, GRAPH_PAYLOAD_FIXTURES, HEADER_BYTES,
-    IO_CHUNK_BYTES, MAGIC, N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB, U32_FIELDS,
-    VERSION,
+    default_graph_payload_runtime, default_header, graph_payload_plan, layer_attn_state_bytes,
+    layer_index_state_bytes, read_graph_payload, sections, validate_payload_cpu,
+    GraphPayloadFixture, GraphPayloadPlan, GraphPayloadRead, PayloadError, PayloadHeader,
+    PayloadSections, GRAPH_PAYLOAD_FIXTURES, HEADER_BYTES, IO_CHUNK_BYTES, MAGIC, N_HEAD_DIM,
+    N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB, U32_FIELDS, VERSION,
 };
 use std::fs;
 use std::io::{self, Write};
 
-const USAGE: &str = "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan|--graph-file-probe <id:path>...]";
+const USAGE: &str = "usage: ds4-session-payload-dump-rs [--graph-plan|--graph-probe|--restore-header-plan|--restore-target-plan|--graph-file-probe <id:path>...]";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum DumpMode {
@@ -18,6 +18,7 @@ enum DumpMode {
     GraphPlan,
     GraphProbe,
     RestoreHeaderPlan,
+    RestoreTargetPlan,
     GraphFileProbe(Vec<GraphFileProbeInput>),
 }
 
@@ -47,6 +48,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Err(USAGE.into());
             }
             mode = DumpMode::RestoreHeaderPlan;
+        } else if arg == "--restore-target-plan" {
+            if mode != DumpMode::Shape {
+                return Err(USAGE.into());
+            }
+            mode = DumpMode::RestoreTargetPlan;
         } else if arg == "--graph-file-probe" {
             let spec = args
                 .next()
@@ -66,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         DumpMode::GraphPlan => write_graph_plan_dump(&mut out)?,
         DumpMode::GraphProbe => write_graph_probe_dump(&mut out)?,
         DumpMode::RestoreHeaderPlan => write_restore_header_plan_dump(&mut out)?,
+        DumpMode::RestoreTargetPlan => write_restore_target_plan_dump(&mut out)?,
         DumpMode::GraphFileProbe(inputs) => write_graph_file_probe_dump(&mut out, &inputs)?,
     }
     Ok(())
@@ -772,6 +779,206 @@ fn write_restore_header_case<W: Write>(out: &mut W, case: &RestoreHeaderCase) ->
         plan.ratio4_rows,
         plan.ratio128_rows
     )
+}
+
+fn write_restore_target_plan_dump<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "{{")?;
+    writeln!(
+        out,
+        "  \"schema\": \"ds4.rust_graph_restore_target_plan.v1\","
+    )?;
+    writeln!(
+        out,
+        "  \"source\": \"rust-graph-restore-target-plan-no-tensor-writes\","
+    )?;
+    writeln!(
+        out,
+        "  \"oracle\": \"ds4-parity/baselines/kv/m7.8/current-c.json\","
+    )?;
+    writeln!(out, "  \"model_path\": \"/workspace/ds4/ds4flash.gguf\",")?;
+    writeln!(
+        out,
+        "  \"model_sha256\": \"efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668\","
+    )?;
+    writeln!(
+        out,
+        "  \"restore_order_source\": \"ds4_session_load_payload graph path\","
+    )?;
+    writeln!(out, "  \"raw_body_policy\": \"hash-only; target mapping uses parsed restore metadata and does not read raw bodies\",")?;
+    writeln!(out, "  \"cases\": [")?;
+    for (idx, case) in RESTORE_HEADER_CASES.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_restore_target_case(out, case)?;
+    }
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")
+}
+
+fn write_restore_target_case<W: Write>(out: &mut W, case: &RestoreHeaderCase) -> io::Result<()> {
+    let plan = graph_payload_plan(GraphPayloadFixture {
+        name: case.id,
+        ctx_size: 32_768,
+        token_count: case.token_count,
+    });
+    let row_bytes = u64::from(N_HEAD_DIM) * 4;
+    write!(out, "    {{\"id\": ")?;
+    write_json_string(out, case.id)?;
+    write!(out, ", \"kind\": ")?;
+    write_json_string(out, case.kind)?;
+    write!(out, ", \"prompt_case\": ")?;
+    write_json_string(out, case.prompt_case)?;
+    write!(
+        out,
+        ", \"ctx\": {}, \"prompt_tokens\": {}, \"payload_bytes\": {}, ",
+        plan.header.ctx_size, plan.header.token_count, plan.payload_bytes
+    )?;
+    write!(
+        out,
+        "\"checkpoint\": {{\"target\": \"s->checkpoint\", \"source\": \"payload token u32 stream\", \
+         \"tokens\": {}, \"bytes\": {}, \"commit\": \"replace-after-success\"}}, ",
+        plan.header.token_count,
+        u64::from(plan.header.token_count) * 4
+    )?;
+    write!(
+        out,
+        "\"logits\": {{\"target\": \"s->logits\", \"source\": \"payload logits f32 stream\", \
+         \"bytes\": {}}}, ",
+        u64::from(N_VOCAB) * 4
+    )?;
+    write!(
+        out,
+        "\"count_tables\": {{\"n_comp_source\": \"payload n_comp table\", \
+         \"n_index_comp_source\": \"payload n_index_comp table\", \"bytes_each\": {}, \
+         \"post_restore_targets\": [\"g->layer_n_comp\", \"g->layer_n_index_comp\"]}}, ",
+        N_LAYER * 4
+    )?;
+    write!(
+        out,
+        "\"raw_ring\": {{\"target\": \"g->layer_raw_cache[layer]\", \
+         \"source_order\": \"logical-position-order\", \"row_bytes\": {}, \
+         \"rows_per_layer\": {}, \"first_pos\": {}, \"last_pos\": {}, \
+         \"physical_rows\": ",
+        row_bytes, plan.header.raw_live_rows, plan.raw_first_pos, plan.raw_last_pos
+    )?;
+    write_raw_physical_rows(out, &plan)?;
+    write!(out, "}}, ")?;
+    write!(
+        out,
+        "\"layer_summary\": {{\"layer_count\": {}, \"raw_layer_spans\": {}, \
+         \"attn_comp_layers\": {}, \"ratio4_layers\": {}, \"ratio128_layers\": {}, \
+         \"index_layers\": {}}}, ",
+        N_LAYER,
+        N_LAYER,
+        count_layers_with_ratio(false),
+        count_layers_ratio(4),
+        count_layers_ratio(128),
+        count_layers_ratio(4)
+    )?;
+    write!(out, "\"layers\": [")?;
+    for layer in 0..N_LAYER {
+        if layer != 0 {
+            write!(out, ", ")?;
+        }
+        write_restore_target_layer(out, &plan, layer)?;
+    }
+    write!(out, "], ")?;
+    write!(out, "\"post_restore_state\": {{\"checkpoint_valid\": true, \"mtp_draft_valid\": false, \"mtp_n_raw\": 0, \"layer_n_comp\": ")?;
+    write_u32_array(out, &plan.n_comp)?;
+    write!(out, ", \"layer_n_index_comp\": ")?;
+    write_u32_array(out, &plan.n_index_comp)?;
+    write!(out, "}}}}")
+}
+
+fn write_restore_target_layer<W: Write>(
+    out: &mut W,
+    plan: &GraphPayloadPlan,
+    layer: usize,
+) -> io::Result<()> {
+    let ratio = compress_ratio(layer);
+    let raw_bytes = u64::from(plan.header.raw_live_rows) * u64::from(N_HEAD_DIM) * 4;
+    write!(
+        out,
+        "{{\"layer\": {}, \"ratio\": {}, \"raw\": {{\"target\": \"g->layer_raw_cache[layer]\", \
+         \"bytes\": {}}}, \"attn\": ",
+        layer, ratio, raw_bytes
+    )?;
+    if ratio == 0 {
+        write!(
+            out,
+            "{{\"n_comp\": 0, \"comp_cache_bytes\": 0, \"state_kv_bytes\": 0, \
+             \"state_score_bytes\": 0, \"targets\": []}}"
+        )?;
+    } else {
+        let state_bytes = layer_attn_state_bytes(ratio);
+        write!(
+            out,
+            "{{\"n_comp\": {}, \"comp_cache_bytes\": {}, \"state_kv_bytes\": {}, \
+             \"state_score_bytes\": {}, \"targets\": [\"g->layer_attn_comp_cache[layer]\", \
+             \"g->layer_attn_state_kv[layer]\", \"g->layer_attn_state_score[layer]\"]}}",
+            plan.n_comp[layer],
+            u64::from(plan.n_comp[layer]) * u64::from(N_HEAD_DIM) * 4,
+            state_bytes,
+            state_bytes
+        )?;
+    }
+    write!(out, ", \"index\": ")?;
+    if ratio == 4 {
+        let state_bytes = layer_index_state_bytes(ratio);
+        write!(
+            out,
+            "{{\"n_index_comp\": {}, \"comp_cache_bytes\": {}, \"state_kv_bytes\": {}, \
+             \"state_score_bytes\": {}, \"targets\": [\"g->layer_index_comp_cache[layer]\", \
+             \"g->layer_index_state_kv[layer]\", \"g->layer_index_state_score[layer]\"]}}",
+            plan.n_index_comp[layer],
+            u64::from(plan.n_index_comp[layer]) * u64::from(N_INDEXER_HEAD_DIM) * 4,
+            state_bytes,
+            state_bytes
+        )?;
+    } else {
+        write!(
+            out,
+            "{{\"n_index_comp\": 0, \"comp_cache_bytes\": 0, \"state_kv_bytes\": 0, \
+             \"state_score_bytes\": 0, \"targets\": []}}"
+        )?;
+    }
+    write!(out, "}}")
+}
+
+fn write_raw_physical_rows<W: Write>(out: &mut W, plan: &GraphPayloadPlan) -> io::Result<()> {
+    write!(out, "[")?;
+    for idx in 0..plan.header.raw_live_rows {
+        if idx != 0 {
+            write!(out, ", ")?;
+        }
+        let pos = plan.raw_first_pos + idx;
+        write!(out, "{}", pos % plan.header.raw_cap)?;
+    }
+    write!(out, "]")
+}
+
+fn write_u32_array<W: Write>(out: &mut W, values: &[u32; N_LAYER]) -> io::Result<()> {
+    write!(out, "[")?;
+    for (idx, value) in values.iter().enumerate() {
+        if idx != 0 {
+            write!(out, ", ")?;
+        }
+        write!(out, "{value}")?;
+    }
+    write!(out, "]")
+}
+
+fn count_layers_ratio(ratio: u32) -> usize {
+    (0..N_LAYER)
+        .filter(|&layer| compress_ratio(layer) == ratio)
+        .count()
+}
+
+fn count_layers_with_ratio(include_zero: bool) -> usize {
+    (0..N_LAYER)
+        .filter(|&layer| include_zero || compress_ratio(layer) != 0)
+        .count()
 }
 
 fn write_header_rejection_cases<W: Write>(out: &mut W) -> io::Result<()> {

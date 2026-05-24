@@ -3,11 +3,12 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7c3b Rust Graph Restore Target Mapping Contract
-- Last validated source before the active item: M10.7c3a Rust Memory Snapshot
-  Raw Body Import Smoke.
+- Active item: M10.7c3c Rust Graph Tensor Restore Readback Smoke
+- Last validated source before the active item: M10.7c3b Rust Graph Restore
+  Target Mapping Contract.
 - M10.7c3 Rust Graph Tensor Restore Next-Token Smoke is split into M10.7c3a
   through M10.7c3d before tensor restore or next-token claims.
+- Earlier M10.7c3a Rust Memory Snapshot Raw Body Import Smoke.
 - Earlier M10.7c2 Rust Disk KV Payload Byte Import Smoke.
 - Earlier M10.7c1 Rust Restore Payload Header Contract.
 - Earlier M10.7b Rust Graph Session Payload Reader And Writer.
@@ -34,6 +35,23 @@
 
 ## Last Evidence
 
+- M10.7c3b adds `ds4-session-payload-dump-rs --restore-target-plan`, a
+  no-tensor-write Rust graph restore target plan for the four M7.8 disk payload
+  and memory snapshot cases.
+- M10.7c3b adds `ds4-parity/compare_graph_restore_target_plan.py`, which
+  independently reconstructs the expected C graph restore destinations and
+  compares checkpoint/logit/count-table targets, raw logical-to-physical ring
+  rows, per-layer attention compressed-cache and state targets, ratio-4 indexer
+  targets, and post-restore counters (`layer_n_comp`, `layer_n_index_comp`,
+  `checkpoint_valid`, `mtp_draft_valid`, and `mtp_n_raw`).
+- M10.7c3b validation passed `python3
+  ds4-parity/compare_graph_restore_target_plan.py --negative-test` with 6012
+  checks and 8 negative mutations, an explicit candidate-file comparison with
+  6012 checks, Python syntax checks, `cargo test -p ds4-gguf session_payload`,
+  `cargo fmt --all -- --check`, `git diff --check`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 53 passed, 38
+  skipped, and 0 failed, `cargo test --workspace`, and non-interactive Claude
+  review with `NO BLOCKERS`.
 - M10.7c3a adds `ds4-restore-dump --snapshot-dir`, which writes the
   `ds4_session_save_snapshot` memory payload bytes to B300 raw files while
   leaving the existing restore JSON format compatible with the M7.8 checker.

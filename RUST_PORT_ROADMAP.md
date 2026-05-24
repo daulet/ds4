@@ -4504,8 +4504,8 @@ restore boundary.
 
 ###### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
 
-- Status: split into M10.7c3a-M10.7c3d before implementation; M10.7c3a done;
-  M10.7c3b active.
+- Status: split into M10.7c3a-M10.7c3d before implementation; M10.7c3a and
+  M10.7c3b done; M10.7c3c active.
 - Goal: advance graph restore from raw memory snapshot availability, to restore
   target mapping, to tensor readback, and finally to next-token behavior.
 - Oracle: current C M7.8 restore oracle on B300.
@@ -4568,6 +4568,18 @@ restore boundary.
 - Validation gate: restore-target comparator, targeted Rust tests, `cargo test
   --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
   non-interactive Claude review with no blockers.
+- Evidence: added `ds4-session-payload-dump-rs --restore-target-plan` and
+  `ds4-parity/compare_graph_restore_target_plan.py`. The comparator covers the
+  four M7.8 disk/snapshot cases over checkpoint/logit/count-table targets, raw
+  logical-to-physical ring rows, per-layer attention compressed-cache and state
+  targets, ratio-4 indexer targets, and post-restore counters
+  (`layer_n_comp`, `layer_n_index_comp`, `checkpoint_valid`,
+  `mtp_draft_valid`, and `mtp_n_raw`). Validation passed the restore-target
+  comparator with 6012 checks and 8 negative mutations, an explicit
+  candidate-file comparison with 6012 checks, Python syntax checks, `cargo test
+  -p ds4-gguf session_payload`, `cargo fmt --all -- --check`, `git diff
+  --check`, the unified parity report with 53 passed, 38 skipped, and 0 failed,
+  `cargo test --workspace`, and non-interactive Claude review with no blockers.
 
 ###### M10.7c3c: Rust Graph Tensor Restore Readback Smoke
 

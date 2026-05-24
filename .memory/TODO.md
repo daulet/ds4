@@ -5104,7 +5104,7 @@
 
 - Status: split into M10.7c1-M10.7c3 before implementation; M10.7c1 and
   M10.7c2 done; M10.7c3 split into M10.7c3a-M10.7c3d before tensor restore;
-  M10.7c3a done; M10.7c3b active.
+  M10.7c3a and M10.7c3b done; M10.7c3c active.
 - Goal: advance disk and memory restore parity in slices: committed restore
   metadata first, raw B300 payload bytes second, and tensor restore behavior
   third.
@@ -5180,7 +5180,7 @@
 ### M10.7c3: Rust Graph Tensor Restore Next-Token Smoke
 
 - Status: split into M10.7c3a-M10.7c3d before implementation; M10.7c3a done;
-  M10.7c3b active.
+  M10.7c3b done; M10.7c3c active.
 - Goal: advance graph restore from raw memory snapshot availability, to restore
   target mapping, to tensor readback, and finally to next-token behavior.
 - Oracle: current C M7.8 restore oracle on B300.
@@ -5229,7 +5229,7 @@
 
 ### M10.7c3b: Rust Graph Restore Target Mapping Contract
 
-- Status: active
+- Status: done
 - Goal: map every parsed disk payload and memory snapshot section to the Rust
   graph restore destination and counter update without moving tensor bytes yet.
 - Oracle: current C `ds4_session_load_payload` graph restore order and the M7.8
@@ -5244,15 +5244,22 @@
   values are exact.
 - Review gate: ask Claude to review that the mapping matches C graph restore
   semantics and does not claim execution behavior.
-- Validation needed: restore-target comparator, targeted Rust tests, `cargo test
-  --workspace`, `cargo fmt --all -- --check`, `git diff --check`, and
+- Validation passed: `python3
+  ds4-parity/compare_graph_restore_target_plan.py --negative-test` passed 6012
+  checks and rejected 8 mutations; explicit candidate-file comparison with
+  `cargo run -p ds4-gguf --bin ds4-session-payload-dump-rs --quiet --
+  --restore-target-plan` passed 6012 checks; `python3 -m py_compile
+  ds4-parity/compare_graph_restore_target_plan.py ds4-parity/run_parity_report.py`;
+  `cargo test -p ds4-gguf session_payload`; `cargo fmt --all -- --check`; `git
+  diff --check`; `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+  reported 53 passed, 38 skipped, and 0 failed; `cargo test --workspace`; and
   non-interactive Claude review with no blockers.
 - Owner path: Rust graph restore target plan, `ds4-parity/`,
   `.memory/status.md`.
 
 ### M10.7c3c: Rust Graph Tensor Restore Readback Smoke
 
-- Status: pending
+- Status: active
 - Goal: write C disk payload and memory snapshot bytes into Rust-owned graph
   tensor allocations on B300 and read back deterministic section hashes.
 - Oracle: M10.7c3b restore-target plan plus M7.8 raw body hashes.

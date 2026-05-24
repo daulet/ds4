@@ -1001,6 +1001,25 @@ section byte plan, compressed/index row counts, and hash-only raw-body policy.
 It materializes snapshot bodies only on B300; the raw body SHA is per-capture
 metadata and the check still does not restore tensors into graph memory.
 
+Compare the M10.7c3b Rust graph restore target plan against the current-C graph
+restore order:
+
+```sh
+python3 ds4-parity/compare_graph_restore_target_plan.py
+python3 ds4-parity/compare_graph_restore_target_plan.py --negative-test
+cargo run -p ds4-gguf --bin ds4-session-payload-dump-rs --quiet -- \
+  --restore-target-plan \
+  > /tmp/ds4-m107c3b-restore-target-rust.json
+python3 ds4-parity/compare_graph_restore_target_plan.py \
+  --candidate /tmp/ds4-m107c3b-restore-target-rust.json
+```
+
+The comparator checks the four M7.8 disk payload and memory snapshot cases over
+checkpoint/logit/count-table targets, raw logical-to-physical ring row mapping,
+per-layer compressed-cache and state-tensor targets, ratio-4 indexer targets,
+and post-restore counter state. It uses parsed metadata only and does not move
+bytes into graph tensors.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
