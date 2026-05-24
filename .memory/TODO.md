@@ -6393,7 +6393,7 @@
 
 #### M10.9b: Rust Runtime Graph Route Switch And Preflight
 
-- Status: active
+- Status: complete
 - Goal: add the Rust runtime graph route behind an explicit selector and prove
   unsupported configurations fail closed before changing visible generation.
 - Oracle: current Rust runtime target-stream path, M10.5 through M10.8 graph
@@ -6409,16 +6409,32 @@
 - Drift policy: option names, fail-closed categories, output bytes, checkpoint
   deltas, and cache/KVC counters are exact; logs and timings are normalized.
 - Review gate: ask Claude to review route selection and fail-closed behavior.
-- Validation needed: targeted Rust tests, route-preflight comparator with
-  negative tests, server/runtime parity report, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
-  non-interactive Claude review with no blockers.
+- Evidence: added shared Rust `RuntimeGraphRoute` selector support and wired
+  `--runtime-graph`/`--runtime-graph-route` through one-shot, interactive, and
+  server runtime binaries. Added
+  `ds4-parity/check_runtime_graph_route_preflight.py` and
+  `ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json` for
+  exact target-stream, disabled-route, invalid-selector, CUDA/non-CUDA
+  unsupported graph-route, missing-model, and server KVC preflight outcomes.
+  Unsupported graph selection exits 99 before model open, stream output,
+  checkpoint/cache mutation, or server KVC directory creation; target-stream
+  and `off` keep the existing missing-model behavior.
+- Validation: `python3 ds4-parity/check_runtime_graph_route_preflight.py
+  --negative-test` passed with 274 checks and 8 negative mutations, `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test` remained
+  green with 118 checks and 8 negative mutations after status advanced to
+  M10.9c, targeted Rust route/parser/server tests passed, `python3
+  ds4-parity/run_server_parity_report.py` passed with 10 passed, 3 skipped,
+  and 0 failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` passed with 73 passed, 46 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 - Owner path: Rust runtime graph route selector, route-preflight comparator,
   `.memory/status.md`.
 
 #### M10.9c: B300 Official-Vector Rust Runtime Gate
 
-- Status: pending
+- Status: active
 - Goal: run official-vector logprob cases through the Rust graph runtime path on
   B300 and compare against the current-C M0.3 baseline.
 - Oracle: current-C `./ds4_test --logprob-vectors` B300 baseline, M6 numeric

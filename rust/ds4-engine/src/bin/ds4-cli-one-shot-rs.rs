@@ -1,8 +1,8 @@
 use ds4_engine::{
-    context_memory_estimate, ArgmaxOptions, Backend, Engine, EngineOptions, SamplingOptions,
-    ThinkMode,
+    context_memory_estimate, ArgmaxOptions, Backend, Engine, EngineOptions, RuntimeGraphRoute,
+    SamplingOptions, ThinkMode,
 };
-use ds4_gguf::cli_parse::{parse_cli_config, CliBackend, CliParseResult};
+use ds4_gguf::cli_parse::{parse_cli_config, CliBackend, CliParseResult, CliRuntimeGraphRoute};
 use std::io::{self, Write};
 use std::process;
 
@@ -28,6 +28,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if config.dump_tokens || config.inspect {
         eprintln!("ds4-rs: M8.13c one-shot implementation supports generation only");
         return Ok(99);
+    }
+    let runtime_graph_route = map_runtime_graph_route(config.runtime_graph_route);
+    if let Some(exit) = runtime_graph_route.fail_closed("ds4-cli-one-shot-rs") {
+        eprint!("{}", exit.stderr);
+        return Ok(exit.code);
     }
 
     let backend = map_backend(config.backend);
@@ -94,6 +99,13 @@ fn map_backend(backend: CliBackend) -> Backend {
         CliBackend::Metal => Backend::Metal,
         CliBackend::Cuda => Backend::Cuda,
         CliBackend::Cpu => Backend::Cpu,
+    }
+}
+
+fn map_runtime_graph_route(route: CliRuntimeGraphRoute) -> RuntimeGraphRoute {
+    match route {
+        CliRuntimeGraphRoute::TargetStream => RuntimeGraphRoute::TargetStream,
+        CliRuntimeGraphRoute::Graph => RuntimeGraphRoute::Graph,
     }
 }
 

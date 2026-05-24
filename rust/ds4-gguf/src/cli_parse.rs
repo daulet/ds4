@@ -37,6 +37,7 @@ pub struct CliConfig {
     pub dump_tokens: bool,
     pub inspect: bool,
     pub backend: CliBackend,
+    pub runtime_graph_route: CliRuntimeGraphRoute,
     pub warm_weights: bool,
     pub quality: bool,
 }
@@ -64,6 +65,7 @@ impl Default for CliConfig {
             dump_tokens: false,
             inspect: false,
             backend: CliBackend::default_backend(),
+            runtime_graph_route: CliRuntimeGraphRoute::TargetStream,
             warm_weights: false,
             quality: false,
         }
@@ -83,6 +85,21 @@ impl CliBackend {
             Self::Metal
         } else {
             Self::Cuda
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CliRuntimeGraphRoute {
+    TargetStream,
+    Graph,
+}
+
+impl CliRuntimeGraphRoute {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::TargetStream => "target-stream",
+            Self::Graph => "graph",
         }
     }
 }
@@ -114,6 +131,7 @@ Model and runtime:\n\
   --cuda\n\
   --cpu\n\
   --backend NAME\n\
+  --runtime-graph ROUTE\n\
   -t, --threads N\n\
   --quality\n\
   --dir-steering-file FILE\n\
@@ -399,6 +417,23 @@ where
                 };
                 state.config.backend = backend;
             }
+            "--runtime-graph" | "--runtime-graph-route" => {
+                let value = match need_arg(&argv, &mut i, arg) {
+                    Ok(value) => value,
+                    Err(result) => return Err(result),
+                };
+                let Some(route) = parse_runtime_graph_route(value) else {
+                    return Err(exit(
+                        2,
+                        "",
+                        &format!(
+                            "ds4: invalid runtime graph route: {value}\n\
+                             ds4: valid runtime graph routes are: target-stream, off, graph\n"
+                        ),
+                    ));
+                };
+                state.config.runtime_graph_route = route;
+            }
             "--cpu"
             | "--metal"
             | "--cuda"
@@ -518,6 +553,16 @@ fn parse_backend(value: &str) -> Option<CliBackend> {
         "metal" => Some(CliBackend::Metal),
         "cuda" => Some(CliBackend::Cuda),
         "cpu" => Some(CliBackend::Cpu),
+        _ => None,
+    }
+}
+
+fn parse_runtime_graph_route(value: &str) -> Option<CliRuntimeGraphRoute> {
+    match value {
+        "target-stream" | "target" | "stream" | "off" | "disabled" => {
+            Some(CliRuntimeGraphRoute::TargetStream)
+        }
+        "graph" => Some(CliRuntimeGraphRoute::Graph),
         _ => None,
     }
 }
@@ -646,6 +691,10 @@ mod tests {
         .expect("valid generation config");
 
         assert_eq!(config.backend, CliBackend::Cuda);
+        assert_eq!(
+            config.runtime_graph_route,
+            CliRuntimeGraphRoute::TargetStream
+        );
         assert_eq!(config.model_path, "model.gguf");
         assert_eq!(config.prompt.as_deref(), Some("prompt"));
         assert_eq!(config.ctx_size, 128);
@@ -663,6 +712,8 @@ mod tests {
             "--backend",
             "cuda",
             "--quality",
+            "--runtime-graph",
+            "graph",
             "-t",
             "2",
             "--warm-weights",
@@ -686,6 +737,7 @@ mod tests {
         .expect("valid runtime-control config");
 
         assert_eq!(config.backend, CliBackend::Cuda);
+        assert_eq!(config.runtime_graph_route, CliRuntimeGraphRoute::Graph);
         assert!(config.quality);
         assert!(config.warm_weights);
         assert_eq!(config.n_threads, 2);
@@ -717,5 +769,15 @@ mod tests {
         );
         assert_eq!(config.directional_steering_ffn, 1.0);
         assert_eq!(config.directional_steering_attn, 0.0);
+    }
+
+    #[test]
+    fn runtime_graph_route_rejects_unknown_values() {
+        let result = run(&["--runtime-graph", "fallback"]);
+        assert_eq!(result.exit_code, 2);
+        assert!(result
+            .stderr
+            .contains("ds4: invalid runtime graph route: fallback"));
+        assert!(result.stderr.contains("target-stream, off, graph"));
     }
 }

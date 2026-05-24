@@ -1,7 +1,7 @@
 use ds4_engine::{
     context_memory_estimate, Backend, Engine, EngineOptions, KvDiskCache, KvDiskCacheLoad,
-    KvDiskCacheOptions, KvDiskCacheTrailerHooks, ServerCacheProbe, ServerGenerationOptions,
-    ServerSession, ThinkMode,
+    KvDiskCacheOptions, KvDiskCacheTrailerHooks, RuntimeGraphRoute, ServerCacheProbe,
+    ServerGenerationOptions, ServerSession, ThinkMode, RUNTIME_GRAPH_ROUTE_VALID_VALUES,
 };
 use ds4_gguf::kv_policy::{
     write_tool_map_trailer, KvOptions, KvPolicyConfig, ToolMapEntry, DEFAULT_MB as KV_DEFAULT_MB,
@@ -64,6 +64,7 @@ struct ServerConfig {
     context_length: i32,
     default_tokens: i32,
     cache: RuntimeCacheConfig,
+    runtime_graph_route: RuntimeGraphRoute,
     enable_cors: bool,
 }
 
@@ -87,6 +88,7 @@ impl Default for ServerConfig {
             context_length: 32768,
             default_tokens: 393216,
             cache: RuntimeCacheConfig::default(),
+            runtime_graph_route: RuntimeGraphRoute::TargetStream,
             enable_cors: false,
         }
     }
@@ -187,6 +189,16 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         Ok(None) => return Ok(0),
         Err(exit) => return Ok(write_exit(exit)?),
     };
+    if let Some(exit) = config
+        .runtime_graph_route
+        .fail_closed("ds4-server-runtime-rs")
+    {
+        return Ok(write_exit(CliExit {
+            code: exit.code,
+            stdout: String::new(),
+            stderr: exit.stderr,
+        })?);
+    }
 
     let engine_options = engine_options_from_config(&config);
     let engine = match Engine::open(&engine_options) {
@@ -1588,6 +1600,18 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<ServerCon
                     ),
                 })?;
             }
+            "--runtime-graph" | "--runtime-graph-route" => {
+                let value = need_arg(&mut args, &arg)?;
+                config.runtime_graph_route =
+                    RuntimeGraphRoute::parse(&value).ok_or_else(|| CliExit {
+                        code: 2,
+                        stdout: String::new(),
+                        stderr: format!(
+                            "ds4-server-runtime-rs: invalid runtime graph route: {value}\n\
+                             ds4-server-runtime-rs: valid runtime graph routes are: {RUNTIME_GRAPH_ROUTE_VALID_VALUES}\n"
+                        ),
+                    })?;
+            }
             "--cuda" => {
                 config.backend = Backend::Cuda;
             }
@@ -1777,6 +1801,8 @@ Model runtime:\n\
       Model path. Default: ds4flash.gguf\n\
   --backend NAME | --cuda | --metal | --cpu\n\
       Runtime backend. Default: platform default\n\
+  --runtime-graph ROUTE\n\
+      Runtime graph route. Values: target-stream, off, graph. Default: target-stream\n\
   --mtp FILE\n\
       Optional MTP model path\n\
   --mtp-draft N\n\
@@ -1963,8 +1989,23 @@ mod tests {
                 context_length: 16,
                 default_tokens: 64,
                 cache: RuntimeCacheConfig::default(),
+                runtime_graph_route: RuntimeGraphRoute::TargetStream,
                 enable_cors: true,
             })
+        );
+        assert_eq!(
+            parse(&["--runtime-graph", "graph"])
+                .unwrap()
+                .unwrap()
+                .runtime_graph_route,
+            RuntimeGraphRoute::Graph
+        );
+        assert_eq!(
+            parse(&["--runtime-graph-route", "off"])
+                .unwrap()
+                .unwrap()
+                .runtime_graph_route,
+            RuntimeGraphRoute::TargetStream
         );
     }
 
@@ -2353,6 +2394,12 @@ mod tests {
         assert!(backend
             .stderr
             .contains("valid backends are: metal, cuda, cpu"));
+        let route = parse(&["--runtime-graph", "fallback"]).unwrap_err();
+        assert_eq!(route.code, 2);
+        assert!(route
+            .stderr
+            .contains("invalid runtime graph route: fallback"));
+        assert!(route.stderr.contains("target-stream, off, graph"));
         let unknown = parse(&["--bad"]).unwrap_err();
         assert_eq!(unknown.code, 2);
         assert!(unknown

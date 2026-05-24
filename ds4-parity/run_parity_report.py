@@ -18,7 +18,7 @@ The report has two jobs:
   M10.7b, M10.7c1, M10.7c2, M10.7c3a, M10.7c3b, M10.7c3c, M10.7c3d,
   M10.7d3a, M10.7d3b, M10.7d3c1, M10.7d3c2, M10.8a, M10.8b, M10.8c,
   M10.8d, M10.8e, M10.8f, M10.8g1, M10.8g2, M10.8g3a, M10.8g3b,
-  M10.8g3c, M10.8g4a, M10.8g4b, and M10.9a.
+  M10.8g3c, M10.8g4a, M10.8g4b, M10.9a, and M10.9b.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -625,6 +625,14 @@ class ParityReport:
                 [
                     sys.executable,
                     "ds4-parity/check_runtime_graph_closure_matrix.py",
+                    "--negative-test",
+                ],
+            ),
+            (
+                "M10.9b Runtime graph route preflight",
+                [
+                    sys.executable,
+                    "ds4-parity/check_runtime_graph_route_preflight.py",
                     "--negative-test",
                 ],
             ),

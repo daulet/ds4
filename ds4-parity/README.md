@@ -186,6 +186,28 @@ artifact locations, rerun commands, claim boundaries, and drift policies. It
 forbids reporting full runtime graph parity before the route, official-vector,
 long-context, tool/server, and benchmark closure gates are all current.
 
+Validate the M10.9b Rust runtime graph route selector:
+
+```sh
+python3 ds4-parity/check_runtime_graph_route_preflight.py
+python3 ds4-parity/check_runtime_graph_route_preflight.py --negative-test
+```
+
+Refresh the exact route-preflight summary after changing runtime route
+selection:
+
+```sh
+python3 ds4-parity/check_runtime_graph_route_preflight.py \
+  --write-summary \
+  ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json \
+  --negative-test
+```
+
+The M10.9b comparator builds the Rust runtime binaries, records exact
+target-stream, disabled-route, invalid-selector, and unsupported graph-route
+outcomes, and verifies unsupported graph selection fails before model open,
+stream output, checkpoint/cache mutation, or server KVC directory creation.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

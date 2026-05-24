@@ -466,9 +466,10 @@ def validate_static_wiring(report: Report) -> None:
     status_has_expected_active = (
         "Active item: M10.9a Runtime Graph Closure Matrix And Rerun Contract" in texts["status"]
         or "Active item: M10.9b Rust Runtime Graph Route Switch And Preflight" in texts["status"]
+        or "Active item: M10.9c B300 Official-Vector Rust Runtime Gate" in texts["status"]
     )
     report.check(status_has_m10_9a, "status M10.9a missing")
-    report.check(status_has_expected_active, "status active M10.9a/M10.9b missing")
+    report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c missing")
     report.check("check_runtime_graph_closure_matrix.py --negative-test" in texts["readme"], "README matrix command missing")
     report.check("M10.9a Runtime graph closure matrix" in texts["report"], "unified report M10.9a missing")
     report.check("M10.9a B300 runtime graph fixture-readiness rerun" in texts["report"], "B300 fixture-readiness rerun missing")

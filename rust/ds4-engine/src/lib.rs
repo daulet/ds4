@@ -51,6 +51,50 @@ impl Backend {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeGraphRoute {
+    TargetStream,
+    Graph,
+}
+
+impl RuntimeGraphRoute {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::TargetStream => "target-stream",
+            Self::Graph => "graph",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "target-stream" | "target" | "stream" | "off" | "disabled" => Some(Self::TargetStream),
+            "graph" => Some(Self::Graph),
+            _ => None,
+        }
+    }
+
+    pub fn fail_closed(self, binary: &str) -> Option<RuntimeGraphRouteExit> {
+        match self {
+            Self::TargetStream => None,
+            Self::Graph => Some(RuntimeGraphRouteExit {
+                code: RUNTIME_GRAPH_ROUTE_UNSUPPORTED_CODE,
+                stderr: format!(
+                    "{binary}: --runtime-graph graph is not implemented yet; use --runtime-graph target-stream\n"
+                ),
+            }),
+        }
+    }
+}
+
+pub const RUNTIME_GRAPH_ROUTE_UNSUPPORTED_CODE: i32 = 99;
+pub const RUNTIME_GRAPH_ROUTE_VALID_VALUES: &str = "target-stream, off, graph";
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RuntimeGraphRouteExit {
+    pub code: i32,
+    pub stderr: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ThinkMode {
     None,
     High,
@@ -1229,6 +1273,41 @@ fn store_result(stored: bool, err: &[c_char]) -> Result<bool, EngineError> {
         Ok(stored)
     } else {
         Err(EngineError::message(c_error(err)))
+    }
+}
+
+#[cfg(test)]
+mod runtime_graph_route_tests {
+    use super::*;
+
+    #[test]
+    fn parses_runtime_graph_route_selector() {
+        assert_eq!(
+            RuntimeGraphRoute::parse("target-stream"),
+            Some(RuntimeGraphRoute::TargetStream)
+        );
+        assert_eq!(
+            RuntimeGraphRoute::parse("off"),
+            Some(RuntimeGraphRoute::TargetStream)
+        );
+        assert_eq!(
+            RuntimeGraphRoute::parse("graph"),
+            Some(RuntimeGraphRoute::Graph)
+        );
+        assert_eq!(RuntimeGraphRoute::parse("fallback"), None);
+    }
+
+    #[test]
+    fn graph_route_fails_closed_before_runtime() {
+        assert_eq!(RuntimeGraphRoute::TargetStream.fail_closed("ds4"), None);
+        assert_eq!(
+            RuntimeGraphRoute::Graph.fail_closed("ds4").unwrap(),
+            RuntimeGraphRouteExit {
+                code: RUNTIME_GRAPH_ROUTE_UNSUPPORTED_CODE,
+                stderr: "ds4: --runtime-graph graph is not implemented yet; use --runtime-graph target-stream\n"
+                    .to_string(),
+            }
+        );
     }
 }
 

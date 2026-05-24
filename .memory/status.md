@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.9b Rust Runtime Graph Route Switch And Preflight
-- Last validated source before the active item: M10.9a Runtime Graph Closure
-  Matrix And Rerun Contract.
+- Active item: M10.9c B300 Official-Vector Rust Runtime Gate
+- Last validated source before the active item: M10.9b Rust Runtime Graph
+  Route Switch And Preflight.
+- Earlier M10.9b Rust Runtime Graph Route Switch And Preflight.
 - Earlier M10.9a Runtime Graph Closure Matrix And Rerun Contract.
 - Earlier M10.9 Runtime Graph End-To-End And Benchmark Closure split into
   M10.9a through M10.9f before implementation.
@@ -78,6 +79,26 @@
 
 ## Last Evidence
 
+- M10.9b adds shared Rust `RuntimeGraphRoute` selector support, wires
+  `--runtime-graph`/`--runtime-graph-route` through one-shot, interactive, and
+  server runtime binaries, and records
+  `ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json`.
+  The route-preflight artifact covers target-stream, disabled-route,
+  invalid-selector, CUDA/non-CUDA unsupported graph-route, missing-model, and
+  server KVC preflight cases. Unsupported graph selection exits 99 before
+  model open, stream output, checkpoint/cache mutation, or server KVC directory
+  creation; target-stream and `off` keep the existing missing-model behavior.
+- M10.9b validation passed Python syntax checks, `python3
+  ds4-parity/check_runtime_graph_route_preflight.py --negative-test` with 274
+  checks and 8 negative mutations, `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test` with 118
+  checks and 8 negative mutations after status advanced to M10.9c, targeted
+  Rust route/parser/server tests, `python3
+  ds4-parity/run_server_parity_report.py` with 10 passed, 3 skipped, and 0
+  failed, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` with 73 passed, 46 skipped, and 0 failed.
+  Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.9a adds
   `ds4-parity/baselines/graph/m10.9a/runtime-graph-closure-matrix.json`,
   `ds4-parity/check_runtime_graph_closure_matrix.py`, README instructions,
@@ -100,8 +121,7 @@
   Non-interactive Claude review returned `NO BLOCKERS`.
 - M10.9 split before implementation into M10.9a closure matrix, M10.9b route
   switch, M10.9c official-vector gate, M10.9d long-context gate, M10.9e
-  tool/server gate, and M10.9f benchmark/final closure. Active item is now
-  M10.9a Runtime Graph Closure Matrix And Rerun Contract.
+  tool/server gate, and M10.9f benchmark/final closure.
 - M10.9 split validation passed the B300 fixture-readiness probe for resolved
   model path
   `/workspace/ds4/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf`,

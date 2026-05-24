@@ -1,5 +1,6 @@
 use ds4_engine::{
-    context_memory_estimate, Backend, Engine, EngineOptions, InteractiveTurnOptions, ThinkMode,
+    context_memory_estimate, Backend, Engine, EngineOptions, InteractiveTurnOptions,
+    RuntimeGraphRoute, ThinkMode, RUNTIME_GRAPH_ROUTE_VALID_VALUES,
 };
 use std::fs;
 use std::io::{self, Write};
@@ -19,6 +20,7 @@ struct Config {
     system: String,
     read_prompt_file: String,
     next_prompt: String,
+    runtime_graph_route: RuntimeGraphRoute,
 }
 
 impl Default for Config {
@@ -36,6 +38,7 @@ impl Default for Config {
             system: "You are a helpful assistant".to_string(),
             read_prompt_file: String::new(),
             next_prompt: String::new(),
+            runtime_graph_route: RuntimeGraphRoute::TargetStream,
         }
     }
 }
@@ -52,6 +55,13 @@ fn main() {
 
 fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let config = parse_args(std::env::args().skip(1))?;
+    if let Some(exit) = config
+        .runtime_graph_route
+        .fail_closed("ds4-interactive-runtime-rs")
+    {
+        eprint!("{}", exit.stderr);
+        return Ok(exit.code);
+    }
     let backend = config.backend;
     log_context_memory(backend, config.ctx_size);
 
@@ -123,6 +133,16 @@ where
                          ds4: valid backends are: metal, cuda, cpu"
                     )
                 })?;
+            }
+            "--runtime-graph" | "--runtime-graph-route" => {
+                let value = need_arg(&argv, &mut i, arg)?;
+                config.runtime_graph_route =
+                    RuntimeGraphRoute::parse(value).ok_or_else(|| {
+                        format!(
+                            "ds4: invalid runtime graph route: {value}\n\
+                             ds4: valid runtime graph routes are: {RUNTIME_GRAPH_ROUTE_VALID_VALUES}"
+                        )
+                    })?;
             }
             "--cuda" => config.backend = Backend::Cuda,
             "--metal" => config.backend = Backend::Metal,

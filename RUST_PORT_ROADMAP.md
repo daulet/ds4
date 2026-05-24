@@ -5697,6 +5697,27 @@ restore boundary.
   negative tests, server/runtime parity report, `cargo test --workspace`,
   `cargo fmt --all -- --check`, `git diff --check`, unified parity report, and
   non-interactive Claude review with no blockers.
+- Evidence: added a shared Rust `RuntimeGraphRoute` selector, wired
+  `--runtime-graph`/`--runtime-graph-route` through one-shot, interactive, and
+  server runtime binaries, and recorded
+  `ds4-parity/baselines/graph/m10.9b/runtime-graph-route-preflight.json`.
+  The route-preflight artifact covers target-stream, disabled-route, invalid
+  selector, CUDA/non-CUDA unsupported graph-route, missing-model, and server
+  KVC preflight cases. Unsupported graph selection exits 99 before model open,
+  stream output, checkpoint/cache mutation, or server KVC directory creation;
+  target-stream and `off` keep the existing missing-model behavior.
+- Validation evidence: `python3
+  ds4-parity/check_runtime_graph_route_preflight.py --negative-test` passed
+  with 274 checks and 8 negative mutations, `python3
+  ds4-parity/check_runtime_graph_closure_matrix.py --negative-test` stayed
+  green with 118 checks and 8 negative mutations after status advanced to
+  M10.9c, targeted Rust route/parser/server tests passed,
+  `python3 ds4-parity/run_server_parity_report.py` passed with 10 passed, 3
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all --
+  --check`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` passed with 73 passed,
+  46 skipped, and 0 failed. Non-interactive Claude review returned `NO
+  BLOCKERS`.
 
 ##### M10.9c: B300 Official-Vector Rust Runtime Gate
 

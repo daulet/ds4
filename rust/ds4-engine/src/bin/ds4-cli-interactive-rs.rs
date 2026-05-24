@@ -1,8 +1,9 @@
 use ds4_engine::interactive_cli::{repl_help, ReplAction, ReplCommandResult, ReplState};
 use ds4_engine::{
-    context_memory_estimate, Backend, Engine, EngineOptions, InteractiveTurnOptions, ThinkMode,
+    context_memory_estimate, Backend, Engine, EngineOptions, InteractiveTurnOptions,
+    RuntimeGraphRoute, ThinkMode,
 };
-use ds4_gguf::cli_parse::{parse_cli_config, CliBackend, CliParseResult};
+use ds4_gguf::cli_parse::{parse_cli_config, CliBackend, CliParseResult, CliRuntimeGraphRoute};
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::process;
@@ -44,6 +45,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if config.prompt.is_some() || config.dump_tokens || config.inspect {
         eprintln!("ds4-rs: M8.15c interactive implementation supports no-prompt REPL only");
         return Ok(99);
+    }
+    let runtime_graph_route = map_runtime_graph_route(config.runtime_graph_route);
+    if let Some(exit) = runtime_graph_route.fail_closed("ds4-cli-interactive-rs") {
+        eprint!("{}", exit.stderr);
+        return Ok(exit.code);
     }
 
     let backend = map_backend(config.backend);
@@ -177,6 +183,13 @@ fn map_backend(backend: CliBackend) -> Backend {
         CliBackend::Metal => Backend::Metal,
         CliBackend::Cuda => Backend::Cuda,
         CliBackend::Cpu => Backend::Cpu,
+    }
+}
+
+fn map_runtime_graph_route(route: CliRuntimeGraphRoute) -> RuntimeGraphRoute {
+    match route {
+        CliRuntimeGraphRoute::TargetStream => RuntimeGraphRoute::TargetStream,
+        CliRuntimeGraphRoute::Graph => RuntimeGraphRoute::Graph,
     }
 }
 

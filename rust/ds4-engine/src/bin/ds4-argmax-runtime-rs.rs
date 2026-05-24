@@ -1,5 +1,6 @@
 use ds4_engine::{
-    context_memory_estimate, ArgmaxOptions, Backend, Engine, EngineOptions, ThinkMode,
+    context_memory_estimate, ArgmaxOptions, Backend, Engine, EngineOptions, RuntimeGraphRoute,
+    ThinkMode, RUNTIME_GRAPH_ROUTE_VALID_VALUES,
 };
 use std::error::Error;
 use std::fs;
@@ -14,6 +15,7 @@ M8.13a runtime boundary for greedy one-shot generation.\n\
 Options:\n\
   -m, --model FILE\n\
   --backend NAME | --cuda | --metal | --cpu\n\
+  --runtime-graph ROUTE\n\
   -c, --ctx N\n\
   -n, --tokens N\n\
   --temp 0\n\
@@ -29,6 +31,7 @@ struct RuntimeConfig {
     n_predict: i32,
     ctx_size: i32,
     think_mode: ThinkMode,
+    runtime_graph_route: RuntimeGraphRoute,
     warm_weights: bool,
     quality: bool,
 }
@@ -43,6 +46,7 @@ impl Default for RuntimeConfig {
             n_predict: 50000,
             ctx_size: 32768,
             think_mode: ThinkMode::default_mode(),
+            runtime_graph_route: RuntimeGraphRoute::TargetStream,
             warm_weights: false,
             quality: false,
         }
@@ -71,6 +75,16 @@ fn run() -> Result<i32, Box<dyn Error>> {
         Ok(config) => config,
         Err(exit) => return Ok(write_exit(exit)?),
     };
+    if let Some(exit) = config
+        .runtime_graph_route
+        .fail_closed("ds4-argmax-runtime-rs")
+    {
+        return Ok(write_exit(RuntimeExit {
+            code: exit.code,
+            stdout: String::new(),
+            stderr: exit.stderr,
+        })?);
+    }
     log_context_memory(config.backend, config.ctx_size);
 
     let effective_think = config.think_mode.for_context(config.ctx_size);
@@ -163,6 +177,20 @@ where
                     ));
                 };
                 config.backend = backend;
+            }
+            "--runtime-graph" | "--runtime-graph-route" => {
+                let value = need_arg(&argv, &mut i, arg)?;
+                config.runtime_graph_route =
+                    RuntimeGraphRoute::parse(value).ok_or_else(|| {
+                        exit(
+                            2,
+                            "",
+                            &format!(
+                                "ds4: invalid runtime graph route: {value}\n\
+                                 ds4: valid runtime graph routes are: {RUNTIME_GRAPH_ROUTE_VALID_VALUES}\n"
+                            ),
+                        )
+                    })?;
             }
             "--cuda" => config.backend = Backend::Cuda,
             "--metal" => config.backend = Backend::Metal,

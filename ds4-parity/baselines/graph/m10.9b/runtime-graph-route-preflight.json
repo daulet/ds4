@@ -1,0 +1,375 @@
+{
+  "schema": "ds4.runtime_graph_route_preflight.v1",
+  "source": "m10.9b-runtime-graph-route-preflight",
+  "milestone": "M10.9b",
+  "next_stage": "M10.9c",
+  "route_selector": {
+    "options": [
+      "--runtime-graph",
+      "--runtime-graph-route"
+    ],
+    "default": "target-stream",
+    "disabled_alias": "off",
+    "supported_values": [
+      "target-stream",
+      "off",
+      "graph"
+    ],
+    "unsupported_route": "graph",
+    "unsupported_exit_code": 99
+  },
+  "fixtures": {
+    "missing_model": "/tmp/ds4-m109b-missing-model.gguf",
+    "server_cache_dir": "/tmp/ds4-m109b-route-preflight-kv",
+    "prompt_file": "ds4-parity/baselines/cli-fixtures/m8.14/read_prompt.txt"
+  },
+  "cases": [
+    {
+      "id": "cli_one_shot_default_missing_model",
+      "binary": "target/debug/ds4-cli-one-shot-rs",
+      "argv": [
+        "--cpu",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "-p",
+        "Answer with one short noun: glacier.",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink"
+      ],
+      "route": "target-stream",
+      "category": "target_stream_missing_model",
+      "backend": "cpu",
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgNDQxLjAwIE1pQiAoY3R4PTMyNzY4LCBiYWNrZW5kPWNwdSwgcHJlZmlsbF9jaHVuaz0wLCByYXdfa3Zfcm93cz0xMjgsIGNvbXByZXNzZWRfa3Zfcm93cz04MTk0KQpkczQ6IGNhbm5vdCBvcGVuIG1vZGVsICcvdG1wL2RzNC1tMTA5Yi1taXNzaW5nLW1vZGVsLmdndWYnOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Cg==",
+        "bytes": 202,
+        "sha256": "b1678acf0241bbe82cfb1a8c2faaf7b8e1a521adc030216f04ccae10daefd240",
+        "text": "ds4: context buffers 441.00 MiB (ctx=32768, backend=cpu, prefill_chunk=0, raw_kv_rows=128, compressed_kv_rows=8194)\nds4: cannot open model '/tmp/ds4-m109b-missing-model.gguf': No such file or directory\n"
+      },
+      "stderr_anchors": [
+        "cannot open model",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "backend=cpu"
+      ],
+      "model_open_attempted": true,
+      "stream_visibility": "no_generation_missing_model",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": null,
+      "cache_dir_created": null
+    },
+    {
+      "id": "cli_one_shot_disabled_route_missing_model",
+      "binary": "target/debug/ds4-cli-one-shot-rs",
+      "argv": [
+        "--runtime-graph",
+        "off",
+        "--cpu",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "-p",
+        "Answer with one short noun: glacier.",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink"
+      ],
+      "route": "target-stream",
+      "category": "disabled_route_missing_model",
+      "backend": "cpu",
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjb250ZXh0IGJ1ZmZlcnMgNDQxLjAwIE1pQiAoY3R4PTMyNzY4LCBiYWNrZW5kPWNwdSwgcHJlZmlsbF9jaHVuaz0wLCByYXdfa3Zfcm93cz0xMjgsIGNvbXByZXNzZWRfa3Zfcm93cz04MTk0KQpkczQ6IGNhbm5vdCBvcGVuIG1vZGVsICcvdG1wL2RzNC1tMTA5Yi1taXNzaW5nLW1vZGVsLmdndWYnOiBObyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Cg==",
+        "bytes": 202,
+        "sha256": "b1678acf0241bbe82cfb1a8c2faaf7b8e1a521adc030216f04ccae10daefd240",
+        "text": "ds4: context buffers 441.00 MiB (ctx=32768, backend=cpu, prefill_chunk=0, raw_kv_rows=128, compressed_kv_rows=8194)\nds4: cannot open model '/tmp/ds4-m109b-missing-model.gguf': No such file or directory\n"
+      },
+      "stderr_anchors": [
+        "cannot open model",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "backend=cpu"
+      ],
+      "model_open_attempted": true,
+      "stream_visibility": "no_generation_missing_model",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": null,
+      "cache_dir_created": null
+    },
+    {
+      "id": "cli_one_shot_graph_unsupported",
+      "binary": "target/debug/ds4-cli-one-shot-rs",
+      "argv": [
+        "--runtime-graph",
+        "graph",
+        "--cuda",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "-p",
+        "Answer with one short noun: glacier.",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink"
+      ],
+      "route": "graph",
+      "category": "unsupported_graph_route",
+      "backend": "cuda",
+      "exit_code": 99,
+      "expected_exit_code": 99,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0LWNsaS1vbmUtc2hvdC1yczogLS1ydW50aW1lLWdyYXBoIGdyYXBoIGlzIG5vdCBpbXBsZW1lbnRlZCB5ZXQ7IHVzZSAtLXJ1bnRpbWUtZ3JhcGggdGFyZ2V0LXN0cmVhbQo=",
+        "bytes": 101,
+        "sha256": "0d48e44ba2106effd4d0e77c4a9e953b390d618cbd278e91395603a7eccfe8e1",
+        "text": "ds4-cli-one-shot-rs: --runtime-graph graph is not implemented yet; use --runtime-graph target-stream\n"
+      },
+      "stderr_anchors": [
+        "ds4-cli-one-shot-rs: --runtime-graph graph is not implemented yet",
+        "use --runtime-graph target-stream"
+      ],
+      "model_open_attempted": false,
+      "stream_visibility": "blocked_before_stream",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": null,
+      "cache_dir_created": null
+    },
+    {
+      "id": "cli_interactive_graph_unsupported",
+      "binary": "target/debug/ds4-cli-interactive-rs",
+      "argv": [
+        "--runtime-graph",
+        "graph",
+        "--cpu",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink"
+      ],
+      "route": "graph",
+      "category": "unsupported_graph_route",
+      "backend": "cpu",
+      "exit_code": 99,
+      "expected_exit_code": 99,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0LWNsaS1pbnRlcmFjdGl2ZS1yczogLS1ydW50aW1lLWdyYXBoIGdyYXBoIGlzIG5vdCBpbXBsZW1lbnRlZCB5ZXQ7IHVzZSAtLXJ1bnRpbWUtZ3JhcGggdGFyZ2V0LXN0cmVhbQo=",
+        "bytes": 104,
+        "sha256": "97bba25c21b4989121ceb595dbf620094baf7379c9b541d16fe577fbe4d1f4c0",
+        "text": "ds4-cli-interactive-rs: --runtime-graph graph is not implemented yet; use --runtime-graph target-stream\n"
+      },
+      "stderr_anchors": [
+        "ds4-cli-interactive-rs: --runtime-graph graph is not implemented yet",
+        "use --runtime-graph target-stream"
+      ],
+      "model_open_attempted": false,
+      "stream_visibility": "blocked_before_stream",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": null,
+      "cache_dir_created": null
+    },
+    {
+      "id": "direct_interactive_graph_unsupported",
+      "binary": "target/debug/ds4-interactive-runtime-rs",
+      "argv": [
+        "--runtime-graph",
+        "graph",
+        "--cuda",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "--read-prompt-file",
+        "ds4-parity/baselines/cli-fixtures/m8.14/read_prompt.txt",
+        "--next-prompt",
+        "Answer with one short noun: glacier.",
+        "--tokens",
+        "1",
+        "--temp",
+        "0",
+        "--nothink"
+      ],
+      "route": "graph",
+      "category": "unsupported_graph_route",
+      "backend": "cuda",
+      "exit_code": 99,
+      "expected_exit_code": 99,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0LWludGVyYWN0aXZlLXJ1bnRpbWUtcnM6IC0tcnVudGltZS1ncmFwaCBncmFwaCBpcyBub3QgaW1wbGVtZW50ZWQgeWV0OyB1c2UgLS1ydW50aW1lLWdyYXBoIHRhcmdldC1zdHJlYW0K",
+        "bytes": 108,
+        "sha256": "492d727d6fc3aaa46f7f5181d4067e60a1ae54502e813728630e9cd4bca48844",
+        "text": "ds4-interactive-runtime-rs: --runtime-graph graph is not implemented yet; use --runtime-graph target-stream\n"
+      },
+      "stderr_anchors": [
+        "ds4-interactive-runtime-rs: --runtime-graph graph is not implemented yet",
+        "use --runtime-graph target-stream"
+      ],
+      "model_open_attempted": false,
+      "stream_visibility": "blocked_before_stream",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": null,
+      "cache_dir_created": null
+    },
+    {
+      "id": "server_target_stream_missing_model",
+      "binary": "target/debug/ds4-server-runtime-rs",
+      "argv": [
+        "--runtime-graph",
+        "target-stream",
+        "--cpu",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "--port",
+        "18109",
+        "--tokens",
+        "1"
+      ],
+      "route": "target-stream",
+      "category": "target_stream_missing_model",
+      "backend": "cpu",
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0OiBjYW5ub3Qgb3BlbiBtb2RlbCAnL3RtcC9kczQtbTEwOWItbWlzc2luZy1tb2RlbC5nZ3VmJzogTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQo=",
+        "bytes": 86,
+        "sha256": "5de4895c4e2121c7235607ed478031de88988d38c0b581f9a20aabfd85c6fc38",
+        "text": "ds4: cannot open model '/tmp/ds4-m109b-missing-model.gguf': No such file or directory\n"
+      },
+      "stderr_anchors": [
+        "cannot open model",
+        "/tmp/ds4-m109b-missing-model.gguf"
+      ],
+      "model_open_attempted": true,
+      "stream_visibility": "no_generation_missing_model",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": null,
+      "cache_dir_created": null
+    },
+    {
+      "id": "server_graph_unsupported_with_cache",
+      "binary": "target/debug/ds4-server-runtime-rs",
+      "argv": [
+        "--runtime-graph",
+        "graph",
+        "--cuda",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf",
+        "--port",
+        "18110",
+        "--tokens",
+        "1",
+        "--kv-disk-dir",
+        "/tmp/ds4-m109b-route-preflight-kv"
+      ],
+      "route": "graph",
+      "category": "unsupported_graph_route",
+      "backend": "cuda",
+      "exit_code": 99,
+      "expected_exit_code": 99,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0LXNlcnZlci1ydW50aW1lLXJzOiAtLXJ1bnRpbWUtZ3JhcGggZ3JhcGggaXMgbm90IGltcGxlbWVudGVkIHlldDsgdXNlIC0tcnVudGltZS1ncmFwaCB0YXJnZXQtc3RyZWFtCg==",
+        "bytes": 103,
+        "sha256": "5817e6c738d691ea6b1f852e4687ff9be6c16615ae41bb3d72037d689bf6fdeb",
+        "text": "ds4-server-runtime-rs: --runtime-graph graph is not implemented yet; use --runtime-graph target-stream\n"
+      },
+      "stderr_anchors": [
+        "ds4-server-runtime-rs: --runtime-graph graph is not implemented yet",
+        "use --runtime-graph target-stream"
+      ],
+      "model_open_attempted": false,
+      "stream_visibility": "blocked_before_stream",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": "/tmp/ds4-m109b-route-preflight-kv",
+      "cache_dir_created": false
+    },
+    {
+      "id": "server_invalid_route",
+      "binary": "target/debug/ds4-server-runtime-rs",
+      "argv": [
+        "--runtime-graph",
+        "fallback",
+        "--cpu",
+        "-m",
+        "/tmp/ds4-m109b-missing-model.gguf"
+      ],
+      "route": "invalid",
+      "category": "invalid_selector",
+      "backend": "cpu",
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "stdout": {
+        "base64": "",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stderr": {
+        "base64": "ZHM0LXNlcnZlci1ydW50aW1lLXJzOiBpbnZhbGlkIHJ1bnRpbWUgZ3JhcGggcm91dGU6IGZhbGxiYWNrCmRzNC1zZXJ2ZXItcnVudGltZS1yczogdmFsaWQgcnVudGltZSBncmFwaCByb3V0ZXMgYXJlOiB0YXJnZXQtc3RyZWFtLCBvZmYsIGdyYXBoCg==",
+        "bytes": 142,
+        "sha256": "f01038657fa1601fbb8a427d87c3ab12be35a71b0099bec7b92722b10d281f39",
+        "text": "ds4-server-runtime-rs: invalid runtime graph route: fallback\nds4-server-runtime-rs: valid runtime graph routes are: target-stream, off, graph\n"
+      },
+      "stderr_anchors": [
+        "invalid runtime graph route: fallback",
+        "valid runtime graph routes are: target-stream, off, graph"
+      ],
+      "model_open_attempted": false,
+      "stream_visibility": "blocked_before_stream",
+      "checkpoint_delta": "0",
+      "cache_kvc_visibility": "none",
+      "cache_dir": null,
+      "cache_dir_created": null
+    }
+  ],
+  "acceptance": {
+    "graph_route_selection": "explicit",
+    "default_behavior": "target-stream route unchanged",
+    "unsupported_route": "fails before model open, stream output, or cache directory creation",
+    "claim_boundary": "no model-backed Rust graph parity claim"
+  }
+}
