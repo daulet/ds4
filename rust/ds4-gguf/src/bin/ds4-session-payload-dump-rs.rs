@@ -1,14 +1,27 @@
 use ds4_gguf::session_payload::{
     append_full_payload, append_prefix_to_first_comp, append_prefix_to_first_index, compress_ratio,
-    default_cpu_runtime, default_header, sections, validate_payload_cpu, PayloadError,
-    PayloadHeader, HEADER_BYTES, IO_CHUNK_BYTES, MAGIC, N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER,
-    N_SWA, N_VOCAB, U32_FIELDS, VERSION,
+    default_cpu_runtime, default_header, graph_payload_plan, sections, validate_payload_cpu,
+    GraphPayloadPlan, PayloadError, PayloadHeader, PayloadSections, GRAPH_PAYLOAD_FIXTURES,
+    HEADER_BYTES, IO_CHUNK_BYTES, MAGIC, N_HEAD_DIM, N_INDEXER_HEAD_DIM, N_LAYER, N_SWA, N_VOCAB,
+    U32_FIELDS, VERSION,
 };
 use std::io::{self, Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut out = io::BufWriter::new(io::stdout());
-    write_dump(&mut out)?;
+    let mut graph_plan_dump = false;
+    for arg in std::env::args().skip(1) {
+        if arg == "--graph-plan" {
+            graph_plan_dump = true;
+        } else {
+            return Err("usage: ds4-session-payload-dump-rs [--graph-plan]".into());
+        }
+    }
+    if graph_plan_dump {
+        write_graph_plan_dump(&mut out)?;
+    } else {
+        write_dump(&mut out)?;
+    }
     Ok(())
 }
 
@@ -168,6 +181,159 @@ fn write_body_order<W: Write>(out: &mut W) -> io::Result<()> {
          \"2 * coff * n_indexer_head_dim * coff * ratio * 4 when ratio == 4\"}}"
     )?;
     writeln!(out, "  ],")
+}
+
+fn write_graph_plan_dump<W: Write>(out: &mut W) -> io::Result<()> {
+    writeln!(out, "{{")?;
+    writeln!(
+        out,
+        "  \"schema\": \"ds4.rust_graph_session_payload_plan.v1\","
+    )?;
+    writeln!(out, "  \"source\": \"rust-session-payload-plan-no-model\",")?;
+    writeln!(out, "  \"scope\": \"graph-session-payload-layout\",")?;
+    writeln!(
+        out,
+        "  \"env_policy\": \"default graph caps; env overrides are out of scope\","
+    )?;
+    writeln!(
+        out,
+        "  \"constants\": {{\"magic_u32\": {}, \"version\": {}, \"u32_fields\": {}, \
+         \"header_bytes\": {}, \"io_chunk_bytes\": {}, \"n_layer\": {}, \
+         \"n_head_dim\": {}, \"n_indexer_head_dim\": {}, \"n_vocab\": {}, \
+         \"n_swa\": {}}},",
+        MAGIC,
+        VERSION,
+        U32_FIELDS,
+        HEADER_BYTES,
+        IO_CHUNK_BYTES,
+        N_LAYER,
+        N_HEAD_DIM,
+        N_INDEXER_HEAD_DIM,
+        N_VOCAB,
+        N_SWA
+    )?;
+    writeln!(
+        out,
+        "  \"body_order\": [\"header\", \"checkpoint_tokens\", \"last_logits\", \
+         \"attn_compressed_row_counts\", \"indexer_compressed_row_counts\", \
+         \"per_layer_raw_rows_logical_order\", \"per_layer_attn_compressed_rows\", \
+         \"per_layer_attn_state_kv\", \"per_layer_attn_state_score\", \
+         \"per_layer_indexer_compressed_rows\", \"per_layer_index_state_kv\", \
+         \"per_layer_index_state_score\"],"
+    )?;
+    writeln!(out, "  \"cases\": [")?;
+    for (idx, fixture) in GRAPH_PAYLOAD_FIXTURES.iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_graph_plan_case(out, &graph_payload_plan(*fixture))?;
+    }
+    writeln!(out, "\n  ]")?;
+    writeln!(out, "}}")
+}
+
+fn write_graph_plan_case<W: Write>(out: &mut W, plan: &GraphPayloadPlan) -> io::Result<()> {
+    write!(out, "    {{\"name\": ")?;
+    write_json_string(out, plan.fixture.name)?;
+    writeln!(
+        out,
+        ", \"ctx_size\": {}, \"token_count\": {}, \"prefill_cap\": {}, \
+         \"raw_cap\": {}, \"raw_window\": {}, \"comp_cap\": {}, \
+         \"raw_live_rows\": {}, \"raw_first_pos\": {}, \"raw_last_pos\": {}, \
+         \"raw_first_phys\": {}, \"raw_last_phys\": {},",
+        plan.header.ctx_size,
+        plan.header.token_count,
+        plan.header.prefill_cap,
+        plan.header.raw_cap,
+        plan.header.raw_window,
+        plan.header.comp_cap,
+        plan.header.raw_live_rows,
+        plan.raw_first_pos,
+        plan.raw_last_pos,
+        plan.raw_first_phys,
+        plan.raw_last_phys
+    )?;
+    write!(out, "     \"section_bytes\": ")?;
+    write_graph_section_bytes(out, plan.sections)?;
+    writeln!(
+        out,
+        ",\n     \"payload_bytes\": {}, \"ratio4_rows\": {}, \"ratio128_rows\": {},",
+        plan.payload_bytes, plan.ratio4_rows, plan.ratio128_rows
+    )?;
+    writeln!(out, "     \"layer_samples\": [")?;
+    for (idx, layer) in [0_usize, 2, 3, 42].into_iter().enumerate() {
+        if idx != 0 {
+            writeln!(out, ",")?;
+        }
+        write_layer_sample(out, plan, layer)?;
+    }
+    writeln!(out, "\n     ]}}")
+}
+
+fn write_graph_section_bytes<W: Write>(out: &mut W, sections: PayloadSections) -> io::Result<()> {
+    write!(
+        out,
+        "{{\"header\": {}, \"tokens\": {}, \"logits\": {}, \"attn_counts\": {}, \
+         \"index_counts\": {}, \"raw_rows\": {}, \"attn_compressed_rows\": {}, \
+         \"attn_state\": {}, \"indexer_compressed_rows\": {}, \"indexer_state\": {}}}",
+        HEADER_BYTES,
+        sections.token_bytes,
+        sections.logits_bytes,
+        sections.comp_count_bytes,
+        sections.index_count_bytes,
+        sections.raw_row_bytes,
+        sections.attn_comp_row_bytes,
+        sections.attn_state_bytes,
+        sections.index_comp_row_bytes,
+        sections.index_state_bytes
+    )
+}
+
+fn write_layer_sample<W: Write>(
+    out: &mut W,
+    plan: &GraphPayloadPlan,
+    layer: usize,
+) -> io::Result<()> {
+    let ratio = compress_ratio(layer);
+    let raw_row_bytes = u64::from(plan.header.raw_live_rows) * u64::from(N_HEAD_DIM) * 4;
+    let attn_compressed_row_bytes = if ratio == 0 {
+        0
+    } else {
+        u64::from(plan.n_comp[layer]) * u64::from(N_HEAD_DIM) * 4
+    };
+    let attn_state_bytes = if ratio == 0 {
+        0
+    } else {
+        2 * ds4_gguf::session_payload::layer_attn_state_bytes(ratio)
+    };
+    let indexer_compressed_row_bytes = if ratio == 4 {
+        u64::from(plan.n_index_comp[layer]) * u64::from(N_INDEXER_HEAD_DIM) * 4
+    } else {
+        0
+    };
+    let indexer_state_bytes = if ratio == 4 {
+        2 * ds4_gguf::session_payload::layer_index_state_bytes(ratio)
+    } else {
+        0
+    };
+    write!(
+        out,
+        "    {{\"layer\": {}, \"ratio\": {}, \"n_comp\": {}, \"n_index_comp\": {}, \
+         \"raw_first_phys\": {}, \"raw_last_phys\": {}, \"raw_row_bytes\": {}, \
+         \"attn_compressed_row_bytes\": {}, \"attn_state_bytes\": {}, \
+         \"indexer_compressed_row_bytes\": {}, \"indexer_state_bytes\": {}}}",
+        layer,
+        ratio,
+        plan.n_comp[layer],
+        plan.n_index_comp[layer],
+        plan.raw_first_phys,
+        plan.raw_last_phys,
+        raw_row_bytes,
+        attn_compressed_row_bytes,
+        attn_state_bytes,
+        indexer_compressed_row_bytes,
+        indexer_state_bytes
+    )
 }
 
 fn write_header_rejection_cases<W: Write>(out: &mut W) -> io::Result<()> {

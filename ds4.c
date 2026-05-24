@@ -23221,6 +23221,237 @@ int ds4_dump_session_payload_shape_json(FILE *fp) {
     return ferror(fp) ? 1 : 0;
 }
 
+typedef struct {
+    const char *name;
+    uint32_t ctx_size;
+    uint32_t token_count;
+} graph_payload_plan_case;
+
+static uint32_t graph_payload_default_prefill_cap(uint32_t ctx_size) {
+    if (ctx_size == 0) return 1;
+    return ctx_size > 2048u ? 2048u : ctx_size;
+}
+
+static uint32_t graph_payload_raw_window(uint32_t ctx_size) {
+    uint32_t rows = DS4_N_SWA;
+    if (rows > ctx_size) rows = ctx_size;
+    if (rows == 0) rows = 1;
+    return rows;
+}
+
+static uint32_t graph_payload_raw_cap(uint32_t ctx_size, uint32_t prefill_cap) {
+    const uint32_t raw_window = graph_payload_raw_window(ctx_size);
+    uint64_t wanted = (uint64_t)raw_window + prefill_cap;
+    if (wanted > ctx_size) wanted = ctx_size;
+    if (wanted == 0) wanted = 1;
+    wanted = align_up(wanted, 256u);
+    if (wanted > 8192u) wanted = 8192u;
+    uint32_t raw_cap = (uint32_t)wanted;
+    if (raw_cap < raw_window) raw_cap = raw_window;
+    return raw_cap;
+}
+
+static uint32_t graph_payload_comp_cap(uint32_t ctx_size) {
+    uint32_t cap = ctx_size / 4u + 2u;
+    return cap < 2u ? 2u : cap;
+}
+
+static uint32_t graph_payload_compressed_rows(uint32_t token_count, uint32_t ratio) {
+    return ratio == 0 ? 0 : token_count / ratio;
+}
+
+static void graph_payload_counts(uint32_t token_count,
+                                 uint32_t n_comp[DS4_N_LAYER],
+                                 uint32_t n_index_comp[DS4_N_LAYER]) {
+    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
+        const uint32_t ratio = ds4_layer_compress_ratio(il);
+        n_comp[il] = graph_payload_compressed_rows(token_count, ratio);
+        n_index_comp[il] = ratio == 4u ? n_comp[il] : 0u;
+    }
+}
+
+static void graph_payload_emit_section_bytes(FILE *fp,
+                                             const payload_shape_sections *sections) {
+    fprintf(fp,
+            "{\"header\": %u, \"tokens\": %" PRIu64 ", \"logits\": %" PRIu64
+            ", \"attn_counts\": %" PRIu64 ", \"index_counts\": %" PRIu64
+            ", \"raw_rows\": %" PRIu64 ", \"attn_compressed_rows\": %" PRIu64
+            ", \"attn_state\": %" PRIu64 ", \"indexer_compressed_rows\": %" PRIu64
+            ", \"indexer_state\": %" PRIu64 "}",
+            (unsigned)(DS4_SESSION_PAYLOAD_U32_FIELDS * sizeof(uint32_t)),
+            sections->token_bytes,
+            sections->logits_bytes,
+            sections->comp_count_bytes,
+            sections->index_count_bytes,
+            sections->raw_row_bytes,
+            sections->attn_comp_row_bytes,
+            sections->attn_state_bytes,
+            sections->index_comp_row_bytes,
+            sections->index_state_bytes);
+}
+
+static void graph_payload_emit_layer_sample(FILE *fp,
+                                            bool *first,
+                                            uint32_t layer,
+                                            uint32_t raw_live,
+                                            uint32_t raw_first_phys,
+                                            uint32_t raw_last_phys,
+                                            const uint32_t n_comp[DS4_N_LAYER],
+                                            const uint32_t n_index_comp[DS4_N_LAYER]) {
+    metadata_comma(fp, first);
+    const uint32_t ratio = ds4_layer_compress_ratio(layer);
+    const uint64_t raw_row_bytes = (uint64_t)raw_live * DS4_N_HEAD_DIM * sizeof(float);
+    uint64_t attn_comp_bytes = 0;
+    uint64_t attn_state_bytes_total = 0;
+    uint64_t index_comp_bytes = 0;
+    uint64_t index_state_bytes_total = 0;
+    if (ratio != 0) {
+        attn_comp_bytes = (uint64_t)n_comp[layer] * DS4_N_HEAD_DIM * sizeof(float);
+        attn_state_bytes_total = 2ull * layer_attn_state_bytes(ratio);
+        if (ratio == 4u) {
+            index_comp_bytes = (uint64_t)n_index_comp[layer] * DS4_N_INDEXER_HEAD_DIM * sizeof(float);
+            index_state_bytes_total = 2ull * layer_index_state_bytes(ratio);
+        }
+    }
+    fprintf(fp,
+            "    {\"layer\": %u, \"ratio\": %u, \"n_comp\": %u, "
+            "\"n_index_comp\": %u, \"raw_first_phys\": %u, "
+            "\"raw_last_phys\": %u, \"raw_row_bytes\": %" PRIu64
+            ", \"attn_compressed_row_bytes\": %" PRIu64
+            ", \"attn_state_bytes\": %" PRIu64
+            ", \"indexer_compressed_row_bytes\": %" PRIu64
+            ", \"indexer_state_bytes\": %" PRIu64 "}",
+            (unsigned)layer,
+            (unsigned)ratio,
+            (unsigned)n_comp[layer],
+            (unsigned)n_index_comp[layer],
+            (unsigned)raw_first_phys,
+            (unsigned)raw_last_phys,
+            raw_row_bytes,
+            attn_comp_bytes,
+            attn_state_bytes_total,
+            index_comp_bytes,
+            index_state_bytes_total);
+}
+
+static void graph_payload_emit_case(FILE *fp,
+                                    bool *first,
+                                    const graph_payload_plan_case *c) {
+    metadata_comma(fp, first);
+    const uint32_t prefill_cap = graph_payload_default_prefill_cap(c->ctx_size);
+    const uint32_t raw_window = graph_payload_raw_window(c->ctx_size);
+    const uint32_t raw_cap = graph_payload_raw_cap(c->ctx_size, prefill_cap);
+    const uint32_t comp_cap = graph_payload_comp_cap(c->ctx_size);
+    const uint32_t raw_live = c->token_count < raw_window ? c->token_count : raw_window;
+    const uint32_t raw_first_pos = c->token_count - raw_live;
+    const uint32_t raw_last_pos = c->token_count - 1u;
+    const uint32_t raw_first_phys = raw_first_pos % raw_cap;
+    const uint32_t raw_last_phys = raw_last_pos % raw_cap;
+    uint32_t n_comp[DS4_N_LAYER];
+    uint32_t n_index_comp[DS4_N_LAYER];
+    graph_payload_counts(c->token_count, n_comp, n_index_comp);
+
+    uint32_t header[DS4_SESSION_PAYLOAD_U32_FIELDS] = {
+        DS4_SESSION_PAYLOAD_MAGIC,
+        DS4_SESSION_PAYLOAD_VERSION,
+        c->ctx_size,
+        prefill_cap,
+        raw_cap,
+        raw_window,
+        comp_cap,
+        c->token_count,
+        DS4_N_LAYER,
+        DS4_N_HEAD_DIM,
+        DS4_N_INDEXER_HEAD_DIM,
+        DS4_N_VOCAB,
+        raw_live,
+    };
+    payload_shape_sections sections;
+    payload_shape_sections_compute(header, n_comp, n_index_comp, &sections);
+
+    fprintf(fp,
+            "    {\"name\": ");
+    json_cstr_write(fp, c->name);
+    fprintf(fp,
+            ", \"ctx_size\": %u, \"token_count\": %u, "
+            "\"prefill_cap\": %u, \"raw_cap\": %u, \"raw_window\": %u, "
+            "\"comp_cap\": %u, \"raw_live_rows\": %u, "
+            "\"raw_first_pos\": %u, \"raw_last_pos\": %u, "
+            "\"raw_first_phys\": %u, \"raw_last_phys\": %u,\n"
+            "     \"section_bytes\": ",
+            (unsigned)c->ctx_size,
+            (unsigned)c->token_count,
+            (unsigned)prefill_cap,
+            (unsigned)raw_cap,
+            (unsigned)raw_window,
+            (unsigned)comp_cap,
+            (unsigned)raw_live,
+            (unsigned)raw_first_pos,
+            (unsigned)raw_last_pos,
+            (unsigned)raw_first_phys,
+            (unsigned)raw_last_phys);
+    graph_payload_emit_section_bytes(fp, &sections);
+    fprintf(fp,
+            ",\n     \"payload_bytes\": %" PRIu64
+            ", \"ratio4_rows\": %u, \"ratio128_rows\": %u,\n"
+            "     \"layer_samples\": [\n",
+            payload_shape_sections_total(&sections),
+            (unsigned)graph_payload_compressed_rows(c->token_count, 4u),
+            (unsigned)graph_payload_compressed_rows(c->token_count, 128u));
+    bool first_sample = true;
+    graph_payload_emit_layer_sample(fp, &first_sample, 0, raw_live, raw_first_phys, raw_last_phys, n_comp, n_index_comp);
+    graph_payload_emit_layer_sample(fp, &first_sample, 2, raw_live, raw_first_phys, raw_last_phys, n_comp, n_index_comp);
+    graph_payload_emit_layer_sample(fp, &first_sample, 3, raw_live, raw_first_phys, raw_last_phys, n_comp, n_index_comp);
+    graph_payload_emit_layer_sample(fp, &first_sample, 42, raw_live, raw_first_phys, raw_last_phys, n_comp, n_index_comp);
+    fputs("\n     ]}", fp);
+}
+
+int ds4_dump_graph_session_payload_plan_json(FILE *fp) {
+    if (!fp) fp = stdout;
+    static const graph_payload_plan_case cases[] = {
+        {"short_checkpoint_tokens3", 32768u, 3u},
+        {"continued_frontier_tokens924", 32768u, 924u},
+        {"prefill_cap_cross_tokens2052", 32768u, 2052u},
+        {"raw_ring_wrap_tokens2305", 32768u, 2305u},
+        {"near_context_tokens32767", 32768u, 32767u},
+    };
+
+    fputs("{\n", fp);
+    fputs("  \"schema\": \"ds4.graph_session_payload_plan_oracle.v1\",\n", fp);
+    fputs("  \"source\": \"current-c-session-payload-plan-no-model\",\n", fp);
+    fputs("  \"scope\": \"graph-session-payload-layout\",\n", fp);
+    fputs("  \"env_policy\": \"default graph caps; env overrides are out of scope\",\n", fp);
+    fprintf(fp,
+            "  \"constants\": {\"magic_u32\": %u, \"version\": %u, "
+            "\"u32_fields\": %u, \"header_bytes\": %u, "
+            "\"io_chunk_bytes\": %u, \"n_layer\": %u, \"n_head_dim\": %u, "
+            "\"n_indexer_head_dim\": %u, \"n_vocab\": %u, \"n_swa\": %u},\n",
+            (unsigned)DS4_SESSION_PAYLOAD_MAGIC,
+            (unsigned)DS4_SESSION_PAYLOAD_VERSION,
+            (unsigned)DS4_SESSION_PAYLOAD_U32_FIELDS,
+            (unsigned)(DS4_SESSION_PAYLOAD_U32_FIELDS * sizeof(uint32_t)),
+            (unsigned)DS4_SESSION_IO_CHUNK,
+            (unsigned)DS4_N_LAYER,
+            (unsigned)DS4_N_HEAD_DIM,
+            (unsigned)DS4_N_INDEXER_HEAD_DIM,
+            (unsigned)DS4_N_VOCAB,
+            (unsigned)DS4_N_SWA);
+    fputs("  \"body_order\": [\"header\", \"checkpoint_tokens\", \"last_logits\", "
+          "\"attn_compressed_row_counts\", \"indexer_compressed_row_counts\", "
+          "\"per_layer_raw_rows_logical_order\", \"per_layer_attn_compressed_rows\", "
+          "\"per_layer_attn_state_kv\", \"per_layer_attn_state_score\", "
+          "\"per_layer_indexer_compressed_rows\", \"per_layer_index_state_kv\", "
+          "\"per_layer_index_state_score\"],\n", fp);
+    fputs("  \"cases\": [\n", fp);
+    bool first = true;
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        graph_payload_emit_case(fp, &first, &cases[i]);
+    }
+    fputs("\n  ]\n", fp);
+    fputc('}', fp);
+    return ferror(fp) ? 1 : 0;
+}
+
 void ds4_engine_dump_tokens(ds4_engine *e, const ds4_tokens *tokens) {
     dump_tokens(&e->vocab, tokens);
 }

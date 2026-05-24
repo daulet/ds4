@@ -3,9 +3,9 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M10.7 Rust Graph Session State And Payload Parity
-- Last validated source before the active item: M10.6d Rust Resumed-Suffix
-  Prefill Execution.
+- Active item: M10.7b Rust Graph Session Payload Reader And Writer
+- Last validated source before the active item: M10.7a Rust Graph Session Payload
+  Layout Plan.
 - Earlier M10.5c4d2 Rust Ratio-Boundary
   Continuation Coverage.
 - Earlier M10.5c4c2b2b2b2b2b2b2b2b2b validation remains recorded below.
@@ -28,6 +28,33 @@
 
 ## Last Evidence
 
+- M10.7 splits broad graph session state/payload parity into M10.7a layout
+  planning, M10.7b payload reader/writer, M10.7c disk KV restore smoke, and
+  M10.7d continued-frontier save/restore policy so each slice has a concrete
+  oracle, fixture, comparator, and acceptance boundary.
+- M10.7a adds `ds4-session-payload-dump --graph-plan`, the C
+  `ds4_dump_graph_session_payload_plan_json` oracle, Rust
+  `graph_payload_plan`, and `ds4-session-payload-dump-rs --graph-plan`. The
+  no-model fixture covers `ctx=32768` graph payload plans for
+  `short_checkpoint_tokens3`, `continued_frontier_tokens924`,
+  `prefill_cap_cross_tokens2052`, `raw_ring_wrap_tokens2305`, and
+  `near_context_tokens32767`.
+- M10.7a adds `ds4-parity/compare_graph_session_payload_plan.py`, which
+  compares the C and Rust graph payload layout plans across schema/scope,
+  constants, body order, prefill/raw/comp caps, raw logical and physical row
+  mapping, ratio-4 and ratio-128 compressed/indexed row counts, section byte
+  totals, sampled layer bytes, and final payload bytes. The comparator passed
+  901 checks and negative tests rejected 7 layout mutations.
+- M10.7a validation passed `arch -arm64 make ds4-session-payload-dump`, C and
+  Rust `--graph-plan` JSON parse checks, `python3
+  ds4-parity/compare_graph_session_payload_plan.py`, `python3
+  ds4-parity/compare_graph_session_payload_plan.py --negative-test`, `cargo
+  test -p ds4-gguf session_payload`, `python3 -m py_compile
+  ds4-parity/compare_graph_session_payload_plan.py
+  ds4-parity/run_parity_report.py`, `git diff --check`, `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 48 passed, 36
+  skipped, and 0 failed, `cargo test --workspace`, `cargo fmt --all --
+  --check`, and non-interactive Claude review with `NO BLOCKERS`.
 - M10.6a splits M10.6 into `M10.6a` scheduling-plan parity, `M10.6b`
   short whole-prefill execution, `M10.6c` cold chunked-prefill execution, and
   `M10.6d` resumed-suffix execution so each slice has a concrete oracle,

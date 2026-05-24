@@ -5031,31 +5031,112 @@
   `ds4-parity/run_parity_report.py`, `ds4-parity/README.md`,
   `.memory/status.md`.
 
-### M10.7: Rust Graph Session State And Payload Parity
+### M10.7a: Rust Graph Session Payload Layout Plan
+
+- Status: done
+- Goal: make Rust own the graph-session payload byte/row/count plan before
+  writing or restoring live tensors.
+- Oracle: current C graph session payload sizing and row-order rules in
+  `ds4_session_payload_bytes`, `ds4_session_save_payload`, and
+  `ds4_session_load_payload`, exposed through a no-model graph layout dump.
+- Fixture: default `ctx=32768` graph payload plans for
+  `short_checkpoint_tokens3`, `continued_frontier_tokens924`,
+  `prefill_cap_cross_tokens2052`, `raw_ring_wrap_tokens2305`, and
+  `near_context_tokens32767`.
+- Comparator: C-vs-Rust graph payload plan comparator covering header fields,
+  prefill/raw/comp caps, raw live rows, logical raw row order, physical raw
+  ring rows, ratio-4 and ratio-128 compressed/indexed row counts, per-section
+  byte totals, and final payload bytes.
+- Acceptance: Rust emits the same graph payload layout plan as C for every
+  fixture without loading a model or claiming tensor restore support.
+- Drift policy: layout fields, row counts, ring mapping, section byte totals,
+  and payload bytes are exact; graph env overrides remain out of scope for this
+  default-layout slice.
+- Review gate: ask Claude to review payload byte accounting and raw-ring
+  ordering before commit.
+- Validation passed: `arch -arm64 make ds4-session-payload-dump`; C and Rust
+  `--graph-plan` JSON parse checks; `python3
+  ds4-parity/compare_graph_session_payload_plan.py` passed 901 checks; `python3
+  ds4-parity/compare_graph_session_payload_plan.py --negative-test` passed 901
+  checks and rejected 7 mutations; `cargo test -p ds4-gguf session_payload`;
+  `python3 -m py_compile ds4-parity/compare_graph_session_payload_plan.py
+  ds4-parity/run_parity_report.py`; `git diff --check`; `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` reported 48 passed, 36
+  skipped, and 0 failed; `cargo test --workspace`; `cargo fmt --all --
+  --check`; and non-interactive Claude review with `NO BLOCKERS`.
+- Owner path: `ds4.c`, `ds4.h`, `ds4_session_payload_dump.c`,
+  `rust/ds4-gguf/src/session_payload.rs`,
+  `rust/ds4-gguf/src/bin/ds4-session-payload-dump-rs.rs`, `ds4-parity/`,
+  `.memory/status.md`.
+
+### M10.7b: Rust Graph Session Payload Reader And Writer
 
 - Status: pending
-- Goal: make Rust own graph session state needed by cache snapshots, disk KV
-  payloads, restore, and continued-frontier decisions.
-- Oracle: C session payload save/load paths, M7 session-payload fixtures, M0.5
-  KV artifacts, M9.8 runtime cache behavior, and graph state counters from
-  M10.5/M10.6.
-- Fixture: short and long checkpoints, raw-ring wrap cases, ratio-4 and
-  ratio-128 compressed states, restored disk KVC payloads, and continued-store
-  frontiers.
-- Comparator: session payload byte/field comparator, disk-KV replay comparator,
-  Rust-vs-C cache counter checks, and B300 restore smoke.
-- Acceptance: Rust graph state can save, restore, and continue sessions with
-  C-compatible payload bytes and M9.8 cache accounting while Rust owns decode
-  and prefill scheduling.
-- Drift policy: payload layout, counter fields, cache source, cached token
-  counts, and store/restore decisions are exact; raw payload hashes remain
-  normalized where existing policy requires.
-- Review gate: ask Claude to review payload compatibility and cache/frontier
-  invariants.
-- Validation needed: session payload comparator, KV replay comparator, B300
-  restore smoke, `cargo test --workspace`, `cargo fmt --all -- --check`,
-  `git diff --check`, and non-interactive Claude review with no blockers.
-- Owner path: Rust graph session state, session payload/KV comparators,
+- Goal: add Rust-owned graph session payload header/body parsing and write-plan
+  helpers for live graph state snapshots.
+- Oracle: M10.7a layout plan, M7.5 session payload structural fixtures, and
+  current C load rejection categories.
+- Fixture: synthetic graph payload bodies with valid, truncated, trailing,
+  invalid compressed count, invalid index count, raw-ring mismatch, and
+  context/layout mismatch cases.
+- Comparator: Rust reader/writer round-trip plus C rejection-code comparator
+  for the same payload bytes.
+- Acceptance: Rust validates and serializes C-compatible graph payload bytes
+  without restoring GPU tensors yet.
+- Drift policy: payload bytes, section order, error classes, and count bounds
+  are exact.
+- Review gate: ask Claude to review binary bounds checks and error mapping.
+- Validation needed: payload reader/writer tests, comparator and negative
+  tests, `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff
+  --check`, and non-interactive Claude review with no blockers.
+- Owner path: Rust graph session payload reader/writer, C rejection probe,
+  `ds4-parity/`, `.memory/status.md`.
+
+### M10.7c: Rust Disk KV Payload Restore Smoke
+
+- Status: pending
+- Goal: restore a C-written disk KVC payload into Rust graph session state and
+  prove next-token behavior matches current C.
+- Oracle: current C M7.8 restore oracle and M0.5 disk KVC artifacts on B300.
+- Fixture: seed disk payload restore, continuation disk payload restore, and
+  in-memory snapshot restore on `/workspace/ds4/ds4flash.gguf`.
+- Comparator: B300 Rust-vs-current-C restore comparator over payload hashes,
+  checkpoint tokens, selected token, top-logprob order, cache source, and graph
+  counters.
+- Acceptance: Rust-restored sessions produce the same next-token state as the
+  C restore oracle for the committed fixtures.
+- Drift policy: payload body hashes, restored checkpoint length, selected
+  token, top-logprob order, cache source, and graph counters are exact; raw
+  payload bodies remain hash-only unless a later item explicitly commits them.
+- Review gate: ask Claude to review restore invariants and B300 evidence.
+- Validation needed: B300 restore smoke, session payload comparator, KV replay
+  comparator, `cargo test --workspace`, `cargo fmt --all -- --check`, `git
+  diff --check`, and non-interactive Claude review with no blockers.
+- Owner path: Rust graph restore runtime, B300 restore comparator,
+  `.memory/status.md`.
+
+### M10.7d: Rust Continued-Frontier Save And Restore Policy
+
+- Status: pending
+- Goal: port continued-frontier cache accounting around save suppression,
+  store targets, and restore decisions into the Rust graph runtime.
+- Oracle: M9.8 runtime KV replay artifacts, M7.7 KV replay comparator, and
+  current C continued-store policy.
+- Fixture: fresh miss, exact-prefix disk restore, continuation restore, already
+  stored frontier, suppressed frontier, and restored frontier re-enable cases.
+- Comparator: Rust-vs-C cache source, cached/write token counts, continued
+  store targets, suppression state, restored frontier state, and KVC reason
+  fields.
+- Acceptance: Rust makes the same store/restore decisions as current C while
+  using Rust-owned graph session state.
+- Drift policy: cache source, cached tokens, write tokens, reason fields,
+  continued targets, and suppression/restore transitions are exact.
+- Review gate: ask Claude to review cache/frontier invariants.
+- Validation needed: KV replay comparator, targeted Rust runtime tests, B300
+  restore smoke when graph restore changes, `cargo test --workspace`, `cargo
+  fmt --all -- --check`, `git diff --check`, and non-interactive Claude review
+  with no blockers.
+- Owner path: Rust runtime cache/frontier policy, KV replay comparator,
   `.memory/status.md`.
 
 ### M10.8: Rust MTP Draft And Verifier Orchestration

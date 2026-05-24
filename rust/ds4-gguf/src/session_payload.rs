@@ -212,6 +212,145 @@ pub fn default_header(ctx_size: u32, tokens: u32) -> PayloadHeader {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GraphPayloadFixture {
+    pub name: &'static str,
+    pub ctx_size: u32,
+    pub token_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphPayloadPlan {
+    pub fixture: GraphPayloadFixture,
+    pub header: PayloadHeader,
+    pub sections: PayloadSections,
+    pub payload_bytes: u64,
+    pub raw_first_pos: u32,
+    pub raw_last_pos: u32,
+    pub raw_first_phys: u32,
+    pub raw_last_phys: u32,
+    pub ratio4_rows: u32,
+    pub ratio128_rows: u32,
+    pub n_comp: [u32; N_LAYER],
+    pub n_index_comp: [u32; N_LAYER],
+}
+
+pub const GRAPH_PAYLOAD_FIXTURES: &[GraphPayloadFixture] = &[
+    GraphPayloadFixture {
+        name: "short_checkpoint_tokens3",
+        ctx_size: 32_768,
+        token_count: 3,
+    },
+    GraphPayloadFixture {
+        name: "continued_frontier_tokens924",
+        ctx_size: 32_768,
+        token_count: 924,
+    },
+    GraphPayloadFixture {
+        name: "prefill_cap_cross_tokens2052",
+        ctx_size: 32_768,
+        token_count: 2_052,
+    },
+    GraphPayloadFixture {
+        name: "raw_ring_wrap_tokens2305",
+        ctx_size: 32_768,
+        token_count: 2_305,
+    },
+    GraphPayloadFixture {
+        name: "near_context_tokens32767",
+        ctx_size: 32_768,
+        token_count: 32_767,
+    },
+];
+
+pub fn graph_payload_plan(fixture: GraphPayloadFixture) -> GraphPayloadPlan {
+    assert!(
+        fixture.token_count > 0,
+        "graph payload fixtures need tokens"
+    );
+    let prefill_cap = default_prefill_cap(fixture.ctx_size);
+    let raw_window = default_raw_cap(fixture.ctx_size);
+    let raw_cap = graph_raw_cap(fixture.ctx_size, prefill_cap);
+    let comp_cap = cpu_comp_cap(fixture.ctx_size);
+    let raw_live_rows = fixture.token_count.min(raw_window);
+    let raw_first_pos = fixture.token_count - raw_live_rows;
+    let raw_last_pos = fixture.token_count - 1;
+    let raw_first_phys = raw_first_pos % raw_cap;
+    let raw_last_phys = raw_last_pos % raw_cap;
+    let mut n_comp = [0_u32; N_LAYER];
+    let mut n_index_comp = [0_u32; N_LAYER];
+    for layer in 0..N_LAYER {
+        let ratio = compress_ratio(layer);
+        n_comp[layer] = graph_compressed_rows(fixture.token_count, ratio);
+        if ratio == 4 {
+            n_index_comp[layer] = n_comp[layer];
+        }
+    }
+    let header = PayloadHeader {
+        magic: MAGIC,
+        version: VERSION,
+        ctx_size: fixture.ctx_size,
+        prefill_cap,
+        raw_cap,
+        raw_window,
+        comp_cap,
+        token_count: fixture.token_count,
+        n_layer: N_LAYER as u32,
+        n_head_dim: N_HEAD_DIM,
+        n_indexer_head_dim: N_INDEXER_HEAD_DIM,
+        n_vocab: N_VOCAB,
+        raw_live_rows,
+    };
+    let sections = sections(&header, &n_comp, &n_index_comp);
+    GraphPayloadPlan {
+        fixture,
+        header,
+        sections,
+        payload_bytes: sections.total(),
+        raw_first_pos,
+        raw_last_pos,
+        raw_first_phys,
+        raw_last_phys,
+        ratio4_rows: graph_compressed_rows(fixture.token_count, 4),
+        ratio128_rows: graph_compressed_rows(fixture.token_count, 128),
+        n_comp,
+        n_index_comp,
+    }
+}
+
+pub fn graph_raw_cap(ctx_size: u32, prefill_cap: u32) -> u32 {
+    let raw_window = default_raw_cap(ctx_size);
+    let mut wanted = u64::from(raw_window) + u64::from(prefill_cap);
+    if wanted > u64::from(ctx_size) {
+        wanted = u64::from(ctx_size);
+    }
+    if wanted == 0 {
+        wanted = 1;
+    }
+    wanted = align_up(wanted, 256);
+    if wanted > 8192 {
+        wanted = 8192;
+    }
+    let raw_cap = wanted as u32;
+    raw_cap.max(raw_window)
+}
+
+pub fn graph_compressed_rows(token_count: u32, ratio: u32) -> u32 {
+    if ratio == 0 {
+        0
+    } else {
+        token_count / ratio
+    }
+}
+
+fn align_up(value: u64, align: u64) -> u64 {
+    if align == 0 {
+        value
+    } else {
+        value.div_ceil(align) * align
+    }
+}
+
 pub fn read_header(bytes: &[u8]) -> Result<PayloadHeader, PayloadError> {
     if bytes.len() < HEADER_BYTES {
         return Err(PayloadError::TruncatedPayload);
@@ -515,5 +654,23 @@ mod tests {
             validate_payload_cpu(&bytes, default_cpu_runtime(16)).unwrap_err(),
             PayloadError::TrailingPayloadBytes
         );
+    }
+
+    #[test]
+    fn graph_payload_plan_covers_raw_wrap_and_near_context() {
+        let wrap = graph_payload_plan(GRAPH_PAYLOAD_FIXTURES[3]);
+        assert_eq!(wrap.header.raw_cap, 2304);
+        assert_eq!(wrap.header.raw_live_rows, 128);
+        assert_eq!(wrap.raw_first_phys, 2177);
+        assert_eq!(wrap.raw_last_phys, 0);
+        assert_eq!(wrap.ratio4_rows, 576);
+        assert_eq!(wrap.ratio128_rows, 18);
+
+        let near = graph_payload_plan(GRAPH_PAYLOAD_FIXTURES[4]);
+        assert_eq!(near.header.token_count, 32_767);
+        assert_eq!(near.ratio4_rows, 8191);
+        assert_eq!(near.ratio128_rows, 255);
+        assert_eq!(near.n_index_comp[42], near.ratio4_rows);
+        assert_eq!(near.n_comp[3], near.ratio128_rows);
     }
 }

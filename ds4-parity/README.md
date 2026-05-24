@@ -877,6 +877,28 @@ chunked-prefill route decisions, resume threshold handling, extension chunk
 boundaries, decode-token counts, raw ring rows, compressed counters, and exact
 output digests/samples.
 
+Compare the M10.7a Rust graph-session payload layout plan against the current-C
+no-model graph payload oracle:
+
+```sh
+python3 ds4-parity/compare_graph_session_payload_plan.py
+python3 ds4-parity/compare_graph_session_payload_plan.py --negative-test
+arch -arm64 make ds4-session-payload-dump
+./ds4-session-payload-dump --graph-plan \
+  > /tmp/ds4-m107a-graph-payload-c.json
+cargo run -p ds4-gguf --bin ds4-session-payload-dump-rs --quiet -- \
+  --graph-plan \
+  > /tmp/ds4-m107a-graph-payload-rust.json
+python3 ds4-parity/compare_graph_session_payload_plan.py \
+  --oracle /tmp/ds4-m107a-graph-payload-c.json \
+  --candidate /tmp/ds4-m107a-graph-payload-rust.json
+```
+
+The comparator checks the default graph payload header plan, prefill/raw/comp
+caps, logical and physical raw ring order, ratio-4 and ratio-128 row counts,
+per-section byte totals, sampled per-layer row/state bytes, and final payload
+size without loading a model or restoring tensors.
+
 ## Sampling And Logprob Parity
 
 Run the local Milestone 6 report:
