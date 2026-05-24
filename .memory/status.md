@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M12.5 Runtime Backend Route Gate
-- Last validated source before the active item: M12.4 First Backend
-  Replacement Slice.
+- Active item: M12.6 Backend Replacement Closure And Removal Decision
+- Last validated source before the active item: M12.5 Runtime Backend Route
+  Gate.
+- Earlier M12.5 Runtime Backend Route Gate.
 - Earlier M12.4 First Backend Replacement Slice.
 - Earlier M12.3 Rust Backend Facade Parity Harness.
 - Earlier M12.2 Operation Tensor Fixture Capture.
@@ -95,6 +96,26 @@
 
 ## Last Evidence
 
+- M12.5 adds the Rust-owned runtime backend route gate descriptor
+  `rust/ds4-gpu/src/backend_route_gate.rs`, the descriptor emitter
+  `rust/ds4-gpu/src/bin/ds4-backend-route-gate.rs`,
+  `ds4-parity/baselines/backend/m12.5/runtime-route-gate.json`, and
+  `ds4-parity/check_backend_runtime_route_gate.py --negative-test`. The
+  explicit opt-in route is `replacement-slice` through
+  `--runtime-backend-route`; the default route remains `current-backend` and
+  does not activate the replacement slice. The gate selects the M12.4
+  `embedding_and_indexer` / `ds4_gpu_embed_token_hc_tensor` slice for
+  `cuda-b300`, rejects CPU/Metal and runtime-default-route selectors, and keeps
+  general backend replacement plus kernel replacement claims false. The checker
+  ties route validation to the existing M10.9 B300 graph-route official-vector,
+  long-context, tool/server, and same-session benchmark artifacts. Validation
+  passed Python syntax, JSON formatting, the M12.5 checker with 135 checks and
+  negative tests, the M12.1, M12.2, M12.3, M12.4, and runtime graph closure
+  checkers with negative tests, `cargo fmt --all -- --check`, `cargo test -p
+  ds4-gpu backend_route_gate`, `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` with 86 passed, 50
+  skipped, 0 failed. M12.6
+  Backend Replacement Closure And Removal Decision is active.
 - M12.4 adds the Rust-owned slice descriptor
   `rust/ds4-gpu/src/replacement_slice.rs`, the descriptor emitter
   `rust/ds4-gpu/src/bin/ds4-backend-replacement-slice.rs`,

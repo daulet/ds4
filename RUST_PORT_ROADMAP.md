@@ -6189,7 +6189,7 @@ kernel execution, runtime route selection, and final removal decisions:
 
 #### M12.5: Runtime Backend Route Gate
 
-- Status: active.
+- Status: complete.
 - Goal: expose the replacement slice through an explicit runtime route and
   validate end-to-end behavior without replacing the default backend.
 - Oracle: current default route plus M10.9 official-vector, long-context,
@@ -6205,10 +6205,32 @@ kernel execution, runtime route selection, and final removal decisions:
 - Drift policy: route behavior drift requires preserving current default-route
   evidence and recording whether the change is route plumbing, numeric kernel
   drift, or benchmark variance.
+- Evidence:
+  - Added Rust-owned runtime backend route gate descriptor
+    `rust/ds4-gpu/src/backend_route_gate.rs`.
+  - Added descriptor emitter
+    `rust/ds4-gpu/src/bin/ds4-backend-route-gate.rs`.
+  - Added `ds4-parity/baselines/backend/m12.5/runtime-route-gate.json`.
+  - Added `ds4-parity/check_backend_runtime_route_gate.py --negative-test`.
+  - The explicit opt-in route is `replacement-slice` through
+    `--runtime-backend-route`; the default route remains `current-backend` and
+    does not activate the replacement slice.
+  - The gate selects the M12.4 `embedding_and_indexer` /
+    `ds4_gpu_embed_token_hc_tensor` slice for `cuda-b300`, rejects CPU/Metal
+    and runtime-default-route selectors, and keeps general backend replacement
+    plus kernel replacement claims false.
+  - The checker ties route validation to the existing M10.9 B300 graph-route
+    official-vector, long-context, tool/server, and same-session benchmark
+    artifacts.
+  - `python3 ds4-parity/check_backend_runtime_route_gate.py --negative-test`
+    passed with 135 checks.
+  - `cargo test -p ds4-gpu backend_route_gate`, `cargo fmt --all -- --check`,
+    `git diff --check`, and `python3 ds4-parity/run_parity_report.py
+    --skip-local-oracles` passed with 86 passed, 50 skipped, 0 failed.
 
 #### M12.6: Backend Replacement Closure And Removal Decision
 
-- Status: planned.
+- Status: active.
 - Goal: decide whether any C/CUDA/Metal backend code can be removed, retained
   as a sidecar, or kept as an oracle after replacement routes pass.
 - Oracle: M12.1 through M12.5 artifacts plus current removal criteria.

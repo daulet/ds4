@@ -452,6 +452,20 @@ fail closed, and keeps runtime routing, general backend replacement, and kernel
 replacement claims false. The current M12.4 fixture passes with 85 checker
 assertions.
 
+Validate the M12.5 Backend runtime route gate:
+
+```sh
+python3 ds4-parity/check_backend_runtime_route_gate.py --negative-test
+```
+
+The M12.5 checker validates
+`baselines/backend/m12.5/runtime-route-gate.json` against the M12.4 replacement
+slice and the M10.9 B300 runtime graph evidence. It also runs the Rust
+`ds4-backend-route-gate` emitter, checks the opt-in replacement route for the
+`cuda-b300` backend, verifies default-route and unsupported-route fail-closed
+behavior, and preserves the no-general-backend-replacement/no-kernel-replacement
+claim boundary. The current M12.5 fixture passes with 135 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

@@ -245,8 +245,15 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check("M12.4: First Backend Replacement Slice" in texts["roadmap"], "roadmap M12.4 missing")
     report.check("- Status: complete." in texts["roadmap"], "roadmap complete status missing")
     report.check("#### M12.5: Runtime Backend Route Gate" in texts["roadmap"], "roadmap M12.5 missing")
-    report.check("- Status: active." in texts["roadmap"], "roadmap M12.5 active status missing")
-    report.check("Active item: M12.5 Runtime Backend Route Gate" in texts["status"], "status active item missing")
+    report.check(
+        "#### M12.6: Backend Replacement Closure And Removal Decision" in texts["roadmap"],
+        "roadmap M12.6 missing",
+    )
+    report.check(
+        "Active item: M12.5 Runtime Backend Route Gate" in texts["status"]
+        or "Active item: M12.6 Backend Replacement Closure And Removal Decision" in texts["status"],
+        "status active item missing",
+    )
     report.check("Earlier M12.4 First Backend Replacement Slice" in texts["status"], "status previous item missing")
     report.check("#### M12.4: First Backend Replacement Slice" in texts["todo"], "TODO M12.4 missing")
     report.check("#### M12.5: Runtime Backend Route Gate" in texts["todo"], "TODO M12.5 missing")

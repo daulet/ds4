@@ -297,7 +297,8 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
         "Active item: M12.2 Operation Tensor Fixture Capture" in texts["status"]
         or "Active item: M12.3 Rust Backend Facade Parity Harness" in texts["status"]
         or "Active item: M12.4 First Backend Replacement Slice" in texts["status"]
-        or "Active item: M12.5 Runtime Backend Route Gate" in texts["status"],
+        or "Active item: M12.5 Runtime Backend Route Gate" in texts["status"]
+        or "Active item: M12.6 Backend Replacement Closure And Removal Decision" in texts["status"],
         "status active item must advance to M12.2 or later",
     )
 
