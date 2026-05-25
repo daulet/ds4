@@ -300,7 +300,8 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
         or "Active item: M12.5 Runtime Backend Route Gate" in texts["status"]
         or "Active item: M12.6 Backend Replacement Closure And Removal Decision" in texts["status"]
         or "Active item: post-M12 roadmap decision" in texts["status"]
-        or "Active item: M13" in texts["status"],
+        or "Active item: M13" in texts["status"]
+        or "Active item: post-M13 roadmap decision" in texts["status"],
         "status active item must advance to M12.2 or later",
     )
 

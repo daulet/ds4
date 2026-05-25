@@ -486,6 +486,7 @@ def validate_static_wiring(report: Report) -> None:
         or "Active item: M12.6 Backend Replacement Closure And Removal Decision" in texts["status"]
         or "Active item: post-M12 roadmap decision" in texts["status"]
         or "Active item: M13" in texts["status"]
+        or "Active item: post-M13 roadmap decision" in texts["status"]
     )
     report.check(status_has_m10_9a, "status M10.9a missing")
     report.check(status_has_expected_active, "status active M10.9a/M10.9b/M10.9c/M10.9d/M10.9e/M10.9f/M11 missing")

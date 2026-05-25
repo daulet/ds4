@@ -558,6 +558,22 @@ out of the repository and keeps runtime routing, default-route replacement,
 general backend replacement, and kernel replacement claims false. The committed
 M13.4 fixture passes with 182 checker assertions.
 
+Validate the M13.5 Expanded embedding/indexer route closure:
+
+```sh
+python3 ds4-parity/check_backend_expanded_route_closure.py --negative-test
+```
+
+The M13.5 checker validates
+`baselines/backend/m13.5/expanded-route-gate.json` and
+`baselines/backend/m13.5/expanded-route-closure.json` against the M13.1
+through M13.4 embedding/indexer artifacts plus the M10.9 B300 runtime graph
+evidence. It verifies the expanded route remains explicit opt-in, the default
+route remains `current-backend`, the first M12.4/M13.2/M13.3 operations are
+Rust replacement slices, and the M13.4 fixture-only operations remain
+current-backend sidecars with removals blocked. The committed M13.5 fixture
+passes with 279 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

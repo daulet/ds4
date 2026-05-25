@@ -279,7 +279,10 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check("M13.2: Batched Embedding Replacement Slice" in texts["roadmap"], "roadmap M13.2 missing")
     report.check("M13.3: Indexed Decode Selection Replacement Slice" in texts["roadmap"], "roadmap M13.3 missing")
     report.check("Earlier M13.2 Batched Embedding Replacement Slice" in texts["status"], "status M13.2 previous item missing")
-    report.check("Active item: M13" in texts["status"], "status M13 active item missing")
+    report.check(
+        "Active item: M13" in texts["status"] or "Active item: post-M13 roadmap decision" in texts["status"],
+        "status M13 active item missing",
+    )
     report.check("#### M13.2: Batched Embedding Replacement Slice" in texts["todo"], "TODO M13.2 missing")
     report.check("#### M13.3: Indexed Decode Selection Replacement Slice" in texts["todo"], "TODO M13.3 missing")
 

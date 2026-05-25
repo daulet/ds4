@@ -323,7 +323,10 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check("M13.4: Batch Indexer Fixture Gap Closure" in texts["roadmap"], "roadmap M13.4 missing")
     report.check("M13.5: Embedding/Indexer Route Gate And Closure" in texts["roadmap"], "roadmap M13.5 missing")
     report.check("Earlier M13.4 Batch Indexer Fixture Gap Closure" in texts["status"], "status M13.4 previous item missing")
-    report.check("Active item: M13.5 Embedding/Indexer Route Gate And Closure" in texts["status"], "status M13.5 active item missing")
+    report.check(
+        "Active item: M13" in texts["status"] or "Active item: post-M13 roadmap decision" in texts["status"],
+        "status M13 active item missing",
+    )
     report.check("#### M13.4: Batch Indexer Fixture Gap Closure" in texts["todo"], "TODO M13.4 missing")
     report.check("#### M13.5: Embedding/Indexer Route Gate And Closure" in texts["todo"], "TODO M13.5 missing")
 

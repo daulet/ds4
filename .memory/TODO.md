@@ -7094,15 +7094,37 @@
 
 #### M13.5: Embedding/Indexer Route Gate And Closure
 
-- Status: active.
+- Status: complete.
 - Goal: expose the expanded embedding/indexer route through an opt-in gate and
   record retained-sidecar closure.
 - Oracle: M13.1 through M13.4 artifacts plus M10.9 official-vector,
   long-context, tool/server, and benchmark gates.
-- Fixture: expanded route gate and closure matrix.
-- Comparator: expanded route closure checker with runtime gate evidence.
+- Fixture:
+  `ds4-parity/baselines/backend/m13.5/expanded-route-gate.json` and
+  `ds4-parity/baselines/backend/m13.5/expanded-route-closure.json`.
+- Comparator: `ds4-parity/check_backend_expanded_route_closure.py
+  --negative-test`.
 - Acceptance: expanded route stays opt-in, default route stays
   current-backend, and removal is rejected unless every operation in the family
   is covered.
 - Drift policy: route drift keeps all prior current-backend oracles until
   default-route parity is proven.
+- Evidence:
+  - Added the M13.5 expanded route gate and closure matrix for the full
+    embedding/indexer operation family.
+  - The closure matrix records `ds4_gpu_embed_token_hc_tensor`,
+    `ds4_gpu_embed_tokens_hc_tensor`, `ds4_gpu_indexer_score_one_tensor`, and
+    `ds4_gpu_indexer_topk_tensor` as opt-in Rust replacement slices.
+  - The closure matrix keeps `ds4_gpu_indexer_scores_prefill_tensor`,
+    `ds4_gpu_indexer_scores_decode_batch_tensor`, and
+    `ds4_gpu_dsv4_topk_mask_tensor` on retained current-backend sidecars.
+  - Default route activation, general backend replacement, kernel replacement,
+    and removals remain blocked until a post-M13 decision.
+  - Validation passed: `python3
+    ds4-parity/check_backend_expanded_route_closure.py --negative-test` (279
+    checks), `cargo test -p ds4-gpu backend_route_gate` (4 tests), `python3
+    ds4-parity/check_backend_runtime_route_gate.py --negative-test` (135
+    checks), `python3 ds4-parity/check_backend_batch_indexer_fixtures.py
+    --negative-test` (182 checks), and `python3
+    ds4-parity/run_parity_report.py --skip-local-oracles` (93 passed, 50
+    skipped, 0 failed).

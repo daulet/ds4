@@ -1,6 +1,6 @@
 use ds4_gpu::backend_route_gate::{
-    first_backend_runtime_route_gate, route_decision, RuntimeBackendRouteDecision,
-    RuntimeBackendRouteError, RuntimeBackendRouteGateSpec,
+    first_backend_runtime_route_gate, route_decision, runtime_route_gate_by_id,
+    RuntimeBackendRouteDecision, RuntimeBackendRouteError, RuntimeBackendRouteGateSpec,
 };
 use std::env;
 use std::io::{self, Write};
@@ -14,11 +14,17 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
-    let spec = first_backend_runtime_route_gate();
     let request = parse_request(&args)?;
+    let gate = request.gate();
+    let spec = match gate {
+        Some(gate) => {
+            runtime_route_gate_by_id(gate).ok_or_else(|| format!("unknown gate: {gate}"))?
+        }
+        None => first_backend_runtime_route_gate(),
+    };
     match request {
-        RouteRequest::Summary => print_summary(spec, None),
-        RouteRequest::Check { route, backend } => match route_decision(spec, route, backend) {
+        RouteRequest::Summary { .. } => print_summary(spec, None),
+        RouteRequest::Check { route, backend, .. } => match route_decision(spec, route, backend) {
             Ok(decision) => print_summary(spec, Some(decision)),
             Err(RuntimeBackendRouteError::UnsupportedRoute { requested }) => {
                 print_error(spec, "unsupported-route", "requested_route", requested)?;
@@ -33,19 +39,43 @@ fn run() -> Result<(), String> {
 }
 
 enum RouteRequest<'a> {
-    Summary,
-    Check { route: &'a str, backend: &'a str },
+    Summary {
+        gate: Option<&'a str>,
+    },
+    Check {
+        gate: Option<&'a str>,
+        route: &'a str,
+        backend: &'a str,
+    },
+}
+
+impl<'a> RouteRequest<'a> {
+    fn gate(&self) -> Option<&'a str> {
+        match self {
+            Self::Summary { gate } | Self::Check { gate, .. } => *gate,
+        }
+    }
 }
 
 fn parse_request(args: &[String]) -> Result<RouteRequest<'_>, String> {
     if args.is_empty() {
-        return Ok(RouteRequest::Summary);
+        return Ok(RouteRequest::Summary { gate: None });
     }
+    let mut gate = None;
     let mut route = None;
     let mut backend = "cuda-b300";
+    let mut saw_backend = false;
     let mut index = 0usize;
     while index < args.len() {
         match args[index].as_str() {
+            "--gate" => {
+                index += 1;
+                gate = Some(
+                    args.get(index)
+                        .ok_or_else(|| "missing gate after --gate".to_string())?
+                        .as_str(),
+                );
+            }
             "--route" | "--runtime-backend-route" => {
                 index += 1;
                 route = Some(
@@ -56,6 +86,7 @@ fn parse_request(args: &[String]) -> Result<RouteRequest<'_>, String> {
             }
             "--backend" => {
                 index += 1;
+                saw_backend = true;
                 backend = args
                     .get(index)
                     .ok_or_else(|| "missing backend after --backend".to_string())?
@@ -63,14 +94,22 @@ fn parse_request(args: &[String]) -> Result<RouteRequest<'_>, String> {
             }
             _ => {
                 return Err(
-                    "usage: ds4-backend-route-gate [--route NAME] [--backend NAME]".to_string(),
+                    "usage: ds4-backend-route-gate [--gate ID] [--route NAME] [--backend NAME]"
+                        .to_string(),
                 );
             }
         }
         index += 1;
     }
-    let route = route.ok_or_else(|| "missing --route NAME".to_string())?;
-    Ok(RouteRequest::Check { route, backend })
+    match route {
+        Some(route) => Ok(RouteRequest::Check {
+            gate,
+            route,
+            backend,
+        }),
+        None if gate.is_some() && !saw_backend => Ok(RouteRequest::Summary { gate }),
+        None => Err("missing --route NAME".to_string()),
+    }
 }
 
 fn print_summary(

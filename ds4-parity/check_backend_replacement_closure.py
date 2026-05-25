@@ -33,6 +33,7 @@ STATUS = ROOT / ".memory/status.md"
 ACCEPTED_ACTIVE_ITEMS = [
     "Active item: post-M12 roadmap decision",
     "Active item: M13",
+    "Active item: post-M13 roadmap decision",
 ]
 EXPECTED_FAMILIES = [
     "backend_lifecycle",
