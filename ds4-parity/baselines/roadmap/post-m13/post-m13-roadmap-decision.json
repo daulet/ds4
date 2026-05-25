@@ -1,0 +1,87 @@
+{
+    "schema": "ds4.post_m13_roadmap_decision.v1",
+    "milestone": "post-M13",
+    "status": "roadmap-complete-no-active-implementation-item",
+    "id": "post-m13-roadmap-decision",
+    "source_artifacts": {
+        "backend_expansion_decision": "ds4-parity/baselines/backend/m13.0/backend-expansion-decision.json",
+        "embedding_indexer_matrix": "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+        "batched_embedding_slice": "ds4-parity/baselines/backend/m13.2/batched-embedding-replacement-slice.json",
+        "indexed_decode_slices": "ds4-parity/baselines/backend/m13.3/indexed-decode-selection-replacement-slices.json",
+        "batch_indexer_fixture_bundle": "ds4-parity/baselines/backend/m13.4/batch-indexer-fixture-bundle.json",
+        "expanded_route_gate": "ds4-parity/baselines/backend/m13.5/expanded-route-gate.json",
+        "expanded_route_closure": "ds4-parity/baselines/backend/m13.5/expanded-route-closure.json",
+        "runtime_official_vectors": "ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json",
+        "runtime_long_context": "ds4-parity/baselines/graph/m10.9d/runtime-long-context.json",
+        "runtime_tool_server": "ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json",
+        "runtime_benchmark_closure": "ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json"
+    },
+    "completed_stages": [
+        "M13.0 Backend Expansion Decision",
+        "M13.1 Embedding/Indexer Expansion Fixture Matrix",
+        "M13.2 Batched Embedding Replacement Slice",
+        "M13.3 Indexed Decode Selection Replacement Slice",
+        "M13.4 Batch Indexer Fixture Gap Closure",
+        "M13.5 Embedding/Indexer Route Gate And Closure"
+    ],
+    "decision": {
+        "active_item_before_decision": "post-M13 roadmap decision",
+        "active_item_after_decision": "none",
+        "roadmap_scope_completed": "RUST_PORT_ROADMAP.md through M13.5",
+        "next_implementation_stage_selected": false,
+        "default_route_promotion_allowed": false,
+        "c_host_removal_allowed": false,
+        "gpu_backend_removal_allowed": false,
+        "general_backend_replacement_claim_allowed": false,
+        "kernel_replacement_claim_allowed": false,
+        "reason": "M13.5 completed the expanded embedding/indexer opt-in route but retained current-backend sidecars and kept the default route on current-backend, so the executable roadmap is complete through M13 without a removal or default-route-promotion stage."
+    },
+    "removal_criteria_evaluation": [
+        {
+            "criterion": "Rust path can run default CLI and server flows",
+            "status": "not-proven-for-removal",
+            "reason": "M13.5 validates an opt-in expanded route and retained current-backend sidecars, not default-route ownership."
+        },
+        {
+            "criterion": "Official-vector and server tests pass through Rust path",
+            "status": "partial-not-removal-ready",
+            "reason": "M10.9 runtime gates remain source artifacts, but M13.5 does not promote those gates to default-route backend replacement."
+        },
+        {
+            "criterion": "Long-context and tool-call quality pass on production backend",
+            "status": "partial-not-removal-ready",
+            "reason": "B300 runtime evidence remains required, but current-backend sidecars are still retained."
+        },
+        {
+            "criterion": "Old code path is no longer needed as active reference",
+            "status": "not-satisfied",
+            "reason": "M13.5 explicitly keeps current-backend as oracle and sidecar."
+        },
+        {
+            "criterion": "Documentation and build commands describe Rust entry points",
+            "status": "not-sufficient-for-removal",
+            "reason": "Documentation records opt-in parity gates, not a default replacement entry point."
+        }
+    ],
+    "deferred_open_decisions": [
+        "Whether the Rust CLI/server should initially call into a C `ds4_engine` shim or wait until graph orchestration is ported.",
+        "How much of the current CPU reference path should be preserved in Rust.",
+        "Whether GGUF tooling should join the same workspace or stay as separate C and Python utilities until the runtime port stabilizes.",
+        "How to version KV persistence if Rust needs to change the on-disk structure.",
+        "Which intermediate tensor checks are worth keeping as permanent diagnostics.",
+        "What numeric tolerances should be used per backend and per operation family.",
+        "What speed regression threshold is acceptable for each backend milestone."
+    ],
+    "future_work_policy": {
+        "requires_new_roadmap": true,
+        "must_start_with_oracle": true,
+        "must_keep_current_backend_oracles_until_default_route_is_proven": true,
+        "must_not_remove_current_backend_sidecars_from_m13_5": true
+    },
+    "overall_decision": {
+        "decision": "roadmap_complete_through_m13_defer_new_scope",
+        "remaining_work": "future roadmap only",
+        "removals_allowed": false,
+        "reason": "All documented M13 stages are complete and verified, while removal criteria and open decisions are intentionally not satisfied by the M13 evidence."
+    }
+}

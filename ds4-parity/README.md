@@ -574,6 +574,21 @@ Rust replacement slices, and the M13.4 fixture-only operations remain
 current-backend sidecars with removals blocked. The committed M13.5 fixture
 passes with 279 checker assertions.
 
+Validate the post-M13 roadmap decision:
+
+```sh
+python3 ds4-parity/check_post_m13_roadmap_decision.py --negative-test
+```
+
+The post-M13 checker validates
+`baselines/roadmap/post-m13/post-m13-roadmap-decision.json` against the M13.0
+through M13.5 artifacts and the M10.9 runtime evidence. It records that the
+roadmap is complete through M13.5, no next implementation stage is selected,
+the default route remains `current-backend`, current-backend sidecars remain
+required, and C/GPU backend removals are blocked until a future roadmap starts
+from new oracles. The committed post-M13 decision passes with 100 checker
+assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

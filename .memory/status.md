@@ -1,11 +1,11 @@
 # DS4 Rust Port Status
 
-- Date: 2026-05-24 UTC
+- Date: 2026-05-25 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: post-M13 roadmap decision
-- Last validated source before the active item: M13.5 Embedding/Indexer Route
-  Gate And Closure.
+- Active item: post-M13 roadmap decision complete; no active implementation item
+- Last validated source before the active item: post-M13 roadmap decision.
+- Earlier post-M13 roadmap decision.
 - Earlier M13.5 Embedding/Indexer Route Gate And Closure.
 - Earlier M13.4 Batch Indexer Fixture Gap Closure.
 - Earlier M13.3 Indexed Decode Selection Replacement Slice.
@@ -103,6 +103,18 @@
 
 ## Last Evidence
 
+- Post-M13 roadmap decision adds
+  `ds4-parity/baselines/roadmap/post-m13/post-m13-roadmap-decision.json` and
+  `ds4-parity/check_post_m13_roadmap_decision.py --negative-test`. It records
+  that `RUST_PORT_ROADMAP.md` is complete through M13.5, no next implementation
+  stage is selected, the default route remains `current-backend`, current-backend
+  sidecars from M13.5 still block C/GPU backend removals, and the open decisions
+  are deferred to a future roadmap that must start from new oracles. Validation
+  passed: `python3 ds4-parity/check_post_m13_roadmap_decision.py
+  --negative-test` (100 checks), `python3
+  ds4-parity/check_backend_expanded_route_closure.py --negative-test` (279
+  checks), and `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+  (94 passed, 50 skipped, 0 failed).
 - M13.5 adds
   `ds4-parity/baselines/backend/m13.5/expanded-route-gate.json`,
   `ds4-parity/baselines/backend/m13.5/expanded-route-closure.json`, and

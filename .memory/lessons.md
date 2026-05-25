@@ -3,6 +3,19 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-05-25: Stage-Progression Checkers Need Future Closure Markers
+
+- Symptom: after M13.5 moved `.memory/status.md` to the post-M13 decision, the
+  unified report failed only in older static-wiring checks that accepted
+  `Active item: M13` but not the closure marker.
+- Root cause: earlier milestone checkers encoded the next active milestone as a
+  bounded string list, so later roadmap closure states can make already-passed
+  historical artifacts look stale.
+- Permanent rule: milestone static-wiring checks should accept durable closure
+  markers for later roadmap phases when the artifact itself remains unchanged.
+  Do not weaken artifact or comparator assertions; only broaden status
+  progression strings that prove the board advanced.
+
 ## 2026-05-24: Field-Adding Comparator Mutations Need Missing-Path Failures
 
 - Symptom: the first M10.7d3b `compare_graph_restore_next_token.py

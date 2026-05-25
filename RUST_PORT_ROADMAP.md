@@ -6515,6 +6515,33 @@ Drift policy:
     ds4-parity/run_parity_report.py --skip-local-oracles` (93 passed, 50
     skipped, 0 failed).
 
+## Post-M13 Roadmap Decision
+
+- Status: complete.
+- Goal: close the active `post-M13 roadmap decision` gate without selecting an
+  unsupported removal or default-route-promotion stage.
+- Oracle: M13.0 through M13.5 artifacts plus the M10.9 runtime graph evidence.
+- Fixture:
+  `ds4-parity/baselines/roadmap/post-m13/post-m13-roadmap-decision.json`.
+- Comparator: `ds4-parity/check_post_m13_roadmap_decision.py
+  --negative-test`.
+- Acceptance: all M13 stages are recorded complete, no next implementation
+  stage is selected, the default route remains `current-backend`, retained
+  current-backend sidecars block C/GPU removals, and open decisions are deferred
+  to a future roadmap.
+- Drift policy: any future scope must start by adding a new roadmap section with
+  its own oracle, fixture, comparator, acceptance, and validation plan.
+- Evidence:
+  - Added the post-M13 roadmap decision artifact and checker.
+  - The decision records that no next implementation stage is selected, no C/GPU
+    removal is allowed, and future work requires a new roadmap with new oracles.
+  - Validation passed: `python3
+    ds4-parity/check_post_m13_roadmap_decision.py --negative-test` (100
+    checks), `python3 ds4-parity/check_backend_expanded_route_closure.py
+    --negative-test` (279 checks), and `python3
+    ds4-parity/run_parity_report.py --skip-local-oracles` (94 passed, 50
+    skipped, 0 failed).
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and
