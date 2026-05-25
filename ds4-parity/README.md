@@ -541,6 +541,23 @@ CPU/Metal/default-route fail-closed behavior, and keeps runtime routing,
 general backend replacement, and kernel replacement claims false. The committed
 M13.3 fixture passes with 195 checker assertions.
 
+Validate the M13.4 Batch indexer fixture gap closure:
+
+```sh
+python3 ds4-parity/check_backend_batch_indexer_fixtures.py --negative-test
+```
+
+The M13.4 checker validates
+`baselines/backend/m13.4/batch-indexer-fixture-bundle.json` against the M13.1
+fixture-gap rows for `ds4_gpu_indexer_scores_prefill_tensor`,
+`ds4_gpu_indexer_scores_decode_batch_tensor`, and
+`ds4_gpu_dsv4_topk_mask_tensor`. The bundle records B300-rerunnable current-C
+fixture contracts, current-C/Rust source anchors, debug dump hooks, output
+field and dtype contracts, and exact rerun commands. It keeps raw tensor bodies
+out of the repository and keeps runtime routing, default-route replacement,
+general backend replacement, and kernel replacement claims false. The committed
+M13.4 fixture passes with 182 checker assertions.
+
 Validate the M10.4 current-C graph checkpoint oracle:
 
 ```sh

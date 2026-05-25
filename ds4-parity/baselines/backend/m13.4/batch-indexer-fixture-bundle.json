@@ -1,0 +1,143 @@
+{
+  "schema": "ds4.batch_indexer_fixture_bundle.v1",
+  "milestone": "M13.4",
+  "status": "fixture-gaps-closed",
+  "id": "m13.4-embedding-and-indexer-batch-indexer-fixtures",
+  "operation_family": "embedding_and_indexer",
+  "previous_stage": "M13.3",
+  "next_stage": "M13.5",
+  "source_artifacts": {
+    "expansion_decision": "ds4-parity/baselines/backend/m13.0/backend-expansion-decision.json",
+    "expansion_matrix": "ds4-parity/baselines/backend/m13.1/embedding-indexer-expansion-matrix.json",
+    "batched_embedding_slice": "ds4-parity/baselines/backend/m13.2/batched-embedding-replacement-slice.json",
+    "indexed_decode_slices": "ds4-parity/baselines/backend/m13.3/indexed-decode-selection-replacement-slices.json"
+  },
+  "capture_environment": {
+    "context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "workdir": "/workspace/ds4",
+    "temp_kubeconfig": "/tmp/ds4-hou2-prod1.kubeconfig",
+    "backend": "cuda",
+    "model_path": "/workspace/ds4/ds4flash.gguf",
+    "model_sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668",
+    "prompt": "tests/test-vectors/prompts/long_memory_archive.txt"
+  },
+  "claim_policy": {
+    "runtime_route_change": false,
+    "default_route_unchanged": true,
+    "default_route_replacement_active": false,
+    "replacement_route_opt_in_only": true,
+    "general_backend_replacement": false,
+    "kernel_replacement": false,
+    "raw_tensor_bodies_committed": false,
+    "current_backend_retained_as_oracle": true,
+    "current_backend_retained_as_sidecar": true,
+    "next_required_gate": "M13.5 Embedding/Indexer Route Gate And Closure"
+  },
+  "comparison_policy": {
+    "digest": "fnv1a64 metadata or debug-dump hash must match on same B300 refresh",
+    "samples": "sample indices and values must be stable for committed summaries",
+    "shape": "operation dimensions must match M13.1 matrix and graph plan context",
+    "dtype": "float32 for score/mask tensors, int32 for top-k row selections",
+    "float_tolerance": "exact digest for current B300 summaries; tolerance changes require rationale"
+  },
+  "fixtures": [
+    {
+      "id": "m13.4-indexer-scores-prefill",
+      "operation": "ds4_gpu_indexer_scores_prefill_tensor",
+      "method": "indexer_scores_prefill",
+      "source_matrix_coverage_level": "inventory-only",
+      "prior_fixture_gap": true,
+      "fixture_gap_closed": true,
+      "oracle": "current-C zero-prefix prefill indexer scoring",
+      "capture_path": "metal_graph_encode_layer_batch zero_prefix topk_prefill_needed",
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_indexer_scores_prefill_tensor(g->indexer_scores",
+      "rust_source": "rust/ds4-gpu/src/graph_plan.rs",
+      "rust_anchor": "ds4_gpu_indexer_scores_prefill_tensor",
+      "debug_dump_hooks": [
+        "metal_graph_debug_dump_tensor(\"indexer_scores\"",
+        "metal_graph_debug_dump_i32_tensor(\"indexer_topk\""
+      ],
+      "output_fields": [
+        "indexer_scores",
+        "indexer_topk"
+      ],
+      "dtype": {
+        "indexer_scores": "float32",
+        "indexer_topk": "int32"
+      },
+      "comparator_dependencies": [
+        "ds4-parity/compare_prefill_chunked.py",
+        "ds4-parity/compare_prefill_resumed.py"
+      ],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native; DS4_METAL_GRAPH_DUMP_PREFIX=/tmp/ds4-m134-prefill DS4_METAL_GRAPH_DUMP_NAME=indexer_scores,indexer_topk ./ds4-prefill-whole-short-oracle-dump --backend cuda --model /workspace/ds4/ds4flash.gguf --prompt tests/test-vectors/prompts/long_memory_archive.txt --limit-tokens 2052 --output /tmp/ds4-m134-indexer-scores-prefill.json'"
+    },
+    {
+      "id": "m13.4-indexer-scores-decode-batch",
+      "operation": "ds4_gpu_indexer_scores_decode_batch_tensor",
+      "method": "indexer_scores_decode_batch",
+      "source_matrix_coverage_level": "surface-covered-needs-fixture-extraction",
+      "prior_fixture_gap": true,
+      "fixture_gap_closed": true,
+      "oracle": "current-C chunked prefill decode-batch indexer scoring",
+      "capture_path": "metal_graph_encode_layer_batch nonzero-prefix indexed batch",
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_indexer_scores_decode_batch_tensor(g->indexer_scores",
+      "rust_source": "rust/ds4-gpu/src/decode_backend.rs",
+      "rust_anchor": "pub fn indexer_scores_decode_batch",
+      "debug_dump_hooks": [
+        "metal_graph_debug_dump_tensor(\"indexer_scores\"",
+        "metal_graph_debug_dump_i32_tensor(\"indexer_topk\""
+      ],
+      "output_fields": [
+        "indexer_scores",
+        "indexer_topk"
+      ],
+      "dtype": {
+        "indexer_scores": "float32",
+        "indexer_topk": "int32"
+      },
+      "comparator_dependencies": [
+        "ds4-parity/compare_prefill_chunked.py"
+      ],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native; DS4_METAL_GRAPH_DUMP_PREFIX=/tmp/ds4-m134-decode-batch DS4_METAL_GRAPH_DUMP_NAME=indexer_scores,indexer_topk ./ds4-prefill-whole-short-oracle-dump --backend cuda --model /workspace/ds4/ds4flash.gguf --prompt tests/test-vectors/prompts/long_memory_archive.txt --limit-tokens 3353 --output /tmp/ds4-m134-indexer-scores-decode-batch.json'"
+    },
+    {
+      "id": "m13.4-dsv4-topk-mask",
+      "operation": "ds4_gpu_dsv4_topk_mask_tensor",
+      "method": "dsv4_topk_mask",
+      "source_matrix_coverage_level": "inventory-only",
+      "prior_fixture_gap": true,
+      "fixture_gap_closed": true,
+      "oracle": "current-C per-token top-k mask for DSV4 compressed attention",
+      "capture_path": "metal_graph_encode_layer_batch per-token comp_mask fallback",
+      "current_c_source": "ds4.c",
+      "current_c_anchor": "ds4_gpu_dsv4_topk_mask_tensor(g->comp_mask",
+      "rust_source": "rust/ds4-gpu/src/graph_plan.rs",
+      "rust_anchor": "ds4_gpu_dsv4_topk_mask_tensor",
+      "debug_dump_hooks": [
+        "metal_graph_debug_dump_tensor(\"comp_mask\""
+      ],
+      "output_fields": [
+        "comp_mask"
+      ],
+      "dtype": {
+        "comp_mask": "float32"
+      },
+      "comparator_dependencies": [],
+      "rerun_command": "git archive HEAD | kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec -i ds4-rust-port-b300 -- tar -xf - -C /workspace/ds4 && kubectl --kubeconfig /tmp/ds4-hou2-prod1.kubeconfig --context hou2-prod1 -n default exec ds4-rust-port-b300 -- sh -lc 'set -e; cd /workspace/ds4; make ds4-prefill-whole-short-oracle-dump CUDA_ARCH=native; DS4_METAL_GRAPH_DUMP_PREFIX=/tmp/ds4-m134-topk-mask DS4_METAL_GRAPH_DUMP_NAME=comp_mask ./ds4-prefill-whole-short-oracle-dump --backend cuda --model /workspace/ds4/ds4flash.gguf --prompt tests/test-vectors/prompts/long_memory_archive.txt --limit-tokens 2337 --resume-prefix-tokens 1537 --output /tmp/ds4-m134-dsv4-topk-mask.json'"
+    }
+  ],
+  "summary": {
+    "fixture_gap_operations_closed": [
+      "ds4_gpu_indexer_scores_prefill_tensor",
+      "ds4_gpu_indexer_scores_decode_batch_tensor",
+      "ds4_gpu_dsv4_topk_mask_tensor"
+    ],
+    "route_status": "fixture-covered-not-route-gated",
+    "removals_allowed": false,
+    "next_route_gate": "M13.5 Embedding/Indexer Route Gate And Closure"
+  }
+}

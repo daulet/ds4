@@ -13025,6 +13025,13 @@ static bool metal_graph_encode_layer_attention_batch(
                     ds4_gpu_tensor_free(indexer_w_view);
                     ds4_gpu_tensor_free(indexer_q_view);
                     if (ok) {
+                        metal_graph_debug_dump_tensor("comp_mask",
+                                                      g->comp_mask,
+                                                      cur_index,
+                                                      il,
+                                                      pos);
+                    }
+                    if (ok) {
                         comp_mask = g->comp_mask;
                         n_selected = DS4_N_INDEXER_TOP_K < cur_index
                             ? DS4_N_INDEXER_TOP_K

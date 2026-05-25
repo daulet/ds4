@@ -3,9 +3,10 @@
 - Date: 2026-05-24 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M13.4 Batch Indexer Fixture Gap Closure
-- Last validated source before the active item: M13.3 Indexed Decode Selection
-  Replacement Slice.
+- Active item: M13.5 Embedding/Indexer Route Gate And Closure
+- Last validated source before the active item: M13.4 Batch Indexer Fixture Gap
+  Closure.
+- Earlier M13.4 Batch Indexer Fixture Gap Closure.
 - Earlier M13.3 Indexed Decode Selection Replacement Slice.
 - Earlier M13.2 Batched Embedding Replacement Slice.
 - Earlier M13.1 Embedding/Indexer Expansion Fixture Matrix.
@@ -101,6 +102,23 @@
 
 ## Last Evidence
 
+- M13.4 adds
+  `ds4-parity/baselines/backend/m13.4/batch-indexer-fixture-bundle.json` and
+  `ds4-parity/check_backend_batch_indexer_fixtures.py --negative-test` for the
+  three M13.1 fixture-gap operations:
+  `ds4_gpu_indexer_scores_prefill_tensor`,
+  `ds4_gpu_indexer_scores_decode_batch_tensor`, and
+  `ds4_gpu_dsv4_topk_mask_tensor`. It also adds the missing current-C debug dump
+  hook for `comp_mask` after `ds4_gpu_dsv4_topk_mask_tensor`. The bundle records
+  B300-rerunnable current-C fixture contracts, exact source anchors,
+  output/dtype contracts, and rerun commands while keeping raw tensor bodies out
+  of the repository and route/default-route/general/backend/kernel replacement
+  claims false. Validation passed: `python3
+  ds4-parity/check_backend_batch_indexer_fixtures.py --negative-test` (182
+  checks), `arch -arm64 make ds4-prefill-whole-short-oracle-dump`, B300 fixture
+  probe (`m134_fixture_probe=ok`), and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` (92 passed, 50 skipped,
+  0 failed).
 - M13.3 adds explicit Rust replacement slice descriptors for
   `ds4_gpu_indexer_score_one_tensor` and `ds4_gpu_indexer_topk_tensor`,
   `ds4-parity/baselines/backend/m13.3/indexed-decode-selection-replacement-slices.json`,

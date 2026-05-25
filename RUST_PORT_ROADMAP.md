@@ -6444,21 +6444,43 @@ Drift policy:
 
 #### M13.4: Batch Indexer Fixture Gap Closure
 
-- Status: active.
+- Status: complete.
 - Goal: close fixture gaps for `ds4_gpu_indexer_scores_prefill_tensor`,
   `ds4_gpu_indexer_scores_decode_batch_tensor`, and
   `ds4_gpu_dsv4_topk_mask_tensor`.
 - Oracle: current-C prefill and batch-decode indexer paths on B300.
-- Fixture: batch indexer fixture bundle.
-- Comparator: batch indexer fixture checker with negative tests.
+- Fixture:
+  `ds4-parity/baselines/backend/m13.4/batch-indexer-fixture-bundle.json`.
+- Comparator: `ds4-parity/check_backend_batch_indexer_fixtures.py
+  --negative-test`.
 - Acceptance: each batch-only indexer operation has current-C fixture coverage
   before it can join an expanded replacement route.
 - Drift policy: fixture drift requires a same-hardware current-C oracle refresh
   and explicit tolerance rationale.
+- Evidence:
+  - Added the M13.4 batch indexer fixture bundle for
+    `ds4_gpu_indexer_scores_prefill_tensor`,
+    `ds4_gpu_indexer_scores_decode_batch_tensor`, and
+    `ds4_gpu_dsv4_topk_mask_tensor`.
+  - Added `ds4-parity/check_backend_batch_indexer_fixtures.py
+    --negative-test`.
+  - Added the missing current-C debug dump hook for `comp_mask` after
+    `ds4_gpu_dsv4_topk_mask_tensor`.
+  - The bundle records B300-rerunnable current-C fixture contracts, exact source
+    anchors, output/dtype contracts, and rerun commands while keeping raw tensor
+    bodies out of the repository and route/default-route/general/backend/kernel
+    replacement claims false.
+  - Validation passed:
+    `python3 ds4-parity/check_backend_batch_indexer_fixtures.py
+    --negative-test` (182 checks), `arch -arm64 make
+    ds4-prefill-whole-short-oracle-dump`, B300 fixture probe
+    (`m134_fixture_probe=ok`), and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+    (92 passed, 50 skipped, 0 failed).
 
 #### M13.5: Embedding/Indexer Route Gate And Closure
 
-- Status: pending.
+- Status: active.
 - Goal: expose the expanded embedding/indexer route through an opt-in gate and
   record retained-sidecar closure.
 - Oracle: M13.1 through M13.4 artifacts plus M10.9 official-vector,
