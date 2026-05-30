@@ -19,6 +19,7 @@ static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
 static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::new(None);
 static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
+static ABI_REGISTERED_MODEL: Mutex<Option<AbiRegisteredModel>> = Mutex::new(None);
 static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_map: 0,
     model_size: 0,
@@ -80,6 +81,33 @@ impl AbiPageableModelRange {
         self.pageable
             .cu_deviceptr()
             .checked_add(offset - self.offset)
+    }
+}
+
+struct AbiRegisteredModel {
+    model_map: usize,
+    model_size: u64,
+    _registration: ReadOnlyRegisteredHostMemory<'static, u8>,
+    device_ptr: u64,
+}
+
+impl AbiRegisteredModel {
+    fn matches(&self, model_map: *const c_void, model_size: u64) -> bool {
+        self.model_map == model_map as usize && self.model_size == model_size
+    }
+
+    fn device_ptr(
+        &self,
+        model_map: *const c_void,
+        model_size: u64,
+        offset: u64,
+        bytes: u64,
+    ) -> Option<u64> {
+        let end = offset.checked_add(bytes)?;
+        if !self.matches(model_map, model_size) || end > model_size {
+            return None;
+        }
+        self.device_ptr.checked_add(offset)
     }
 }
 
@@ -229,12 +257,44 @@ fn pageable_hmm_direct_read_selected() -> bool {
 
 const ABI_MODEL_COPY_CHUNK_BYTES: usize = 64 * 1024 * 1024;
 
+fn try_register_abi_model(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    model_size: u64,
+) -> bool {
+    let Ok(model_len) = usize::try_from(model_size) else {
+        return false;
+    };
+    // SAFETY: the public model-map ABI requires the active mapping to remain
+    // readable and immutable until synchronized replacement or cleanup; the
+    // stored registration guard preserves that CUDA-visible lifetime.
+    let source = unsafe { std::slice::from_raw_parts(model_map.cast::<u8>(), model_len) };
+    let Ok(registration) = backend.register_read_only_host_range(source) else {
+        return false;
+    };
+    let device_ptr = registration.cu_deviceptr();
+    let Ok(mut active) = ABI_REGISTERED_MODEL.lock() else {
+        return false;
+    };
+    *active = Some(AbiRegisteredModel {
+        model_map: model_map as usize,
+        model_size,
+        _registration: registration,
+        device_ptr,
+    });
+    true
+}
+
 fn chunk_selected_model_copy_selected() -> bool {
     std::env::var_os("DS4_CUDA_COPY_MODEL_CHUNKED").is_some()
         && std::env::var_os("DS4_CUDA_NO_MODEL_COPY").is_none()
         && std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_none()
         && std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_none()
         && std::env::var_os("DS4_CUDA_WEIGHT_PRELOAD").is_none()
+}
+
+fn full_model_copy_selected() -> bool {
+    std::env::var_os("DS4_CUDA_COPY_MODEL").is_some_and(|value| !value.is_empty())
 }
 
 fn try_copy_abi_model_window(
@@ -248,6 +308,13 @@ fn try_copy_abi_model_window(
         return false;
     }
     if ABI_COPIED_MODEL.lock().ok().is_some_and(|active| {
+        active
+            .as_ref()
+            .is_some_and(|model| model.matches(model_map, model_size))
+    }) {
+        return true;
+    }
+    if ABI_REGISTERED_MODEL.lock().ok().is_some_and(|active| {
         active
             .as_ref()
             .is_some_and(|model| model.matches(model_map, model_size))
@@ -349,6 +416,14 @@ fn with_cached_abi_model_range<T>(
     if bytes == 0 {
         let ptr = (model_map as usize).checked_add(usize::try_from(offset).ok()?)?;
         return operation(ptr as u64);
+    }
+    let registered_model_ptr = ABI_REGISTERED_MODEL
+        .lock()
+        .ok()?
+        .as_ref()
+        .and_then(|model| model.device_ptr(model_map, model_size, offset, bytes));
+    if let Some(ptr) = registered_model_ptr {
+        return operation(ptr);
     }
     let copied_ptr = ABI_COPIED_MODEL
         .lock()
@@ -476,6 +551,9 @@ pub extern "C" fn ds4_gpu_cleanup() {
             }
             if let Ok(mut copied_model) = ABI_COPIED_MODEL.lock() {
                 *copied_model = None;
+            }
+            if let Ok(mut registered_model) = ABI_REGISTERED_MODEL.lock() {
+                *registered_model = None;
             }
             if let Ok(mut control) = ABI_MODEL_CONTROL.lock() {
                 control.model_map = 0;
@@ -1107,8 +1185,12 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             ABI_MODEL_RANGES.lock().ok()?.clear();
             *ABI_PAGEABLE_MODEL_RANGE.lock().ok()? = None;
             *ABI_COPIED_MODEL.lock().ok()? = None;
+            *ABI_REGISTERED_MODEL.lock().ok()? = None;
             control.model_map = model_map as usize;
             control.model_size = model_size;
+            if !full_model_copy_selected() {
+                let _ = try_register_abi_model(backend, model_map, model_size);
+            }
             Some(true)
         })
         .unwrap_or(false)

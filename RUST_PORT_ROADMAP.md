@@ -9641,11 +9641,13 @@ Stage split:
     registration-disable policy, q8/f16 cache hooks, whole-archive
     retention, and the generated `.note.GNU-stack` warning remain open.
 
-###### M14.6b2b2b2b2b2b: Chunked Copy And Fd-Backed Model-Control Policy
+###### M14.6b2b2b2b2b2b: Registration And Fd-Backed Residual Model-Control Policy
 
-- Status: active; split into M14.6b2b2b2b2b2b1 and M14.6b2b2b2b2b2b2
-  because deterministic successful chunk-selected copying is separately
-  testable from fd-backed staging and remaining failure/cache policy.
+- Status: active; split into M14.6b2b2b2b2b2b1,
+  M14.6b2b2b2b2b2b2a, and M14.6b2b2b2b2b2b2b because deterministic
+  successful chunk-selected copying and whole-map registration precedence are
+  separately testable from fd-backed staging and residual failure/cache
+  policy.
 - Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
   staging, registration-disable, preload/copy selection, and remaining
   cache-policy branches to the public model-control ABI without claiming
@@ -9690,12 +9692,53 @@ Stage split:
     registration-disable policy, q8/f16 cache hooks, whole-archive retention,
     and the generated `.note.GNU-stack` warning remain open.
 
-####### M14.6b2b2b2b2b2b2: Fd-Backed And Remaining Model-Control Policy
+####### M14.6b2b2b2b2b2b2a: Whole-Map Registration Precedence ABI
+
+- Status: done.
+- Goal: connect current-C whole-map read-only registration attempt and
+  registered-pointer precedence to public Rust model control, while
+  validating the B300 rejected-registration continuation into chunk-selected
+  copied weights without claiming fd-backed policy or route promotion.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2a/abi-model-control-whole-registration-precedence-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_whole_registration_precedence_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` retains an `AbiRegisteredModel`
+    `ReadOnlyRegisteredHostMemory` guard until synchronized replacement or
+    cleanup and resolves model ranges from a global registered pointer ahead
+    of copied, pageable, and per-range storage.
+  - Selection matches current C: a nonempty `DS4_CUDA_COPY_MODEL` value
+    suppresses registration, while an empty value still attempts
+    registration before chunk-selected range handling.
+  - The dedicated B300 registered-range probe reports read-only registration
+    rejected with CUDA error code 801. An aligned C-linked public consumer
+    selects the empty-copy-model registration attempt plus chunk-selected
+    fallback and preserves original weighted-RMS output after host mutation.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 98 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features cuda-oxide-kernels
+    --lib` passes with 100 tests, the static library rebuilds, and the Rust
+    export set remains 29 symbols.
+  - `check_cuda_abi_model_control_whole_registration_precedence_smoke.py
+    --negative-test` passes with 93 checks, and unified parity passes with
+    184 passed, 45 skipped, and no failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the registration-precedence boundary, current-C oracle, comparator, and
+    B300 evidence, but returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+    completed findings. Self-review corrected nonempty-vs-empty
+    `DS4_CUDA_COPY_MODEL` selection to match current C.
+  - Successful global registered zero-copy is implemented from the current-C
+    oracle but is not live-observed on this B300 device. Fd-backed staging,
+    residual model-copy failure/cache policy, remaining graph compute,
+    whole-archive retention, route promotion, and the generated
+    `.note.GNU-stack` warning remain open.
+
+####### M14.6b2b2b2b2b2b2b: Fd-Backed And Residual Model-Control Policy
 
 - Status: active.
-- Goal: connect whole-map registration precedence, fd-backed direct-I/O
-  staging, chunk-copy failure routing and residual selection/cache policy
-  without claiming remaining graph compute or route promotion.
+- Goal: connect fd-backed direct-I/O staging, chunk-copy failure routing and
+  residual model-control selection/cache policy without claiming remaining
+  graph compute or route promotion.
 
 ## Removal Criteria for C Host Code
 

@@ -9384,11 +9384,13 @@
   advised window, fd staging, registration-disable, q8/f16 cache hooks,
   whole-archive retention, and the `.note.GNU-stack` warning remain pending.
 
-###### M14.6b2b2b2b2b2b: Chunked Copy And Fd-Backed Model-Control Policy
+###### M14.6b2b2b2b2b2b: Registration And Fd-Backed Residual Model-Control Policy
 
-- Status: active; split into M14.6b2b2b2b2b2b1 and M14.6b2b2b2b2b2b2
-  because deterministic successful chunk-selected copying is independently
-  testable from fd-backed staging and residual failure/cache policy.
+- Status: active; split into M14.6b2b2b2b2b2b1,
+  M14.6b2b2b2b2b2b2a, and M14.6b2b2b2b2b2b2b because deterministic
+  successful chunk-selected copying and whole-map registration precedence are
+  independently testable from fd-backed staging and residual failure/cache
+  policy.
 - Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
   staging, registration-disable, preload/copy selection, and remaining
   cache-policy branches without claiming graph-compute closure or route
@@ -9422,10 +9424,38 @@
   hooks, whole-archive retention, and the `.note.GNU-stack` warning remain
   pending.
 
-####### M14.6b2b2b2b2b2b2: Fd-Backed And Remaining Model-Control Policy
+####### M14.6b2b2b2b2b2b2a: Whole-Map Registration Precedence ABI
+
+- Status: done
+- Goal: connect whole-map read-only registration attempt and
+  registered-pointer precedence to public Rust model control while keeping
+  fd-backed policy and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2a/abi-model-control-whole-registration-precedence-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_whole_registration_precedence_smoke.py --negative-test`.
+- Evidence: Rust retains a whole-map read-only registration guard and gives
+  its device pointer precedence ahead of copied, pageable, and per-range
+  model storage. Selection matches current C because empty
+  `DS4_CUDA_COPY_MODEL` still attempts registration. The dedicated B300
+  registration probe reports CUDA error code 801; an aligned C-linked
+  consumer then continues into retained chunk-selected copied weights and
+  matches original weighted output after host mutation. Local library tests
+  pass with 98 tests, B300 release-feature tests pass with 100 tests, and
+  the static library retains 29 exports. The whole-map registration
+  precedence checker passes with 93 checks, and unified parity passes with
+  184 passed, 45 skipped, and no failures. Successful registered zero-copy
+  is implemented but not live-observed on this B300 device. The required
+  non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`; self-review fixed empty-string
+  `DS4_CUDA_COPY_MODEL` selection to match current C. Fd-backed staging,
+  residual failure/cache policy, graph compute closure, whole-archive
+  retention, route promotion, and the `.note.GNU-stack` warning remain
+  pending.
+
+####### M14.6b2b2b2b2b2b2b: Fd-Backed And Residual Model-Control Policy
 
 - Status: active
-- Goal: connect whole-map registration precedence, fd-backed direct-I/O
-  staging, chunk-copy failure routing and remaining model-control
-  selection/cache policy without claiming graph compute closure or route
-  promotion.
+- Goal: connect fd-backed direct-I/O staging, chunk-copy failure routing and
+  residual model-control selection/cache policy without claiming graph
+  compute closure or route promotion.

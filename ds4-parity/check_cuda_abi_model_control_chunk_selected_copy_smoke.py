@@ -240,11 +240,15 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2 Fd-Backed And Remaining Model-Control Policy"
+        "Active item: M14.6b2b2b2b2b2b2b Fd-Backed And Residual Model-Control Policy"
         in texts["status"],
         "active item missing",
     )
     report.check("M14.6b2b2b2b2b2b1 Chunk-Selected Model Copy ABI" in texts["status"], "status evidence missing")
+    report.check(
+        "M14.6b2b2b2b2b2b2a Whole-Map Registration Precedence ABI" in texts["status"],
+        "registration successor status missing",
+    )
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2 Fd-Backed And Remaining Model-Control Policy
+- Active item: M14.6b2b2b2b2b2b2b Fd-Backed And Residual Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,23 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2a Whole-Map Registration Precedence ABI adds the
+  current-C whole-map read-only registration attempt and registered-pointer
+  precedence to the public Rust model-control path. An empty
+  `DS4_CUDA_COPY_MODEL` value still reaches registration as in current C.
+  The dedicated B300 registration probe reports CUDA error code 801, and an
+  aligned C-linked consumer then continues into retained chunk-selected
+  copied weights and matches weighted RMS after host mutation. Local library
+  tests pass with 98 tests; B300 release-feature tests pass with 100 tests,
+  and the static library retains 29 exports. The whole-map registration
+  precedence checker passes with 93 checks, and unified parity passes with
+  184 passed, 45 skipped, and no failures. Successful global zero-copy is
+  implemented from the current-C oracle but is not live-observed on this
+  B300 device. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`; self-review fixed empty-string
+  `DS4_CUDA_COPY_MODEL` selection to match current C. Fd-backed staging,
+  residual failure/cache policy, whole-archive retention, the
+  executable-stack warning, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b1 Chunk-Selected Model Copy ABI adds the deterministic
   successful public `DS4_CUDA_COPY_MODEL_CHUNKED` subset: Rust retains a
   device image containing the public consumed prefix, copied through bounded

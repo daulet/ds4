@@ -3082,6 +3082,22 @@ discard/progress effects, unconsumed ranges, fd-backed staging, remaining
 cache policy, whole-archive retention, and the executable-stack warning
 remain open.
 
+Validate the M14.6b2b2b2b2b2b2a Rust CUDA whole-map registration precedence
+ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_whole_registration_precedence_smoke.py --negative-test
+```
+
+The fixture combines the live B300 read-only registration probe, which reports
+CUDA error code 801, with an aligned C-linked public ABI consumer. Rust
+attempts whole-map registration when `DS4_CUDA_COPY_MODEL` is empty, while
+the observed B300 rejection continues into the previously validated
+chunk-selected copied-image path and preserves the original weighted output
+after host mutation. Successful global zero-copy registration, fd-backed
+staging, residual failure/cache policy, whole-archive retention, and the
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
