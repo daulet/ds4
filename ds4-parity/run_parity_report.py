@@ -1024,6 +1024,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.2d2c4 cuda-oxide chunk/tree top-k kernel smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_indexer_topk_tree_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

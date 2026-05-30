@@ -7758,13 +7758,43 @@ Stage split:
 
 ##### M14.2d2c4: Chunked And Tree-Merge Top-K Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port the large-component chunk candidate, intermediate tree merge,
   and final merge kernels plus their scratch layout.
+- Oracle: current-C `indexer_topk_chunk_pow2_kernel<4096>`,
+  `indexer_topk_tree_merge_pow2_kernel<4096>`,
+  `indexer_topk_merge_pow2_kernel<4096>`, and its
+  `DS4_CUDA_TOPK_MERGE_GROUP` scratch allocation loop.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c4/indexer-topk-tree-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_tree_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Acceptance: Rust owns direct chunk/tree/final merge execution and
+  contiguous scratch-level calculations; indexed ascending sort, specialized
+  dispatch policy, route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust 4096-element chunk, intermediate tree-merge,
+    and final-merge kernels using current-C descending score and lower-index
+    tie semantics.
+  - The host smoke represents current-C's one scratch allocation with
+    explicit non-overlapping offsets: for two tokens and ten chunks it uses
+    levels `{offset: 0, stride: 5120}` and
+    `{offset: 10240, stride: 1024}` for 12,288 elements total.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 36 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved chunk, tree, and final outputs, token-stride
+    isolation, partial final-chunk sentinel exclusion, and invalid-shape
+    rejection on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 81-check comparator, and
+    unified parity passed with 127 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained the dispatch and indexed-sort
+    non-claims.
 
 ##### M14.2d2c5: Indexed Ascending Top-K Sort And Dispatch Policy
 
-- Status: pending.
+- Status: active.
 - Goal: port indexed attention's ascending 512-element sort and close the
   validated-input specialized top-k dispatch ordering.
 

@@ -2372,6 +2372,18 @@ key semantics while leaving CUB library ownership, branch selection,
 chunk/tree merging, indexed ascending sort, runtime route, and C CUDA removal
 pending.
 
+Validate the M14.2d2c4 Rust CUDA chunk/tree top-k kernel smoke:
+
+```sh
+python3 ds4-parity/check_indexer_topk_tree_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local 4096-element chunk, tree-merge, and
+final-merge kernels on B300 through a contiguous scratch-level plan. It proves
+multi-token stride isolation and partial final-chunk behavior while leaving
+indexed ascending sort, specialized dispatch policy, runtime route, and
+C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

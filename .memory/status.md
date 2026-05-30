@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2d2c4 Chunked And Tree-Merge Top-K Kernels
+- Active item: M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -36,7 +36,8 @@
   through M14.2d2c5 because 1024 bitonic selection, larger power-of-two
   selection, CUB-or-equivalent selection, chunk/tree merge, and indexed
   ascending sort have separate CUDA launch and storage contracts.
-- Last validated source before the active item: M14.2d2c3 CUB-Or-Equivalent Top-K Branch.
+- Last validated source before the active item: M14.2d2c4 Chunked And Tree-Merge Top-K Kernels.
+- Earlier M14.2d2c3 CUB-Or-Equivalent Top-K Branch.
 - Earlier M14.2d2c2 Power-Of-Two Top-K Kernels.
 - Earlier M14.2d2c1 1024 Bitonic Top-K Kernel.
 - Earlier M14.2d2b2c WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority.
@@ -161,6 +162,25 @@
 
 ## Last Evidence
 
+- M14.2d2c4 Chunked And Tree-Merge Top-K Kernels adds executable-local Rust
+  cuda-oxide `indexer_topk_chunk_pow2_4096_kernel`,
+  `indexer_topk_tree_merge_pow2_4096_kernel`, and
+  `indexer_topk_merge_pow2_4096_kernel`. Its host smoke models current-C's
+  single contiguous scratch allocation with explicit non-overlapping level
+  offsets and per-token strides. On B300 pod `ds4-rust-port-b300`,
+  feature-enabled `ds4-cuda` tests passed with 36 tests and live
+  cargo-oxide execution emitted portable `sm_80` PTX and proved a
+  two-token, ten-chunk case with one intermediate tree level, a partial final
+  chunk, and a 12,288-element scratch plan on `NVIDIA B300 SXM6 AC`. Its
+  fixture and checker are
+  `ds4-parity/baselines/backend/m14.2d2c4/indexer-topk-tree-kernel-smoke.json`
+  and `ds4-parity/check_indexer_topk_tree_kernel_smoke.py --negative-test`.
+  Specialized top-k dispatch policy, indexed ascending sort, runtime route
+  activation, and C CUDA removal remain unclaimed. Local formatting, diff,
+  workspace tests, the 81-check comparator, and unified parity passed with
+  127 passed, 45 skipped, and 0 failed. Non-interactive Claude review timed
+  out without a completed result; adversarial self-review retained the
+  dispatch and route non-claims.
 - M14.2d2c3 CUB-Or-Equivalent Top-K Branch adds executable-local Rust
   cuda-oxide `indexer_topk_8192_packed_key_equivalent_kernel`, retaining
   current-C's ordered-float packed key, lower-index tie order, and sentinel

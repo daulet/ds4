@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.2d2c3 Rust CUDA packed-key top-k equivalent smoke."""
+"""Validate the M14.2d2c4 Rust CUDA chunk/tree top-k kernel smoke."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.2d2c3/indexer-topk-packed-kernel-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.2d2c4/indexer-topk-tree-kernel-smoke.json"
 CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/indexer_topk_packed_smoke.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/indexer_topk_tree_smoke.rs"
 CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -27,14 +27,12 @@ REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
 EXPECTED_RUST_OWNED = [
-    "executable-local cuda-oxide 8192 packed-key top-k equivalent launch proof",
-    "current-C-shaped ordered-float and lower-index packed-key semantics",
-    "host opt-in for 65536-byte dynamic shared-memory launch shape",
+    "executable-local cuda-oxide 4096-element chunk candidate kernel launch proof",
+    "executable-local cuda-oxide tree and final merge kernel launch proof",
+    "current-C-shaped contiguous per-token scratch level and stride calculation",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "CUB BlockRadixSort implementation",
-    "specialized top-k dispatch policy",
-    "chunked top-k dispatch",
+    "validated-input specialized top-k dispatch policy",
     "indexed ascending top-k sort dispatch",
     "runtime graph integration or default CUDA route",
     "C CUDA removal",
@@ -86,18 +84,17 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.indexer_topk_packed_kernel_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.2d2c3", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.indexer_topk_tree_kernel_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.2d2c4", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
     report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
     report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
-    report.check('name = "ds4-cuda-indexer-topk-packed-smoke"' in texts["cargo"], "smoke binary wiring missing")
+    report.check('name = "ds4-cuda-indexer-topk-tree-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
-    validate_repair(report, fixture, texts)
     validate_execution(report, fixture, texts)
     validate_wiring(report, texts)
 
@@ -106,13 +103,14 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
     for marker in [
-        "__device__ __forceinline__ static uint32_t topk_float_ordered_key",
-        "__device__ __forceinline__ static uint64_t topk_pack_key",
-        "__global__ static void indexer_topk_8192_cub_kernel",
-        "using BlockSort = cub::BlockRadixSort<uint64_t, BLOCK_THREADS, ITEMS_PER_THREAD>;",
-        "cudaDevAttrMaxSharedMemoryPerBlockOptin",
-        "cudaFuncSetAttribute(indexer_topk_8192_cub_kernel",
-        "indexer_topk_8192_cub_kernel<<<n_tokens, 512, (size_t)smem>>>",
+        "__global__ static void indexer_topk_chunk_pow2_kernel",
+        "__global__ static void indexer_topk_tree_merge_pow2_kernel",
+        "__global__ static void indexer_topk_merge_pow2_kernel",
+        "DS4_CUDA_TOPK_MERGE_GROUP = 8u",
+        "scratch_u32_per_token += (uint64_t)n_sets * top_k;",
+        "indexer_topk_chunk_pow2_kernel<4096><<<grid_chunks, 1024>>>",
+        "indexer_topk_tree_merge_pow2_kernel<4096><<<grid_merge, 1024>>>",
+        "indexer_topk_merge_pow2_kernel<4096><<<n_tokens, 1024>>>",
     ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
 
@@ -123,40 +121,27 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim scope drift")
     for key, expected in [
         ("opt_in_only", True),
-        ("owns_indexer_topk_8192_packed_key_equivalent_kernel", True),
-        ("owns_dynamic_shared_launch_shape", True),
-        ("owns_cub_library_implementation", False),
+        ("owns_indexer_topk_chunk_pow2_4096_kernel", True),
+        ("owns_indexer_topk_tree_merge_pow2_4096_kernel", True),
+        ("owns_indexer_topk_merge_pow2_4096_kernel", True),
+        ("owns_scratch_layout", True),
         ("owns_topk_dispatch_policy", False),
-        ("owns_chunked_topk_dispatch", False),
+        ("owns_indexed_topk_sort_dispatch", False),
         ("changes_default_route", False),
         ("retains_current_c_cuda_oracle", True),
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_2D2C3_SCOPE",
-        "owns_indexer_topk_8192_packed_key_equivalent_kernel: true",
-        "owns_dynamic_shared_launch_shape: true",
-        "owns_cub_library_implementation: false",
+        "pub const M14_2D2C4_SCOPE",
+        "owns_indexer_topk_chunk_pow2_4096_kernel: true",
+        "owns_indexer_topk_tree_merge_pow2_4096_kernel: true",
+        "owns_indexer_topk_merge_pow2_4096_kernel: true",
+        "owns_scratch_layout: true",
         "owns_topk_dispatch_policy: false",
-        "owns_chunked_topk_dispatch: false",
+        "owns_indexed_topk_sort_dispatch: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
-
-
-def validate_repair(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    repair = require_dict(report, fixture.get("dynamic_shared_repair"), "dynamic_shared_repair")
-    report.check(repair.get("cuda_oxide_revision") == DEPENDENCY_REVISION, "repair revision drift")
-    report.check(repair.get("method") == "CudaFunction::set_max_dynamic_shared_memory_size", "repair API drift")
-    report.check(repair.get("requested_bytes") == 65536, "repair byte size drift")
-    report.check("invalid argument" in repair.get("failure_before_repair", ""), "pre-repair failure missing")
-    for marker in [
-        "const SHARED_KEY_BYTES: u32 = (SORT_N * std::mem::size_of::<u64>()) as u32;",
-        "pub fn opt_in_large_dynamic_shared_memory",
-        ".set_max_dynamic_shared_memory_size(SHARED_KEY_BYTES as i32)",
-        "kernels::opt_in_large_dynamic_shared_memory(&module)?;",
-    ]:
-        report.check(marker in texts["smoke"], f"dynamic shared setup marker missing: {marker}")
 
 
 def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -164,67 +149,76 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("kube_context") == "hou2-prod1", "B300 context drift")
     report.check(execution.get("pod") == "ds4-rust-port-b300", "B300 pod drift")
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
-    report.check(execution.get("test_count") == 35, "feature test count drift")
+    report.check(execution.get("test_count") == 36, "feature test count drift")
     report.check("--features cuda-oxide-backend" in execution.get("test_command", ""), "feature test command missing")
     command = execution.get("command", "")
     report.check("--features cuda-oxide-kernels" in command, "kernel feature command missing")
-    report.check("--bin ds4-cuda-indexer-topk-packed-smoke" in command, "smoke command missing")
+    report.check("--bin ds4-cuda-indexer-topk-tree-smoke" in command, "smoke command missing")
     report.check("CUDA_OXIDE_TARGET" not in command, "smoke command forces a device target")
     report.check("CUDA_OXIDE_LINK_TARGET" not in command, "smoke command forces a link target")
     report.check(execution.get("backend_selected_target") == "sm_80", "portable backend target drift")
+    case = require_dict(report, execution.get("case"), "b300_execution.case")
+    report.check(case.get("n_comp") == 36937, "case component count drift")
+    report.check(case.get("n_tokens") == 2, "case token count drift")
+    report.check(case.get("n_chunks") == 10, "case chunk count drift")
+    report.check(case.get("merge_group") == 8, "case merge group drift")
+    report.check(case.get("scratch_elements") == 12288, "case scratch size drift")
     expected = {
-        "milestone": "M14.2d2c3",
+        "milestone": "M14.2d2c4",
         "device_name": "NVIDIA B300 SXM6 AC",
         "rust_kernel_toolchain": True,
-        "packed_key_4096_output_matches": True,
-        "packed_key_8192_range_output_matches": True,
-        "ordered_float_and_index_key_matches": True,
-        "dynamic_shared_launch_matches": True,
-        "sentinel_output_excluded": True,
+        "chunk_output_matches": True,
+        "tree_merge_output_matches": True,
+        "final_merge_output_matches": True,
+        "scratch_layout_matches": True,
+        "multi_token_stride_matches": True,
+        "partial_chunk_sentinel_excluded": True,
         "invalid_shape_rejected": True,
-        "owns_indexer_topk_8192_packed_key_equivalent_kernel": True,
-        "owns_dynamic_shared_launch_shape": True,
-        "owns_cub_library_implementation": False,
+        "owns_indexer_topk_chunk_pow2_4096_kernel": True,
+        "owns_indexer_topk_tree_merge_pow2_4096_kernel": True,
+        "owns_indexer_topk_merge_pow2_4096_kernel": True,
+        "owns_scratch_layout": True,
         "owns_topk_dispatch_policy": False,
-        "owns_chunked_topk_dispatch": False,
+        "owns_indexed_topk_sort_dispatch": False,
         "changes_default_route": False,
     }
     stdout = require_dict(report, execution.get("stdout"), "b300_execution.stdout")
-    report.check(stdout == expected, "B300 packed-key top-k result drift")
+    report.check(stdout == expected, "B300 tree top-k result drift")
     for marker in [
-        "pub fn indexer_topk_8192_packed_key_equivalent_kernel",
-        "DynamicSharedArray::<u64>::get()",
-        "const EMPTY_KEY: u64 = 0x007f_ffff_u64 << 32;",
-        "f32::from_bits(0x7fc0_0001)",
-        "expected_topk(&wide_scores, TOP_K)",
-        "Err(IndexerTopkPackedError::InvalidShape)",
+        "pub fn indexer_topk_chunk_pow2_4096_kernel",
+        "pub fn indexer_topk_tree_merge_pow2_4096_kernel",
+        "pub fn indexer_topk_merge_pow2_4096_kernel",
+        "fn scratch_plan(",
+        "ScratchLevel {",
+        "total_elements: 12288",
+        "expected_topk(row, TOP_K)",
+        "Err(IndexerTopkTreeError::InvalidShape)",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture = "ds4-parity/baselines/backend/m14.2d2c3/indexer-topk-packed-kernel-smoke.json"
-    checker = "check_indexer_topk_packed_kernel_smoke.py"
-    item = "M14.2d2c3: CUB-Or-Equivalent Top-K Branch"
+    fixture = "ds4-parity/baselines/backend/m14.2d2c4/indexer-topk-tree-kernel-smoke.json"
+    checker = "check_indexer_topk_tree_kernel_smoke.py"
+    item = "M14.2d2c4: Chunked And Tree-Merge Top-K Kernels"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.2d2c" in texts["status"], "top-k active stage missing")
-    report.check("M14.2d2c3 CUB-Or-Equivalent Top-K Branch" in texts["status"], "status evidence missing")
+    report.check("Active item: M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy" in texts["status"], "next active stage missing")
+    report.check("M14.2d2c4 Chunked And Tree-Merge Top-K Kernels" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("packed result absent", lambda value: value["b300_execution"]["stdout"].update({"packed_key_8192_range_output_matches": False})),
-        ("dynamic launch absent", lambda value: value["b300_execution"]["stdout"].update({"dynamic_shared_launch_matches": False})),
-        ("sentinel result absent", lambda value: value["b300_execution"]["stdout"].update({"sentinel_output_excluded": False})),
-        ("shared setup absent", lambda value: value["ownership"].update({"owns_dynamic_shared_launch_shape": False})),
-        ("CUB overclaim", lambda value: value["ownership"].update({"owns_cub_library_implementation": True})),
+        ("chunk result absent", lambda value: value["b300_execution"]["stdout"].update({"chunk_output_matches": False})),
+        ("tree result absent", lambda value: value["b300_execution"]["stdout"].update({"tree_merge_output_matches": False})),
+        ("scratch result absent", lambda value: value["b300_execution"]["stdout"].update({"scratch_layout_matches": False})),
+        ("scratch claim absent", lambda value: value["ownership"].update({"owns_scratch_layout": False})),
         ("dispatch overclaim", lambda value: value["ownership"].update({"owns_topk_dispatch_policy": True})),
-        ("chunked overclaim", lambda value: value["ownership"].update({"owns_chunked_topk_dispatch": True})),
+        ("indexed overclaim", lambda value: value["ownership"].update({"owns_indexed_topk_sort_dispatch": True})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)
@@ -241,7 +235,7 @@ def require_dict(report: Report, value: Any, name: str) -> dict[str, Any]:
 
 def print_report(report: Report) -> None:
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.2d2c3 packed-key top-k equivalent smoke: {status} ({report.checks} checks)")
+    print(f"M14.2d2c4 chunk/tree top-k kernel smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
 

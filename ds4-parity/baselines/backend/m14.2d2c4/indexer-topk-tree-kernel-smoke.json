@@ -1,0 +1,102 @@
+{
+  "schema": "ds4.indexer_topk_tree_kernel_smoke.v1",
+  "milestone": "M14.2d2c4",
+  "status": "b300-pass",
+  "id": "m14.2d2c4-indexer-topk-chunk-tree-merge",
+  "goal": "Prove opt-in Rust cuda-oxide ownership of current-C's large-component chunk, intermediate tree-merge, final-merge, and scratch-layout top-k path without claiming final dispatch integration.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "e9c0d677104751179985098f02212ff044d3ec22",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] 4096-element chunk, tree-merge, and final-merge kernels"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "indexer_topk_chunk_pow2_kernel<4096> emits 512 candidates for each 4096-component chunk",
+      "indexer_topk_tree_merge_pow2_kernel<4096> combines groups of up to eight candidate sets",
+      "indexer_topk_merge_pow2_kernel<4096> emits the final 512 selected components",
+      "per-token contiguous scratch level layout and partial final-chunk sentinel exclusion"
+    ],
+    "excluded_behavior": [
+      "indexed ascending top-k sort",
+      "validated-input specialized top-k dispatch policy",
+      "runtime graph integration and default CUDA route",
+      "C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "executable-local cuda-oxide 4096-element chunk candidate kernel launch proof",
+      "executable-local cuda-oxide tree and final merge kernel launch proof",
+      "current-C-shaped contiguous per-token scratch level and stride calculation"
+    ],
+    "not_claimed_in_this_stage": [
+      "validated-input specialized top-k dispatch policy",
+      "indexed ascending top-k sort dispatch",
+      "runtime graph integration or default CUDA route",
+      "C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "owns_indexer_topk_chunk_pow2_4096_kernel": true,
+    "owns_indexer_topk_tree_merge_pow2_4096_kernel": true,
+    "owns_indexer_topk_merge_pow2_4096_kernel": true,
+    "owns_scratch_layout": true,
+    "owns_topk_dispatch_policy": false,
+    "owns_indexed_topk_sort_dispatch": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 36,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-indexer-topk-tree-smoke",
+    "backend_selected_target": "sm_80",
+    "case": {
+      "n_comp": 36937,
+      "n_tokens": 2,
+      "n_chunks": 10,
+      "merge_group": 8,
+      "scratch_levels": [
+        {
+          "offset": 0,
+          "n_sets": 10,
+          "stride": 5120
+        },
+        {
+          "offset": 10240,
+          "n_sets": 2,
+          "stride": 1024
+        }
+      ],
+      "scratch_elements": 12288
+    },
+    "stdout": {
+      "milestone": "M14.2d2c4",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "chunk_output_matches": true,
+      "tree_merge_output_matches": true,
+      "final_merge_output_matches": true,
+      "scratch_layout_matches": true,
+      "multi_token_stride_matches": true,
+      "partial_chunk_sentinel_excluded": true,
+      "invalid_shape_rejected": true,
+      "owns_indexer_topk_chunk_pow2_4096_kernel": true,
+      "owns_indexer_topk_tree_merge_pow2_4096_kernel": true,
+      "owns_indexer_topk_merge_pow2_4096_kernel": true,
+      "owns_scratch_layout": true,
+      "owns_topk_dispatch_policy": false,
+      "owns_indexed_topk_sort_dispatch": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy"
+}

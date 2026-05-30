@@ -7979,12 +7979,31 @@
 
 ##### M14.2d2c4: Chunked And Tree-Merge Top-K Kernels
 
-- Status: active
+- Status: done
 - Goal: port chunk candidate, intermediate tree merge, and final merge
   kernels together with their scratch layout.
+- Oracle: current-C `indexer_topk_chunk_pow2_kernel<4096>`,
+  `indexer_topk_tree_merge_pow2_kernel<4096>`,
+  `indexer_topk_merge_pow2_kernel<4096>`, and its scratch allocation loop.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c4/indexer-topk-tree-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_tree_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust chunk, intermediate tree-merge, and
+  final-merge kernels plus current-C-shaped contiguous scratch level
+  calculation. B300 feature-enabled tests passed with 36 tests and live
+  cargo-oxide execution proved a two-token, ten-chunk case with one
+  intermediate level, per-token stride isolation, partial final-chunk
+  sentinel exclusion, and a 12,288-element scratch plan. Specialized top-k
+  dispatch policy, indexed ascending sort, runtime route, and C CUDA removal
+  remain unclaimed. Local formatting, diff, workspace tests, the 81-check
+  comparator, and unified parity passed with 127 passed, 45 skipped, and 0
+  failed. Non-interactive Claude review timed out without a completed result;
+  adversarial self-review retained the dispatch and indexed-sort non-claims.
 
 ##### M14.2d2c5: Indexed Ascending Top-K Sort And Dispatch Policy
 
-- Status: pending
+- Status: active
 - Goal: port indexed attention's ascending 512-element sort and close
   specialized top-k dispatch ordering.

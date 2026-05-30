@@ -552,6 +552,29 @@ pub const M14_2D2C3_SCOPE: IndexerTopkPackedKeyKernelScope = IndexerTopkPackedKe
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerTopkTreeKernelScope {
+    pub opt_in_only: bool,
+    pub owns_indexer_topk_chunk_pow2_4096_kernel: bool,
+    pub owns_indexer_topk_tree_merge_pow2_4096_kernel: bool,
+    pub owns_indexer_topk_merge_pow2_4096_kernel: bool,
+    pub owns_scratch_layout: bool,
+    pub owns_topk_dispatch_policy: bool,
+    pub owns_indexed_topk_sort_dispatch: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2D2C4_SCOPE: IndexerTopkTreeKernelScope = IndexerTopkTreeKernelScope {
+    opt_in_only: true,
+    owns_indexer_topk_chunk_pow2_4096_kernel: true,
+    owns_indexer_topk_tree_merge_pow2_4096_kernel: true,
+    owns_indexer_topk_merge_pow2_4096_kernel: true,
+    owns_scratch_layout: true,
+    owns_topk_dispatch_policy: false,
+    owns_indexed_topk_sort_dispatch: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -570,6 +593,7 @@ mod tests {
         M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
         M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
         M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
+        M14_2D2C4_SCOPE,
     };
 
     #[test]
@@ -838,6 +862,18 @@ mod tests {
         assert!(!M14_2D2C3_SCOPE.owns_topk_dispatch_policy);
         assert!(!M14_2D2C3_SCOPE.owns_chunked_topk_dispatch);
         assert!(!M14_2D2C3_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn tree_topk_scope_leaves_dispatch_indexed_sort_and_route_pending() {
+        assert!(M14_2D2C4_SCOPE.opt_in_only);
+        assert!(M14_2D2C4_SCOPE.owns_indexer_topk_chunk_pow2_4096_kernel);
+        assert!(M14_2D2C4_SCOPE.owns_indexer_topk_tree_merge_pow2_4096_kernel);
+        assert!(M14_2D2C4_SCOPE.owns_indexer_topk_merge_pow2_4096_kernel);
+        assert!(M14_2D2C4_SCOPE.owns_scratch_layout);
+        assert!(!M14_2D2C4_SCOPE.owns_topk_dispatch_policy);
+        assert!(!M14_2D2C4_SCOPE.owns_indexed_topk_sort_dispatch);
+        assert!(!M14_2D2C4_SCOPE.changes_default_route);
     }
 
     #[test]
