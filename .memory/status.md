@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb Remaining Residual Failure Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbb Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,25 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba Public Fd Stage Allocation Failure
+  Continuation ABI observes the existing Rust continuation from failed pinned
+  staging allocation into registration/device-copy fallback without consulting
+  strict fd-cache mode. A C-linked B300 consumer selects buffered fd caching,
+  forces `cuMemAllocHost_v2` failure before two disjoint ranges across a
+  strict-mode transition, rejects the first range-registration attempt, and
+  proves both ranges retain host-backed cached output rather than divergent fd
+  bytes. The second allocation attempt proves staging failure does not latch
+  arena cache-full state; one registration attempt preserves the previously
+  owned registration-disable boundary. Local library tests pass with 115
+  tests; B300 release-feature tests pass with 122 tests, the static library
+  retains 29 exports, and stage-pool reuse, fd-upload failure continuation,
+  fd-arena failure, fd-budget cache-result, default-fd, direct-I/O
+  asynchronous-staging, and registration-disable linked consumers pass
+  against it. The focused comparator and default unified parity report pass
+  with 201 passed, 45 skipped, and 0 failed. The required non-interactive
+  Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed
+  findings. Fd-read, event, and final synchronization observations, route
+  promotion, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba Public Fd Stage Pool Reuse ABI
   retains a Linux-only four-slot pinned staging pool independently from fd
   arenas, reuses sufficient slots across later range uploads and model-map

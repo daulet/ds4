@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2a full-model copy ABI smoke."""
+"""Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba fd stage-allocation failure ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,13 +14,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-full-model-copy-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba/abi-model-control-fd-stage-allocation-failure-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
-HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/abi_model_control_full_model_copy_link_smoke.c"
-FD_BUDGET_HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b1/abi_model_control_fd_cache_budget_link_smoke.c"
-FD_PROGRESS_HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2a/abi_model_control_fd_source_page_progress_link_smoke.c"
+HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba/abi_model_control_fd_stage_allocation_failure_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -55,8 +53,6 @@ def main(argv: Iterable[str]) -> int:
         "lib": CUDA_LIB.read_text(encoding="utf-8"),
         "abi": CUDA_ABI.read_text(encoding="utf-8"),
         "harness": HARNESS.read_text(encoding="utf-8"),
-        "fd_budget": FD_BUDGET_HARNESS.read_text(encoding="utf-8"),
-        "fd_progress": FD_PROGRESS_HARNESS.read_text(encoding="utf-8"),
         "gpu_build": GPU_BUILD.read_text(encoding="utf-8"),
         "gpu_sys": GPU_SYS.read_text(encoding="utf-8"),
         "roadmap": ROADMAP.read_text(encoding="utf-8"),
@@ -71,8 +67,8 @@ def main(argv: Iterable[str]) -> int:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
     print(
-        "M14.6b2b2b2b2b2b2b2b2b2b2b2a Rust CUDA public full-model copy "
-        f"ABI smoke: {state} ({report.checks} checks)"
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba Rust CUDA public fd "
+        f"stage-allocation failure ABI smoke: {state} ({report.checks} checks)"
     )
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
@@ -81,12 +77,15 @@ def main(argv: Iterable[str]) -> int:
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     report.check(
-        fixture.get("schema") == "ds4.cuda_abi_model_control_full_model_copy_smoke.v1",
+        fixture.get("schema") == "ds4.cuda_abi_model_control_fd_stage_allocation_failure_smoke.v1",
         "schema drift",
     )
-    report.check(fixture.get("milestone") == "M14.6b2b2b2b2b2b2b2b2b2b2b2a", "milestone drift")
     report.check(
-        fixture.get("status") == "b300-pass-staticlib-full-model-copy-abi",
+        fixture.get("milestone") == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba",
+        "milestone drift",
+    )
+    report.check(
+        fixture.get("status") == "b300-pass-staticlib-fd-stage-allocation-failure-abi",
         "status drift",
     )
     validate_oracle(report, fixture, texts)
@@ -100,20 +99,19 @@ def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
     report.check(
         oracle.get("symbols")
-        == ["ds4_gpu_set_model_map", "cuda_model_range_ptr", "cuda_model_range_is_cached"],
+        == ["cuda_model_stage_pool_alloc", "cuda_model_range_ptr_from_fd", "cuda_model_range_ptr"],
         "oracle symbols drift",
     )
     for marker in [
-        'const char *copy_env = getenv("DS4_CUDA_COPY_MODEL");',
-        "if (copy_env && copy_env[0])",
-        "cudaMalloc(&dev, (size_t)model_size)",
-        "cudaMemcpy(dev, model_map, (size_t)model_size, cudaMemcpyHostToDevice)",
-        "g_model_device_owned = 1;",
-        "cudaHostRegister((void *)model_map",
-        "if (g_model_device_owned || g_model_registered) return cuda_model_ptr(model_map, offset);",
-        "if (g_model_device_owned || g_model_registered) return 1;",
+        "static int cuda_model_stage_pool_alloc(uint64_t bytes) {",
+        "g_model_stage_bytes = 0;",
+        "if (!cuda_model_stage_pool_alloc(stage_bytes)) return NULL;",
+        "const char *fd_ptr = cuda_model_range_ptr_from_fd(model_map, offset, bytes, what);",
+        "if (fd_ptr) return fd_ptr;",
+        "if (g_model_range_mapping_supported) {",
+        'if (getenv("DS4_CUDA_STRICT_WEIGHT_CACHE") != NULL) return NULL;',
     ]:
-        report.check(marker in texts["cuda_c"], f"current-C full-copy marker missing: {marker}")
+        report.check(marker in texts["cuda_c"], f"current-C stage-failure marker missing: {marker}")
 
 
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -122,11 +120,10 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         ("exported_abi_symbol_count", 29),
         ("exported_compute_symbol_count", 9),
         ("public_gpu_abi_function_count", 81),
-        ("owns_nonempty_full_model_copy_selection", True),
-        ("owns_retained_full_model_device_image", True),
-        ("owns_copy_failure_registration_continuation", True),
-        ("owns_live_copy_failure_observation", False),
-        ("owns_remaining_failure_selection", False),
+        ("owns_initial_stage_allocation_failure_continuation", True),
+        ("owns_strict_independent_stage_failure_continuation", True),
+        ("owns_live_retried_stage_allocation_failure_observation", True),
+        ("owns_remaining_fd_read_event_sync_failure_selection", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
         ("changes_default_route", False),
@@ -138,23 +135,43 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     report.check(len(symbols) == 29, "Rust ABI export implementation count drift")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
+    upload_fn = texts["abi"].split("fn upload_abi_async_fd_range_into", maxsplit=1)[1].split(
+        "fn upload_abi_async_fd_arena_range", maxsplit=1
+    )[0]
+    buffered_fn = texts["abi"].split("fn try_upload_abi_buffered_fd_range(", maxsplit=1)[1].split(
+        "enum AbiFdArenaUpload", maxsplit=1
+    )[0]
+    range_fn = texts["abi"].split("fn with_cached_abi_model_range", maxsplit=1)[1].split(
+        "fn abi_model_range_is_cached", maxsplit=1
+    )[0]
     for marker in [
-        "fn full_model_copy_selected() -> bool",
-        'std::env::var_os("DS4_CUDA_COPY_MODEL").is_some_and(|value| !value.is_empty())',
-        "fn try_copy_abi_model_window(",
-        "if full_model_copy_selected()",
-        "&& try_copy_abi_model_window(backend, model_map, model_size, 0, model_size)",
-        "let _ = try_register_abi_model(backend, model_map, model_size);",
+        "static ABI_MODEL_STAGE_POOL: Mutex<AbiModelStagePool>",
+        "let mut stage_pool = ABI_MODEL_STAGE_POOL.lock().ok()?;",
+        "stage_pool.stage_bytes = 0;",
+        "staging: backend.pinned_zeroed::<u8>(stage_bytes).ok()?,",
     ]:
-        report.check(marker in texts["abi"], f"Rust full-copy marker missing: {marker}")
+        report.check(marker in texts["abi"] or marker in upload_fn, f"Rust stage-allocation marker missing: {marker}")
+    report.check("strict_fd_weight_cache_selected()" not in upload_fn, "strict mode unexpectedly gates stage allocation")
+    report.check(
+        "AbiFdArenaUpload::ArenaFallback" in buffered_fn
+        and "if strict_fd_weight_cache_selected()" in buffered_fn,
+        "strict mode no longer remains confined to arena fallback",
+    )
     for marker in [
-        "pub struct CudaAbiFullModelCopySelectionScope",
-        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE",
-        "owns_nonempty_full_model_copy_selection: true",
-        "owns_retained_full_model_device_image: true",
-        "owns_copy_failure_registration_continuation: true",
-        "owns_live_copy_failure_observation: false",
-        "owns_remaining_failure_selection: false",
+        "let fd_resolution = if direct_io_fd_weight_cache_selected() {",
+        "let storage = match fd_resolution {",
+        "None => {",
+        "match try_register_abi_model_range(",
+        "AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?)",
+    ]:
+        report.check(marker in range_fn, f"Rust post-stage-failure continuation marker missing: {marker}")
+    for marker in [
+        "pub struct CudaAbiFdStageAllocationFailureScope",
+        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBA_SCOPE",
+        "owns_initial_stage_allocation_failure_continuation: true",
+        "owns_strict_independent_stage_failure_continuation: true",
+        "owns_live_retried_stage_allocation_failure_observation: true",
+        "owns_remaining_fd_read_event_sync_failure_selection: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -168,57 +185,68 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 108),
-        ("feature_release_test_count", 115),
+        ("local_library_test_count", 115),
+        ("feature_release_test_count", 122),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
+    failure = require_dict(report, execution.get("forced_failure"), "forced_failure")
+    for key, expected in [
+        ("interposed_symbol", "cuMemAllocHost_v2"),
+        ("stage_failure_error", 2),
+        ("registration_failure_error", 801),
+    ]:
+        report.check(failure.get(key) == expected, f"forced failure drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
-        "nonempty_copy_model_selected",
-        "successful_full_copy_skips_registration",
-        "host_mutation_after_map_setup_ignored",
-        "model_replacement_copies_new_image",
-        "cached_weighted_rms_reads_copied_image",
+        "buffered_fd_selection_active",
+        "interposed_initial_stage_allocation_failure",
+        "stage_failure_retries_without_cache_full_latch",
+        "non_strict_stage_failure_continues_to_cached_device_copy",
+        "strict_stage_failure_continues_to_cached_device_copy",
+        "first_stage_failure_enters_registration_fallback",
+        "subsequent_stage_failure_respects_registration_disable",
+        "cached_fallback_retains_original_host_bytes",
+        "host_bytes_precede_file_bytes_after_stage_failure",
         "weighted_outputs_match",
         "embedded_libdevice_module_loaded",
         "staticlib_export_count_unchanged",
-        "whole_registration_regression_passed",
+        "fd_stage_pool_reuse_regression_passed",
+        "fd_upload_failure_continuation_regression_passed",
+        "fd_arena_failure_regression_passed",
+        "fd_budget_cache_result_regression_passed",
+        "default_fd_regression_passed",
+        "direct_io_async_staging_regression_passed",
         "registration_disable_regression_passed",
-        "chunk_selected_copy_regression_passed",
-        "fd_budget_regression_passed",
-        "fd_source_page_progress_regression_passed",
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
     for marker in [
-        "CUresult cuMemHostRegister_v2(",
-        "return 801;",
-        'setenv("DS4_CUDA_COPY_MODEL", "1", 1)',
-        "host_register_calls != 0",
-        "memcpy((unsigned char *)first_map + offset, first_changed, bytes)",
-        "ds4_gpu_set_model_map(second_map, sizeof(second_map))",
-        "ds4_gpu_rms_norm_weight_tensor(",
+        "CUresult cuMemAllocHost_v2(",
+        'dlsym(RTLD_NEXT, "cuMemAllocHost_v2")',
+        "fail_stage_alloc = 1;",
+        "stage_alloc_failures != 1",
+        "stage_alloc_failures != 2",
+        "host_register_calls != register_calls_after_map + 1",
+        'setenv("DS4_CUDA_STRICT_WEIGHT_CACHE", "1", 1)',
+        "stage_failure_retries_without_cache_full_latch",
+        "subsequent_stage_failure_respects_registration_disable",
+        "cached_fallback_retains_original_host_bytes",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
-    for name in ["fd_budget", "fd_progress"]:
-        report.check(
-            'setenv("DS4_CUDA_COPY_MODEL", "", 1)' in texts[name],
-            f"{name} regression still selects full-model copy instead of fd staging",
-        )
     risks = fixture.get("integration_risks", [])
-    report.check(any("source-backed only" in value for value in risks), "live copy-failure caveat missing")
-    report.check(any("fd-only predecessor" in value for value in risks), "fd regression correction caveat missing")
-    report.check(any("remaining model-control" in value for value in risks), "remaining selection risk missing")
+    report.check(any("cuMemAllocHost_v2" in value for value in risks), "stage allocation boundary missing")
+    report.check(any("range-registration disable" in value for value in risks), "registration-disable boundary missing")
+    report.check(any("fd read, event" in value for value in risks), "remaining failure boundary missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     fixture_path = (
-        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/"
-        "abi-model-control-full-model-copy-smoke.json"
+        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba/"
+        "abi-model-control-fd-stage-allocation-failure-smoke.json"
     )
-    checker = "check_cuda_abi_model_control_full_model_copy_smoke.py"
-    item = "M14.6b2b2b2b2b2b2b2b2b2b2b2a: Public Full-Model Copy Selection ABI"
+    checker = "check_cuda_abi_model_control_fd_stage_allocation_failure_smoke.py"
+    item = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba: Public Fd Stage Allocation Failure Continuation ABI"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
@@ -229,7 +257,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
         "active item missing",
     )
     report.check(
-        "M14.6b2b2b2b2b2b2b2b2b2b2b2a Public Full-Model Copy Selection ABI"
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba Public Fd Stage Allocation Failure"
         in texts["status"],
         "status evidence missing",
     )
@@ -237,17 +265,17 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(
         fixture.get("next_required_stage")
-        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy",
+        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbb Remaining Residual Failure Selection Policy",
         "next stage drift",
     )
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("full-copy ownership missing", lambda value: value["ownership"].update({"owns_nonempty_full_model_copy_selection": False})),
-        ("retained image missing", lambda value: value["b300_execution"]["observed"].update({"host_mutation_after_map_setup_ignored": False})),
-        ("registration unexpectedly used", lambda value: value["b300_execution"]["observed"].update({"successful_full_copy_skips_registration": False})),
-        ("live failure overclaim", lambda value: value["ownership"].update({"owns_live_copy_failure_observation": True})),
+        ("initial allocation ownership missing", lambda value: value["ownership"].update({"owns_initial_stage_allocation_failure_continuation": False})),
+        ("strict-independent ownership missing", lambda value: value["ownership"].update({"owns_strict_independent_stage_failure_continuation": False})),
+        ("retry observation missing", lambda value: value["b300_execution"]["observed"].update({"stage_failure_retries_without_cache_full_latch": False})),
+        ("registration-disable observation missing", lambda value: value["b300_execution"]["observed"].update({"subsequent_stage_failure_respects_registration_disable": False})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)

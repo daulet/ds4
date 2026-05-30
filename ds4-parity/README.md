@@ -3341,6 +3341,22 @@ pinned allocation or registration fallback. Initial allocation and
 pool-growth failure, fd-read, event, and final synchronization observations,
 whole-archive retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbba Rust CUDA public fd
+stage-allocation failure continuation ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_stage_allocation_failure_smoke.py --negative-test
+```
+
+The fixture selects buffered fd caching from a C-linked B300 consumer,
+forces `cuMemAllocHost_v2` failure before two disjoint ranges across a
+strict-mode transition, and rejects the first range-registration attempt.
+Host-backed cached weighted output from both ranges proves failed stage
+allocation continues through device-copy fallback independently of strict
+mode; the repeated allocation failure proves it does not latch arena
+cache-full state. Fd-read, event, final synchronization, whole-archive
+retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
