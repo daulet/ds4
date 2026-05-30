@@ -24,6 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let module = kernels::load(substrate.context())?;
     let mut tensor = substrate.upload(&[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0])?;
 
+    substrate.begin_commands();
     fill_f32(&module, substrate.stream(), &mut tensor, -3.5, 4)?;
     substrate.flush_commands()?;
     assert_eq!(
@@ -54,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     println!(
-        "{{\"milestone\":\"M14.1b4\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"prefix_fill_matches\":true,\"negative_infinity_fill_matches\":true,\"zero_count_is_noop\":true,\"bounds_rejected\":true,\"flush_is_context_wide\":true,\"end_is_context_wide\":true,\"synchronize_is_context_wide\":true,\"owns_tensor_fill_f32\":{},\"owns_command_synchronization\":{},\"owns_dequant_kernels\":{},\"owns_graph_kernels\":{},\"changes_default_route\":{}}}",
+        "{{\"milestone\":\"M14.1b4\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"begin_is_noop\":true,\"prefix_fill_matches\":true,\"negative_infinity_fill_matches\":true,\"zero_count_is_noop\":true,\"bounds_rejected\":true,\"flush_is_context_wide\":true,\"end_is_context_wide\":true,\"synchronize_is_context_wide\":true,\"owns_tensor_fill_f32\":{},\"owns_command_synchronization\":{},\"owns_dequant_kernels\":{},\"owns_graph_kernels\":{},\"changes_default_route\":{}}}",
         substrate.device_name()?,
         M14_1B4_SCOPE.owns_tensor_fill_f32,
         M14_1B4_SCOPE.owns_command_synchronization,

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1c Substrate Route Closure Gate
+- Active item: M14.2 Embedding Indexer And Elementwise Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -17,7 +17,8 @@
   M14.1b3a and M14.1b3b because managed-KV/memory-report policy only needs a
   memory-capacity query, while Q8 caches and quality mode need BLAS or kernel
   ownership.
-- Last validated source before the active item: M14.1b4 Fill Kernel And Command Lifetime.
+- Last validated source before the active item: M14.1c Substrate Route Closure Gate.
+- Earlier M14.1b4 Fill Kernel And Command Lifetime.
 - Earlier M14.1b3b Q8 Cache And Quality Policy.
 - Earlier M14.1b3a Managed KV And Memory Report Policy.
 - Earlier M14.1b2c Model Map Cache Closure.
@@ -128,12 +129,31 @@
 
 ## Last Evidence
 
+- M14.1c Substrate Route Closure Gate closes the opt-in Rust resource
+  substrate boundary for later kernel stages. It corrects the M14.0
+  inventory after the Q8 policy milestone proved that
+  `ds4_gpu_cache_q8_f16_range`, `dequant_q8_0_to_f16_kernel`, and
+  `dequant_q8_0_to_f32_kernel` remain M14.3 ownership rather than M14.1;
+  M14.1 owns only `fill_f32_kernel` among CUDA kernels. The Rust substrate
+  now also exposes current-C's no-op `begin_commands` operation and the B300
+  fill smoke invokes it before command completion. Its fixture and checker
+  are `ds4-parity/baselines/backend/m14.1c/substrate-route-closure.json` and
+  `ds4-parity/check_substrate_route_closure.py --negative-test`. This closure
+  does not activate the default route or allow `ds4_cuda.cu` removal. Local
+  formatter, diff, and workspace tests passed; the updated 81-check M14.1b4
+  comparator and 139-check closure comparator passed; B300 feature-enabled
+  tests passed with 21 tests and the live cargo-oxide fill execution reported
+  `begin_is_noop:true`; unified parity passed with 108 passed, 50 skipped,
+  and 0 failed. Non-interactive Claude review timed out without a completed
+  result; adversarial self-review confirmed the deferred M14.3 ownership,
+  no-op command mapping, and no route or removal overclaim.
 - M14.1b4 Fill Kernel And Command Lifetime adds the opt-in
   `cuda-oxide-kernels` feature and executable-local
   `ds4-cuda-fill-lifetime-smoke`. Its Rust `#[kernel] fill_f32` uses the
   current-C 256-thread launch shape with explicit count semantics, while the
-  substrate now exposes context-wide flush/end/synchronize completion
-  wrappers. Initial B300 execution proved two toolchain defects before the
+  substrate now exposes current-C's no-op begin and context-wide
+  flush/end/synchronize completion wrappers. Initial B300 execution proved
+  two toolchain defects before the
   final success: library-only embedded modules were not retained in the
   executable, and `cargo oxide run` forced `sm_103` while `/usr/bin/llc`
   emitted invalid `.version 6.0 / .target sm_103` PTX, producing CUDA JIT

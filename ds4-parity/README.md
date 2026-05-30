@@ -2196,9 +2196,22 @@ python3 ds4-parity/check_fill_command_lifetime_smoke.py --negative-test
 The fixture records an executable-local `#[cuda_module]` fill kernel run on
 B300 after cuda-oxide stopped forcing the unsupported `sm_103` PTX target for
 a basic portable kernel. It proves prefix fill, negative-infinity fill,
-zero-count/bounds behavior, and context-wide flush/end/synchronize wrappers.
-It does not claim library artifact retention, dequant or graph compute
-kernels, runtime graph integration, or default-route ownership.
+zero-count/bounds behavior, current-C's no-op begin command, and context-wide
+flush/end/synchronize wrappers. It does not claim library artifact retention,
+dequant or graph compute kernels, runtime graph integration, or default-route
+ownership.
+
+Validate the M14.1c Rust CUDA substrate route-closure gate:
+
+```sh
+python3 ds4-parity/check_substrate_route_closure.py --negative-test
+```
+
+The closure fixture records that M14.1 exposes only the opt-in Rust CUDA
+resource substrate and `fill_f32` command surface to following kernel work.
+It corrects the inventory so converted Q8 cache ownership and dequant kernels
+remain assigned to M14.3, and rejects default-route promotion or C CUDA
+removal.
 
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 

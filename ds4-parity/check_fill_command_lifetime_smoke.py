@@ -31,7 +31,7 @@ TOOL_REVISION = "981e3244a107d84d807cfb087793269c477cc764"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide fill_f32 kernel launch proof",
     "current-C-shaped fill count, zero-count, and bounds semantics",
-    "context-wide flush, end, and explicit synchronize completion wrappers",
+    "no-op begin plus context-wide flush, end, and explicit synchronize completion wrappers",
 ]
 EXPECTED_NOT_CLAIMED = [
     "library embedded-kernel artifact retention or runtime graph integration",
@@ -112,6 +112,7 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
         "ds4_gpu_tensor_fill_f32",
         "fill_f32_kernel<<<(count + 255u) / 256u, 256>>>",
         "__global__ static void fill_f32_kernel",
+        "ds4_gpu_begin_commands",
         "ds4_gpu_flush_commands",
         "ds4_gpu_end_commands",
         "ds4_gpu_synchronize",
@@ -161,6 +162,7 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
         "milestone": "M14.1b4",
         "device_name": "NVIDIA B300 SXM6 AC",
         "rust_kernel_toolchain": True,
+        "begin_is_noop": True,
         "prefix_fill_matches": True,
         "negative_infinity_fill_matches": True,
         "zero_count_is_noop": True,
@@ -185,11 +187,13 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
         "count.div_ceil(THREADS_PER_BLOCK as u64)",
         "f32::NEG_INFINITY",
         "Err(FillF32Error::CountExceedsTensor",
+        "substrate.begin_commands()",
     ]:
         report.check(marker in texts["smoke"], f"kernel smoke marker missing: {marker}")
     for marker in [
         "pub fn context(&self)",
         "pub fn stream(&self)",
+        "pub fn begin_commands(&self)",
         "pub fn flush_commands(&self)",
         "pub fn end_commands(&self)",
         "pub fn synchronize_device(&self)",
@@ -205,7 +209,11 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check("M14.1b4: Fill Kernel And Command Lifetime" in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.1c Substrate Route Closure Gate" in texts["status"], "next active stage missing")
+    report.check(
+        "Active item: M14.1c Substrate Route Closure Gate" in texts["status"]
+        or "Active item: M14.2 Embedding Indexer And Elementwise Kernels" in texts["status"],
+        "next active stage missing",
+    )
     report.check("M14.1b4 Fill Kernel And Command Lifetime" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
@@ -214,6 +222,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
         ("kernel execution absent", lambda value: value["b300_execution"]["stdout"].update({"rust_kernel_toolchain": False})),
+        ("begin no-op absent", lambda value: value["b300_execution"]["stdout"].update({"begin_is_noop": False})),
         ("prefix fill absent", lambda value: value["b300_execution"]["stdout"].update({"prefix_fill_matches": False})),
         ("portable target lost", lambda value: value["b300_execution"].update({"backend_selected_target": "sm_103"})),
         ("dequant overclaim", lambda value: value["ownership"].update({"owns_dequant_kernels": True})),

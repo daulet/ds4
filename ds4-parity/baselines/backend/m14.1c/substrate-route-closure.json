@@ -1,0 +1,83 @@
+{
+  "schema": "ds4.cuda_oxide_substrate_closure.v1",
+  "milestone": "M14.1c",
+  "status": "closure-no-route-promotion",
+  "id": "m14.1c-substrate-route-closure",
+  "goal": "Close the opt-in Rust CUDA substrate boundary for following kernel stages without promoting the default route or claiming deferred Q8 conversion work.",
+  "source_artifacts": {
+    "ownership_inventory": "ds4-parity/baselines/backend/m14.0/cuda-rust-ownership-inventory.json",
+    "host_substrate": "ds4-parity/baselines/backend/m14.1a/cuda-oxide-substrate-smoke.json",
+    "model_residency": "ds4-parity/baselines/backend/m14.1b1/model-residency-handles-smoke.json",
+    "model_range_copy": "ds4-parity/baselines/backend/m14.1b2a/model-range-copy-smoke.json",
+    "model_range_strategy": "ds4-parity/baselines/backend/m14.1b2b1/model-range-strategy-smoke.json",
+    "registered_range": "ds4-parity/baselines/backend/m14.1b2b2/model-registered-range-smoke.json",
+    "pageable_hmm": "ds4-parity/baselines/backend/m14.1b2b3a/model-pageable-hmm-smoke.json",
+    "direct_io": "ds4-parity/baselines/backend/m14.1b2b3b1/model-direct-io-smoke.json",
+    "async_staging": "ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json",
+    "model_map_closure": "ds4-parity/baselines/backend/m14.1b2c/model-map-closure-smoke.json",
+    "allocation_policy": "ds4-parity/baselines/backend/m14.1b3a/allocation-policy-smoke.json",
+    "q8_quality_policy": "ds4-parity/baselines/backend/m14.1b3b/q8-quality-policy-smoke.json",
+    "fill_command_lifetime": "ds4-parity/baselines/backend/m14.1b4/fill-command-lifetime-smoke.json"
+  },
+  "inventory_refresh": {
+    "reason": "M14.1b3b validated Q8 admission and quality policy only; converted Q8 cache ownership and dequant kernels remain assigned to M14.3.",
+    "reassigned_to_m14_3": [
+      "ds4_gpu_cache_q8_f16_range",
+      "dequant_q8_0_to_f16_kernel",
+      "dequant_q8_0_to_f32_kernel"
+    ],
+    "m14_1_kernel_symbols": [
+      "fill_f32_kernel"
+    ]
+  },
+  "closed_resource_capabilities": [
+    "context, stream, device and managed allocation substrate",
+    "model-window and staged range-cache lifetime policy",
+    "managed-KV, memory-report, and Q8 admission or quality policy",
+    "fill_f32 launch and current-C-shaped command completion surface"
+  ],
+  "verified_non_claims": {
+    "q8_quality_policy": {
+      "owns_converted_q8_buffers": false,
+      "owns_dequant_kernels": false
+    },
+    "fill_command_lifetime": {
+      "owns_dequant_kernels": false,
+      "owns_graph_kernels": false
+    }
+  },
+  "claim_policy": {
+    "m14_1_substrate_available_to_following_kernel_stages": true,
+    "opt_in_only": true,
+    "default_route_replacement_active": false,
+    "ds4_cuda_removal_allowed": false,
+    "current_c_cuda_retained_as_oracle": true,
+    "q8_conversion_and_dequant_deferred_to_m14_3": true
+  },
+  "b300_rerun_contract": {
+    "date_utc": "2026-05-30",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "host_feature_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "fill_kernel_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-fill-lifetime-smoke",
+    "backend_selected_target": "sm_80",
+    "fill_stdout": {
+      "milestone": "M14.1b4",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "begin_is_noop": true,
+      "prefix_fill_matches": true,
+      "negative_infinity_fill_matches": true,
+      "zero_count_is_noop": true,
+      "bounds_rejected": true,
+      "flush_is_context_wide": true,
+      "end_is_context_wide": true,
+      "synchronize_is_context_wide": true,
+      "owns_tensor_fill_f32": true,
+      "owns_command_synchronization": true,
+      "owns_dequant_kernels": false,
+      "owns_graph_kernels": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.2 Embedding Indexer And Elementwise Kernels"
+}

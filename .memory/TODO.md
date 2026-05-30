@@ -7549,11 +7549,13 @@
   target selection by retaining the backend-selected portable `sm_80` target
   for a basic kernel instead of forcing rejected `sm_103` PTX. The B300
   `ds4-cuda-fill-lifetime-smoke` execution proved prefix and
-  negative-infinity fills, zero-count and bounds behavior, and context-wide
-  flush/end/synchronize wrappers through a Rust `#[kernel]`. This does not
+  negative-infinity fills, zero-count and bounds behavior, current-C's no-op
+  begin command, and context-wide flush/end/synchronize wrappers through a
+  Rust `#[kernel]`. This does not
   claim reusable library embedded-kernel linkage, dequant or graph compute
   kernels, runtime graph integration, or route activation.
-- Validation: local workspace tests, formatter and diff checks, the 77-check
+- Validation: local workspace tests, formatter and diff checks, the
+  fill/command-lifetime
   comparator and retained M14 checks, B300 feature-enabled `ds4-cuda` tests,
   B300 `cargo-oxide` tests and live kernel execution, and unified parity
   (107 passed, 50 skipped, 0 failed) passed. Non-interactive Claude review
@@ -7562,11 +7564,23 @@
 
 ##### M14.1c: Substrate Route Closure Gate
 
-- Status: planned
+- Status: done
 - Goal: close M14.1 so M14.2 kernels can depend on Rust-owned resource
   behavior while keeping C CUDA as the retained oracle.
 - Oracle: M14.0 and M14.1a/M14.1b artifacts.
-- Comparator: closure matrix checker and B300 rerun contract.
-- Validation needed: no unassigned M14.1 operations and no default-route or
-  removal overclaim.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1c/substrate-route-closure.json`.
+- Comparator: `ds4-parity/check_substrate_route_closure.py --negative-test`
+  and B300 feature-test plus fill-kernel rerun contract.
+- Evidence: corrected the inventory so `ds4_gpu_cache_q8_f16_range` and both
+  dequant kernels remain M14.3 work; M14.1 owns `fill_f32_kernel` and an
+  explicit Rust no-op `begin_commands` command facade. Default-route
+  promotion and C CUDA removal remain rejected.
+- Validation: local formatting, diff and workspace tests passed; the updated
+  81-check M14.1b4 comparator and 139-check closure comparator passed; B300
+  feature-enabled `ds4-cuda` tests passed with 21 tests and live cargo-oxide
+  fill execution reported `begin_is_noop:true`; unified parity passed with
+  108 passed, 50 skipped, and 0 failed. Non-interactive Claude review timed
+  out without a completed result; adversarial self-review found no remaining
+  ownership-boundary or route-claim defect.
 - Owner path: M14.1 artifacts and route policy.

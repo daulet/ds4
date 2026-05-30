@@ -58,6 +58,9 @@ impl CudaOxideSubstrate {
         self.stream.synchronize()
     }
 
+    /// Mirrors current C: beginning a command scope has no asynchronous work.
+    pub fn begin_commands(&self) {}
+
     /// Mirrors the current-C command API's device-wide completion boundary.
     pub fn flush_commands(&self) -> Result<(), DriverError> {
         self.context.synchronize()

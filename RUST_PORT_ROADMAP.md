@@ -7179,12 +7179,13 @@ Stage split:
   - On B300 pod `ds4-rust-port-b300`, `cargo test -p cargo-oxide` passed and
     the kernel smoke executed on `NVIDIA B300 SXM6 AC` with backend-selected
     `sm_80`, proving prefix fill, negative-infinity fill, zero-count no-op,
-    bounds rejection, and context-wide flush/end/synchronize behavior.
+    bounds rejection, current-C's no-op begin command, and context-wide
+    flush/end/synchronize behavior.
   - This is an executable-local kernel proof. Library embedded-module
     retention, dequant kernels, graph compute kernels, runtime graph
     integration, and default-route ownership remain unclaimed.
   - Validation passed through local workspace tests, formatter and diff
-    checks, the 77-check comparator and retained M14 checks, B300
+    checks, the fill/command-lifetime comparator and retained M14 checks, B300
     feature-enabled `ds4-cuda` tests, B300 `cargo-oxide` tests and kernel
     execution, and unified parity with 107 passed, 50 skipped, and 0 failed.
     Non-interactive Claude review timed out without a completed result;
@@ -7194,14 +7195,37 @@ Stage split:
 
 ##### M14.1c: Substrate Route Closure Gate
 
-- Status: planned.
+- Status: done.
 - Goal: close resource ownership and expose the Rust CUDA substrate only to
   the following kernel stages, without promoting the default runtime route.
 - Oracle: M14.1a and M14.1b artifacts plus M14.0 claim policy.
-- Comparator: closure matrix and B300 regression rerun contract.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1c/substrate-route-closure.json`.
+- Comparator: `ds4-parity/check_substrate_route_closure.py --negative-test`
+  plus the retained B300 feature-test and fill-kernel rerun contract.
 - Acceptance: M14.2 may consume the Rust substrate; CUDA C removal and
   default-route promotion remain rejected.
 - Drift policy: retained current-C CUDA oracles remain required through M14.6.
+- Evidence:
+  - Corrected the M14.0 ownership inventory after M14.1b3b established that
+    `ds4_gpu_cache_q8_f16_range`, `dequant_q8_0_to_f16_kernel`, and
+    `dequant_q8_0_to_f32_kernel` remain M14.3 work, while M14.1 owns only
+    `fill_f32_kernel` among CUDA kernels.
+  - Added the explicit Rust no-op `begin_commands` facade and live fill smoke
+    invocation so the current-C command surface is complete before M14.2
+    consumes the substrate.
+  - Route promotion and `ds4_cuda.cu` removal remain rejected; all M14.1
+    behavior remains opt-in and current C remains the oracle.
+  - Validation passed through local formatting, diff, and workspace tests;
+    the updated 81-check M14.1b4 comparator; the 139-check closure
+    comparator; B300 feature-enabled `ds4-cuda` tests with 21 passing tests;
+    live B300 cargo-oxide `fill_f32` execution including
+    `begin_is_noop:true`; and unified parity with 108 passed, 50 skipped, and
+    0 failed.
+  - Non-interactive Claude review produced no completed result before its
+    timeout; adversarial self-review confirmed that the reassigned Q8/dequant
+    symbols remain M14.3-only, the begin command maps only the current-C
+    no-op, and closure makes no route or removal claim.
 
 ## Removal Criteria for C Host Code
 
