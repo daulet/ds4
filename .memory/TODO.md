@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c4
+- Status: active; split beginning with M14.5a through M14.5c2c5
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8881,6 +8881,25 @@
 
 ##### M14.5c2c4: Atomic Expert-Tile Down Output
 
-- Status: active
+- Status: done
 - Goal: port token-indexed atomic accumulation for expert-tile down projection
   before tile16 and widened-row scheduling variants.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c4/routed-moe-atomic-down-smoke.json`
+- Comparator: `ds4-parity/check_routed_moe_atomic_down_smoke.py --negative-test`
+- Evidence: executable-local Rust `zero_kernel` and row32
+  `DeviceAtomicF32::fetch_add` branches cover token-indexed atomic down
+  accumulation for both tile8 and tile4 descriptor schedules. B300
+  feature-enabled tests passed with 80 tests; live cargo-oxide execution
+  emitted portable `sm_80` PTX and matched both atomic outputs on
+  `NVIDIA B300 SXM6 AC`. Tile16/rowspan dispatch, shared-cache
+  specialization, Q4_K, hyperconnection, runtime route activation, and C
+  CUDA removal remain unclaimed. Local formatting, diff, library tests, the
+  M14.5c2c4 comparator, retained M14 checks, and unified parity passed with
+  159 passed, 50 skipped, and 0 failed.
+
+##### M14.5c2c5: Tile16 Row32 Atomic Down
+
+- Status: active
+- Goal: port the high-token tile16 row32 atomic down projection selection
+  before widened-row and shared-cache specialization boundaries.

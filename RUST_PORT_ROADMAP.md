@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c4.
+- Status: active; split beginning with M14.5a through M14.5c2c5.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8920,9 +8920,38 @@ Stage split:
 
 ##### M14.5c2c4: Atomic Expert-Tile Down Output
 
-- Status: active.
+- Status: done.
 - Goal: port token-indexed atomic accumulation for expert-tile down projection
   before tile16 and widened-row scheduling variants.
+- Oracle: current-C `zero_kernel`, `use_atomic_down` dispatch, and atomic
+  branches of `moe_down_expert_tile8_row32_kernel` and
+  `moe_down_expert_tile4_row32_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c4/routed-moe-atomic-down-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_atomic_down_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in device-zero initialization and token-indexed
+  `DeviceAtomicF32` down accumulation for tile8 and tile4 row32 schedules.
+  Tile16/rowspan dispatch, shared-cache specialization, Q4_K, hyperconnection,
+  runtime graph integration, default route activation, and C CUDA removal
+  remain pending.
+- Evidence:
+  - Added executable-local Rust `zero_kernel` and atomic row32 down branches;
+    one atomic execution validates both tile8 and tile4 scheduling against
+    token-summed reference output.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 80 tests; live cargo-oxide execution emitted portable `sm_80` PTX,
+    lowered `DeviceAtomicF32::fetch_add`, and matched atomic outputs on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2c4 comparator, retained
+    M14 checks, and unified parity passed with 159 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2c5: Tile16 Row32 Atomic Down
+
+- Status: active.
+- Goal: port the high-token tile16 row32 atomic down projection selection
+  before widened-row and shared-cache specialization boundaries.
 
 ## Removal Criteria for C Host Code
 

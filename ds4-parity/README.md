@@ -2826,6 +2826,18 @@ bucketing through tile metadata. It leaves shared-cache specialization,
 atomic-down/tile16/rowspan execution, Q4_K, hyperconnection, runtime route,
 and C CUDA removal unclaimed.
 
+Validate the M14.5c2c4 Rust CUDA routed MoE atomic-down smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_atomic_down_smoke.py --negative-test
+```
+
+The fixture records current-C `DS4_CUDA_MOE_ATOMIC_DOWN` behavior on B300:
+device-zero initialization followed by token-indexed float atomic accumulation
+for both tile8 and tile4 row32 down schedules. It leaves tile16/rowspan
+scheduling, shared-cache specialization, Q4_K, hyperconnection, runtime
+route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
