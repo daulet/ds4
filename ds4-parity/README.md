@@ -3282,6 +3282,21 @@ fd reads do not require `DS4_CUDA_WEIGHT_CACHE`, remain selected under
 fallback range handling. Remaining failure selection, whole-archive
 retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b1 Rust CUDA public fd-budget
+fallback cache-result ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_budget_cache_result_smoke.py --negative-test
+```
+
+The fixture admits a near-one-GiB buffered fd-backed range through a
+C-linked B300 consumer, then forces a small raw fd budget fallback with
+divergent host and file weights. It proves that
+`ds4_gpu_cache_model_range` reports the fallback as uncached while weighted
+RMS consumes the returned host bytes. Arena allocation failure, persistent
+cache-full state, `DS4_CUDA_STRICT_WEIGHT_CACHE` continuation, whole-archive
+retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

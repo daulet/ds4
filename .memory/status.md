@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,22 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b1 Public Fd Budget Fallback Cache-Result ABI
+  makes the public cache-range return value reflect retained storage after fd
+  budget resolution and releases the retained-range mutex before callbacks.
+  A C-linked B300 consumer admits a near-one-GiB fd-backed range, forces a
+  small over-budget fallback with divergent host/file weights, observes an
+  uncached public result, and verifies weighted RMS reads host bytes. The
+  corrected fd-budget predecessor, default-fd, direct-model, pageable-HMM,
+  and full-model-copy linked consumers pass against the rebuilt archive.
+  Local library tests pass with 111 tests; B300 release-feature tests pass
+  with 118 tests and the static library retains 29 exports. The public
+  fd-budget cache-result checker passes 101 checks, and the default unified
+  report passes with 197 passed, 45 skipped, and 0 failed. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Arena allocation failure, persistent
+  cache-full state, `DS4_CUDA_STRICT_WEIGHT_CACHE` continuation, route
+  promotion, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2a Public Default Fd Selection ABI selects
   a configured model fd whenever fd caching is not disabled and direct-host
   bypass is not selected, without incorrectly requiring

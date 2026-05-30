@@ -9895,6 +9895,42 @@
 
 ################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2 because the public uncached return value
+  and compute use of fd-budget host fallback are independently observable
+  from arena-allocation and strict-cache failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.
+
+################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b1: Public Fd Budget Fallback Cache-Result ABI
+
+- Status: done
+- Goal: preserve current-C uncached public cache-result behavior for raw fd
+  byte-budget fallback and observe weighted compute through the returned host
+  pointer while leaving arena/strict-cache failure selection pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b1/abi-model-control-fd-budget-cache-result-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_budget_cache_result_smoke.py --negative-test`.
+- Evidence: Rust now reports retained cache membership after public range
+  resolution and releases the retained-range mutex before callback execution.
+  A C-linked B300 consumer admits a near-one-GiB fd-backed range, triggers a
+  small over-budget fallback with divergent host/file weights, observes an
+  uncached public result, and verifies weighted RMS consumes host bytes. The
+  corrected preceding fd-budget consumer now reports its oversized fallback
+  as uncached; default-fd, direct-model, pageable-HMM, and full-model-copy
+  consumers pass against the rebuilt archive. Local tests pass with 111
+  tests, B300 release-feature tests pass with 118 tests, and the static
+  library retains 29 exports. The public fd-budget cache-result checker passes
+  101 checks, and the default unified report passes with 197 passed, 45
+  skipped, and 0 failed. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Arena
+  allocation failure, persistent cache-full state,
+  `DS4_CUDA_STRICT_WEIGHT_CACHE` continuation, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
+
 - Status: active
 - Goal: connect remaining model-control failure selection without claiming
   graph compute closure or route promotion.

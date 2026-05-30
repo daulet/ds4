@@ -23,7 +23,7 @@
     "scope_source": "rust/ds4-cuda/src/lib.rs",
     "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b1/abi_model_control_fd_cache_budget_link_smoke.c",
     "selection_path": "DS4_CUDA_WEIGHT_CACHE=1 with DS4_CUDA_NO_DIRECT_IO=1 and DS4_CUDA_WEIGHT_CACHE_LIMIT_GB=1 first admits a small fd-backed range, then rejects a 1 GiB request because admitted bytes already consume part of the limit",
-    "observable_public_harness_boundary": "the linked consumer makes the rejected model pages inaccessible and keeps the backing file truncated, so successful oversized ds4_gpu_cache_model_range calls prove the budget path returns before staging or copying those bytes; it does not consume the fallback pointer in a compute kernel",
+    "observable_public_harness_boundary": "the corrected linked consumer makes the rejected model pages inaccessible and keeps the backing file truncated, then requires oversized ds4_gpu_cache_model_range calls to report uncached; it does not consume the fallback pointer in a compute kernel",
     "lower_level_budget_evidence": "M14.1b2b3b2 independently records one budget fallback that is not cached under a small exact byte limit",
     "remaining_policy_boundary": "source-page discard/progress, public compute through uncached host fallback pointers, residual model-control selection, q8/f16 hooks, remaining compute exports, and route promotion stay pending"
   },
@@ -64,7 +64,7 @@
       "buffered_only_environment": true,
       "one_gib_cache_limit_selected": true,
       "small_fd_range_admitted": true,
-      "oversized_budget_fallback_returns_without_transfer": true,
+      "oversized_budget_fallback_not_reported_as_cached": true,
       "rejected_source_pages_unreadable": true,
       "admitted_fd_cache_retained_after_file_mutation": true,
       "weighted_output_matches": true,
@@ -79,7 +79,7 @@
     "lower_level_budget_baseline": "ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json"
   },
   "integration_risks": [
-    "the linked public output proves pre-transfer budget rejection through inaccessible source pages but intentionally does not execute a compute kernel through the returned host fallback pointer",
+    "the corrected linked public output proves that oversized budget fallback is not reported as cached while intentionally leaving compute through its returned host pointer to a follow-on artifact",
     "source-page discard/progress, residual model-control selection, q8/f16 hooks, production linker selection, and C CUDA removal remain pending",
     "the generated embed object still produces an executable-stack linker warning before route promotion"
   ],

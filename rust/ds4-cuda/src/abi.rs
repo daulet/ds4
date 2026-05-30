@@ -1210,6 +1210,7 @@ fn with_cached_abi_model_range<T>(
                 .is_some_and(|range_end| end <= range_end)
     }) {
         let ptr = range.device_ptr().checked_add(offset - range.offset)?;
+        drop(ranges);
         return operation(ptr);
     }
     let offset = usize::try_from(offset).ok()?;
@@ -1224,7 +1225,10 @@ fn with_cached_abi_model_range<T>(
         Some(AbiFdRangeResolution::Cached(storage)) => storage,
         Some(AbiFdRangeResolution::BudgetFallback {
             requested_device_ptr,
-        }) => return operation(requested_device_ptr),
+        }) => {
+            drop(ranges);
+            return operation(requested_device_ptr);
+        }
         None => match try_upload_abi_buffered_fd_range(
             backend,
             model_map,
@@ -1235,7 +1239,10 @@ fn with_cached_abi_model_range<T>(
             Some(AbiFdRangeResolution::Cached(storage)) => storage,
             Some(AbiFdRangeResolution::BudgetFallback {
                 requested_device_ptr,
-            }) => return operation(requested_device_ptr),
+            }) => {
+                drop(ranges);
+                return operation(requested_device_ptr);
+            }
             None => {
                 match try_register_abi_model_range(
                     backend,
@@ -1283,6 +1290,7 @@ fn with_cached_abi_model_range<T>(
         bytes: bytes as u64,
         storage,
     });
+    drop(ranges);
     operation(ptr)
 }
 
@@ -1324,23 +1332,6 @@ fn abi_model_range_is_cached(
                     .is_some_and(|range_end| end <= range_end)
         })
     })
-}
-
-fn abi_uncached_direct_read_selected(
-    model_map: *const c_void,
-    model_size: u64,
-    offset: u64,
-    bytes: u64,
-) -> bool {
-    direct_model_read_selected()
-        || (pageable_hmm_direct_read_selected()
-            && ABI_PAGEABLE_MODEL_RANGE.lock().ok().is_some_and(|active| {
-                active.as_ref().is_some_and(|range| {
-                    range
-                        .device_ptr(model_map, model_size, offset, bytes)
-                        .is_some()
-                })
-            }))
 }
 
 fn allocation_len(bytes: u64) -> Option<(u64, usize)> {
@@ -2118,12 +2109,11 @@ pub unsafe extern "C" fn ds4_gpu_cache_model_range(
         if bytes == 0 {
             return true;
         }
-        if abi_uncached_direct_read_selected(model_map, model_size, offset, bytes) {
-            return abi_model_range_is_cached(model_map, model_size, offset, bytes);
-        }
         with_backend(|backend| {
             with_cached_abi_model_range(backend, model_map, model_size, offset, bytes, |_| {
-                Some(true)
+                Some(abi_model_range_is_cached(
+                    model_map, model_size, offset, bytes,
+                ))
             })
         })
         .unwrap_or(false)

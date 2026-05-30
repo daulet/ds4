@@ -147,7 +147,9 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         "if aligned_bytes > limit - state.range_bytes",
         "state.range_bytes = state.range_bytes.checked_add(bytes)?;",
         "AbiFdRangeResolution::BudgetFallback",
-        "return operation(requested_device_ptr),",
+        "return operation(requested_device_ptr);",
+        "fn abi_model_range_is_cached(",
+        "Some(abi_model_range_is_cached(",
         "fn public_fd_cache_limit_override_matches_current_c_gib_policy()",
     ]:
         report.check(marker in texts["abi"], f"Rust budget marker missing: {marker}")
@@ -204,7 +206,7 @@ def validate_execution(
         "buffered_only_environment",
         "one_gib_cache_limit_selected",
         "small_fd_range_admitted",
-        "oversized_budget_fallback_returns_without_transfer",
+        "oversized_budget_fallback_not_reported_as_cached",
         "rejected_source_pages_unreadable",
         "admitted_fd_cache_retained_after_file_mutation",
         "weighted_output_matches",
@@ -236,10 +238,11 @@ def validate_execution(
         'setenv("DS4_CUDA_COPY_MODEL", "", 1)',
         "const uint64_t rejected_bytes = limit_bytes;",
         "budget-rejected-repeat",
+        "oversized_budget_fallback_not_reported_as_cached",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
     risks = fixture.get("integration_risks", [])
-    report.check(any("does not execute a compute kernel through" in value for value in risks), "fallback compute caveat missing")
+    report.check(any("leaving compute through" in value for value in risks), "fallback compute caveat missing")
     report.check(any("source-page discard/progress" in value for value in risks), "remaining policy risk missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
@@ -253,7 +256,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy"
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy"
         in texts["status"],
         "active item missing",
     )
@@ -280,7 +283,7 @@ def run_negative_tests(
         ("budget ownership missing", lambda value: value["ownership"].update({"owns_fd_cache_budget_policy": False})),
         ("fallback ownership missing", lambda value: value["ownership"].update({"owns_uncached_budget_fallback_pointer": False})),
         ("compute overclaim", lambda value: value["ownership"].update({"owns_public_fallback_compute_observation": True})),
-        ("rejection observation missing", lambda value: value["b300_execution"]["observed"].update({"oversized_budget_fallback_returns_without_transfer": False})),
+        ("rejection observation missing", lambda value: value["b300_execution"]["observed"].update({"oversized_budget_fallback_not_reported_as_cached": False})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)

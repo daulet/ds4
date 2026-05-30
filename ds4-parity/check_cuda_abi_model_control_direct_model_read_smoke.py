@@ -144,8 +144,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         'std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_some_and(|value| !value.is_empty())',
         "if direct_model_read_selected() {",
         "fn abi_model_range_is_cached(",
-        "fn abi_uncached_direct_read_selected(",
-        "return abi_model_range_is_cached(model_map, model_size, offset, bytes);",
+        "Some(abi_model_range_is_cached(",
     ]:
         report.check(marker in texts["abi"], f"Rust direct-model marker missing: {marker}")
     for marker in [
@@ -235,7 +234,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy"
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy"
         in texts["status"],
         "active item missing",
     )
