@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2b SwiGLU And Directional Steering Kernels
+- Active item: M14.2b2 SwiGLU Libdevice Path
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -20,8 +20,11 @@
 - M14.2 Embedding Indexer And Elementwise Kernels is split into M14.2a
   through M14.2e because standalone elementwise, nonlinear/reduction,
   model-backed embedding, indexer/top-k, and closure work need separate live
-  CUDA evidence boundaries.
-- Last validated source before the active item: M14.2a Add And Repeat Elementwise Kernels.
+  CUDA evidence boundaries. M14.2b is further split into M14.2b1 and
+  M14.2b2 because B300 proved the directional projection PTX path while
+  exposing a separate libdevice/NVVM executable blocker for SwiGLU.
+- Last validated source before the active item: M14.2b1 Directional Steering Projection Kernel.
+- Earlier M14.2a Add And Repeat Elementwise Kernels.
 - Earlier M14.1c Substrate Route Closure Gate.
 - Earlier M14.1b4 Fill Kernel And Command Lifetime.
 - Earlier M14.1b3b Q8 Cache And Quality Policy.
@@ -134,6 +137,26 @@
 
 ## Last Evidence
 
+- M14.2b1 Directional Steering Projection Kernel introduces the
+  executable-local Rust cuda-oxide `directional_steering_project_kernel`
+  path with one block per row, `SharedArray<f32, 256>` reduction storage,
+  block synchronization, and in-place projection. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 23
+  tests and live cargo-oxide execution selected portable `sm_80` while
+  proving directional output and invalid-shape rejection. Its fixture and
+  checker are
+  `ds4-parity/baselines/backend/m14.2b1/directional-steering-kernel-smoke.json`
+  and `ds4-parity/check_directional_steering_kernel_smoke.py --negative-test`.
+  A combined SwiGLU attempt recorded the remaining blocker: `f32::exp()`
+  emits `__nv_expf`, selects cuda-oxide NVVM IR output, and CUDA 13.2
+  `libnvvm` rejects its opaque-pointer function signature with
+  `parse expected type`. SwiGLU, model-backed kernels, route activation, and
+  C CUDA removal remain unclaimed. Local formatter, diff, and workspace tests
+  passed; the 71-check directional comparator and unified parity report
+  passed with 110 passed, 50 skipped, and 0 failed. Non-interactive Claude
+  review timed out without a completed result; self-review retained the
+  in-place row-ownership/synchronization proof and explicit unowned SwiGLU
+  blocker.
 - M14.2a Add And Repeat Elementwise Kernels introduces the executable-local
   Rust cuda-oxide `add_kernel` and `repeat_hc_kernel` smoke path with
   current-C-shaped 256-thread launch geometry and safe disjoint output

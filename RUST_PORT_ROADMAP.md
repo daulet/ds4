@@ -7229,12 +7229,15 @@ Stage split:
 
 #### M14.2: Embedding Indexer And Elementwise Kernels
 
-- Status: split before implementation into M14.2a through M14.2e.
+- Status: split before implementation into M14.2a through M14.2e; M14.2b
+  split into M14.2b1 and M14.2b2 after B300 exposed an independent
+  libdevice/NVVM blocker for SwiGLU.
 - Goal: port the M14.2 operation family through bounded Rust CUDA kernel
   slices while retaining current-C oracles and the opt-in-only route.
 - Stage split:
   - M14.2a: Add And Repeat Elementwise Kernels.
-  - M14.2b: SwiGLU And Directional Steering Kernels.
+  - M14.2b1: Directional Steering Projection Kernel.
+  - M14.2b2: SwiGLU Libdevice Path.
   - M14.2c: Embedding Kernel Pair.
   - M14.2d: Indexer And Top-K Kernels.
   - M14.2e: M14.2 Kernel Closure Gate.
@@ -7273,18 +7276,52 @@ Stage split:
   - This stage remains opt-in; it does not claim any model-backed embedding,
     selection, nonlinear/reduction, route, or removal ownership.
 
-##### M14.2b: SwiGLU And Directional Steering Kernels
+##### M14.2b1: Directional Steering Projection Kernel
+
+- Status: done.
+- Goal: port current-C's in-place directional projection and shared-memory
+  row reduction before introducing model-backed embedding or indexer/top-k.
+- Oracle: current-C `directional_steering_project_kernel` and
+  `ds4_gpu_directional_steering_project_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2b1/directional-steering-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_directional_steering_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns only bounded directional projection; SwiGLU,
+  model-backed families, selection families, route activation, and removal
+  remain pending.
+- Evidence:
+  - Added executable-local Rust `directional_steering_project_kernel` with
+    one block per row, `SharedArray<f32, 256>` reduction storage,
+    `thread::sync_threads()` barriers, and in-place row updates matching the
+    current-C operation shape.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 23 tests and cargo-oxide executed the directional projection on
+    `NVIDIA B300 SXM6 AC` using portable `sm_80`, proving projected output
+    and invalid-shape rejection.
+  - Local formatter, diff, and workspace tests passed; the 71-check
+    directional comparator passed and unified parity passed with 110 passed,
+    50 skipped, and 0 failed.
+  - Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained the in-place row-ownership and
+    synchronization proof and the explicit unowned SwiGLU blocker.
+  - A combined SwiGLU attempt first exposed unsupported device `f32::min`/
+    `f32::max` lowering and, after finite clamp comparisons removed that
+    issue, exposed the blocking path: `f32::exp()` emits `__nv_expf`, then
+    CUDA 13.2 `libnvvm` rejects cuda-oxide's opaque-pointer NVVM IR with
+    `parse expected type`. SwiGLU ownership is not claimed by this stage.
+
+##### M14.2b2: SwiGLU Libdevice Path
 
 - Status: planned.
-- Goal: port the remaining standalone f32 nonlinear and projection kernels
-  before introducing model-backed embedding or indexer/top-k code.
-- Oracle: current-C `swiglu_kernel`, `ds4_gpu_swiglu_tensor`,
-  `directional_steering_project_kernel`, and
-  `ds4_gpu_directional_steering_project_tensor`.
-- Comparator: operation-level B300 kernel smoke with explicit numeric
-  tolerance and shape/bounds rejection.
-- Acceptance: only these two kernels become Rust-owned; model-backed and
-  selection families plus route/removal policy remain pending.
+- Goal: repair or replace cuda-oxide's blocked executable libdevice path,
+  then port current-C `swiglu_kernel` and `ds4_gpu_swiglu_tensor`.
+- Blocker: the generated NVVM IR for an `f32::exp()` kernel is rejected by
+  CUDA 13.2 `libnvvm` before a loadable cubin can be produced.
+- Acceptance: a semantics-preserving SwiGLU kernel executes on B300 with
+  bounded clamp/output evidence; no route or later kernel ownership is
+  implied.
 
 ## Removal Criteria for C Host Code
 

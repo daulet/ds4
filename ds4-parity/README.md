@@ -2225,6 +2225,18 @@ bounded argument rejection while leaving embedding, indexer/top-k, SwiGLU,
 directional steering, runtime graph integration, and default-route ownership
 unclaimed.
 
+Validate the M14.2b1 Rust CUDA directional-steering kernel smoke:
+
+```sh
+python3 ds4-parity/check_directional_steering_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `directional_steering_project_kernel`
+execution on B300 through static shared memory and block synchronization. It
+also records the remaining SwiGLU blocker: `f32::exp()` selects cuda-oxide's
+libdevice/NVVM path, whose emitted opaque-pointer IR is rejected by CUDA 13.2
+`libnvvm`, so SwiGLU ownership is not claimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

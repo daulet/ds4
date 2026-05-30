@@ -7587,10 +7587,12 @@
 
 #### M14.2: Embedding Indexer And Elementwise Kernels
 
-- Status: split before implementation into M14.2a through M14.2e.
-- Stage split: M14.2a Add And Repeat Elementwise Kernels; M14.2b SwiGLU And
-  Directional Steering Kernels; M14.2c Embedding Kernel Pair; M14.2d Indexer
-  And Top-K Kernels; M14.2e Kernel Closure Gate.
+- Status: split before implementation into M14.2a through M14.2e; M14.2b is
+  further split after B300 exposed a separate libdevice/NVVM SwiGLU blocker.
+- Stage split: M14.2a Add And Repeat Elementwise Kernels; M14.2b1
+  Directional Steering Projection Kernel; M14.2b2 SwiGLU Libdevice Path;
+  M14.2c Embedding Kernel Pair; M14.2d Indexer And Top-K Kernels; M14.2e
+  Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
 
@@ -7614,9 +7616,32 @@
   indexer/top-k, SwiGLU, directional steering, route activation, and removal
   remain unclaimed.
 
-##### M14.2b: SwiGLU And Directional Steering Kernels
+##### M14.2b1: Directional Steering Projection Kernel
+
+- Status: done
+- Goal: port in-place directional steering projection with current-C-shaped
+  shared-memory reduction without claiming SwiGLU or route activation.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2b1/directional-steering-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_directional_steering_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added Rust `directional_steering_project_kernel` using
+  `SharedArray<f32, 256>`, `thread::sync_threads()`, and in-place row
+  projection. B300 feature-enabled `ds4-cuda` tests passed with 23 tests and
+  live cargo-oxide execution selected `sm_80` and proved directional output
+  and shape rejection. A combined SwiGLU experiment exposed that `f32::exp()`
+  selects NVVM IR whose opaque-pointer function signature CUDA 13.2
+  `libnvvm` rejects with `parse expected type`; SwiGLU remains unclaimed.
+  Local formatter, diff, and workspace tests passed; the 71-check directional
+  comparator and unified parity report passed with 110 passed, 50 skipped,
+  and 0 failed. Non-interactive Claude review timed out without a completed
+  result; self-review retained the in-place row-ownership/synchronization
+  proof and explicit unowned SwiGLU blocker.
+
+##### M14.2b2: SwiGLU Libdevice Path
 
 - Status: planned
-- Goal: port the standalone nonlinear and projection kernels without claiming
-  model-backed embedding/indexer families or route activation.
+- Goal: make cuda-oxide execute current-C-shaped SwiGLU math on B300 after
+  repairing or replacing the blocked libdevice/NVVM path.
 - Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.

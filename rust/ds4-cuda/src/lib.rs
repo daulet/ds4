@@ -279,6 +279,25 @@ pub const M14_2A_SCOPE: ElementwiseKernelScope = ElementwiseKernelScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DirectionalSteeringKernelScope {
+    pub opt_in_only: bool,
+    pub owns_swiglu_tensor: bool,
+    pub owns_directional_steering_project_tensor: bool,
+    pub owns_embedding_kernels: bool,
+    pub owns_indexer_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2B1_SCOPE: DirectionalSteeringKernelScope = DirectionalSteeringKernelScope {
+    opt_in_only: true,
+    owns_swiglu_tensor: false,
+    owns_directional_steering_project_tensor: true,
+    owns_embedding_kernels: false,
+    owns_indexer_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -293,7 +312,7 @@ mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
-        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE,
+        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE,
     };
 
     #[test]
@@ -444,5 +463,15 @@ mod tests {
         assert!(!M14_2A_SCOPE.owns_indexer_kernels);
         assert!(!M14_2A_SCOPE.owns_swiglu_and_directional_steering);
         assert!(!M14_2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn directional_steering_scope_leaves_swiglu_model_kernels_and_route_pending() {
+        assert!(M14_2B1_SCOPE.opt_in_only);
+        assert!(!M14_2B1_SCOPE.owns_swiglu_tensor);
+        assert!(M14_2B1_SCOPE.owns_directional_steering_project_tensor);
+        assert!(!M14_2B1_SCOPE.owns_embedding_kernels);
+        assert!(!M14_2B1_SCOPE.owns_indexer_kernels);
+        assert!(!M14_2B1_SCOPE.changes_default_route);
     }
 }
