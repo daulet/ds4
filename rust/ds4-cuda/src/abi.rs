@@ -1249,13 +1249,18 @@ fn with_cached_abi_model_range<T>(
     }
     let offset = usize::try_from(offset).ok()?;
     let bytes = usize::try_from(bytes).ok()?;
-    let storage = match try_upload_abi_direct_fd_range(
-        backend,
-        model_map,
-        model_size,
-        offset as u64,
-        bytes as u64,
-    ) {
+    let fd_resolution = if direct_io_fd_weight_cache_selected() {
+        try_upload_abi_direct_fd_range(backend, model_map, model_size, offset as u64, bytes as u64)
+    } else {
+        try_upload_abi_buffered_fd_range(
+            backend,
+            model_map,
+            model_size,
+            offset as u64,
+            bytes as u64,
+        )
+    };
+    let storage = match fd_resolution {
         Some(AbiFdRangeResolution::Cached(storage)) => storage,
         Some(AbiFdRangeResolution::BudgetFallback {
             requested_device_ptr,
@@ -1263,41 +1268,26 @@ fn with_cached_abi_model_range<T>(
             drop(ranges);
             return operation(requested_device_ptr);
         }
-        None => match try_upload_abi_buffered_fd_range(
-            backend,
-            model_map,
-            model_size,
-            offset as u64,
-            bytes as u64,
-        ) {
-            Some(AbiFdRangeResolution::Cached(storage)) => storage,
-            Some(AbiFdRangeResolution::BudgetFallback {
-                requested_device_ptr,
-            }) => {
-                drop(ranges);
-                return operation(requested_device_ptr);
-            }
-            None => {
-                match try_register_abi_model_range(
-                    backend,
-                    model_map,
-                    model_size,
-                    offset as u64,
-                    bytes as u64,
-                ) {
-                    Some(storage) => storage,
-                    None => {
-                        // SAFETY: the public C ABI requires `model_map` to remain readable
-                        // for `model_size` bytes while this copy executes; bounds were
-                        // checked above and the upload is synchronized before returning.
-                        let source = unsafe {
-                            std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes)
-                        };
-                        AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?)
-                    }
+        None => {
+            match try_register_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                offset as u64,
+                bytes as u64,
+            ) {
+                Some(storage) => storage,
+                None => {
+                    // SAFETY: the public C ABI requires `model_map` to remain readable
+                    // for `model_size` bytes while this copy executes; bounds were
+                    // checked above and the upload is synchronized before returning.
+                    let source = unsafe {
+                        std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes)
+                    };
+                    AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?)
                 }
             }
-        },
+        }
     };
     backend.synchronize().ok()?;
     let ptr = match &storage {

@@ -2650,6 +2650,34 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE: CudaAbiFdArenaFailureSelection
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiFdUploadFailureContinuationScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_single_selected_fd_attempt: bool,
+    pub owns_post_fd_failure_registration_continuation: bool,
+    pub owns_live_interposed_async_copy_failure_observation: bool,
+    pub owns_all_fd_upload_failure_observations: bool,
+    pub owns_remaining_failure_selection: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE: CudaAbiFdUploadFailureContinuationScope =
+    CudaAbiFdUploadFailureContinuationScope {
+        exported_abi_symbol_count: 29,
+        exported_compute_symbol_count: 9,
+        owns_single_selected_fd_attempt: true,
+        owns_post_fd_failure_registration_continuation: true,
+        owns_live_interposed_async_copy_failure_observation: true,
+        owns_all_fd_upload_failure_observations: false,
+        owns_remaining_failure_selection: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2702,6 +2730,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE,
     };
 
     #[test]
@@ -4120,6 +4149,31 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_fd_upload_failure_continuation_scope_leaves_remaining_failure_selection_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.exported_abi_symbol_count,
+            29
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.exported_compute_symbol_count,
+            9
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.owns_single_selected_fd_attempt);
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.owns_post_fd_failure_registration_continuation
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE
+                .owns_live_interposed_async_copy_failure_observation
+        );
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.owns_all_fd_upload_failure_observations);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.owns_remaining_failure_selection);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BA_SCOPE.changes_default_route);
     }
 
     #[test]

@@ -3312,6 +3312,20 @@ allocation attempt. Aligned-budget strict routing is source-backed but not
 separately forced live; staging allocation/read/copy failure selection,
 whole-archive retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2ba Rust CUDA public fd-upload
+failure-continuation ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_upload_failure_continuation_smoke.py --negative-test
+```
+
+The fixture selects the direct fd branch from a C-linked B300 consumer,
+injects one asynchronous fd upload copy failure, rejects registration, and
+uses divergent fd and host weights to prove that failure continues to cached
+device-copy fallback rather than retrying a buffered fd upload. Staged
+allocation, fd-read, event, and final synchronization failure observations,
+whole-archive retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -1,0 +1,78 @@
+{
+  "schema": "ds4.cuda_abi_model_control_fd_upload_failure_continuation_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2ba",
+  "status": "b300-pass-staticlib-fd-upload-failure-continuation-abi",
+  "goal": "Rust-own the current-C single selected fd upload attempt boundary: after an attempted fd upload fails, continue to registration or device-copy fallback without a second buffered fd upload.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "cuda_model_range_ptr",
+      "cuda_model_range_ptr_from_fd",
+      "ds4_gpu_cache_model_range"
+    ],
+    "semantics": [
+      "current C calls cuda_model_range_ptr_from_fd once per unresolved range and accepts a non-null result before later fallback handling",
+      "staging, read, asynchronous copy, event, and final upload synchronization failures return NULL from that one fd attempt",
+      "after NULL, current C continues into range registration and device-copy fallback rather than launching a second fd upload"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2ba/abi_model_control_fd_upload_failure_continuation_link_smoke.c",
+    "selection_path": "with_cached_abi_model_range now selects either the direct-I/O fd path or the buffered-only fd path once, so failure of a selected direct path continues to registration/device copy without retrying through buffered fd caching",
+    "live_boundary": "the linked consumer selects the direct fd branch by environment, interposes one cuMemcpyHtoDAsync_v2 failure after tensor setup, rejects registration, and distinguishes correct host-byte device-copy fallback from an incorrect second fd upload using divergent fd bytes",
+    "remaining_policy_boundary": "the routing fix applies after any selected fd upload returns failure, but live failure injection separately observes asynchronous copy only; staged allocation, read, event, final-sync, q8/f16, graph-compute, and route-promotion boundaries remain pending"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_single_selected_fd_attempt": true,
+    "owns_post_fd_failure_registration_continuation": true,
+    "owns_live_interposed_async_copy_failure_observation": true,
+    "owns_all_fd_upload_failure_observations": false,
+    "owns_remaining_failure_selection": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 113,
+    "feature_release_test_count": 120,
+    "forced_failure": {
+      "interposed_symbol": "cuMemcpyHtoDAsync_v2",
+      "fd_upload_failure_error": 1,
+      "registration_failure_error": 801
+    },
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "direct_fd_branch_selected": true,
+      "interposed_fd_async_copy_failure": true,
+      "single_selected_fd_attempt_after_failure": true,
+      "fd_failure_continues_to_device_copy": true,
+      "registration_fallback_boundary_preserved": true,
+      "cached_fallback_retains_original_host_bytes": true,
+      "weighted_outputs_match": true,
+      "embedded_libdevice_module_loaded": true,
+      "staticlib_export_count_unchanged": true,
+      "fd_arena_failure_regression_passed": true,
+      "fd_budget_cache_result_regression_passed": true,
+      "default_fd_regression_passed": true,
+      "direct_io_async_staging_regression_passed": true,
+      "registration_disable_regression_passed": true
+    }
+  },
+  "integration_risks": [
+    "the live linked consumer forces the selected fd upload asynchronous-copy failure through cuda-oxide driver symbol cuMemcpyHtoDAsync_v2 and verifies the subsequent host-byte device-copy fallback",
+    "staged allocation, fd read, event-record, event-wait, and final stream-synchronization failure routes share the corrected one-attempt source path but are not separately forced live by this consumer",
+    "q8/f16 hooks, production linker selection, remaining graph compute exports, and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb Remaining Residual Failure Selection Policy"
+}

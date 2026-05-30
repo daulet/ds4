@@ -153,7 +153,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     ]:
         report.check(marker in texts["abi"], f"Rust cache-result marker missing: {marker}")
     cached_fn = texts["abi"].split("fn with_cached_abi_model_range", maxsplit=1)[1]
-    report.check(cached_fn.count("drop(ranges);") >= 4, "range mutex releases missing before callbacks")
+    report.check(cached_fn.count("drop(ranges);") >= 3, "range mutex releases missing before callbacks")
     report.check(
         re.search(r"drop\(ranges\);\s+return operation\(requested_device_ptr\);", cached_fn)
         is not None,
@@ -261,7 +261,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy"
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb Remaining Residual Failure Selection Policy"
         in texts["status"],
         "active item missing",
     )

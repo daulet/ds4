@@ -9968,6 +9968,43 @@
 
 #################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2ba and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb because failed selected fd uploads
+  must continue into fallback handling without retrying through a buffered
+  fd upload.
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.
+
+##################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2ba: Public Fd Upload Failure Continuation ABI
+
+- Status: done
+- Goal: preserve current-C one-attempt fd failure routing so a failed
+  selected fd upload continues into registration or device-copy fallback
+  without launching a second buffered fd upload.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2ba/abi-model-control-fd-upload-failure-continuation-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_upload_failure_continuation_smoke.py --negative-test`.
+- Evidence: Rust now selects exactly one configured fd upload branch before
+  matching its result, so an attempted direct-fd upload failure falls through
+  to registration/device-copy handling once. A C-linked B300 consumer selects
+  that branch, injects one `cuMemcpyHtoDAsync_v2` failure after tensor setup,
+  rejects range registration, and proves cached device-copy consumes and
+  retains original host bytes rather than retrying divergent fd bytes. Local
+  tests pass with 113 tests, B300 release-feature tests pass with 120 tests,
+  and the static library retains 29 exports. Fd-arena failure, fd-budget
+  cache-result, default-fd, direct-I/O asynchronous-staging, and
+  registration-disable linked consumers pass against the rebuilt archive.
+  The focused comparator passes with 102 checks and the default unified
+  parity report passes with 199 passed, 45 skipped, and 0 failed. The
+  required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Staged
+  allocation, fd-read, event-record, event-wait, and final synchronization
+  failure observations, route promotion, and the `.note.GNU-stack` warning
+  remain pending.
+
+##################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb: Remaining Residual Failure Selection Policy
+
 - Status: active
 - Goal: connect remaining model-control failure selection without claiming
   graph compute closure or route promotion.
