@@ -11,7 +11,7 @@ use std::ptr::NonNull;
 use std::slice;
 
 use cuda_core::{
-    DeviceBuffer, DriverError, PinnedHostBuffer, ReadOnlyPageableHostMemory,
+    CudaEvent, DeviceBuffer, DriverError, PinnedHostBuffer, ReadOnlyPageableHostMemory,
     ReadOnlyRegisteredHostMemory,
 };
 
@@ -39,6 +39,7 @@ pub enum ModelRangeError {
     EmptyModel,
     ModelTooLarge,
     InvalidPageSize,
+    InvalidStagingConfig(&'static str),
     InvalidRange { offset: u64, bytes: u64, size: u64 },
     Cuda(DriverError),
     MissingCachedRange { offset: u64, bytes: u64 },
@@ -51,6 +52,9 @@ impl fmt::Display for ModelRangeError {
             Self::EmptyModel => write!(f, "model file is empty"),
             Self::ModelTooLarge => write!(f, "model file is too large to mmap"),
             Self::InvalidPageSize => write!(f, "could not determine model mapping page size"),
+            Self::InvalidStagingConfig(reason) => {
+                write!(f, "invalid asynchronous staging configuration: {reason}")
+            }
             Self::InvalidRange {
                 offset,
                 bytes,
@@ -385,6 +389,461 @@ fn try_direct_pinned_source(
     Ok(None)
 }
 
+const ASYNC_STAGE_SLOTS: usize = 4;
+const ARENA_ALIGNMENT: u64 = 256;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AsyncPinnedCacheConfig {
+    pub copy_chunk_bytes: u64,
+    pub arena_chunk_bytes: u64,
+    pub cache_limit_bytes: u64,
+}
+
+impl AsyncPinnedCacheConfig {
+    fn validate(self) -> Result<Self, ModelRangeError> {
+        if self.copy_chunk_bytes == 0 {
+            return Err(ModelRangeError::InvalidStagingConfig(
+                "copy_chunk_bytes must be non-zero",
+            ));
+        }
+        if self.arena_chunk_bytes == 0 {
+            return Err(ModelRangeError::InvalidStagingConfig(
+                "arena_chunk_bytes must be non-zero",
+            ));
+        }
+        if self.cache_limit_bytes == 0 {
+            return Err(ModelRangeError::InvalidStagingConfig(
+                "cache_limit_bytes must be non-zero",
+            ));
+        }
+        Ok(self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AsyncPinnedCacheOutcome {
+    Inserted,
+    Reused,
+    BudgetFallback,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DirectIoPolicyState {
+    Unavailable,
+    Enabled { alignment: u64 },
+    DisabledAfterError { raw_os_error: i32 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AsyncPinnedCacheStats {
+    pub stage_slots: usize,
+    pub chunks_uploaded: u64,
+    pub stage_slot_reuse_waits: u64,
+    pub events_recorded: u64,
+    pub direct_io_chunks: u64,
+    pub buffered_chunks: u64,
+    pub arena_count: usize,
+    pub arena_bytes: u64,
+    pub range_count: usize,
+    pub range_bytes: u64,
+    pub budget_fallbacks: u64,
+    pub direct_io_state: DirectIoPolicyState,
+}
+
+struct AsyncPinnedStageSlot {
+    staging: PinnedHostBuffer<u8>,
+    event: Option<CudaEvent>,
+}
+
+struct AsyncPinnedArena {
+    device: DeviceBuffer<u8>,
+    bytes: u64,
+    used: u64,
+}
+
+struct AsyncPinnedCachedRange {
+    offset: u64,
+    bytes: u64,
+    arena_index: usize,
+    device_offset: u64,
+}
+
+struct StageRead {
+    payload_offset: usize,
+    direct_io: bool,
+}
+
+struct DirectIoReader {
+    #[cfg(target_os = "linux")]
+    direct_file: Option<File>,
+    alignment: u64,
+    disabled_raw_os_error: Option<i32>,
+}
+
+impl DirectIoReader {
+    fn open(model: &MappedModelFile) -> Result<Self, ModelRangeError> {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+
+            let alignment = (model._file.metadata()?.blksize() as u64).max(512);
+            let direct_path = format!("/proc/self/fd/{}", model._file.as_raw_fd());
+            let direct_file = OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_DIRECT)
+                .open(direct_path)
+                .ok();
+            Ok(Self {
+                direct_file,
+                alignment,
+                disabled_raw_os_error: None,
+            })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = model;
+            Ok(Self {
+                alignment: 1,
+                disabled_raw_os_error: None,
+            })
+        }
+    }
+
+    fn state(&self) -> DirectIoPolicyState {
+        if let Some(raw_os_error) = self.disabled_raw_os_error {
+            return DirectIoPolicyState::DisabledAfterError { raw_os_error };
+        }
+        #[cfg(target_os = "linux")]
+        if self.direct_file.is_some() {
+            return DirectIoPolicyState::Enabled {
+                alignment: self.alignment,
+            };
+        }
+        DirectIoPolicyState::Unavailable
+    }
+
+    fn stage_alignment(&self) -> u64 {
+        self.alignment.max(1)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn record_direct_read_error(&mut self, err: &std::io::Error) {
+        if direct_io_error_disables(err.raw_os_error()) {
+            self.direct_file = None;
+            self.disabled_raw_os_error = err.raw_os_error();
+            self.alignment = 1;
+        }
+    }
+
+    fn read_into(
+        &mut self,
+        model: &MappedModelFile,
+        staging: &mut PinnedHostBuffer<u8>,
+        offset: u64,
+        bytes: u64,
+    ) -> Result<StageRead, ModelRangeError> {
+        #[cfg(target_os = "linux")]
+        if self.direct_file.is_some() {
+            let read_offset = offset - (offset % self.alignment);
+            let payload_delta = offset - read_offset;
+            let read_bytes = round_up_to_alignment(
+                payload_delta
+                    .checked_add(bytes)
+                    .ok_or(ModelRangeError::ModelTooLarge)?,
+                self.alignment,
+            )?;
+            let alignment =
+                usize::try_from(self.alignment).map_err(|_| ModelRangeError::ModelTooLarge)?;
+            let base = staging.as_ptr() as usize;
+            let aligned_delta = (alignment - (base % alignment)) % alignment;
+            if read_offset <= model.size
+                && read_bytes <= model.size - read_offset
+                && read_bytes <= (staging.len() - aligned_delta) as u64
+            {
+                let payload_delta =
+                    usize::try_from(payload_delta).map_err(|_| ModelRangeError::ModelTooLarge)?;
+                let read_bytes =
+                    usize::try_from(read_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+                let result = self
+                    .direct_file
+                    .as_ref()
+                    .expect("direct file was checked above")
+                    .read_exact_at(
+                        &mut staging.as_mut_slice()[aligned_delta..aligned_delta + read_bytes],
+                        read_offset,
+                    );
+                match result {
+                    Ok(()) => {
+                        return Ok(StageRead {
+                            payload_offset: aligned_delta + payload_delta,
+                            direct_io: true,
+                        });
+                    }
+                    Err(err) => {
+                        self.record_direct_read_error(&err);
+                    }
+                }
+            }
+        }
+        let bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        model
+            ._file
+            .read_exact_at(&mut staging.as_mut_slice()[..bytes], offset)?;
+        Ok(StageRead {
+            payload_offset: 0,
+            direct_io: false,
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn direct_io_error_disables(raw_os_error: Option<i32>) -> bool {
+    raw_os_error.is_some_and(|raw| {
+        [libc::EINVAL, libc::EFAULT, libc::ENOTSUP, libc::EOPNOTSUPP].contains(&raw)
+    })
+}
+
+pub struct AsyncPinnedRangeCache<'model> {
+    model: &'model MappedModelFile,
+    config: AsyncPinnedCacheConfig,
+    direct_io: DirectIoReader,
+    slots: Vec<AsyncPinnedStageSlot>,
+    arenas: Vec<AsyncPinnedArena>,
+    ranges: Vec<AsyncPinnedCachedRange>,
+    chunks_uploaded: u64,
+    stage_slot_reuse_waits: u64,
+    events_recorded: u64,
+    direct_io_chunks: u64,
+    buffered_chunks: u64,
+    range_bytes: u64,
+    budget_fallbacks: u64,
+}
+
+impl<'model> AsyncPinnedRangeCache<'model> {
+    pub fn new(
+        model: &'model MappedModelFile,
+        config: AsyncPinnedCacheConfig,
+    ) -> Result<Self, ModelRangeError> {
+        Ok(Self {
+            model,
+            config: config.validate()?,
+            direct_io: DirectIoReader::open(model)?,
+            slots: Vec::new(),
+            arenas: Vec::new(),
+            ranges: Vec::new(),
+            chunks_uploaded: 0,
+            stage_slot_reuse_waits: 0,
+            events_recorded: 0,
+            direct_io_chunks: 0,
+            buffered_chunks: 0,
+            range_bytes: 0,
+            budget_fallbacks: 0,
+        })
+    }
+
+    pub fn cache_range(
+        &mut self,
+        substrate: &CudaOxideSubstrate,
+        offset: u64,
+        bytes: u64,
+    ) -> Result<AsyncPinnedCacheOutcome, ModelRangeError> {
+        self.model.range(offset, bytes)?;
+        if self.find(offset, bytes).is_some() {
+            return Ok(AsyncPinnedCacheOutcome::Reused);
+        }
+        let Some((arena_index, device_offset)) = self.reserve_range(substrate, bytes)? else {
+            self.budget_fallbacks += 1;
+            return Ok(AsyncPinnedCacheOutcome::BudgetFallback);
+        };
+        self.upload_range(substrate, arena_index, device_offset, offset, bytes)?;
+        self.ranges.push(AsyncPinnedCachedRange {
+            offset,
+            bytes,
+            arena_index,
+            device_offset,
+        });
+        self.range_bytes += bytes;
+        Ok(AsyncPinnedCacheOutcome::Inserted)
+    }
+
+    pub fn readback(
+        &self,
+        substrate: &CudaOxideSubstrate,
+        offset: u64,
+        bytes: u64,
+    ) -> Result<Vec<u8>, ModelRangeError> {
+        let range = self
+            .find(offset, bytes)
+            .ok_or(ModelRangeError::MissingCachedRange { offset, bytes })?;
+        let device = &self.arenas[range.arena_index].device;
+        let requested_bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        Ok(unsafe {
+            substrate.download_u8_device_ptr(
+                device.cu_deviceptr() + range.device_offset,
+                requested_bytes,
+            )?
+        })
+    }
+
+    pub fn stats(&self) -> AsyncPinnedCacheStats {
+        AsyncPinnedCacheStats {
+            stage_slots: self.slots.len(),
+            chunks_uploaded: self.chunks_uploaded,
+            stage_slot_reuse_waits: self.stage_slot_reuse_waits,
+            events_recorded: self.events_recorded,
+            direct_io_chunks: self.direct_io_chunks,
+            buffered_chunks: self.buffered_chunks,
+            arena_count: self.arenas.len(),
+            arena_bytes: self.arenas.iter().map(|arena| arena.bytes).sum(),
+            range_count: self.ranges.len(),
+            range_bytes: self.range_bytes,
+            budget_fallbacks: self.budget_fallbacks,
+            direct_io_state: self.direct_io.state(),
+        }
+    }
+
+    fn find(&self, offset: u64, bytes: u64) -> Option<&AsyncPinnedCachedRange> {
+        self.ranges
+            .iter()
+            .find(|range| range.offset == offset && range.bytes == bytes)
+    }
+
+    fn reserve_range(
+        &mut self,
+        substrate: &CudaOxideSubstrate,
+        bytes: u64,
+    ) -> Result<Option<(usize, u64)>, ModelRangeError> {
+        if self.range_bytes > self.config.cache_limit_bytes
+            || bytes > self.config.cache_limit_bytes - self.range_bytes
+        {
+            return Ok(None);
+        }
+        let aligned = round_up_to_alignment(bytes, ARENA_ALIGNMENT)?;
+        for (index, arena) in self.arenas.iter_mut().enumerate() {
+            let used = round_up_to_alignment(arena.used, ARENA_ALIGNMENT)?;
+            if used <= arena.bytes && aligned <= arena.bytes - used {
+                arena.used = used + aligned;
+                return Ok(Some((index, used)));
+            }
+        }
+        if aligned > self.config.cache_limit_bytes - self.range_bytes {
+            return Ok(None);
+        }
+        let arena_bytes = self.config.arena_chunk_bytes.max(aligned);
+        let arena_len = usize::try_from(arena_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        let device = substrate.zeroed(arena_len)?;
+        self.arenas.push(AsyncPinnedArena {
+            device,
+            bytes: arena_bytes,
+            used: aligned,
+        });
+        Ok(Some((self.arenas.len() - 1, 0)))
+    }
+
+    fn upload_range(
+        &mut self,
+        substrate: &CudaOxideSubstrate,
+        arena_index: usize,
+        device_offset: u64,
+        offset: u64,
+        bytes: u64,
+    ) -> Result<(), ModelRangeError> {
+        let stage_bytes = self
+            .config
+            .copy_chunk_bytes
+            .checked_add(
+                self.direct_io
+                    .stage_alignment()
+                    .checked_mul(2)
+                    .ok_or(ModelRangeError::ModelTooLarge)?,
+            )
+            .ok_or(ModelRangeError::ModelTooLarge)?;
+        self.ensure_slots(substrate, stage_bytes)?;
+        let device_offset =
+            usize::try_from(device_offset).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        let device = &self.arenas[arena_index].device;
+        let mut copied = 0_u64;
+        let mut chunk_index = 0_u64;
+        let upload_result = (|| {
+            while copied < bytes {
+                let chunk_bytes = (bytes - copied).min(self.config.copy_chunk_bytes);
+                let slot_index = (chunk_index as usize) % ASYNC_STAGE_SLOTS;
+                let slot = &mut self.slots[slot_index];
+                if let Some(event) = slot.event.take() {
+                    event.synchronize()?;
+                    self.stage_slot_reuse_waits += 1;
+                }
+                let read = self.direct_io.read_into(
+                    self.model,
+                    &mut slot.staging,
+                    offset + copied,
+                    chunk_bytes,
+                )?;
+                let copied_usize =
+                    usize::try_from(copied).map_err(|_| ModelRangeError::ModelTooLarge)?;
+                let chunk_bytes =
+                    usize::try_from(chunk_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+                let destination_offset = device_offset
+                    .checked_add(copied_usize)
+                    .ok_or(ModelRangeError::ModelTooLarge)?;
+                unsafe {
+                    substrate.enqueue_pinned_u8_range_async(
+                        device,
+                        destination_offset,
+                        &slot.staging,
+                        read.payload_offset,
+                        chunk_bytes,
+                    )?;
+                }
+                slot.event = Some(substrate.record_event()?);
+                self.events_recorded += 1;
+                self.chunks_uploaded += 1;
+                if read.direct_io {
+                    self.direct_io_chunks += 1;
+                } else {
+                    self.buffered_chunks += 1;
+                }
+                copied += chunk_bytes as u64;
+                chunk_index += 1;
+            }
+            Ok::<(), ModelRangeError>(())
+        })();
+        // Drain already-enqueued copies even when a later read or event operation fails.
+        let synchronize_result = substrate.synchronize().map_err(ModelRangeError::from);
+        for slot in &mut self.slots {
+            slot.event = None;
+        }
+        upload_result?;
+        synchronize_result?;
+        Ok(())
+    }
+
+    fn ensure_slots(
+        &mut self,
+        substrate: &CudaOxideSubstrate,
+        stage_bytes: u64,
+    ) -> Result<(), ModelRangeError> {
+        let stage_bytes =
+            usize::try_from(stage_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        if self
+            .slots
+            .first()
+            .is_some_and(|slot| slot.staging.len() >= stage_bytes)
+        {
+            return Ok(());
+        }
+        substrate.synchronize()?;
+        self.slots.clear();
+        for _ in 0..ASYNC_STAGE_SLOTS {
+            self.slots.push(AsyncPinnedStageSlot {
+                staging: substrate.pinned_zeroed(stage_bytes)?,
+                event: None,
+            });
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CacheOutcome {
     Inserted,
@@ -571,4 +1030,38 @@ fn round_up_to_alignment(value: u64, alignment: u64) -> Result<u64, ModelRangeEr
         .checked_add(alignment - 1)
         .map(|end| (end / alignment) * alignment)
         .ok_or(ModelRangeError::ModelTooLarge)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use std::fs::File;
+
+    use super::{direct_io_error_disables, DirectIoPolicyState, DirectIoReader};
+
+    #[test]
+    fn direct_io_disable_errors_match_current_c_policy() {
+        for raw_os_error in [libc::EINVAL, libc::EFAULT, libc::ENOTSUP, libc::EOPNOTSUPP] {
+            assert!(direct_io_error_disables(Some(raw_os_error)));
+        }
+        assert!(!direct_io_error_disables(Some(libc::EIO)));
+        assert!(!direct_io_error_disables(None));
+    }
+
+    #[test]
+    fn direct_io_selected_error_persistently_disables_future_direct_reads() {
+        let mut reader = DirectIoReader {
+            direct_file: Some(File::open("/dev/null").expect("open sentinel file")),
+            alignment: 4096,
+            disabled_raw_os_error: None,
+        };
+        reader.record_direct_read_error(&std::io::Error::from_raw_os_error(libc::EINVAL));
+        assert_eq!(
+            reader.state(),
+            DirectIoPolicyState::DisabledAfterError {
+                raw_os_error: libc::EINVAL
+            }
+        );
+        assert!(reader.direct_file.is_none());
+        assert_eq!(reader.stage_alignment(), 1);
+    }
 }

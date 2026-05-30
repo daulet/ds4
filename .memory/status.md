@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy
+- Active item: M14.1b2c Model Map Cache Closure
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -14,7 +14,8 @@
   through M14.1b2b3b2 because file-staged device copy, registered fallback,
   pageable HMM, direct-I/O read selection, and asynchronous staging policy
   have distinct API and live-evidence boundaries.
-- Last validated source before the active item: M14.1b2b3b1 Direct-I/O Pinned Read Selection.
+- Last validated source before the active item: M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy.
+- Earlier M14.1b2b3b1 Direct-I/O Pinned Read Selection.
 - Earlier M14.1b2b3a Pageable HMM Range Strategy.
 - Earlier M14.1b2b2 Registered Range Strategy.
 - Earlier M14.1b2b1 File-Staged Range Strategy.
@@ -120,6 +121,28 @@
 
 ## Last Evidence
 
+- M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy adds an opt-in
+  Rust four-slot pinned upload ring with CUDA-event-guarded refill, persistent
+  direct-I/O disable-after-selected-error policy, and bounded device-arena
+  admission. On B300 pod `ds4-rust-port-b300`, seven direct-I/O chunks used
+  four slots with two reuse waits, two ranges shared one 32,768-byte arena
+  totaling 28,672 bytes, the next byte selected budget fallback, and exact
+  readback passed for both admitted ranges. A boundary probe rejected a new
+  arena whose aligned reservation exceeded remaining budget, and intermediate
+  upload errors drain queued copies before staging-slot state clears. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json`
+  and `ds4-parity/check_model_async_staging_smoke.py --negative-test`.
+  Feature-enabled B300 tests validate the direct-I/O disable errno policy;
+  the live smoke does not claim an induced I/O error. Source-page
+  discard/progress behavior, DS4 kernels, and default-route ownership remain
+  false. Local workspace tests, formatter/diff checks, the 96-check
+  comparator and retained M14 checks, B300 feature tests and predecessor
+  direct-I/O smoke, and unified parity (103 passed, 50 skipped, 0 failed)
+  passed. Local feature compilation cannot run without CUDA headers; B300
+  supplied that gate. Non-interactive Claude review was unavailable because
+  the CLI reported `Not logged in`; adversarial self-review fixed error-path
+  draining and aligned new-arena admission defects before finding no remaining
+  lifetime, policy, or bounded-claim issue.
 - M14.1b2b3b1 Direct-I/O Pinned Read Selection adds a Rust
   `O_DIRECT`-or-buffered pinned stage and synchronized selected-range device
   upload. On B300 pod `ds4-rust-port-b300`, requested range `13..4109` read

@@ -872,6 +872,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.1b2b3b2 cuda-oxide model async staging smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_model_async_staging_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

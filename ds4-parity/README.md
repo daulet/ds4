@@ -2132,6 +2132,21 @@ match. It does not claim asynchronous staging-ring/event scheduling,
 cache-budget policy, persistent disable-after-error state, kernels, or route
 activation.
 
+Validate the M14.1b2b3b2 asynchronous staging ring and budget policy B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_async_staging_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-async-staging-smoke` against the pinned GGUF: seven direct
+chunks rotate through four pinned slots with event-guarded reuse, two
+admitted ranges share a bounded device arena, and the next range takes the
+budget fallback while admitted bytes read back exactly. Feature tests cover
+the direct-I/O disable errno policy; the live smoke does not claim an induced
+I/O error, source-page discard/progress behavior, kernels, or route
+activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

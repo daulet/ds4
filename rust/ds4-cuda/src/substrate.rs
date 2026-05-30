@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cuda_core::{
-    CudaContext, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer,
+    CudaContext, CudaEvent, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer,
     MappedHostBuffer, MemoryAdvice, MemoryLocation, PinnedHostBuffer, ReadOnlyPageableHostMemory,
     ReadOnlyRegisteredHostMemory, RegisteredHostMemory, StreamAttachment,
 };
@@ -141,6 +141,36 @@ impl CudaOxideSubstrate {
         PinnedHostBuffer::zeroed(&self.context, len)
     }
 
+    /// Enqueues a selected pinned staging range into an existing device buffer.
+    ///
+    /// # Safety
+    ///
+    /// `staging` must remain allocated and immutable until this substrate's
+    /// stream reaches a completion point after this call.
+    pub unsafe fn enqueue_pinned_u8_range_async(
+        &self,
+        device: &DeviceBuffer<u8>,
+        device_offset: usize,
+        staging: &PinnedHostBuffer<u8>,
+        staging_offset: usize,
+        bytes: usize,
+    ) -> Result<(), DriverError> {
+        assert!(device_offset <= device.len() && bytes <= device.len() - device_offset);
+        assert!(staging_offset <= staging.len() && bytes <= staging.len() - staging_offset);
+        unsafe {
+            cuda_core::memory::memcpy_htod_async(
+                device.cu_deviceptr() + device_offset as u64,
+                staging.as_ptr().add(staging_offset),
+                bytes,
+                self.stream.cu_stream(),
+            )
+        }
+    }
+
+    pub fn record_event(&self) -> Result<CudaEvent, DriverError> {
+        self.stream.record_event(None)
+    }
+
     /// Copies a selected range from a live pinned staging buffer and completes it.
     pub fn upload_pinned_u8_range(
         &self,
@@ -148,15 +178,9 @@ impl CudaOxideSubstrate {
         offset: usize,
         bytes: usize,
     ) -> Result<DeviceBuffer<u8>, DriverError> {
-        assert!(offset <= staging.len() && bytes <= staging.len() - offset);
         let device = self.zeroed(bytes)?;
         unsafe {
-            cuda_core::memory::memcpy_htod_async(
-                device.cu_deviceptr(),
-                staging.as_ptr().add(offset),
-                bytes,
-                self.stream.cu_stream(),
-            )?;
+            self.enqueue_pinned_u8_range_async(&device, 0, staging, offset, bytes)?;
         }
         self.synchronize()?;
         Ok(device)

@@ -6977,15 +6977,52 @@ Stage split:
 
 ######### M14.1b2b3b2: Asynchronous Staging Ring And Budget Policy
 
-- Status: planned.
+- Status: complete.
 - Goal: port the multi-buffer event-driven upload ring, direct-I/O
   disable-after-error state, and range-cache arena/budget decisions.
+- Oracle: current-C `cuda_model_stage_pool_alloc`, `cuda_model_stage_read`,
+  `cuda_model_arena_alloc`, and `cuda_model_range_ptr_from_fd`, excluding
+  source-page discard/progress side effects and compute-kernel consumption.
+- Acceptance: a multi-chunk model range uses four CUDA-event-guarded pinned
+  slots with observable reuse, admitted ranges share a bounded device arena,
+  both raw and aligned new-arena admission gates select budget fallback when
+  exhausted, and exact device readback passes. The direct-I/O error-disable
+  errno policy must be tested without claiming a live B300 induced error.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json`.
+- Comparator:
+  `ds4-parity/check_model_async_staging_smoke.py --negative-test` plus
+  executable Rust B300 smoke using the pinned GGUF.
+- Evidence:
+  - Added an opt-in Rust `AsyncPinnedRangeCache` owning a four-slot pinned
+    stage ring; each slot is refilled only after synchronizing its recorded
+    CUDA event, and intermediate upload errors drain previously enqueued
+    copies before slot state is cleared.
+  - On B300 pod `ds4-rust-port-b300`, seven direct-I/O chunks used four slots
+    with two reuse waits, two cached ranges shared one 32,768-byte arena, and
+    the next byte selected budget fallback after 28,672 admitted bytes; a
+    separate boundary probe also rejected a new arena whose aligned
+    reservation exceeded the remaining raw-byte budget. Both admitted range
+    readbacks matched exactly.
+  - The B300 feature test validates the current-C direct-I/O disable errno
+    classes; the live smoke explicitly records that it did not induce a
+    direct-read failure. Source-page discard/progress output, compute kernels,
+    and runtime route activation remain unclaimed.
+  - Validation passed through local workspace tests, formatter and diff
+    checks, the 96-check comparator and retained M14 checks, B300
+    feature-enabled crate tests plus predecessor direct-I/O smoke, and unified
+    parity with 103 passed, 50 skipped, and 0 failed. Local feature compilation
+    is unavailable without CUDA headers; B300 supplied that gate.
+    Non-interactive Claude review was unavailable because the local CLI
+    reported `Not logged in`; adversarial self-review found and fixed
+    error-path draining and aligned new-arena budget admission defects, then
+    found no remaining lifetime, policy, or bounded-claim defect.
 
 ####### M14.1b2c: Model Map Cache Closure
 
 - Status: planned.
-- Goal: close the model-map/range-cache assignment with explicit strategy
-  coverage and retained-current-C route evidence.
+- Goal: close the model-map/range-cache assignment, including remaining
+  source-page discard/progress policy and retained-current-C route evidence.
 
 ###### M14.1b3: Allocation And Quality Policy
 

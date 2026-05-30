@@ -7416,14 +7416,40 @@
 
 ######### M14.1b2b3b2: Asynchronous Staging Ring And Budget Policy
 
-- Status: planned
+- Status: done
 - Goal: add multi-buffer event-driven overlap, direct-I/O error suppression,
   and range-cache arena/budget behavior.
+- Oracle: current-C `cuda_model_stage_pool_alloc`, `cuda_model_stage_read`,
+  `cuda_model_arena_alloc`, and `cuda_model_range_ptr_from_fd`, excluding
+  source-page discard/progress side effects and compute-kernel consumption.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json`.
+- Evidence: the B300 smoke uploaded seven direct-I/O chunks through a
+  four-slot pinned ring with two event-guarded slot reuses, admitted two
+  ranges into one 32,768-byte arena totaling 28,672 bytes, selected budget
+  fallback for the next byte, rejected a new arena whose aligned reservation
+  exceeded its remaining raw-byte budget, and read back both admitted ranges
+  exactly. Intermediate upload errors drain already-enqueued copies before
+  staging-slot state is cleared. The feature-enabled crate test covers the current-C direct-I/O
+  disable-after-selected-error errno set while the live smoke explicitly
+  does not claim an induced I/O error. Source-page discard/progress policy,
+  kernels, and route activation remain unclaimed.
+- Validation: local workspace tests, formatting and diff checks, the
+  96-check new comparator, retained M14 comparators, B300 feature-enabled
+  crate tests and predecessor direct-I/O smoke, and unified parity (103
+  passed, 50 skipped, 0 failed) passed. Local feature compilation requires
+  CUDA headers unavailable on this host; B300 supplied that gate.
+  Non-interactive Claude review was unavailable because the CLI reported
+  `Not logged in`; adversarial self-review fixed error-path draining and
+  aligned new-arena admission defects before recording no remaining
+  lifetime, policy, or bounded-claim issue.
 
 ####### M14.1b2c: Model Map Cache Closure
 
 - Status: planned
-- Goal: close model-map/range-cache ownership before allocation/quality work.
+- Goal: close model-map/range-cache ownership, remaining source-page
+  discard/progress policy, and retained-current-C route evidence before
+  allocation/quality work.
 
 ###### M14.1b3: Allocation And Quality Policy
 

@@ -147,6 +147,31 @@ pub const M14_1B2B3B1_SCOPE: DirectIoStagingScope = DirectIoStagingScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AsyncStagingPolicyScope {
+    pub opt_in_only: bool,
+    pub owns_four_slot_event_ring: bool,
+    pub owns_direct_io_disable_after_error_policy: bool,
+    pub owns_arena_range_allocation: bool,
+    pub owns_range_cache_budget_fallback: bool,
+    pub owns_source_page_discard_policy: bool,
+    pub owns_progress_reporting: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B2B3B2_SCOPE: AsyncStagingPolicyScope = AsyncStagingPolicyScope {
+    opt_in_only: true,
+    owns_four_slot_event_ring: true,
+    owns_direct_io_disable_after_error_policy: true,
+    owns_arena_range_allocation: true,
+    owns_range_cache_budget_fallback: true,
+    owns_source_page_discard_policy: false,
+    owns_progress_reporting: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
 
@@ -157,7 +182,7 @@ pub mod substrate;
 mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
-        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE,
+        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE,
     };
 
     #[test]
@@ -239,5 +264,18 @@ mod tests {
         assert!(!M14_1B2B3B1_SCOPE.owns_cache_budget_policy);
         assert!(!M14_1B2B3B1_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B2B3B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn async_staging_scope_leaves_cleanup_progress_kernels_and_route_pending() {
+        assert!(M14_1B2B3B2_SCOPE.opt_in_only);
+        assert!(M14_1B2B3B2_SCOPE.owns_four_slot_event_ring);
+        assert!(M14_1B2B3B2_SCOPE.owns_direct_io_disable_after_error_policy);
+        assert!(M14_1B2B3B2_SCOPE.owns_arena_range_allocation);
+        assert!(M14_1B2B3B2_SCOPE.owns_range_cache_budget_fallback);
+        assert!(!M14_1B2B3B2_SCOPE.owns_source_page_discard_policy);
+        assert!(!M14_1B2B3B2_SCOPE.owns_progress_reporting);
+        assert!(!M14_1B2B3B2_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B2B3B2_SCOPE.changes_default_route);
     }
 }
