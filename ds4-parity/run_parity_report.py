@@ -1056,6 +1056,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.3b1 cuda-oxide fused QKV and head RMS norm smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_fused_rms_norm_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

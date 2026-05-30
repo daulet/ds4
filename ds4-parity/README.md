@@ -2420,6 +2420,19 @@ single-row behavior, and bounds rejection while leaving fused QKV/head norm,
 dense projection, Q8 conversion or matmul, runtime graph integration, and
 default-route ownership unclaimed.
 
+Validate the M14.3b1 Rust CUDA fused QKV and basic head RMS normalization smoke:
+
+```sh
+python3 ds4-parity/check_fused_rms_norm_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `dsv4_qkv_rms_norm_rows_kernel` and
+`head_rms_norm_kernel` execution on B300 using the libdevice-linked
+reciprocal RMS scale path. It proves the fused rows-by-two grid with unequal
+Q and KV widths and in-place per-head normalization while leaving the
+RMS-plus-RoPE-tail kernel, fused-QKV fallback policy, projection, Q8, route,
+and removal ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

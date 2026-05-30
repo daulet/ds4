@@ -8049,8 +8049,8 @@
 
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
-- Status: split after M14.3a implementation; M14.3a is done and M14.3b is
-  active
+- Status: split after M14.3a implementation; M14.3a and M14.3b1 are done,
+  and M14.3b2 is active
 - Goal: port dense projection, Q8 conversion, and normalization kernels
   through bounded Rust CUDA slices with current C retained as the oracle.
 
@@ -8078,6 +8078,36 @@
 
 ##### M14.3b: Fused QKV And Head RMS Norm Kernels
 
-- Status: active
+- Status: split into M14.3b1 and M14.3b2 because basic fused QKV/head RMS
+  normalization and head RMS plus YARN/RoPE tail need separate evidence
 - Goal: port fused QKV and head RMS normalization without claiming the
   remaining projection or Q8 operation family.
+
+##### M14.3b1: Fused QKV And Basic Head RMS Norm Kernels
+
+- Status: done
+- Goal: prove fused Q/KV weighted RMS normalization and basic in-place head
+  RMS normalization through opt-in Rust CUDA kernels.
+- Oracle: current-C `dsv4_qkv_rms_norm_rows_kernel`,
+  `head_rms_norm_kernel`, and their tensor launch surfaces.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3b1/fused-rms-norm-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_fused_rms_norm_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust fused QKV and basic head RMS kernels.
+  B300 feature-enabled tests passed with 40 tests and live cargo-oxide
+  emitted portable `sm_80` PTX while proving asymmetric Q/KV widths and
+  in-place head normalization on `NVIDIA B300 SXM6 AC`. Head RMS plus
+  RoPE-tail fusion, fused-QKV fallback policy, projection, Q8 kernels, route
+  activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, workspace tests, the 73-check comparator, and
+  unified parity passed with 131 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result; live
+  compilation found and corrected the in-place `DisjointSlice` read through
+  a mutable device pointer before the successful B300 rerun.
+
+##### M14.3b2: Head RMS Norm Rope Tail Kernel
+
+- Status: active
+- Goal: port the combined head RMS normalization and YARN/RoPE tail kernel
+  without claiming the remaining projection or Q8 operation family.

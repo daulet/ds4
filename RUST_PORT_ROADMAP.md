@@ -7856,8 +7856,8 @@ Stage split:
 
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
-- Status: split after M14.3a implementation; M14.3a is done and M14.3b is
-  active.
+- Status: split after M14.3a implementation; M14.3a and M14.3b1 are done,
+  and M14.3b2 is active.
 - Goal: port the M14.3 dense projection, Q8 conversion, and normalization
   operation family through bounded Rust CUDA slices.
 
@@ -7890,9 +7890,44 @@ Stage split:
 
 ##### M14.3b: Fused QKV And Head RMS Norm Kernels
 
-- Status: active.
+- Status: split into M14.3b1 and M14.3b2 because fused QKV/basic head RMS
+  normalization and head RMS plus YARN/RoPE tail have distinct math and
+  validation contracts.
 - Goal: port fused QKV and head RMS normalization behavior without claiming
   the remaining projection or Q8 operation family.
+
+##### M14.3b1: Fused QKV And Basic Head RMS Norm Kernels
+
+- Status: done.
+- Goal: prove fused Q/KV weighted RMS normalization and basic in-place head
+  RMS normalization through opt-in Rust CUDA kernels.
+- Oracle: current-C `dsv4_qkv_rms_norm_rows_kernel`,
+  `head_rms_norm_kernel`, and their tensor launch surfaces.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3b1/fused-rms-norm-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_fused_rms_norm_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: head RMS plus RoPE-tail fusion, the fused-QKV fallback policy,
+  projection, Q8 kernels, runtime route activation, and C CUDA removal remain
+  pending.
+- Evidence:
+  - Added executable-local Rust fused QKV and head RMS kernels using the
+    current-C row reduction and libdevice-linked reciprocal scale.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 40 tests. Live cargo-oxide execution emitted portable `sm_80` PTX,
+    handled asymmetric Q and KV widths, and proved in-place head
+    normalization on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 73-check comparator, and
+    unified parity passed with 131 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result; live
+    compilation found and corrected the in-place `DisjointSlice` read through
+    a mutable device pointer before the successful B300 rerun.
+
+##### M14.3b2: Head RMS Norm Rope Tail Kernel
+
+- Status: active.
+- Goal: port the combined head RMS normalization and YARN/RoPE tail kernel
+  without claiming remaining projection or Q8 ownership.
 
 ## Removal Criteria for C Host Code
 
