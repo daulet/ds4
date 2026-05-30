@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Rust CUDA public hyperconnection weighted-sum ABI smoke."""
+"""Validate the Rust CUDA public raw KV storage ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-hc-weighted-sum-smoke.json"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-raw-kv-storage-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
 CUDA_KERNELS = ROOT / "rust/ds4-cuda/src/abi_kernels.rs"
-HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_hc_weighted_sum_link_smoke.c"
+HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_raw_kv_storage_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -70,56 +70,49 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA public HC weighted-sum ABI smoke: {state} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA public raw KV storage ABI smoke: {state} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
 
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.cuda_abi_hc_weighted_sum_smoke.v1", "schema drift")
+    report.check(fixture.get("schema") == "ds4.cuda_abi_raw_kv_storage_smoke.v1", "schema drift")
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
     report.check(
-        fixture.get("status") == "b300-pass-staticlib-public-hc-weighted-sum-abi",
+        fixture.get("status") == "b300-pass-staticlib-public-raw-kv-storage-abi",
         "status drift",
     )
-    validate_oracle(report, fixture, texts)
+    oracle = require_dict(report, fixture.get("oracle"), "oracle")
+    report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
+    report.check(
+        oracle.get("symbols")
+        == ["ds4_gpu_store_raw_kv_tensor", "ds4_gpu_store_raw_kv_batch_tensor"],
+        "oracle symbols drift",
+    )
+    for marker in [
+        "__global__ static void store_raw_kv_batch_kernel(",
+        'extern "C" int ds4_gpu_store_raw_kv_tensor',
+        'extern "C" int ds4_gpu_store_raw_kv_batch_tensor',
+        "uint32_t row = (pos0 + t) % raw_cap;",
+        "__half2float(__float2half(kv[",
+    ]:
+        report.check(marker in texts["cuda_c"], f"current-C raw KV marker missing: {marker}")
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
     validate_wiring(report, fixture, texts)
 
 
-def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    oracle = require_dict(report, fixture.get("oracle"), "oracle")
-    report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
-    report.check(
-        oracle.get("symbols")
-        == [
-            "ds4_gpu_hc_weighted_sum_tensor",
-            "ds4_gpu_hc_weighted_sum_split_tensor",
-        ],
-        "oracle symbols drift",
-    )
-    for marker in [
-        "__global__ static void hc_weighted_sum_kernel(",
-        'extern "C" int ds4_gpu_hc_weighted_sum_tensor',
-        'extern "C" int ds4_gpu_hc_weighted_sum_split_tensor',
-        "hc_weighted_sum_kernel<<<",
-        "2u * n_hc + n_hc * n_hc",
-    ]:
-        report.check(marker in texts["cuda_c"], f"current-C weighted-sum marker missing: {marker}")
-
-
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
-        ("exported_abi_symbol_count", 44),
-        ("exported_compute_symbol_count", 21),
+        ("exported_abi_symbol_count", 56),
+        ("exported_compute_symbol_count", 32),
         ("public_gpu_abi_function_count", 81),
-        ("owns_hc_weighted_sum_tensor", True),
-        ("owns_hc_weighted_sum_split_tensor", True),
-        ("owns_hc_weighted_sum_kernel", True),
-        ("owns_sinkhorn_or_fused_hc_reductions", False),
+        ("owns_store_raw_kv_tensor", True),
+        ("owns_store_raw_kv_batch_tensor", True),
+        ("owns_store_raw_kv_batch_kernel", True),
+        ("owns_kv_fp8_store_raw_composition", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
         ("changes_default_route", False),
@@ -129,37 +122,39 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
     report.check(len(symbols) == 56, "Rust ABI export implementation count drift")
-    for symbol in [
-        "ds4_gpu_hc_weighted_sum_tensor",
-        "ds4_gpu_hc_weighted_sum_split_tensor",
-    ]:
-        report.check(symbol in symbols, f"weighted-sum public export missing: {symbol}")
+    report.check("ds4_gpu_store_raw_kv_tensor" in symbols, "single-row raw KV export missing")
+    report.check("ds4_gpu_store_raw_kv_batch_tensor" in symbols, "batch raw KV export missing")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
-        "unsafe fn hc_weighted_sum_impl(",
-        "pub unsafe extern \"C\" fn ds4_gpu_hc_weighted_sum_tensor",
-        "pub unsafe extern \"C\" fn ds4_gpu_hc_weighted_sum_split_tensor",
-        "weight_stride",
-        "residual_hc.bytes < residual_bytes",
-        "weights.bytes < weight_bytes",
+        "unsafe fn store_raw_kv_impl(",
+        'pub unsafe extern "C" fn ds4_gpu_store_raw_kv_tensor',
+        'pub unsafe extern "C" fn ds4_gpu_store_raw_kv_batch_tensor',
+        "raw_cap == 0",
+        "n_tokens == 0",
+        "head_dim == 0",
+        "kv_elements.div_ceil(256_u64)",
+        "kernels.store_raw_kv_batch_tensor(",
     ]:
-        report.check(marker in texts["abi"], f"Rust weighted-sum ABI marker missing: {marker}")
+        report.check(marker in texts["abi"], f"Rust raw KV ABI marker missing: {marker}")
     for marker in [
-        "pub fn abi_hc_weighted_sum_kernel",
-        "hc_weighted_sum_kernel: CudaFunction",
-        '.load_function("abi_hc_weighted_sum_kernel")',
-        "fn hc_weighted_sum_tensor(",
-        "u64::from(n_embd) * u64::from(n_tokens)",
+        "pub fn abi_store_raw_kv_batch_kernel",
+        "let row = pos0.wrapping_add(token as u32) % raw_cap;",
+        "(u64::from(row) * u64::from(head_dim) + dimension) as usize",
+        "store_raw_kv_batch_kernel: CudaFunction",
+        '.load_function("abi_store_raw_kv_batch_kernel")',
+        "fn store_raw_kv_batch_tensor(",
     ]:
-        report.check(marker in texts["kernels"], f"embedded weighted-sum marker missing: {marker}")
+        report.check(marker in texts["kernels"], f"embedded raw KV marker missing: {marker}")
     for marker in [
-        "pub struct CudaAbiHcWeightedSumScope",
-        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE",
-        "exported_abi_symbol_count: 44",
-        "exported_compute_symbol_count: 21",
-        "owns_hc_weighted_sum_kernel: true",
-        "owns_sinkhorn_or_fused_hc_reductions: false",
+        "pub struct CudaAbiRawKvStorageScope",
+        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
+        "exported_abi_symbol_count: 56",
+        "exported_compute_symbol_count: 32",
+        "owns_store_raw_kv_tensor: true",
+        "owns_store_raw_kv_batch_tensor: true",
+        "owns_store_raw_kv_batch_kernel: true",
+        "owns_kv_fp8_store_raw_composition: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -168,8 +163,10 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
 
 def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
-    report.check(implementation.get("kernel_entry") == "abi_hc_weighted_sum_kernel", "kernel entry drift")
-    report.check("rejecting" in implementation.get("validation_boundary", ""), "validation boundary missing")
+    report.check(
+        implementation.get("kernel_entry") == "abi_store_raw_kv_batch_kernel",
+        "kernel entry drift",
+    )
     report.check("--whole-archive" in implementation.get("linkage_requirement", ""), "linkage path missing")
     execution = require_dict(report, fixture.get("b300_execution"), "b300_execution")
     for key, expected in [
@@ -179,42 +176,47 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("pod", "ds4-rust-port-b300"),
         ("node", "c1v17-b300n1-nic1"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 130),
-        ("feature_release_test_count", 137),
-        ("staticlib_export_count", 44),
+        ("local_library_test_count", 140),
+        ("feature_release_test_count", 147),
+        ("staticlib_export_count", 56),
+        ("embedded_kernel_count", 33),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
-        "direct_weighted_sum_matches",
-        "split_stride_weighted_sum_matches",
-        "short_residual_rejected",
-        "short_split_rejected",
-        "zero_shape_rejected",
-        "embedded_hc_weighted_sum_kernel_loaded",
+        "batch_fp16_ring_wrap_output_matches",
+        "uint32_position_wrap_matches",
+        "single_row_store_matches",
+        "untouched_rows_preserved",
+        "zero_grid_rejected",
+        "invalid_shape_rejected",
+        "null_rejected",
+        "embedded_store_raw_kv_batch_kernel_loaded",
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
-    report.check(observed.get("predecessor_c_linked_regression_consumers_passed") == 40, "predecessor count drift")
-    report.check(observed.get("predecessor_relink_executable_stack_warning_count") == 40, "warning count drift")
+    report.check(observed.get("predecessor_c_linked_regression_consumers_passed") == 50, "predecessor count drift")
+    report.check(observed.get("predecessor_relink_executable_stack_warning_count") == 50, "warning count drift")
     for marker in [
-        "ds4_gpu_hc_weighted_sum_tensor(",
-        "ds4_gpu_hc_weighted_sum_split_tensor(",
-        "direct_weighted_sum_matches",
-        "split_stride_weighted_sum_matches",
-        "short_residual_rejected",
-        "short_split_rejected",
+        "const uint32_t pos0 = UINT32_MAX;",
+        "(uint32_t)(pos0 + token) % RAW_CAP",
+        "half_roundtrip(",
+        "ds4_gpu_store_raw_kv_tensor(",
+        "ds4_gpu_store_raw_kv_batch_tensor(",
+        "uint32_position_wrap_matches",
+        "embedded_store_raw_kv_batch_kernel_loaded",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
     risks = fixture.get("integration_risks", [])
-    report.check(any("Sinkhorn" in value for value in risks), "remaining reduction boundary missing")
+    report.check(any("nondeterministic" in value for value in risks), "overlap-ordering risk missing")
+    report.check(any("route promotion" in value for value in risks), "remaining-compute risk missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-hc-weighted-sum-smoke.json"
-    checker = "check_cuda_abi_hc_weighted_sum_smoke.py"
-    item = f"{MILESTONE}: Public Hyperconnection Weighted Sum ABI"
+    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-raw-kv-storage-smoke.json"
+    checker = "check_cuda_abi_raw_kv_storage_smoke.py"
+    item = f"{MILESTONE}: Public Raw KV Storage ABI"
     for target, label in [("roadmap", "roadmap"), ("todo", "TODO"), ("status", "status")]:
         report.check(item in texts[target], f"{label} item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
@@ -227,18 +229,26 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
         "active remainder status missing",
     )
     report.check(
+        fixture.get("review", {}).get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+        "pre-implementation review evidence missing",
+    )
+    report.check(
+        fixture.get("review", {}).get("final") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+        "final review evidence missing",
+    )
+    report.check(
         fixture.get("next_required_stage")
-        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy",
+        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy",
         "next stage drift",
     )
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("direct result removed", lambda value: value["b300_execution"]["observed"].update({"direct_weighted_sum_matches": False})),
-        ("split result removed", lambda value: value["b300_execution"]["observed"].update({"split_stride_weighted_sum_matches": False})),
-        ("buffer rejection removed", lambda value: value["b300_execution"]["observed"].update({"short_split_rejected": False})),
-        ("fused reduction overclaim", lambda value: value["ownership"].update({"owns_sinkhorn_or_fused_hc_reductions": True})),
+        ("FP16 storage failure", lambda value: value["b300_execution"]["observed"].update({"batch_fp16_ring_wrap_output_matches": False})),
+        ("position wrap failure", lambda value: value["b300_execution"]["observed"].update({"uint32_position_wrap_matches": False})),
+        ("kernel ownership removed", lambda value: value["ownership"].update({"owns_store_raw_kv_batch_kernel": False})),
+        ("composition overclaim", lambda value: value["ownership"].update({"owns_kv_fp8_store_raw_composition": True})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)

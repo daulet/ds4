@@ -10969,6 +10969,41 @@
 
 ############################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb because
+  public raw KV row storage is independently comparable before composed
+  FP8/raw storage, compressor, attention, routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Raw KV Storage ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_store_raw_kv_tensor` and
+  `ds4_gpu_store_raw_kv_batch_tensor` through one public raw-store kernel
+  without claiming composed FP8/raw storage, compressor, attention, routed
+  MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-raw-kv-storage-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_raw_kv_storage_smoke.py --negative-test`.
+- Evidence: Rust exports both public raw KV wrappers through one embedded
+  FP16-rounding ring-storage kernel. A C-linked B300 witness proves batched
+  and single-row storage, `uint32_t` wraparound ring positioning on distinct
+  destination rows, untouched rows, zero-grid rejection, invalid-shape
+  rejection, and null rejection. Local tests pass with 140 tests; B300
+  feature tests pass with 147 tests; the static library exposes 56 symbols
+  and embeds 33 kernels; all 50 preceding linked ABI consumers pass against
+  the rebuilt archive with the known executable-stack warning. All 54 CUDA
+  ABI comparators pass, and the unified parity report passes with 226 passed,
+  45 skipped, and 0 failed. Overlapping same-launch ring writes and composed
+  FP8/raw storage remain unclaimed. The pre-implementation and final
+  pass-end non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

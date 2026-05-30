@@ -71,7 +71,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
     "ds4_gpu_hc_weighted_sum_tensor",
     "ds4_gpu_hc_weighted_sum_split_tensor",
-    "ds4_gpu_hc_split_sinkhorn_tensor", "ds4_gpu_hc_split_weighted_sum_tensor", "ds4_gpu_hc_split_weighted_sum_norm_tensor", "ds4_gpu_output_hc_weights_tensor", "ds4_gpu_embed_token_hc_tensor", "ds4_gpu_embed_tokens_hc_tensor", "ds4_gpu_head_rms_norm_tensor", "ds4_gpu_dsv4_fp8_kv_quantize_tensor", "ds4_gpu_dsv4_indexer_qat_tensor", "ds4_gpu_rope_tail_tensor",
+    "ds4_gpu_hc_split_sinkhorn_tensor", "ds4_gpu_hc_split_weighted_sum_tensor", "ds4_gpu_hc_split_weighted_sum_norm_tensor", "ds4_gpu_output_hc_weights_tensor", "ds4_gpu_embed_token_hc_tensor", "ds4_gpu_embed_tokens_hc_tensor", "ds4_gpu_head_rms_norm_tensor", "ds4_gpu_dsv4_fp8_kv_quantize_tensor", "ds4_gpu_dsv4_indexer_qat_tensor", "ds4_gpu_rope_tail_tensor", "ds4_gpu_store_raw_kv_tensor", "ds4_gpu_store_raw_kv_batch_tensor",
 ]
 
 

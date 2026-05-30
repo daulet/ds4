@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Raw KV Storage ABI
+  is validated on B300. Rust exports `ds4_gpu_store_raw_kv_tensor` and
+  `ds4_gpu_store_raw_kv_batch_tensor` through one embedded public raw-store
+  kernel. A C-linked B300 witness proves FP16 row storage, `uint32_t`
+  position-wrap ring selection on distinct destination rows, single-row
+  storage, untouched rows, and zero-grid, invalid-shape, and null rejection.
+  Local tests pass with 140 tests; B300 feature tests pass with 147 tests; the
+  static library exposes 56 symbols and embeds 33 kernels; all 50 preceding
+  linked ABI consumers pass against the rebuilt archive with the known
+  executable-stack warning. All 54 CUDA ABI comparators pass, and the
+  unified report passes with 226 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Overlapping
+  same-launch ring writes, composed FP8/raw storage, compressor, attention,
+  routed MoE, remaining graph compute, whole-archive/route promotion, C CUDA
+  removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Standalone RoPE ABI
   is validated on B300. Rust exports `ds4_gpu_rope_tail_tensor` through an
   embedded public unit-stride rotary-tail kernel. A C-linked B300 witness

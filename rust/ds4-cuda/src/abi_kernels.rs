@@ -698,6 +698,30 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_store_raw_kv_batch_kernel(
+        raw_cap: u32,
+        pos0: u32,
+        n_tokens: u32,
+        head_dim: u32,
+        kv: &[f32],
+        mut raw: DisjointSlice<f32>,
+    ) {
+        let gid = u64::from(thread::blockIdx_x()) * u64::from(thread::blockDim_x())
+            + u64::from(thread::threadIdx_x());
+        let count = u64::from(n_tokens) * u64::from(head_dim);
+        if gid >= count {
+            return;
+        }
+        let dimension = gid % u64::from(head_dim);
+        let token = gid / u64::from(head_dim);
+        let row = pos0.wrapping_add(token as u32) % raw_cap;
+        unsafe {
+            *raw.get_unchecked_mut((u64::from(row) * u64::from(head_dim) + dimension) as usize) =
+                (kv[gid as usize] as f16) as f32;
+        }
+    }
+
+    #[kernel]
     pub fn abi_fp8_kv_quantize_kernel(
         n_tok: u32,
         head_dim: u32,
@@ -1715,6 +1739,7 @@ pub(crate) struct AbiKernelModule {
     rms_norm_plain_kernel: CudaFunction,
     head_rms_norm_kernel: CudaFunction,
     rope_tail_kernel: CudaFunction,
+    store_raw_kv_batch_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
@@ -1782,6 +1807,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             rope_tail_kernel: module
                 .load_function("abi_rope_tail_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            store_raw_kv_batch_kernel: module
+                .load_function("abi_store_raw_kv_batch_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             fp8_kv_quantize_kernel: module
                 .load_function("abi_fp8_kv_quantize_kernel")
@@ -2731,6 +2759,58 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.rope_tail_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn store_raw_kv_batch_tensor(
+        &self,
+        stream: &CudaStream,
+        raw_ptr: u64,
+        kv_ptr: u64,
+        raw_elements: u64,
+        kv_elements: u64,
+        raw_cap: u32,
+        pos0: u32,
+        n_tokens: u32,
+        head_dim: u32,
+        grid_blocks: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (grid_blocks, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut raw_cap = raw_cap;
+        let mut pos0 = pos0;
+        let mut n_tokens = n_tokens;
+        let mut head_dim = head_dim;
+        let mut kv_ptr = kv_ptr;
+        let mut kv_len = kv_elements;
+        let mut raw_ptr = raw_ptr;
+        let mut raw_len = raw_elements;
+        let mut params = [
+            (&mut raw_cap as *mut u32).cast::<c_void>(),
+            (&mut pos0 as *mut u32).cast::<c_void>(),
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut kv_ptr as *mut u64).cast::<c_void>(),
+            (&mut kv_len as *mut u64).cast::<c_void>(),
+            (&mut raw_ptr as *mut u64).cast::<c_void>(),
+            (&mut raw_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates source/destination spans, nonzero ring
+        // geometry, and the checked nonzero grid before launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.store_raw_kv_batch_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

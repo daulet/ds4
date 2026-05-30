@@ -3704,6 +3704,21 @@ null rejection. Raw KV storage, compressor, attention, routed MoE, remaining
 graph compute, whole-archive retention policy, route promotion, C CUDA
 removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public raw KV storage ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_raw_kv_storage_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the single-row and batched public raw KV
+store wrappers through one embedded Rust kernel, proves FP16 round-trip
+storage and `uint32_t` wraparound row selection on distinct destinations, then
+checks short-span, zero-grid, and null rejection. Overlapping same-launch
+ring writes, composed FP8/raw storage, compressor, attention, routed MoE,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

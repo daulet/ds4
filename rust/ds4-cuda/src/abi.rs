@@ -2977,6 +2977,95 @@ pub unsafe extern "C" fn ds4_gpu_rope_tail_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+unsafe fn store_raw_kv_impl(
+    raw_cache: *mut Ds4GpuTensor,
+    kv: *const Ds4GpuTensor,
+    raw_cap: u32,
+    pos0: u32,
+    n_tokens: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| {
+        let Some(raw_cache) = (unsafe { tensor_ref(raw_cache.cast_const()) }) else {
+            return false;
+        };
+        let Some(kv) = (unsafe { tensor_ref(kv) }) else {
+            return false;
+        };
+        let Some(raw_elements) = u64::from(raw_cap).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(kv_elements) = u64::from(n_tokens).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(raw_bytes) = raw_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(kv_bytes) = kv_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Ok(grid_blocks) = u32::try_from(kv_elements.div_ceil(256_u64)) else {
+            return false;
+        };
+        if raw_cap == 0
+            || n_tokens == 0
+            || head_dim == 0
+            || grid_blocks == 0
+            || raw_cache.bytes < raw_bytes
+            || kv.bytes < kv_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: source/destination spans, nonzero ring geometry,
+                // and the checked launch grid are validated above.
+                Some(unsafe {
+                    kernels.store_raw_kv_batch_tensor(
+                        backend.stream(),
+                        raw_cache.device_ptr(),
+                        kv.device_ptr(),
+                        raw_elements,
+                        kv_elements,
+                        raw_cap,
+                        pos0,
+                        n_tokens,
+                        head_dim,
+                        grid_blocks,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_store_raw_kv_tensor(
+    raw_cache: *mut Ds4GpuTensor,
+    kv: *const Ds4GpuTensor,
+    raw_cap: u32,
+    row: u32,
+    head_dim: u32,
+) -> c_int {
+    unsafe { store_raw_kv_impl(raw_cache, kv, raw_cap, row, 1, head_dim) }
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_store_raw_kv_batch_tensor(
+    raw_cache: *mut Ds4GpuTensor,
+    kv: *const Ds4GpuTensor,
+    raw_cap: u32,
+    pos0: u32,
+    n_tokens: u32,
+    head_dim: u32,
+) -> c_int {
+    unsafe { store_raw_kv_impl(raw_cache, kv, raw_cap, pos0, n_tokens, head_dim) }
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

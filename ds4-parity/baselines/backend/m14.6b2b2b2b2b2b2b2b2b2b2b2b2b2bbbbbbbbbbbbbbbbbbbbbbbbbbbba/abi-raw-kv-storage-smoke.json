@@ -1,0 +1,76 @@
+{
+  "schema": "ds4.cuda_abi_raw_kv_storage_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-raw-kv-storage-abi",
+  "goal": "Rust-own the public raw KV storage wrappers without claiming composed FP8 storage, compressor, attention, routed MoE, or route promotion.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_store_raw_kv_tensor",
+      "ds4_gpu_store_raw_kv_batch_tensor"
+    ],
+    "semantics": [
+      "store each valid raw KV row through an FP16 round trip before widening back to float",
+      "preserve uint32 position addition wrap before raw-capacity modulo for ring row selection",
+      "prove only requests whose token rows map to distinct destinations because overlapping same-launch writes have no deterministic ordering",
+      "reject null, short-buffer, zero-capacity, zero-grid, and overflowing launch requests before current-C invalid or unsafe launches"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_raw_kv_storage_link_smoke.c",
+    "kernel_entry": "abi_store_raw_kv_batch_kernel",
+    "remaining_compute_boundary": "composed FP8 raw storage, compressor, attention, routed MoE, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 56,
+    "exported_compute_symbol_count": 32,
+    "public_gpu_abi_function_count": 81,
+    "owns_store_raw_kv_tensor": true,
+    "owns_store_raw_kv_batch_tensor": true,
+    "owns_store_raw_kv_batch_kernel": true,
+    "owns_kv_fp8_store_raw_composition": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 140,
+    "feature_release_test_count": 147,
+    "staticlib_export_count": 56,
+    "embedded_kernel_count": 33,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "batch_fp16_ring_wrap_output_matches": true,
+      "uint32_position_wrap_matches": true,
+      "single_row_store_matches": true,
+      "untouched_rows_preserved": true,
+      "zero_grid_rejected": true,
+      "invalid_shape_rejected": true,
+      "null_rejected": true,
+      "embedded_store_raw_kv_batch_kernel_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 50,
+      "predecessor_relink_executable_stack_warning_count": 50
+    }
+  },
+  "integration_risks": [
+    "same-launch requests whose token rows overlap the same raw ring slot retain current-C nondeterministic write ordering and are intentionally not claimed by this witness",
+    "composed FP8 raw storage, compressor, attention, routed MoE, remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
