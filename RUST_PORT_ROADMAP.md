@@ -7240,7 +7240,9 @@ Stage split:
   16-component tile independently from the widened multi-warp dispatch;
   M14.2d2b2 split into M14.2d2b2a through M14.2d2b2c because the 32,
   64, and 128-component branches and final priority wiring need separate
-  multi-warp evidence.
+  multi-warp evidence; M14.2d2c split into M14.2d2c1 through M14.2d2c5
+  because each specialized top-k family has an independent CUDA launch and
+  storage contract.
 - Goal: port the M14.2 operation family through bounded Rust CUDA kernel
   slices while retaining current-C oracles and the opt-in-only route.
 - Stage split:
@@ -7254,7 +7256,11 @@ Stage split:
   - M14.2d2b2a: WMMA32 Tensor-Core Indexer Score Kernel.
   - M14.2d2b2b: WMMA64 Tensor-Core Indexer Score Kernel.
   - M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority.
-  - M14.2d2c: Specialized Top-K Kernels.
+  - M14.2d2c1: 1024 Bitonic Top-K Kernel.
+  - M14.2d2c2: Power-Of-Two Top-K Kernels.
+  - M14.2d2c3: CUB-Or-Equivalent Top-K Branch.
+  - M14.2d2c4: Chunked And Tree-Merge Top-K Kernels.
+  - M14.2d2c5: Indexed Ascending Top-K Sort And Dispatch Policy.
   - M14.2e: M14.2 Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
@@ -7641,9 +7647,65 @@ Stage split:
 
 ##### M14.2d2c: Specialized Top-K Kernels
 
-- Status: active.
+- Status: split before implementation into M14.2d2c1 through M14.2d2c5.
 - Goal: port the shared-memory, CUB-equivalent, chunked, merge, tree-merge,
   and indexed ascending-sort top-k kernels.
+
+##### M14.2d2c1: 1024 Bitonic Top-K Kernel
+
+- Status: done.
+- Goal: port current-C's `top_k == 512 && n_comp <= 1024` shared-memory
+  bitonic fast path without claiming larger selection branches.
+- Oracle: current-C `indexer_topk_1024_kernel` and its guarded
+  `ds4_gpu_indexer_topk_tensor` launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c1/indexer-topk1024-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk1024_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Acceptance: Rust owns only executable-local 1024-element top-k sorting and
+  host-side shape safety; larger top-k dispatch, indexed ascending sort,
+  route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexer_topk_1024_kernel` with the current-C
+    1024-thread shared-memory bitonic network, descending score order, and
+    lower-index tie break.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 33 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved full-width output, partial-width sentinel
+    exclusion, tie ordering, and invalid-shape rejection on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 69-check comparator, and
+    unified parity passed with 124 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review confirmed that the Rust scope owns only the
+    guarded kernel shape and current-C ordering, not dispatch selection.
+  - This stage remains opt-in; it does not claim larger top-k branches,
+    indexed ascending sort, runtime route activation, or C CUDA removal.
+
+##### M14.2d2c2: Power-Of-Two Top-K Kernels
+
+- Status: active.
+- Goal: port the 2048/4096 and 8192 shared-memory power-of-two selection
+  branches after the 1024 shape is proven.
+
+##### M14.2d2c3: CUB-Or-Equivalent Top-K Branch
+
+- Status: pending.
+- Goal: port or explicitly close current-C's dynamic-shared-memory CUB
+  selection optimization with equivalent validated ordering.
+
+##### M14.2d2c4: Chunked And Tree-Merge Top-K Kernels
+
+- Status: pending.
+- Goal: port the large-component chunk candidate, intermediate tree merge,
+  and final merge kernels plus their scratch layout.
+
+##### M14.2d2c5: Indexed Ascending Top-K Sort And Dispatch Policy
+
+- Status: pending.
+- Goal: port indexed attention's ascending 512-element sort and close the
+  validated-input specialized top-k dispatch ordering.
 
 ## Removal Criteria for C Host Code
 

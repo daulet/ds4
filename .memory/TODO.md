@@ -7600,8 +7600,11 @@
   M14.2d2a Direct-One Indexer Score Kernel; M14.2d2b1 Base Tensor-Core
   Indexer Score Kernel; M14.2d2b2a WMMA32 Tensor-Core Indexer Score Kernel;
   M14.2d2b2b WMMA64 Tensor-Core Indexer Score Kernel; M14.2d2b2c WMMA128
-  Tensor-Core Indexer Score Kernel And Dispatch Priority; M14.2d2c
-  Specialized Top-K Kernels; M14.2e Kernel Closure Gate.
+  Tensor-Core Indexer Score Kernel And Dispatch Priority; M14.2d2c1
+  1024 Bitonic Top-K Kernel; M14.2d2c2 Power-Of-Two Top-K Kernels;
+  M14.2d2c3 CUB-Or-Equivalent Top-K Branch; M14.2d2c4 Chunked And
+  Tree-Merge Top-K Kernels; M14.2d2c5 Indexed Ascending Top-K Sort And
+  Dispatch Policy; M14.2e Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
 
@@ -7891,6 +7894,56 @@
 
 ##### M14.2d2c: Specialized Top-K Kernels
 
-- Status: active
+- Status: split before implementation into M14.2d2c1 through M14.2d2c5
 - Goal: port specialized top-k sort, chunk, merge, tree, and indexed-sort
   kernels.
+
+##### M14.2d2c1: 1024 Bitonic Top-K Kernel
+
+- Status: done
+- Goal: port the current-C shared-memory `indexer_topk_1024_kernel` used for
+  validated `top_k == 512` and `n_comp <= 1024` calls.
+- Oracle: `indexer_topk_1024_kernel` and its guarded
+  `ds4_gpu_indexer_topk_tensor` launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c1/indexer-topk1024-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk1024_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Acceptance: Rust owns only bounded 1024-element top-k sorting and shape
+  rejection; larger top-k branches, indexed ascending sort, runtime route,
+  and C CUDA removal remain unclaimed.
+- Evidence: added executable-local Rust `indexer_topk_1024_kernel` mirroring
+  the current-C 1024-thread shared-memory bitonic network and lower-index tie
+  order. B300 feature-enabled `ds4-cuda` tests passed with 33 tests and live
+  cargo-oxide execution emitted portable `sm_80` PTX and proved full-width
+  output, partial-width sentinel exclusion, stable tie ordering, and
+  invalid-shape rejection on `NVIDIA B300 SXM6 AC`. Larger top-k dispatch,
+  indexed ascending sort, runtime route, and C CUDA removal remain unclaimed.
+  Local formatting, diff, workspace tests, the 69-check comparator, and
+  unified parity passed with 124 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result;
+  adversarial self-review retained only bounded kernel-shape and ordering
+  ownership.
+
+##### M14.2d2c2: Power-Of-Two Top-K Kernels
+
+- Status: active
+- Goal: port 2048/4096 and 8192 power-of-two shared-memory top-k branches.
+
+##### M14.2d2c3: CUB-Or-Equivalent Top-K Branch
+
+- Status: pending
+- Goal: port or explicitly close current-C's CUB radix-sort optimization.
+
+##### M14.2d2c4: Chunked And Tree-Merge Top-K Kernels
+
+- Status: pending
+- Goal: port chunk candidate, intermediate tree merge, and final merge
+  kernels together with their scratch layout.
+
+##### M14.2d2c5: Indexed Ascending Top-K Sort And Dispatch Policy
+
+- Status: pending
+- Goal: port indexed attention's ascending 512-element sort and close
+  specialized top-k dispatch ordering.

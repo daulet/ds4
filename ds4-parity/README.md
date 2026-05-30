@@ -2335,6 +2335,18 @@ output tile, plus the Rust selector for current-C's validated-input score
 kernel priority order. It leaves specialized top-k dispatch, runtime route,
 and C CUDA removal pending.
 
+Validate the M14.2d2c1 Rust CUDA 1024-element bitonic top-k kernel smoke:
+
+```sh
+python3 ds4-parity/check_indexer_topk1024_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `indexer_topk_1024_kernel` execution on
+B300 with current-C's descending score and lower-index tie ordering. It
+proves the `top_k == 512 && n_comp <= 1024` fast path, including partial
+component padding, while leaving larger top-k branches, indexed ascending
+sort, runtime route, and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

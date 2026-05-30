@@ -491,6 +491,23 @@ pub const M14_2D2B2C_SCOPE: IndexerWmma128DispatchScope = IndexerWmma128Dispatch
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerTopk1024KernelScope {
+    pub opt_in_only: bool,
+    pub owns_indexer_topk_1024_kernel: bool,
+    pub owns_larger_topk_dispatch: bool,
+    pub owns_indexed_topk_sort_dispatch: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2D2C1_SCOPE: IndexerTopk1024KernelScope = IndexerTopk1024KernelScope {
+    opt_in_only: true,
+    owns_indexer_topk_1024_kernel: true,
+    owns_larger_topk_dispatch: false,
+    owns_indexed_topk_sort_dispatch: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -508,7 +525,7 @@ mod tests {
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
         M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
         M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
-        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
+        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE,
     };
 
     #[test]
@@ -745,6 +762,15 @@ mod tests {
         assert!(M14_2D2B2C_SCOPE.owns_indexer_score_dispatch_policy);
         assert!(!M14_2D2B2C_SCOPE.owns_specialized_topk_dispatch);
         assert!(!M14_2D2B2C_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn topk1024_scope_leaves_larger_indexed_dispatch_and_route_pending() {
+        assert!(M14_2D2C1_SCOPE.opt_in_only);
+        assert!(M14_2D2C1_SCOPE.owns_indexer_topk_1024_kernel);
+        assert!(!M14_2D2C1_SCOPE.owns_larger_topk_dispatch);
+        assert!(!M14_2D2C1_SCOPE.owns_indexed_topk_sort_dispatch);
+        assert!(!M14_2D2C1_SCOPE.changes_default_route);
     }
 
     #[test]

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2d2c Specialized Top-K Kernels
+- Active item: M14.2d2c2 Power-Of-Two Top-K Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -32,8 +32,12 @@
   cuda-oxide MMA operations independently from widened multi-warp dispatch.
   M14.2d2b2 is further split into M14.2d2b2a through M14.2d2b2c because
   the 32, 64, and 128-component multi-warp kernels and final priority wiring
-  need bounded live evidence.
-- Last validated source before the active item: M14.2d2b2c WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority.
+  need bounded live evidence. M14.2d2c is further split into M14.2d2c1
+  through M14.2d2c5 because 1024 bitonic selection, larger power-of-two
+  selection, CUB-or-equivalent selection, chunk/tree merge, and indexed
+  ascending sort have separate CUDA launch and storage contracts.
+- Last validated source before the active item: M14.2d2c1 1024 Bitonic Top-K Kernel.
+- Earlier M14.2d2b2c WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority.
 - Earlier M14.2d2b2b WMMA64 Tensor-Core Indexer Score Kernel.
 - Earlier M14.2d2b2a WMMA32 Tensor-Core Indexer Score Kernel.
 - Earlier M14.2d2b1 Base Tensor-Core Indexer Score Kernel.
@@ -155,6 +159,22 @@
 
 ## Last Evidence
 
+- M14.2d2c1 1024 Bitonic Top-K Kernel adds executable-local Rust cuda-oxide
+  `indexer_topk_1024_kernel` with the current-C 1024-thread shared-memory
+  bitonic network, descending score order, and lower-index tie breaking.
+  On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+  with 33 tests and live cargo-oxide execution emitted portable `sm_80` PTX
+  and proved full-width output, partial-width sentinel exclusion, stable tie
+  ordering, and invalid-shape rejection on `NVIDIA B300 SXM6 AC`. Its
+  fixture and checker are
+  `ds4-parity/baselines/backend/m14.2d2c1/indexer-topk1024-kernel-smoke.json`
+  and `ds4-parity/check_indexer_topk1024_kernel_smoke.py --negative-test`.
+  Larger top-k dispatch, indexed ascending sort, runtime route activation,
+  and C CUDA removal remain unclaimed. Local formatting, diff, workspace
+  tests, the 69-check comparator, and unified parity passed with 124 passed,
+  45 skipped, and 0 failed. Non-interactive Claude review timed out without
+  a completed result; adversarial self-review retained only bounded
+  kernel-shape and ordering ownership.
 - M14.2d2b2c WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority
   adds executable-local Rust cuda-oxide `indexer_scores_wmma128_kernel`
   with eight warps, native `f16` shared staging, and cuda-oxide
