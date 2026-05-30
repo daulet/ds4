@@ -17,10 +17,16 @@ cuda-oxide-kernels = ["cuda-oxide-backend", "dep:cuda-device", "dep:cuda-host"]
 
 [lib]
 path = "src/lib.rs"
+crate-type = ["rlib", "staticlib"]
 
 [[bin]]
 name = "ds4-cuda-substrate-smoke"
 path = "src/bin/substrate_smoke.rs"
+required-features = ["cuda-oxide-backend"]
+
+[[bin]]
+name = "ds4-cuda-abi-resource-smoke"
+path = "src/bin/abi_resource_smoke.rs"
 required-features = ["cuda-oxide-backend"]
 
 [[bin]]

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b Rust CUDA ABI Backend Assembly
+- Active item: M14.6b2 Rust CUDA Compute ABI Assembly
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.6a Production Route Linkage Blocker.
+- Last validated source before the active item: M14.6b1 Rust CUDA Resource ABI Exports.
+- Earlier M14.6a Production Route Linkage Blocker.
 - Earlier M14.5d Hyperconnection Split And Expansion Kernels.
 - Earlier M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE.
 - Earlier M14.5c2e Shared-Cache Expert-Tile Projection.
@@ -224,6 +225,17 @@
 
 ## Last Evidence
 
+- M14.6b1 Rust CUDA Resource ABI Exports adds a linkable opt-in
+  `rust/ds4-cuda` static library surface with 16 exported `ds4_gpu_*`
+  initialization, tensor/resource, copy, synchronization, and managed-KV
+  policy symbols. The B300 smoke on `NVIDIA B300 SXM6 AC` passed device,
+  managed, view, device-copy, command, and invalid-input checks, and `nm`
+  confirmed all 16 symbols in `target/debug/libds4_cuda.a`. Local library
+  tests passed with 87 tests and B300 backend-feature tests passed with 89
+  tests; the resource ABI checker passed with 77 checks; and the unified
+  parity report passed with 173 passes, 45 skips, and no failures. Compute
+  ABI ownership, production-link selection, and default route promotion
+  remain false; M14.6b2 owns that work.
 - M14.6a Production Route Linkage Blocker establishes that the Rust
   cuda-oxide operation proofs are not yet a production backend:
   `rust/ds4-gpu/build.rs` still compiles and archives `ds4_cuda.cu`;

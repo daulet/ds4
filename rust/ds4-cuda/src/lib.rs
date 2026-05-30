@@ -1959,8 +1959,38 @@ pub const M14_6A_GATE: CudaRoutePromotionGate = CudaRoutePromotionGate {
     can_remove_c_cuda: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiResourceScope {
+    pub exported_resource_symbol_count: u32,
+    pub owns_initialization: bool,
+    pub owns_tensor_storage: bool,
+    pub owns_host_device_copies: bool,
+    pub owns_command_synchronization: bool,
+    pub owns_managed_kv_policy: bool,
+    pub owns_tensor_fill_kernel: bool,
+    pub owns_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B1_SCOPE: CudaAbiResourceScope = CudaAbiResourceScope {
+    exported_resource_symbol_count: 16,
+    owns_initialization: true,
+    owns_tensor_storage: true,
+    owns_host_device_copies: true,
+    owns_command_synchronization: true,
+    owns_managed_kv_policy: true,
+    owns_tensor_fill_kernel: false,
+    owns_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
+
+#[cfg(feature = "cuda-oxide-backend")]
+pub mod abi;
 
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
@@ -1995,7 +2025,7 @@ mod tests {
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
         M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE, M14_5C2F_SCOPE,
-        M14_5D_SCOPE, M14_6A_GATE,
+        M14_5D_SCOPE, M14_6A_GATE, M14_6B1_SCOPE,
     };
 
     #[test]
@@ -3002,6 +3032,20 @@ mod tests {
         assert!(!M14_6A_GATE.runtime_graph_route_implemented);
         assert!(!M14_6A_GATE.can_promote_default_route);
         assert!(!M14_6A_GATE.can_remove_c_cuda);
+    }
+
+    #[test]
+    fn resource_abi_scope_leaves_compute_and_route_pending() {
+        assert_eq!(M14_6B1_SCOPE.exported_resource_symbol_count, 16);
+        assert!(M14_6B1_SCOPE.owns_initialization);
+        assert!(M14_6B1_SCOPE.owns_tensor_storage);
+        assert!(M14_6B1_SCOPE.owns_host_device_copies);
+        assert!(M14_6B1_SCOPE.owns_command_synchronization);
+        assert!(M14_6B1_SCOPE.owns_managed_kv_policy);
+        assert!(!M14_6B1_SCOPE.owns_tensor_fill_kernel);
+        assert!(!M14_6B1_SCOPE.owns_compute_abi);
+        assert!(!M14_6B1_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B1_SCOPE.changes_default_route);
     }
 
     #[test]

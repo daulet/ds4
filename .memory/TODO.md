@@ -9076,7 +9076,29 @@
 
 ##### M14.6b: Rust CUDA ABI Backend Assembly
 
-- Status: active
+- Status: active; split into M14.6b1 and M14.6b2
 - Goal: assemble the validated cuda-oxide operations behind the production
   `ds4_gpu_*` ABI and use that linkable backend for same-B300 route
   comparison before any C CUDA removal.
+
+##### M14.6b1: Rust CUDA Resource ABI Exports
+
+- Status: done
+- Goal: export the resource and command subset of `ds4_gpu_*` from a
+  linkable Rust cuda-oxide static library.
+- Fixture: `ds4-parity/baselines/backend/m14.6b1/abi-resource-smoke.json`
+- Comparator: `ds4-parity/check_cuda_abi_resource_smoke.py --negative-test`.
+- Evidence: `rust/ds4-cuda/src/abi.rs` exports 16 initialization, tensor,
+  transfer, synchronization, and managed-KV symbols. B300 execution on
+  `NVIDIA B300 SXM6 AC` passed the resource ABI smoke and static-library
+  symbol inspection; 87 local library tests and 89 B300 backend-feature
+  tests passed; the resource ABI checker passed with 77 checks; and the
+  unified parity report passed with 173 passes, 45 skips, and no failures.
+  Compute ABI ownership and production linker promotion remain explicitly
+  false.
+
+##### M14.6b2: Rust CUDA Compute ABI Assembly
+
+- Status: active
+- Goal: consolidate validated kernel families into reusable modules and
+  export the compute ABI before any production linker or route promotion.

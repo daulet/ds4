@@ -20,6 +20,7 @@ GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 CUDA_CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
+CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
 ENGINE = ROOT / "rust/ds4-engine/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -58,6 +59,7 @@ def main(argv: Iterable[str]) -> int:
         "gpu_sys": GPU_SYS.read_text(encoding="utf-8"),
         "cuda_cargo": CUDA_CARGO.read_text(encoding="utf-8"),
         "cuda_lib": CUDA_LIB.read_text(encoding="utf-8"),
+        "cuda_abi": CUDA_ABI.read_text(encoding="utf-8"),
         "engine": ENGINE.read_text(encoding="utf-8"),
         "roadmap": ROADMAP.read_text(encoding="utf-8"),
         "todo": TODO.read_text(encoding="utf-8"),
@@ -122,9 +124,19 @@ def validate_boundary(report: ReportState, fixture: dict[str, Any], texts: dict[
     ffi_exports = re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"])
     report.check(len(set(ffi_exports)) == 81, "Rust FFI function count drift")
     report.check("[[bin]]" in texts["cuda_cargo"], "cuda-oxide executable-local proof markers missing")
-    report.check("crate-type" not in texts["cuda_cargo"], "Rust CUDA crate unexpectedly exposes a link artifact")
-    report.check('extern "C"' not in texts["cuda_lib"], "Rust CUDA library unexpectedly exports C ABI functions")
-    report.check("ds4_gpu_init" not in texts["cuda_lib"], "Rust CUDA library unexpectedly implements GPU ABI")
+    report.check(
+        'crate-type = ["rlib", "staticlib"]' in texts["cuda_cargo"],
+        "Rust CUDA resource ABI successor staticlib missing",
+    )
+    report.check("pub mod abi;" in texts["cuda_lib"], "Rust CUDA resource ABI successor module missing")
+    report.check(
+        'pub extern "C" fn ds4_gpu_init' in texts["cuda_abi"],
+        "Rust CUDA resource ABI successor init export missing",
+    )
+    report.check(
+        "owns_complete_ds4_gpu_abi: false" in texts["cuda_lib"],
+        "partial resource ABI unexpectedly claims complete ABI",
+    )
     report.check(
         "--runtime-graph graph is not implemented yet" in texts["engine"],
         "runtime graph rejection marker missing",
@@ -172,7 +184,7 @@ def validate_wiring(report: ReportState, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.6b Rust CUDA ABI Backend Assembly" in texts["status"], "active stage missing")
+    report.check("Active item: M14.6b2 Rust CUDA Compute ABI Assembly" in texts["status"], "active stage missing")
     report.check("M14.6a Production Route Linkage Blocker" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

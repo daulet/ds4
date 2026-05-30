@@ -9200,13 +9200,47 @@ Stage split:
 
 ##### M14.6b: Rust CUDA ABI Backend Assembly
 
-- Status: active.
+- Status: active; split into M14.6b1 and M14.6b2 so linkable resource
+  exports are validated before compute export assembly.
 - Goal: consolidate the validated cuda-oxide substrate and kernel families
   behind a linkable Rust implementation of the production `ds4_gpu_*` ABI,
   then compare the resulting route end to end before removing current C.
 - Acceptance: the production Linux CUDA build can select a Rust-owned ABI
   backend without compiling `ds4_cuda.cu`, and same-B300 output, quality,
   long-context, server, and benchmark gates pass before default promotion.
+
+##### M14.6b1: Rust CUDA Resource ABI Exports
+
+- Status: done.
+- Goal: make the validated cuda-oxide resource substrate linkable through
+  production-shaped `ds4_gpu_*` C ABI symbols without overclaiming compute
+  execution or route ownership.
+- Fixture: `ds4-parity/baselines/backend/m14.6b1/abi-resource-smoke.json`.
+- Comparator: `ds4-parity/check_cuda_abi_resource_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda` now emits an opt-in Rust `staticlib` and exports 16
+    initialization, tensor/resource, synchronization, and managed-KV policy
+    symbols from `rust/ds4-cuda/src/abi.rs`.
+  - On `ds4-rust-port-b300` (`NVIDIA B300 SXM6 AC`), the resource ABI smoke
+    passed device allocation, managed allocation, view, copy, synchronization,
+    and invalid-input checks; `nm` confirmed all 16 exported symbols in
+    `target/debug/libds4_cuda.a`.
+  - Local `cargo test --locked -p ds4-cuda --lib` passed with 87 tests and
+    B300 `cargo test --locked -p ds4-cuda --features cuda-oxide-backend --
+    --nocapture` passed with 89 tests.
+  - `check_cuda_abi_resource_smoke.py --negative-test` passed with 77 checks,
+    and the unified parity report passed with 173 passes, 45 skips, and no
+    failures.
+  - This stage does not export tensor-fill or compute operations and does not
+    alter the production linker or default route; `ds4_cuda.cu` remains
+    required.
+
+##### M14.6b2: Rust CUDA Compute ABI Assembly
+
+- Status: active.
+- Goal: move validated cuda-oxide kernel families into reusable modules and
+  export the remaining production operation ABI needed before switching the
+  Linux CUDA link away from `ds4_cuda.cu`.
 
 ## Removal Criteria for C Host Code
 

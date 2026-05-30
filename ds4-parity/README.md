@@ -2924,10 +2924,21 @@ Validate the M14.6a production route linkage blocker:
 python3 ds4-parity/check_cuda_route_promotion_gate.py --negative-test
 ```
 
-The fixture rejects route promotion while the production Linux Rust build
-still compiles `ds4_cuda.cu`, the cuda-oxide crate has no linkable
-`ds4_gpu_*` ABI backend, and the Rust runtime graph route is unimplemented.
-M14.6b owns that backend assembly work.
+The fixture records why route promotion was rejected at M14.6a: the
+production Linux Rust build still compiled `ds4_cuda.cu`, the cuda-oxide
+crate had no linkable `ds4_gpu_*` ABI backend, and the Rust runtime graph
+route was unimplemented. M14.6b owns that backend assembly work.
+
+Validate the M14.6b1 Rust CUDA resource ABI exports:
+
+```sh
+python3 ds4-parity/check_cuda_abi_resource_smoke.py --negative-test
+```
+
+The fixture records the first linkable Rust `ds4_gpu_*` subset: 16
+initialization, tensor/resource, copy, synchronization, and managed-KV
+symbols emitted from a cuda-oxide `staticlib` and executed on B300. Compute
+exports, production linker selection, and route promotion remain pending.
 
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
