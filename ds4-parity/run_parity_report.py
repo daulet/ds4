@@ -1504,6 +1504,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b1 Rust CUDA direct-I/O error-disable ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_model_control_direct_io_error_disable_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

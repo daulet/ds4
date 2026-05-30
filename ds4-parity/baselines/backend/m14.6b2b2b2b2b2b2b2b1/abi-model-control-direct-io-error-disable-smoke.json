@@ -1,0 +1,63 @@
+{
+  "schema": "ds4.cuda_abi_model_control_direct_io_error_disable_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b1",
+  "status": "b300-pass-staticlib-direct-io-error-disable-abi",
+  "goal": "Rust-own the public retained direct-fd disable-after-selected-error state transition while leaving asynchronous staging, cache budgets, source-page policy, residual failure policy, and route promotion pending.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "cuda_model_stage_read",
+      "ds4_gpu_set_model_fd",
+      "cuda_model_range_ptr_from_fd"
+    ],
+    "semantics": [
+      "after a selected O_DIRECT read returns EINVAL, EFAULT, ENOTSUP, or EOPNOTSUPP, current C closes the direct fd and resets alignment to buffered mode",
+      "the failing request continues through buffered pread after the direct state transition",
+      "direct-read failures outside the disable class do not permanently remove the retained direct-fd selection"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "public_success_harness": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2a/abi_model_control_direct_io_fd_cache_link_smoke.c",
+    "error_state_path": "the public direct-read helper applies the four current-C disabling errno classes, drops the retained O_DIRECT file, resets direct alignment, and enters its existing buffered fd fallback",
+    "live_observation_boundary": "the B300 feature test validates the public error-class selector and the successful linked public fd-cache regression remains live; no deterministic public direct-read error was induced on the B300 filesystem",
+    "remaining_policy_boundary": "asynchronous four-slot staging, arena/cache budget, source-page advice/progress, chunk-copy failure selection, q8/f16 hooks, remaining compute exports, and route promotion stay pending"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_direct_io_disable_after_selected_error": true,
+    "owns_current_c_direct_io_disable_error_classes": true,
+    "owns_live_public_error_observation": false,
+    "owns_async_fd_staging_ring": false,
+    "owns_fd_cache_budget_policy": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 101,
+    "feature_release_test_count": 104,
+    "observed": {
+      "public_error_class_policy_test_passed": true,
+      "lower_level_error_disable_policy_tests_passed": true,
+      "c_linked_direct_enabled_success_regression_passed": true,
+      "staticlib_export_count_unchanged": true,
+      "public_direct_read_error_live_exercised": false,
+      "temporary_link_artifacts_cleaned": true
+    }
+  },
+  "integration_risks": [
+    "public direct-read disable-after-error behavior is implemented and feature-test covered against current-C errno classes, but this milestone does not claim a live B300 public request induced the disabling error",
+    "asynchronous staging, range-arena cache-budget fallback, source-page discard/progress, residual model-copy failure policy, q8/f16 hooks, production linker selection, and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2 Public Async Staging And Residual Cache Policy"
+}

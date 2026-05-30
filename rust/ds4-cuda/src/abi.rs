@@ -395,7 +395,7 @@ fn try_upload_abi_direct_fd_range(
     }
     let fd = abi_model_fd(model_map)?;
     let direct_device = (|| -> Option<DeviceBuffer<u8>> {
-        let control = ABI_MODEL_CONTROL.lock().ok()?;
+        let mut control = ABI_MODEL_CONTROL.lock().ok()?;
         let direct_file = control.model_direct_file.as_ref()?;
         let alignment = control.model_direct_align.max(1);
         let read_offset = offset - (offset % alignment);
@@ -416,7 +416,10 @@ fn try_upload_abi_direct_fd_range(
             let read_bytes = usize::try_from(read_bytes).ok()?;
             let direct_window =
                 &mut staging.as_mut_slice()[aligned_delta..aligned_delta + read_bytes];
-            direct_file.read_exact_at(direct_window, read_offset).ok()?;
+            if let Err(error) = direct_file.read_exact_at(direct_window, read_offset) {
+                disable_abi_direct_io_after_error(&mut control, error.raw_os_error());
+                return None;
+            }
             let payload_delta = usize::try_from(payload_delta).ok()?;
             let bytes = usize::try_from(bytes).ok()?;
             backend
@@ -427,6 +430,26 @@ fn try_upload_abi_direct_fd_range(
     direct_device.map(|device| (device, true)).or_else(|| {
         upload_abi_buffered_fd_range(backend, fd, offset, bytes).map(|device| (device, false))
     })
+}
+
+#[cfg(target_os = "linux")]
+fn abi_direct_io_error_disables(raw_os_error: Option<c_int>) -> bool {
+    raw_os_error.is_some_and(|raw| {
+        [libc::EINVAL, libc::EFAULT, libc::ENOTSUP, libc::EOPNOTSUPP].contains(&raw)
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn disable_abi_direct_io_after_error(
+    control: &mut AbiModelControl,
+    raw_os_error: Option<c_int>,
+) -> bool {
+    if !abi_direct_io_error_disables(raw_os_error) {
+        return false;
+    }
+    control.model_direct_file = None;
+    control.model_direct_align = 1;
+    true
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -1470,4 +1493,43 @@ pub extern "C" fn ds4_gpu_should_use_managed_kv_cache(
         c_int::from(managed_kv_decision(kv_cache_bytes, context_bytes, memory).use_managed)
     }))
     .unwrap_or(0)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::{abi_direct_io_error_disables, disable_abi_direct_io_after_error, AbiModelControl};
+
+    #[test]
+    fn public_direct_io_disable_error_classes_match_current_c_policy() {
+        for raw_os_error in [libc::EINVAL, libc::EFAULT, libc::ENOTSUP, libc::EOPNOTSUPP] {
+            assert!(abi_direct_io_error_disables(Some(raw_os_error)));
+        }
+        assert!(!abi_direct_io_error_disables(Some(libc::EIO)));
+        assert!(!abi_direct_io_error_disables(None));
+
+        let mut qualifying = AbiModelControl {
+            model_map: 0,
+            model_size: 0,
+            model_fd: -1,
+            model_fd_host_base: 0,
+            model_file_size: 0,
+            model_direct_align: 4096,
+            model_direct_file: None,
+        };
+        assert!(disable_abi_direct_io_after_error(
+            &mut qualifying,
+            Some(libc::EINVAL)
+        ));
+        assert_eq!(qualifying.model_direct_align, 1);
+
+        let mut non_qualifying = AbiModelControl {
+            model_direct_align: 4096,
+            ..qualifying
+        };
+        assert!(!disable_abi_direct_io_after_error(
+            &mut non_qualifying,
+            Some(libc::EIO)
+        ));
+        assert_eq!(non_qualifying.model_direct_align, 4096);
+    }
 }

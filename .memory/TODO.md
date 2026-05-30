@@ -9528,7 +9528,45 @@
 
 ######## M14.6b2b2b2b2b2b2b2b: Direct-I/O Residual Failure And Cache Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2 because the current-C direct-read disable
+  transition and errno classes can be proved independently from public
+  asynchronous staging, arena/budget, and remaining cache selection policy.
 - Goal: connect persistent direct-read error disablement, asynchronous/budget
   policy, chunk-copy failure routing, and residual model-control policy
   without claiming graph compute closure or route promotion.
+
+######### M14.6b2b2b2b2b2b2b2b1: Direct-I/O Error Disable ABI
+
+- Status: done
+- Goal: connect current-C disable-after-selected-direct-read-error state to
+  the public Rust fd-cache path without claiming a live induced public error,
+  asynchronous staging, budgets, remaining cache policy, or route promotion.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b1/abi-model-control-direct-io-error-disable-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_direct_io_error_disable_smoke.py --negative-test`.
+- Evidence: Rust applies current-C direct-read disabling errno classes
+  (`EINVAL`, `EFAULT`, `ENOTSUP`, `EOPNOTSUPP`), drops its retained direct
+  fd state, resets direct alignment, and enters buffered fd fallback. This
+  branch is not reliably inducible through the public B300 filesystem
+  harness: the B300 feature tests execute the public error-class policy
+  check, while the previously linked direct-enabled fd-cache consumer is
+  rerun as a successful-regression gate. Local library tests pass with 101
+  tests, B300 release-feature tests pass with 104 tests, and the static
+  library retains 29 exports. The error-disable checker passes with 88
+  checks and unified parity passes with 187 passed, 45 skipped, and no
+  failures. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings; self-review
+  retained the explicit non-claim for live public error induction and
+  asynchronous/budget policy. Asynchronous staging, arena/cache-budget and
+  source-page/progress policy, chunk-copy failure selection, graph compute
+  closure, whole-archive retention, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+######### M14.6b2b2b2b2b2b2b2b2: Public Async Staging And Residual Cache Policy
+
+- Status: active
+- Goal: connect public asynchronous/budget staging, chunk-copy failure
+  routing, and residual model-control selection/cache policy without claiming
+  graph compute closure or route promotion.

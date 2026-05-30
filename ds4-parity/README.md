@@ -3129,6 +3129,20 @@ direct-read error disablement, asynchronous staging, cache-budget and
 source-page policy, residual failure handling, whole-archive retention, and
 the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b1 Rust CUDA direct-I/O error-disable ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_direct_io_error_disable_smoke.py --negative-test
+```
+
+The fixture records public source ownership of current-C selected-direct-read
+disable classes and a B300 feature-policy test, while reusing the preceding
+direct-enabled C-linked public consumer as a success regression. No live
+public B300 request is claimed to have induced a disabling direct-read error.
+Asynchronous staging, cache-budget and source-page policy, residual
+model-control handling, whole-archive retention, and the executable-stack
+warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

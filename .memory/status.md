@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b Direct-I/O Residual Failure And Cache Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2 Public Async Staging And Residual Cache Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,24 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b1 Direct-I/O Error Disable ABI adds the public
+  current-C state transition for a selected direct read that fails with
+  `EINVAL`, `EFAULT`, `ENOTSUP`, or `EOPNOTSUPP`: Rust drops its retained
+  direct file, resets alignment, and uses the existing buffered fd fallback.
+  The error transition is feature-test covered but is not claimed as live
+  induced through the public B300 filesystem harness; the previously linked
+  direct-enabled public consumer was rerun as a successful fd-cache
+  regression gate. Local library tests pass with 101 tests; B300
+  release-feature tests pass with 104 tests, and the static library retains
+  29 exports. The error-disable checker passes with 88 checks and unified
+  parity passes with 187 passed, 45 skipped, and no failures. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings; self-review retained the explicit non-claim
+  for live public error induction and asynchronous/budget policy. The
+  generated embed object still emits the executable-stack linker warning.
+  Asynchronous staging, cache-budget and source-page/progress policy,
+  residual model-control policy, whole-archive retention, and remaining
+  graph compute remain active.
 - M14.6b2b2b2b2b2b2b2a Direct-I/O Fd Cache ABI adds the public retained
   Linux `O_DIRECT` reopen and aligned pinned-read subset under
   `DS4_CUDA_WEIGHT_CACHE=1` with `DS4_CUDA_NO_DIRECT_IO` unset. Rust retains

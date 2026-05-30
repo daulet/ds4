@@ -9830,11 +9830,58 @@ Stage split:
 
 ######## M14.6b2b2b2b2b2b2b2b: Direct-I/O Residual Failure And Cache Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2 because the current-C direct-read disable
+  transition and errno classes can be proved independently from public
+  asynchronous staging, arena/budget, and remaining cache selection policy.
 - Goal: connect persistent direct-read error disablement, asynchronous/budget
   policy, chunk-copy failure routing, and residual model-control
   selection/cache policy without claiming remaining graph compute or route
   promotion.
+
+######### M14.6b2b2b2b2b2b2b2b1: Direct-I/O Error Disable ABI
+
+- Status: done.
+- Goal: connect current-C disable-after-selected-direct-read-error state to
+  the public Rust fd-cache path without claiming a live induced public error,
+  asynchronous staging, budgets, remaining cache policy, or route promotion.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b1/abi-model-control-direct-io-error-disable-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_direct_io_error_disable_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now applies the current-C disabling errno
+    classes (`EINVAL`, `EFAULT`, `ENOTSUP`, `EOPNOTSUPP`) to a selected
+    direct read: it drops the retained direct file, resets direct alignment,
+    and continues through the existing buffered fd fallback.
+  - This branch is not reliably inducible through the public B300 filesystem
+    harness. The B300 feature test executes the public error-class policy
+    check, while the previously linked public direct-enabled fd-cache
+    consumer is rerun as a successful-regression gate.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 101 tests;
+    B300 `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 104 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - `check_cuda_abi_model_control_direct_io_error_disable_smoke.py
+    --negative-test` passes with 88 checks, and unified parity passes with
+    187 passed, 45 skipped, and no failures.
+  - Asynchronous staging, arena/cache-budget and source-page/progress
+    policy, chunk-copy failure selection, q8/f16 hooks, remaining graph
+    compute, whole-archive retention, route promotion, and the generated
+    `.note.GNU-stack` warning remain open.
+  - The required non-interactive Claude adversarial review was invoked with
+    the public direct-read error-disable boundary, current-C oracle,
+    comparator, and B300 evidence, but returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+    Self-review retained the explicit non-claim for live public error
+    induction and for asynchronous/budget policy.
+
+######### M14.6b2b2b2b2b2b2b2b2: Public Async Staging And Residual Cache Policy
+
+- Status: active.
+- Goal: connect public asynchronous/budget staging, chunk-copy failure
+  routing, and residual model-control selection/cache policy without claiming
+  remaining graph compute or route promotion.
 
 ## Removal Criteria for C Host Code
 
