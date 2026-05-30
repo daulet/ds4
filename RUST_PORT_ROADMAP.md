@@ -8164,7 +8164,7 @@ Stage split:
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d4 and split next into M14.4d5.
+- Status: active; done through M14.4d5 and split next into M14.4d6.
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8361,7 +8361,7 @@ Stage split:
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d4 and split next into M14.4d5.
+- Status: active; done through M14.4d5 and split next into M14.4d6.
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8492,9 +8492,42 @@ Stage split:
 
 ###### M14.4d5: Static Heads8 Online And CUBLAS Attention Prefill Dispatch
 
-- Status: active.
+- Status: done.
 - Goal: port optimized static heads8-online and CUBLAS attention prefill
   dispatch before claiming indexed or output-Q8 attention.
+- Oracle: current-C `attention_static_mixed_heads8_online_kernel`,
+  `attention_prefill_raw_softmax_kernel`, `attention_prefill_mixed_softmax_kernel`,
+  `attention_prefill_pack_mixed_kv_kernel`,
+  `attention_prefill_unpack_heads_kernel`,
+  `ds4_gpu_attention_prefill_raw_heads_tensor`, and
+  `attention_prefill_mixed_launch`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d5/attention-prefill-optimized-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_prefill_optimized_smoke.py --negative-test`
+  plus live B300 cargo-oxide and cuBLAS execution.
+- Acceptance: Rust owns opt-in static heads8-online prefill output semantics,
+  live raw and masked-mixed cuBLAS prefill pipelines, and current-C online /
+  cuBLAS / generic branch selection. Indexed/output-Q8 attention, runtime
+  graph integration, default route activation, and C CUDA removal remain
+  pending.
+- Evidence:
+  - Added executable-local grouped-head online prefill, current-C-equivalent
+    softmax/pack/unpack kernels, and row-major adapter kernels required to
+    execute the safe `cuda-core` strided-batched SGEMM API.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 63 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    with libdevice linkage and matched static online, raw cuBLAS, and masked
+    mixed cuBLAS outputs on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 70-check d5 comparator,
+    retained attention checks, and unified parity passed with 150 passed, 45
+    skipped, and 0 failed.
+
+###### M14.4d6: Generic Indexed Mixed Attention Surface
+
+- Status: active.
+- Goal: port the generic indexed mixed-attention surface before optimized
+  indexed heads8/sort dispatch or output-Q8 attention ownership.
 
 ## Removal Criteria for C Host Code
 

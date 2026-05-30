@@ -2651,6 +2651,18 @@ visibility and masking, and learned-sink softmax while leaving static
 heads8-online/CUBLAS prefill dispatch, indexed/output-Q8 attention, runtime
 route, and C CUDA removal unclaimed.
 
+Validate the M14.4d5 Rust CUDA optimized attention prefill smoke:
+
+```sh
+python3 ds4-parity/check_attention_prefill_optimized_smoke.py --negative-test
+```
+
+The fixture records executable-local `attention_static_mixed_heads8_online_kernel`
+semantics and live `cuda-core` strided-batched SGEMM execution on B300. It
+proves static heads8-online output, raw cuBLAS prefill output, masked mixed
+cuBLAS prefill output, and current-C branch priority while leaving indexed
+and output-Q8 attention, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

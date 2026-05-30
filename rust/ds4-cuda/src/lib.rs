@@ -1272,6 +1272,67 @@ pub const M14_4D4_SCOPE: AttentionPrefillGenericScope = AttentionPrefillGenericS
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttentionPrefillPath {
+    StaticHeads8Online,
+    Cublas,
+    Generic,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionPrefillDispatchOptions {
+    pub use_comp_mask: bool,
+    pub n_tokens: u32,
+    pub head_dim: u32,
+    pub cublas_ready: bool,
+    pub no_cublas_attention: bool,
+    pub no_window_attention: bool,
+    pub window_attention: bool,
+    pub quality_mode: bool,
+}
+
+pub const fn select_attention_prefill_path(
+    options: AttentionPrefillDispatchOptions,
+) -> AttentionPrefillPath {
+    if !options.use_comp_mask
+        && options.n_tokens > 1
+        && options.head_dim == 512
+        && !options.no_window_attention
+        && (options.window_attention || (!options.quality_mode && options.n_tokens >= 128))
+    {
+        AttentionPrefillPath::StaticHeads8Online
+    } else if options.cublas_ready
+        && options.n_tokens > 1
+        && options.head_dim == 512
+        && !options.no_cublas_attention
+    {
+        AttentionPrefillPath::Cublas
+    } else {
+        AttentionPrefillPath::Generic
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionPrefillOptimizedScope {
+    pub opt_in_only: bool,
+    pub owns_static_heads8_online_prefill_kernel: bool,
+    pub owns_prefill_dispatch_policy: bool,
+    pub owns_live_cublas_prefill_pipeline: bool,
+    pub owns_indexed_or_output_q8_attention: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4D5_SCOPE: AttentionPrefillOptimizedScope = AttentionPrefillOptimizedScope {
+    opt_in_only: true,
+    owns_static_heads8_online_prefill_kernel: true,
+    owns_prefill_dispatch_policy: true,
+    owns_live_cublas_prefill_pipeline: true,
+    owns_indexed_or_output_q8_attention: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1284,10 +1345,11 @@ pub mod substrate;
 #[cfg(test)]
 mod tests {
     use super::{
-        q8_dp4a_enabled, select_attention_decode_path, select_f16_pair_projection_path,
-        select_f16_projection_path, select_f32_projection_path, select_indexer_score_kernel,
-        select_indexer_topk_kernel, select_q8_matmul_path, should_sort_indexed_topk,
-        AttentionDecodeDispatchOptions, AttentionDecodePath, F16PairProjectionDispatch,
+        q8_dp4a_enabled, select_attention_decode_path, select_attention_prefill_path,
+        select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
+        select_indexer_score_kernel, select_indexer_topk_kernel, select_q8_matmul_path,
+        should_sort_indexed_topk, AttentionDecodeDispatchOptions, AttentionDecodePath,
+        AttentionPrefillDispatchOptions, AttentionPrefillPath, F16PairProjectionDispatch,
         F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath, F32ProjectionPath,
         IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
         IndexerTopkDispatchOptions, IndexerTopkKernel, Q8MatmulDispatchOptions, Q8MatmulPath,
@@ -1299,7 +1361,7 @@ mod tests {
         M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
-        M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
+        M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE, M14_4D5_SCOPE,
     };
 
     #[test]
@@ -1902,6 +1964,81 @@ mod tests {
         assert!(!M14_4D4_SCOPE.owns_indexed_or_output_q8_attention);
         assert!(!M14_4D4_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4D4_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_optimized_prefill_scope_leaves_indexed_and_route_pending() {
+        assert!(M14_4D5_SCOPE.opt_in_only);
+        assert!(M14_4D5_SCOPE.owns_static_heads8_online_prefill_kernel);
+        assert!(M14_4D5_SCOPE.owns_prefill_dispatch_policy);
+        assert!(M14_4D5_SCOPE.owns_live_cublas_prefill_pipeline);
+        assert!(!M14_4D5_SCOPE.owns_indexed_or_output_q8_attention);
+        assert!(!M14_4D5_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4D5_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_prefill_dispatch_paths_match_current_c_priority() {
+        let base = AttentionPrefillDispatchOptions {
+            use_comp_mask: false,
+            n_tokens: 128,
+            head_dim: 512,
+            cublas_ready: true,
+            no_cublas_attention: false,
+            no_window_attention: false,
+            window_attention: false,
+            quality_mode: false,
+        };
+        assert_eq!(
+            select_attention_prefill_path(base),
+            AttentionPrefillPath::StaticHeads8Online
+        );
+        assert_eq!(
+            select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                use_comp_mask: true,
+                ..base
+            }),
+            AttentionPrefillPath::Cublas
+        );
+        assert_eq!(
+            select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                no_window_attention: true,
+                ..base
+            }),
+            AttentionPrefillPath::Cublas
+        );
+        assert_eq!(
+            select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                n_tokens: 2,
+                window_attention: true,
+                ..base
+            }),
+            AttentionPrefillPath::StaticHeads8Online
+        );
+        assert_eq!(
+            select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                n_tokens: 2,
+                quality_mode: true,
+                ..base
+            }),
+            AttentionPrefillPath::Cublas
+        );
+        assert_eq!(
+            select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                n_tokens: 2,
+                quality_mode: true,
+                no_cublas_attention: true,
+                ..base
+            }),
+            AttentionPrefillPath::Generic
+        );
+        assert_eq!(
+            select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                head_dim: 256,
+                ..base
+            }),
+            AttentionPrefillPath::Generic
+        );
     }
 
     #[test]
