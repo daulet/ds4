@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.3b2 Head RMS Norm Rope Tail Kernel
+- Active item: M14.3c Dense F16 And F32 Projection Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -41,8 +41,10 @@
   can be proved independently from fused QKV/head normalization, projection,
   and Q8 kernel families. M14.3b is further split into M14.3b1 and M14.3b2
   because basic fused QKV/head RMS normalization is independent from the
-  combined head-normalization and YARN/RoPE tail path.
-- Last validated source before the active item: M14.3b1 Fused QKV And Basic Head RMS Norm Kernels.
+  combined head-normalization and YARN/RoPE tail path. M14.3c begins dense
+  F16/F32 projection separately from remaining Q8 conversion/matmul kernels.
+- Last validated source before the active item: M14.3b2 Head RMS Norm Rope Tail Kernel.
+- Earlier M14.3b1 Fused QKV And Basic Head RMS Norm Kernels.
 - Earlier M14.3a Plain And Weighted RMS Norm Kernels.
 - Earlier M14.2e M14.2 Kernel Closure Gate.
 - Earlier M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy.
@@ -172,6 +174,23 @@
 
 ## Last Evidence
 
+- M14.3b2 Head RMS Norm Rope Tail Kernel adds executable-local Rust
+  cuda-oxide `head_rms_norm_rope_tail_kernel`, retaining current-C's
+  per-head reduction, tail-only rotation, YARN correction/ramp path, and
+  inverse sign behavior. On B300 pod `ds4-rust-port-b300`, feature-enabled
+  `ds4-cuda` tests passed with 41 tests and live cargo-oxide execution
+  emitted portable `sm_80` PTX and proved interpolated rotation, YARN
+  forward rotation, inverse rotation, and invalid-shape rejection on
+  `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.3b2/head-rms-rope-tail-kernel-smoke.json`
+  and `ds4-parity/check_head_rms_rope_tail_kernel_smoke.py --negative-test`.
+  Standalone RoPE, projection, Q8 kernels, route activation, and C CUDA
+  removal remain unclaimed.
+  Local formatting, diff, workspace tests, the 74-check comparator, and
+  unified parity passed with 132 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result;
+  adversarial self-review retained standalone-RoPE, projection, Q8, and
+  route non-claims.
 - M14.3b1 Fused QKV And Basic Head RMS Norm Kernels adds executable-local
   Rust cuda-oxide `dsv4_qkv_rms_norm_rows_kernel` and
   `head_rms_norm_kernel`. On B300 pod `ds4-rust-port-b300`, feature-enabled

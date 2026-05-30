@@ -2433,6 +2433,18 @@ Q and KV widths and in-place per-head normalization while leaving the
 RMS-plus-RoPE-tail kernel, fused-QKV fallback policy, projection, Q8, route,
 and removal ownership unclaimed.
 
+Validate the M14.3b2 Rust CUDA head RMS normalization and RoPE-tail smoke:
+
+```sh
+python3 ds4-parity/check_head_rms_rope_tail_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `head_rms_norm_rope_tail_kernel`
+execution on B300 through libdevice-linked RMS, YARN, and rotary math. It
+proves interpolated rotation, YARN forward rotation, inverse rotation, and
+shape rejection while leaving standalone RoPE, projection, Q8, route, and
+removal ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

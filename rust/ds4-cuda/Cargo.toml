@@ -162,3 +162,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-fused-rms-norm-smoke"
 path = "src/bin/fused_rms_norm_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-head-rms-rope-tail-smoke"
+path = "src/bin/head_rms_rope_tail_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

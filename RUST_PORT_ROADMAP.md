@@ -7856,8 +7856,8 @@ Stage split:
 
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
-- Status: split after M14.3a implementation; M14.3a and M14.3b1 are done,
-  and M14.3b2 is active.
+- Status: split after M14.3a implementation; M14.3a, M14.3b1, and M14.3b2
+  are done, and M14.3c is active.
 - Goal: port the M14.3 dense projection, Q8 conversion, and normalization
   operation family through bounded Rust CUDA slices.
 
@@ -7890,9 +7890,8 @@ Stage split:
 
 ##### M14.3b: Fused QKV And Head RMS Norm Kernels
 
-- Status: split into M14.3b1 and M14.3b2 because fused QKV/basic head RMS
-  normalization and head RMS plus YARN/RoPE tail have distinct math and
-  validation contracts.
+- Status: done through M14.3b1 and M14.3b2, which separate fused QKV/basic
+  head RMS normalization from head RMS plus YARN/RoPE tail math.
 - Goal: port fused QKV and head RMS normalization behavior without claiming
   the remaining projection or Q8 operation family.
 
@@ -7925,9 +7924,37 @@ Stage split:
 
 ##### M14.3b2: Head RMS Norm Rope Tail Kernel
 
-- Status: active.
+- Status: done.
 - Goal: port the combined head RMS normalization and YARN/RoPE tail kernel
   without claiming remaining projection or Q8 ownership.
+- Oracle: current-C `head_rms_norm_rope_tail_kernel`,
+  `rope_yarn_ramp_dev`, and `ds4_gpu_head_rms_norm_rope_tail_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3b2/head-rms-rope-tail-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_head_rms_rope_tail_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: standalone RoPE, dense projection, Q8 kernels, runtime route
+  activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `head_rms_norm_rope_tail_kernel` with
+    current-C per-head reduction, tail-only rotary math, YARN ramp mixing,
+    and inverse sign handling.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 41 tests. Live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and proved interpolated, YARN forward, inverse, and
+    invalid-shape behavior on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 74-check comparator, and
+    unified parity passed with 132 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained standalone-RoPE, projection, Q8, and
+    route non-claims.
+
+##### M14.3c: Dense F16 And F32 Projection Kernels
+
+- Status: active.
+- Goal: port dense F16/F32 projection execution as a separately comparable
+  slice before claiming Q8 conversion or quantized matmul ownership.
 
 ## Removal Criteria for C Host Code
 

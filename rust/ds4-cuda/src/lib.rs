@@ -700,6 +700,27 @@ pub const M14_3B1_SCOPE: FusedRmsNormKernelScope = FusedRmsNormKernelScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HeadRmsRopeTailKernelScope {
+    pub opt_in_only: bool,
+    pub owns_head_rms_norm_rope_tail_kernel: bool,
+    pub owns_yarn_rotary_math_path: bool,
+    pub owns_standalone_rope_tail_kernel: bool,
+    pub owns_qkv_fused_dispatch_policy: bool,
+    pub owns_dense_projection_or_q8_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_3B2_SCOPE: HeadRmsRopeTailKernelScope = HeadRmsRopeTailKernelScope {
+    opt_in_only: true,
+    owns_head_rms_norm_rope_tail_kernel: true,
+    owns_yarn_rotary_math_path: true,
+    owns_standalone_rope_tail_kernel: false,
+    owns_qkv_fused_dispatch_policy: false,
+    owns_dense_projection_or_q8_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -720,7 +741,7 @@ mod tests {
         M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE, M14_2C_SCOPE, M14_2D1_SCOPE,
         M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
         M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
-        M14_3A_SCOPE, M14_3B1_SCOPE,
+        M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
     };
 
     #[test]
@@ -1034,6 +1055,17 @@ mod tests {
         assert!(!M14_3B1_SCOPE.owns_qkv_fused_dispatch_policy);
         assert!(!M14_3B1_SCOPE.owns_dense_projection_or_q8_kernels);
         assert!(!M14_3B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn head_rms_rope_tail_scope_leaves_standalone_rope_projection_q8_and_route_pending() {
+        assert!(M14_3B2_SCOPE.opt_in_only);
+        assert!(M14_3B2_SCOPE.owns_head_rms_norm_rope_tail_kernel);
+        assert!(M14_3B2_SCOPE.owns_yarn_rotary_math_path);
+        assert!(!M14_3B2_SCOPE.owns_standalone_rope_tail_kernel);
+        assert!(!M14_3B2_SCOPE.owns_qkv_fused_dispatch_policy);
+        assert!(!M14_3B2_SCOPE.owns_dense_projection_or_q8_kernels);
+        assert!(!M14_3B2_SCOPE.changes_default_route);
     }
 
     #[test]

@@ -1064,6 +1064,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.3b2 cuda-oxide head RMS RoPE-tail smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_head_rms_rope_tail_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
