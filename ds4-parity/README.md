@@ -2503,6 +2503,16 @@ warp8, and batched warp8 Q8 matmul execution on B300. It proves packed Q8
 scalar integer-dot behavior while leaving DP4A acceleration, pair/HC
 expansion, dispatch, route, and removal ownership unclaimed.
 
+Validate the M14.3d3 Rust CUDA Q8 specialized matmul kernel smoke:
+
+```sh
+python3 ds4-parity/check_q8_specialized_matmul_kernel_smoke.py --negative-test
+```
+
+The fixture records paired unequal-width and HC-expansion Q8 matmul execution
+on B300. It proves optional HC block addition while leaving DP4A
+acceleration, dispatch, route, and removal ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -7857,8 +7857,8 @@ Stage split:
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
 - Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2,
-  M14.3c1, M14.3c2, M14.3c3, M14.3d1, and M14.3d2 are done, and M14.3d3
-  is active.
+  M14.3c1, M14.3c2, M14.3c3, M14.3d1, M14.3d2, and M14.3d3 are done, and
+  M14.3d4 is active.
 - Goal: port the M14.3 dense projection, Q8 conversion, and normalization
   operation family through bounded Rust CUDA slices.
 
@@ -8107,9 +8107,38 @@ Stage split:
 
 ##### M14.3d3: Paired And HC-Expansion Q8 Matmul Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port paired and HC-expansion Q8 matmul kernels before claiming DP4A
   acceleration, final Q8 dispatch policy, or runtime route ownership.
+- Oracle: current-C `matmul_q8_0_pair_preq_warp8_kernel` and
+  `matmul_q8_0_hc_expand_preq_warp8_kernel` behavior.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3d3/q8-specialized-matmul-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_q8_specialized_matmul_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: DP4A acceleration, Q8 dispatch, runtime route activation, and C
+  CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `matmul_q8_0_pair_preq_warp8_kernel` and
+    `matmul_q8_0_hc_expand_preq_warp8_kernel` with packed Q8 scalar
+    integer-dot execution and optional HC block addition.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 48 tests. Live cargo-oxide execution emitted portable `sm_80` PTX
+    and proved unequal-width paired output, HC block output, HC-expansion
+    output with and without block addition, partial blocks, and invalid-shape
+    behavior on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 71-check comparator, and
+    unified parity passed with 138 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained DP4A, dispatch, route, and removal
+    non-claims.
+
+##### M14.3d4: Q8 DP4A Acceleration And Dispatch Policy
+
+- Status: active.
+- Goal: add the remaining DP4A accelerated integer-dot path and Q8 dispatch
+  policy before any runtime route or C-removal claim.
 
 ## Removal Criteria for C Host Code
 
