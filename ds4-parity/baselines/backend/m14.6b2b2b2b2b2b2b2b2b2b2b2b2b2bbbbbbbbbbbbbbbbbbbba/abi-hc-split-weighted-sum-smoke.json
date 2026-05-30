@@ -1,0 +1,73 @@
+{
+  "schema": "ds4.cuda_abi_hc_split_weighted_sum_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-hc-split-weighted-sum-abi",
+  "goal": "Rust-own the public fused hyperconnection split weighted-sum wrapper without claiming its normalized consumer or output-head weights.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbol": "ds4_gpu_hc_split_weighted_sum_tensor",
+    "semantics": [
+      "output full rows define the fused launch count and n_hc is fixed at four",
+      "each launched row materializes the 24-float split buffer and reduces residual_hc using its four pre weights",
+      "three scale floats and 24 base floats are read from model-backed parameter ranges"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbba/abi_hc_split_weighted_sum_link_smoke.c",
+    "kernel_entry": "abi_hc_split_weighted_sum_fused_kernel",
+    "parameter_path": "with_cached_abi_model_range resolves scale and base spans before one synchronized fused launch",
+    "validation_boundary": "output rows drive launch while rejecting incomplete output rows and undersized mix, split, or residual spans",
+    "remaining_compute_boundary": "normalized fused reduction, output HC weights, remaining graph compute, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 46,
+    "exported_compute_symbol_count": 23,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "owns_hc_split_weighted_sum_tensor": true,
+    "owns_hc_split_weighted_sum_fused_kernel": true,
+    "owns_hc_split_weighted_sum_norm_tensor": false,
+    "owns_output_hc_weights_tensor": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 132,
+    "feature_release_test_count": 139,
+    "staticlib_export_count": 46,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "fused_split_weighted_output_matches": true,
+      "emitted_split_matches": true,
+      "output_row_count_drives_launch": true,
+      "alternate_parameter_range_matches": true,
+      "short_mix_rejected": true,
+      "short_split_rejected": true,
+      "short_residual_rejected": true,
+      "partial_output_rejected": true,
+      "invalid_model_range_rejected": true,
+      "invalid_hc_count_rejected": true,
+      "embedded_hc_split_weighted_sum_fused_kernel_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 42,
+      "predecessor_relink_executable_stack_warning_count": 42
+    }
+  },
+  "integration_risks": [
+    "the normalized fused reduction and output HC weights retain downstream synchronization and normalization behavior outside this leaf",
+    "remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

@@ -3590,6 +3590,21 @@ Fused split-weighted reductions, remaining graph compute, whole-archive
 retention policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbba Rust CUDA
+public hyperconnection split weighted-sum ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_hc_split_weighted_sum_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes synchronized split generation and
+weighted-sum reduction through one embedded Rust kernel, validates emitted
+split values, output-defined row count, and alternate cached model parameter
+ranges, then checks invalid tensor and model spans. Normalized fused
+reduction, output HC weights, remaining graph compute, whole-archive
+retention policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

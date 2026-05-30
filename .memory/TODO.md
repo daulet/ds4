@@ -10687,6 +10687,42 @@
 
 ####################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbb because the
+  public fused split-weighted reduction is a bounded ABI leaf independently
+  from normalized reduction and output-head HC weights.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+######################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbba: Public Hyperconnection Split Weighted Sum ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_hc_split_weighted_sum_tensor` through one
+  synchronized embedded split-and-reduction kernel without claiming the
+  normalized fused consumer, output-head HC weights, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbba/abi-hc-split-weighted-sum-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_hc_split_weighted_sum_smoke.py --negative-test`.
+- Evidence: Rust exports the fused wrapper through
+  `abi_hc_split_weighted_sum_fused_kernel`, retaining output-defined full-row
+  launch behavior while validating all accessed input spans and cached
+  scale/base model ranges. A C-linked B300 witness proves fused output,
+  emitted split values, alternate parameter ranges, output-defined row count,
+  and invalid-input rejection. Local tests pass with 132 tests; B300 feature
+  tests pass with 139 tests; the static library exposes 46 symbols; all 42
+  preceding linked ABI consumers pass against the rebuilt archive with the
+  known embedded-object executable-stack warning. All 46 CUDA ABI comparators
+  pass, and the unified parity report passes with 218 passed, 45 skipped,
+  and 0 failed. The pre-implementation and final pass-end non-interactive
+  Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  Normalized fused reduction, output HC weights, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain
+  pending.
+
+######################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before
