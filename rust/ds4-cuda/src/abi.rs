@@ -23,6 +23,8 @@ use crate::{
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_F16_ACTIVATIONS: Mutex<Option<DeviceBuffer<f16>>> = Mutex::new(None);
 static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
 #[cfg(target_os = "linux")]
 static ABI_MODEL_ARENAS: Mutex<AbiModelArenaState> = Mutex::new(AbiModelArenaState {
@@ -300,6 +302,35 @@ fn with_abi_kernels<T>(
         *kernels = Some(AbiKernelModule::load(backend.context()).ok()?);
     }
     operation(kernels.as_ref()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_f16_activations<T>(
+    backend: &CudaOxideSubstrate,
+    elements: usize,
+    operation: impl FnOnce(&mut DeviceBuffer<f16>) -> Option<T>,
+) -> Option<T> {
+    if elements == 0 {
+        return None;
+    }
+    let mut activations = ABI_F16_ACTIVATIONS.lock().ok()?;
+    if activations
+        .as_ref()
+        .map_or(true, |current| current.len() < elements)
+    {
+        if activations.is_some() {
+            backend.synchronize().ok()?;
+        }
+        let bytes = elements.checked_mul(size_of::<f16>())?;
+        backend.context().bind_to_thread().ok()?;
+        let ptr = unsafe { cuda_core::memory::malloc_sync(bytes).ok()? };
+        // SAFETY: malloc_sync allocates exactly this typed span in the
+        // active context; DeviceBuffer drop pairs it with free_sync.
+        *activations = Some(unsafe {
+            DeviceBuffer::<f16>::from_raw_parts(ptr, elements, backend.context().clone())
+        });
+    }
+    operation(activations.as_mut()?)
 }
 
 fn abi_page_bounded_source(
@@ -1445,6 +1476,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             if let Ok(mut kernels) = ABI_KERNELS.lock() {
                 *kernels = None;
             }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut activations) = ABI_F16_ACTIVATIONS.lock() {
+                *activations = None;
+            }
             if let Ok(mut model_ranges) = ABI_MODEL_RANGES.lock() {
                 model_ranges.clear();
             }
@@ -1820,16 +1855,22 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f16_tensor(
         let Some(weight_bytes) = weight_elements.checked_mul(size_of::<u16>() as u64) else {
             return false;
         };
-        let Some(x_bytes) = in_dim.checked_mul(size_of::<f32>() as u64) else {
+        let Some(x_bytes) = in_dim
+            .checked_mul(n_tok)
+            .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+        else {
             return false;
         };
-        let Some(out_bytes) = out_dim.checked_mul(size_of::<f32>() as u64) else {
+        let Some(out_bytes) = out_dim
+            .checked_mul(n_tok)
+            .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+        else {
             return false;
         };
         if model_map.is_null()
             || in_dim == 0
             || out_dim == 0
-            || n_tok != 1
+            || n_tok == 0
             || weight_offset > model_size
             || weight_bytes > model_size - weight_offset
             || x.bytes < x_bytes
@@ -1838,7 +1879,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f16_tensor(
             return false;
         }
         let path = select_f16_projection_path(F16ProjectionDispatch {
-            blas_ready: false,
+            blas_ready: n_tok > 1,
             serial_f16: std::env::var_os("DS4_CUDA_SERIAL_F16_MATMUL").is_some(),
             serial_router: std::env::var_os("DS4_CUDA_SERIAL_ROUTER").is_some(),
             no_ordered_f16_matmul: std::env::var_os("DS4_CUDA_NO_ORDERED_F16_MATMUL").is_some(),
@@ -1854,10 +1895,87 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f16_tensor(
                 weight_offset,
                 weight_bytes,
                 |weight_ptr| {
+                    if path == crate::F16ProjectionPath::Blas {
+                        let Ok(blas) = backend.blas_handle() else {
+                            return Some(false);
+                        };
+                        let math_mode = if ABI_NO_TF32_AT_INIT.load(Ordering::Relaxed) {
+                            BlasMathMode::Default
+                        } else {
+                            BlasMathMode::Tf32TensorOp
+                        };
+                        if blas.set_math_mode(math_mode).is_err() {
+                            return Some(false);
+                        }
+                        let Some(weight_elements) = usize::try_from(weight_elements).ok() else {
+                            return Some(false);
+                        };
+                        let Some(x_elements) = usize::try_from(in_dim.checked_mul(n_tok)?).ok()
+                        else {
+                            return Some(false);
+                        };
+                        let Some(out_elements) = usize::try_from(out_dim.checked_mul(n_tok)?).ok()
+                        else {
+                            return Some(false);
+                        };
+                        let Some(in_dim) = usize::try_from(in_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(out_dim) = usize::try_from(out_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(n_tok) = usize::try_from(n_tok).ok() else {
+                            return Some(false);
+                        };
+                        return with_abi_f16_activations(backend, x_elements, |activations| {
+                            with_abi_kernels(backend, |kernels| {
+                                // SAFETY: activation bounds are validated and
+                                // retained scratch storage survives queued BLAS
+                                // use until a later synchronized replacement.
+                                if !unsafe {
+                                    kernels.f32_to_f16_tensor(
+                                        backend.stream(),
+                                        x.device_ptr(),
+                                        activations.cu_deviceptr(),
+                                        x_elements as u64,
+                                    )
+                                } {
+                                    return Some(false);
+                                }
+                                // SAFETY: these wrappers borrow ABI-owned
+                                // device allocations during BLAS submission;
+                                // ManuallyDrop prevents duplicate frees.
+                                let weights = ManuallyDrop::new(unsafe {
+                                    DeviceBuffer::<f16>::from_raw_parts(
+                                        weight_ptr,
+                                        weight_elements,
+                                        backend.context().clone(),
+                                    )
+                                });
+                                let mut output = ManuallyDrop::new(unsafe {
+                                    DeviceBuffer::<f32>::from_raw_parts(
+                                        out.device_ptr(),
+                                        out_elements,
+                                        backend.context().clone(),
+                                    )
+                                });
+                                Some(
+                                    blas.project_f16_f32(
+                                        backend.stream(),
+                                        ProjectionConfig::new(in_dim, out_dim, n_tok),
+                                        &weights,
+                                        activations,
+                                        &mut output,
+                                    )
+                                    .is_ok(),
+                                )
+                            })
+                        });
+                    }
                     with_abi_kernels(backend, |kernels| {
-                        // SAFETY: this leaf validates the single-token tensor
-                        // and cached model-weight bounds before selecting the
-                        // equivalent current-C base, ordered, or serial path.
+                        // SAFETY: this leaf validates tensor and cached
+                        // model-weight bounds before selecting the equivalent
+                        // current-C base, ordered, or serial path.
                         Some(unsafe {
                             kernels.matmul_f16_tensor(
                                 backend.stream(),
@@ -1908,16 +2026,22 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f16_pair_tensor(
         let Some(weight_bytes) = weight_elements.checked_mul(size_of::<u16>() as u64) else {
             return false;
         };
-        let Some(x_bytes) = in_dim.checked_mul(size_of::<f32>() as u64) else {
+        let Some(x_bytes) = in_dim
+            .checked_mul(n_tok)
+            .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+        else {
             return false;
         };
-        let Some(out_bytes) = out_dim.checked_mul(size_of::<f32>() as u64) else {
+        let Some(out_bytes) = out_dim
+            .checked_mul(n_tok)
+            .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+        else {
             return false;
         };
         if model_map.is_null()
             || in_dim == 0
             || out_dim == 0
-            || n_tok != 1
+            || n_tok == 0
             || weight0_offset > model_size
             || weight1_offset > model_size
             || weight_bytes > model_size - weight0_offset

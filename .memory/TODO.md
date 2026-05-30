@@ -10392,8 +10392,46 @@
 
 ############################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb because public
+  multi-token F16 BLAS projection and paired delegation have one bounded
+  public ABI comparator independently from Q8/F16 caching and route work.
 - Goal: connect multi-token F16 BLAS projection, q8/f16 cache hooks,
   quality-mode mutation, remaining graph compute, whole-archive retention
   policy, and production route-promotion work without claiming C CUDA
   removal before those gates pass.
+
+################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba: Public Multi-Token F16 BLAS Projection ABI
+
+- Status: done
+- Goal: Rust-own public multi-token F16 projection and paired delegation
+  through current-C-compatible F32-to-F16 activation conversion and
+  `cublasGemmEx` without claiming Q8/F16 cache, quality-mode mutation, or
+  route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba/abi-matmul-f16-multi-token-blas-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_matmul_f16_multi_token_blas_smoke.py --negative-test`.
+- Evidence: Rust retains synchronously allocated reusable F16 activation scratch storage through
+  queued BLAS work, promotes `abi_f32_to_f16_kernel` into the reusable ABI
+  module, and sends multi-token direct and paired-delegated F16 projection
+  through cuda-oxide `project_f16_f32`, while a serial override retains the
+  F32 activation fallback. A C-linked B300 consumer proves cached F16 weight
+  authority after host mutation and observes F32-to-F16 activation rounding.
+  Local library tests pass with 124 tests; B300 release-feature tests pass
+  with 131 tests; the static library remains at 32 exports; fifteen
+  unaffected predecessor linked consumers pass, each retaining the known
+  executable-stack warning. Earlier single-token F16 rejection witnesses are
+  historical after this successor. The focused comparator and default
+  unified parity report pass with 210 passed, 45 skipped, and 0 failed.
+  Pre-implementation and final pass-end Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Q8/F16 cache
+  hooks, quality mutation, remaining graph compute, whole-archive retention,
+  route promotion, C CUDA removal, and the warning remain pending.
+
+################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active
+- Goal: connect q8/f16 cache hooks, quality-mode mutation, remaining graph
+  compute, whole-archive retention policy, and production route-promotion
+  work without claiming C CUDA removal before those gates pass.

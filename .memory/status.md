@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba: Public Multi-Token F16 BLAS Projection ABI
+  is validated. Rust extends `ds4_gpu_matmul_f16_tensor` through retained,
+  synchronously allocated F16 activation scratch, reusable `abi_f32_to_f16_kernel`, and cuda-oxide
+  `project_f16_f32` for multi-token work; paired multi-token projection
+  delegates through that owner and serial multi-token execution retains F32
+  activation semantics. Local tests pass with 124 tests, B300 feature tests
+  pass with 131 tests, the static library remains at 32 symbols, and fifteen
+  unaffected predecessor C-linked consumers pass with the known
+  executable-stack warning. A linked B300 witness proves half-rounded BLAS
+  activations and cached F16 weights after host mutation. The focused
+  comparator and default unified report pass with 210 passed, 45 skipped, and
+  0 failed. Pre-implementation and final pass-end Claude review attempts each
+  returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  Q8/F16 cache hooks,
+  quality-mode mutation, remaining graph compute, whole-archive/route
+  promotion, C CUDA removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbba: Public Multi-Token F32 BLAS Projection ABI
   is validated. Rust extends `ds4_gpu_matmul_f32_tensor` so `n_tok > 1`
   dispatches through the cuda-oxide `project_f32` cuBLAS adapter while
@@ -16,8 +32,8 @@
   and default unified report pass with 209 passed, 45 skipped, and 0 failed.
   Required
   non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
-  without completed findings. Multi-token F16 BLAS, Q8/F16 cache hooks,
-  quality-mode mutation, remaining graph compute, whole-archive/route
+  without completed findings. Q8/F16 cache hooks, quality-mode mutation,
+  remaining graph compute, whole-archive/route
   promotion, and the embedded-object executable-stack warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbba: Public Single-Token F32 Projection ABI
   is validated. Rust exports `ds4_gpu_matmul_f32_tensor` for one-token base
@@ -28,8 +44,8 @@
   focused comparator and default unified report pass with 208 passed, 45
   skipped, and 0 failed; required non-interactive Claude review returned
   `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Its recorded
-  multi-token rejection is historical after the successor above. Multi-token
-  F16 BLAS, Q8/F16 cache hooks, remaining graph compute,
+  multi-token rejection is historical after the F32 BLAS successor. Q8/F16
+  cache hooks, remaining graph compute,
   whole-archive/route promotion, and the embedded-object executable-stack
   warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba: Public Single-Token Paired F16 Projection ABI
@@ -40,8 +56,9 @@
   the rebuilt archive, retaining the known executable-stack warning. The
   focused comparator and default unified report pass with 207 passed, 45
   skipped, and 0 failed; required non-interactive Claude review returned
-  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Multi-token
-  BLAS, Q8/F16 cache hooks, remaining graph compute,
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Its recorded
+  multi-token rejection is historical after the F16 BLAS successor above.
+  Q8/F16 cache hooks, remaining graph compute,
   whole-archive/route promotion, and the embedded-object executable-stack
   warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbba: Public Single-Token F16 Projection ABI
@@ -52,7 +69,8 @@
   predecessor linked consumers pass. The focused comparator and default
   unified report pass with 206 passed, 45 skipped, and 0 failed; required
   non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
-  without completed findings. Multi-token/paired F16, Q8/F16 cache hooks,
+  without completed findings. Its recorded multi-token rejection is historical
+  after the F16 BLAS successor above. Q8/F16 cache hooks,
   remaining graph compute, whole-archive/route promotion, and the generated
   embedded-object executable-stack warning remain open.
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through

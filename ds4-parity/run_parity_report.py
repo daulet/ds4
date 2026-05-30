@@ -1688,6 +1688,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba Rust CUDA public multi-token F16 BLAS projection ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_matmul_f16_multi_token_blas_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

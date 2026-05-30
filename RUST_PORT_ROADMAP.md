@@ -10913,11 +10913,63 @@ Stage split:
 
 ############################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb because public
+  multi-token F16 BLAS projection and paired delegation can be proved
+  independently from Q8/F16 cache hooks, quality mutation, and route
+  promotion.
 - Goal: connect multi-token F16 BLAS projection, q8/f16 cache hooks,
   quality-mode mutation, remaining graph compute, whole-archive retention
   policy, and production route-promotion work without claiming C CUDA
   removal before those gates pass.
+
+################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba: Public Multi-Token F16 BLAS Projection ABI
+
+- Status: done.
+- Goal: Rust-own public multi-token F16 projection and paired delegation
+  through the current-C F32-to-F16 activation conversion plus
+  `cublasGemmEx` boundary without claiming Q8/F16 cache, quality-mode
+  mutation, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba/abi-matmul-f16-multi-token-blas-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_matmul_f16_multi_token_blas_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` retains a synchronously allocated ABI-owned
+    F16 activation scratch buffer, synchronizes before replacing it, and dispatches multi-token
+    F16 projection through the cuda-oxide `project_f16_f32` adapter while
+    preserving the current-C serial fallback. `ds4_gpu_matmul_f16_pair_tensor`
+    now permits multi-token independent delegation through that same owner.
+  - `rust/ds4-cuda/src/abi_kernels.rs` exposes the reusable
+    `abi_f32_to_f16_kernel` required by the staticlib path; this promotes the
+    previously validated executable-local conversion proof into public ABI
+    execution.
+  - A C-linked B300 consumer proves one-token and paired predecessors,
+    multi-token F16 BLAS output, paired multi-token delegation, cached F16
+    weight authority after host-map mutation, half-rounding of a
+    non-representable F32 activation on the BLAS route, and retained serial
+    multi-token F32 activation behavior.
+  - Local library tests pass with 124 tests; B300 release-feature tests pass
+    with 131 tests; the static library remains at 32 Rust ABI symbols, and
+    fifteen unaffected predecessor C-linked consumers pass against the
+    rebuilt archive, retaining the known embedded-object executable-stack
+    warning. The earlier single-token F16 rejection witnesses are historical
+    after this successor.
+  - The focused comparator passes, and the default unified parity report
+    passes with 210 passed, 45 skipped, and 0 failed.
+  - Pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+    completed findings.
+  - Q8/F16 cache hooks, quality-mode mutation, remaining graph compute,
+    whole-archive retention policy, route promotion, C CUDA removal, and the
+    generated embedded-object executable-stack warning remain open.
+
+################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: connect q8/f16 cache hooks, quality-mode mutation, remaining graph
+  compute, whole-archive retention policy, and production route-promotion
+  work without claiming C CUDA removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 

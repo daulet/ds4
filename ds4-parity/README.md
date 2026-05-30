@@ -3431,10 +3431,9 @@ python3 ds4-parity/check_cuda_abi_matmul_f16_single_token_smoke.py --negative-te
 The C-linked B300 fixture dispatches `ds4_gpu_matmul_f16_tensor` through the
 default ordered-chunks, forced base, and forced serial single-token paths,
 then mutates host model bytes to verify the cached F16 range remains the
-projection weight source. It rejects multi-token projection until the BLAS
-boundary is owned. Paired F16, Q8/F16 cache hooks, remaining graph compute,
-whole-archive retention policy, route promotion, C CUDA removal, and the
-generated embedded-object executable-stack warning remain open.
+projection weight source. Its recorded rejection of multi-token projection
+is a historical boundary now consumed by the multi-token F16 BLAS successor
+below.
 
 Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba Rust CUDA public
 single-token paired F16 projection ABI:
@@ -3446,10 +3445,9 @@ python3 ds4-parity/check_cuda_abi_matmul_f16_pair_single_token_smoke.py --negati
 The C-linked B300 fixture dispatches `ds4_gpu_matmul_f16_pair_tensor` through
 its default paired ordered-chunks path and its no-pair, no-ordered, and
 serial independent fallback selections, then mutates host model bytes to
-verify both cached F16 weight ranges remain authoritative. It rejects
-multi-token projection until the BLAS boundary is owned. Q8/F16 cache hooks,
-remaining graph compute, whole-archive retention policy, route promotion, C
-CUDA removal, and the embedded-object executable-stack warning remain open.
+verify both cached F16 weight ranges remain authoritative. Its recorded
+rejection of multi-token projection is a historical boundary now consumed by
+the multi-token F16 BLAS successor below.
 
 Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbba Rust CUDA public
 single-token F32 projection ABI:
@@ -3476,6 +3474,22 @@ cuda-oxide cuBLAS adapter to prove cached F32 weights remain authoritative
 across both branches; it also unsets an initialization-time
 `DS4_CUDA_NO_TF32` before BLAS execution to verify the math-mode selection is
 retained. Multi-token F16 BLAS, Q8/F16 cache hooks, quality-mode mutation,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba Rust CUDA
+public multi-token F16 BLAS projection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_matmul_f16_multi_token_blas_smoke.py --negative-test
+```
+
+The C-linked B300 fixture establishes the existing one-token and paired F16
+paths, mutates host model bytes, and then executes multi-token mixed-precision
+projection and paired delegation through the cuda-oxide BLAS adapter. A
+non-half-exact second token proves F32-to-F16 activation conversion on the
+BLAS route, while `DS4_CUDA_SERIAL_F16_MATMUL` proves the multi-token F32
+activation fallback is retained. Q8/F16 cache hooks, quality-mode mutation,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 

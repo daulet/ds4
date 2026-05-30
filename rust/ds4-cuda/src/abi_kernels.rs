@@ -235,6 +235,17 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_f32_to_f16_kernel(count: u64, x: &[f32], mut out: DisjointSlice<f16>) {
+        let index = thread::index_1d();
+        let offset = index.get();
+        if (offset as u64) < count {
+            if let Some(element) = out.get_mut(index) {
+                *element = x[offset] as f16;
+            }
+        }
+    }
+
+    #[kernel]
     pub fn abi_matmul_f16_kernel(
         in_dim: u64,
         out_dim: u64,
@@ -473,6 +484,7 @@ pub(crate) struct AbiKernelModule {
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
+    f32_to_f16_kernel: CudaFunction,
     matmul_f16_kernel: CudaFunction,
     matmul_f16_serial_kernel: CudaFunction,
     matmul_f16_ordered_chunks_kernel: CudaFunction,
@@ -501,6 +513,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            f32_to_f16_kernel: module
+                .load_function("abi_f32_to_f16_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             matmul_f16_kernel: module
                 .load_function("abi_matmul_f16_kernel")
@@ -861,6 +876,43 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 function,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn f32_to_f16_tensor(
+        &self,
+        stream: &CudaStream,
+        x_ptr: u64,
+        out_ptr: u64,
+        count: u64,
+    ) -> bool {
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut count = count;
+        let mut x_ptr = x_ptr;
+        let mut x_len = count;
+        let mut out_ptr = out_ptr;
+        let mut out_len = count;
+        let mut params = [
+            (&mut count as *mut u64).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates activation bounds and retains the scratch
+        // conversion output through every queued BLAS consumer.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.f32_to_f16_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

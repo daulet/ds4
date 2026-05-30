@@ -133,7 +133,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
         "pub unsafe extern \"C\" fn ds4_gpu_matmul_f16_pair_tensor",
-        "n_tok != 1",
+        "n_tok == 0",
         "select_f16_pair_projection_path(F16PairProjectionDispatch",
         'std::env::var_os("DS4_CUDA_NO_F16_PAIR_MATMUL")',
         "F16PairProjectionPath::TwoIndependent",
