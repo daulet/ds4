@@ -3172,6 +3172,22 @@ asynchronous staging baseline remains the event-count proof. Arena/cache
 budget, source-page/progress policy, residual model-control selection,
 whole-archive retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2a Rust CUDA public fd arena
+suballocation ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_arena_suballocation_smoke.py --negative-test
+```
+
+The fixture selects buffered public fd caching with a bounded 256 MiB arena
+chunk override and consumes two disjoint cached ranges through a C-linked
+B300 consumer. Public output proves fd-sourced results and retained reuse for
+both ranges after backing-file mutation; source wiring plus the retained
+M14.1b2b3b2 lower-level baseline establish arena ownership without claiming
+that the public output exposes arena count or device offsets. Cache-budget
+fallback, source-page/progress policy, residual model-control selection,
+whole-archive retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -9636,7 +9636,43 @@
 
 ########### M14.6b2b2b2b2b2b2b2b2b2: Arena Budget And Residual Model-Control Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b because public fd arena suballocation/lifetime
+  is independently testable from cache-budget fallback, source-page/progress,
+  and residual selection policy.
 - Goal: connect arena/cache-budget and source-page/progress policy,
+  chunk-copy failure routing, and residual model-control selection/cache
+  policy without claiming graph compute closure or route promotion.
+
+############ M14.6b2b2b2b2b2b2b2b2b2a: Public Fd Arena Suballocation ABI
+
+- Status: done
+- Goal: connect public fd-cache ranges to retained arena suballocation and
+  synchronized arena reset while leaving cache-budget fallback,
+  source-page/progress, residual selection, and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2a/abi-model-control-fd-arena-suballocation-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_arena_suballocation_smoke.py --negative-test`.
+- Evidence: Rust retains Linux fd-cache destinations in `ABI_MODEL_ARENAS`,
+  applies the current-C arena chunk override clamp/growth rule and
+  256-byte-aligned suballocation, and clears arena lifetime after
+  synchronization. A C-linked B300 consumer selects a 256 MiB bounded arena
+  allocation, admits two disjoint buffered fd ranges, observes fd-backed
+  weighted output over divergent host bytes, and reuses both retained ranges
+  after backing-file mutation. Local tests pass with 104 tests, B300
+  release-feature tests pass with 109 tests, and the static library retains
+  29 exports. The lower-level M14.1b2b3b2 B300 baseline remains the
+  internal one-arena/two-range proof. The new checker passes with 104 checks,
+  and unified parity passes with 190 passed, 45 skipped, and no failures.
+  The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Cache-budget fallback,
+  source-page/progress policy, residual selection, whole-archive retention,
+  route promotion, and the `.note.GNU-stack` warning remain pending.
+
+############ M14.6b2b2b2b2b2b2b2b2b2b: Cache Budget And Residual Model-Control Policy
+
+- Status: active
+- Goal: connect public cache-budget fallback, source-page/progress policy,
   chunk-copy failure routing, and residual model-control selection/cache
   policy without claiming graph compute closure or route promotion.

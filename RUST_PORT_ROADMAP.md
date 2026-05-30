@@ -9975,8 +9975,57 @@ Stage split:
 
 ########### M14.6b2b2b2b2b2b2b2b2b2: Arena Budget And Residual Model-Control Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b because public fd arena suballocation and
+  lifetime are independently testable from cache-budget fallback,
+  source-page/progress, and residual selection policy.
 - Goal: connect arena/cache-budget and source-page/progress policy,
+  chunk-copy failure routing, and residual model-control selection/cache
+  policy without claiming remaining graph compute or route promotion.
+
+############ M14.6b2b2b2b2b2b2b2b2b2a: Public Fd Arena Suballocation ABI
+
+- Status: done.
+- Goal: connect public fd-cache ranges to retained arena suballocation and
+  synchronized arena reset while leaving cache-budget fallback,
+  source-page/progress, residual selection, and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2a/abi-model-control-fd-arena-suballocation-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_arena_suballocation_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` retains Linux public fd-cache allocations in
+    `ABI_MODEL_ARENAS`, parses the current-C
+    `DS4_CUDA_WEIGHT_ARENA_CHUNK_MB` clamp/growth rule, suballocates
+    256-byte-aligned destinations for the asynchronous uploader, and clears
+    arenas only after synchronization during model replacement or cleanup.
+  - A C-linked B300 consumer selects buffered fd caching with a 256 MiB arena
+    override, admits two disjoint ranges, observes each fd-backed weighted
+    result over divergent host bytes, and preserves both retained results
+    after rewriting the backing file. Its output intentionally does not claim
+    internal arena count or device offsets.
+  - The existing M14.1b2b3b2 B300 lower-level baseline remains the internal
+    arena proof: it observes one device arena serving two admitted ranges.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 104 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 109 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - `check_cuda_abi_model_control_fd_arena_suballocation_smoke.py
+    --negative-test` passes with 104 checks, and unified parity passes with
+    190 passed, 45 skipped, and no failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the public fd-arena boundary, current-C oracle, comparator, and B300
+    evidence, but returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+    completed findings.
+  - Cache-budget fallback, source-page/progress policy, residual model-control
+    selection, q8/f16 hooks, remaining graph compute, whole-archive
+    retention, route promotion, and the generated `.note.GNU-stack` warning
+    remain open.
+
+############ M14.6b2b2b2b2b2b2b2b2b2b: Cache Budget And Residual Model-Control Policy
+
+- Status: active.
+- Goal: connect public cache-budget fallback, source-page/progress policy,
   chunk-copy failure routing, and residual model-control selection/cache
   policy without claiming remaining graph compute or route promotion.
 

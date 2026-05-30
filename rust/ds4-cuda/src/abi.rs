@@ -17,6 +17,8 @@ static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
+#[cfg(target_os = "linux")]
+static ABI_MODEL_ARENAS: Mutex<Vec<AbiModelArena>> = Mutex::new(Vec::new());
 static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::new(None);
 static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
 static ABI_REGISTERED_MODEL: Mutex<Option<AbiRegisteredModel>> = Mutex::new(None);
@@ -39,10 +41,27 @@ struct AbiModelRange {
     storage: AbiModelRangeStorage,
 }
 
+#[cfg(target_os = "linux")]
+struct AbiModelArena {
+    device: DeviceBuffer<u8>,
+    bytes: u64,
+    used: u64,
+}
+
 enum AbiModelRangeStorage {
     DeviceCopy(DeviceBuffer<u8>),
+    #[cfg(not(target_os = "linux"))]
     BufferedFdDeviceCopy(DeviceBuffer<u8>),
+    #[cfg(not(target_os = "linux"))]
     DirectIoFdDeviceCopy(DeviceBuffer<u8>),
+    #[cfg(target_os = "linux")]
+    BufferedFdArenaDeviceCopy {
+        requested_device_ptr: u64,
+    },
+    #[cfg(target_os = "linux")]
+    DirectIoFdArenaDeviceCopy {
+        requested_device_ptr: u64,
+    },
     ReadOnlyRegistered {
         _registration: ReadOnlyRegisteredHostMemory<'static, u8>,
         requested_device_ptr: u64,
@@ -52,9 +71,17 @@ enum AbiModelRangeStorage {
 impl AbiModelRange {
     fn device_ptr(&self) -> u64 {
         match &self.storage {
-            AbiModelRangeStorage::DeviceCopy(buffer)
-            | AbiModelRangeStorage::BufferedFdDeviceCopy(buffer)
+            AbiModelRangeStorage::DeviceCopy(buffer) => buffer.cu_deviceptr(),
+            #[cfg(not(target_os = "linux"))]
+            AbiModelRangeStorage::BufferedFdDeviceCopy(buffer)
             | AbiModelRangeStorage::DirectIoFdDeviceCopy(buffer) => buffer.cu_deviceptr(),
+            #[cfg(target_os = "linux")]
+            AbiModelRangeStorage::BufferedFdArenaDeviceCopy {
+                requested_device_ptr,
+            }
+            | AbiModelRangeStorage::DirectIoFdArenaDeviceCopy {
+                requested_device_ptr,
+            } => *requested_device_ptr,
             AbiModelRangeStorage::ReadOnlyRegistered {
                 requested_device_ptr,
                 ..
@@ -346,6 +373,50 @@ fn abi_model_copy_chunk_bytes() -> Option<usize> {
     abi_model_copy_chunk_bytes_from_value(value.as_deref())
 }
 
+#[cfg(target_os = "linux")]
+fn abi_model_arena_chunk_bytes_from_value(
+    value: Option<&std::ffi::CStr>,
+    need: usize,
+) -> Option<usize> {
+    const MIB: u64 = 1024 * 1024;
+    const ROUNDING_BYTES: u64 = 256 * MIB;
+
+    let mut mb = 1792_u64;
+    if let Some(value) = value {
+        let mut end = ptr::null_mut();
+        let parsed = unsafe { libc::strtoull(value.as_ptr(), &mut end, 10) };
+        if end.cast_const() != value.as_ptr() && parsed > 0 {
+            mb = parsed;
+        }
+    }
+    let mut bytes = mb.clamp(256, 8192).checked_mul(MIB)?;
+    let need = u64::try_from(need).ok()?;
+    if bytes < need {
+        bytes = need
+            .checked_add(ROUNDING_BYTES - 1)?
+            .checked_div(ROUNDING_BYTES)?
+            .checked_mul(ROUNDING_BYTES)?;
+    }
+    usize::try_from(bytes).ok()
+}
+
+#[cfg(target_os = "linux")]
+fn abi_model_arena_chunk_bytes(need: usize) -> Option<usize> {
+    let value = std::env::var("DS4_CUDA_WEIGHT_ARENA_CHUNK_MB")
+        .ok()
+        .and_then(|value| std::ffi::CString::new(value).ok());
+    abi_model_arena_chunk_bytes_from_value(value.as_deref(), need)
+}
+
+#[cfg(target_os = "linux")]
+fn align_abi_model_arena_bytes(bytes: u64) -> Option<u64> {
+    const ALIGNMENT: u64 = 256;
+    bytes
+        .checked_add(ALIGNMENT - 1)?
+        .checked_div(ALIGNMENT)?
+        .checked_mul(ALIGNMENT)
+}
+
 fn abi_model_fd(model_map: *const c_void) -> Option<c_int> {
     let control = ABI_MODEL_CONTROL.lock().ok()?;
     if control.model_fd < 0
@@ -402,12 +473,15 @@ fn try_upload_abi_buffered_fd_range(
     model_map: *const c_void,
     offset: u64,
     bytes: u64,
-) -> Option<DeviceBuffer<u8>> {
+) -> Option<AbiModelRangeStorage> {
     if !buffered_fd_weight_cache_selected() || bytes == 0 {
         return None;
     }
-    upload_abi_async_fd_range(backend, abi_model_fd(model_map)?, offset, bytes, false)
-        .map(|(device, _)| device)
+    upload_abi_async_fd_arena_range(backend, abi_model_fd(model_map)?, offset, bytes, false).map(
+        |(requested_device_ptr, _)| AbiModelRangeStorage::BufferedFdArenaDeviceCopy {
+            requested_device_ptr,
+        },
+    )
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -416,11 +490,12 @@ fn try_upload_abi_buffered_fd_range(
     model_map: *const c_void,
     offset: u64,
     bytes: u64,
-) -> Option<DeviceBuffer<u8>> {
+) -> Option<AbiModelRangeStorage> {
     if !buffered_fd_weight_cache_selected() || bytes == 0 {
         return None;
     }
     upload_abi_buffered_fd_range(backend, abi_model_fd(model_map)?, offset, bytes)
+        .map(AbiModelRangeStorage::BufferedFdDeviceCopy)
 }
 
 #[cfg(target_os = "linux")]
@@ -470,19 +545,20 @@ fn read_abi_direct_or_buffered_fd_stage(
 }
 
 #[cfg(target_os = "linux")]
-fn upload_abi_async_fd_range(
+fn upload_abi_async_fd_range_into(
     backend: &CudaOxideSubstrate,
+    device: &DeviceBuffer<u8>,
+    device_offset: usize,
     fd: c_int,
     offset: u64,
     bytes: u64,
     use_direct_io: bool,
-) -> Option<(DeviceBuffer<u8>, bool)> {
+) -> Option<bool> {
     let bytes = usize::try_from(bytes).ok()?;
     let chunk_bytes = abi_model_copy_chunk_bytes()?;
     let alignment = ABI_MODEL_CONTROL.lock().ok()?.model_direct_align.max(1);
     let alignment = usize::try_from(alignment).ok()?;
     let stage_bytes = chunk_bytes.checked_add(alignment.checked_mul(2)?)?;
-    let device = backend.zeroed::<u8>(bytes).ok()?;
     let mut staging = Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS);
     let mut events: Vec<Option<CudaEvent>> = Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS);
     for _ in 0..ABI_DIRECT_FD_STAGE_SLOTS {
@@ -518,8 +594,8 @@ fn upload_abi_async_fd_range(
             unsafe {
                 backend
                     .enqueue_pinned_u8_range_async(
-                        &device,
-                        copied,
+                        device,
+                        device_offset.checked_add(copied)?,
                         &staging[slot],
                         payload_offset,
                         this_chunk,
@@ -538,7 +614,51 @@ fn upload_abi_async_fd_range(
     if !synchronize_ok {
         return None;
     }
-    Some((device, used_direct))
+    Some(used_direct)
+}
+
+#[cfg(target_os = "linux")]
+fn upload_abi_async_fd_arena_range(
+    backend: &CudaOxideSubstrate,
+    fd: c_int,
+    offset: u64,
+    bytes: u64,
+    use_direct_io: bool,
+) -> Option<(u64, bool)> {
+    let aligned_bytes = align_abi_model_arena_bytes(bytes)?;
+    let mut arenas = ABI_MODEL_ARENAS.lock().ok()?;
+    let reservation = arenas.iter().enumerate().find_map(|(index, arena)| {
+        let used = align_abi_model_arena_bytes(arena.used)?;
+        (used <= arena.bytes && aligned_bytes <= arena.bytes - used).then_some((index, used))
+    });
+    let (arena_index, device_offset) = match reservation {
+        Some((index, used)) => {
+            arenas[index].used = used + aligned_bytes;
+            (index, used)
+        }
+        None => {
+            let chunk_bytes = abi_model_arena_chunk_bytes(usize::try_from(bytes).ok()?)?;
+            let device = backend.zeroed::<u8>(chunk_bytes).ok()?;
+            arenas.push(AbiModelArena {
+                device,
+                bytes: u64::try_from(chunk_bytes).ok()?,
+                used: aligned_bytes,
+            });
+            (arenas.len().checked_sub(1)?, 0)
+        }
+    };
+    let arena = arenas.get(arena_index)?;
+    let requested_device_ptr = arena.device.cu_deviceptr().checked_add(device_offset)?;
+    let used_direct = upload_abi_async_fd_range_into(
+        backend,
+        &arena.device,
+        usize::try_from(device_offset).ok()?,
+        fd,
+        offset,
+        bytes,
+        use_direct_io,
+    )?;
+    Some((requested_device_ptr, used_direct))
 }
 
 #[cfg(target_os = "linux")]
@@ -547,11 +667,23 @@ fn try_upload_abi_direct_fd_range(
     model_map: *const c_void,
     offset: u64,
     bytes: u64,
-) -> Option<(DeviceBuffer<u8>, bool)> {
+) -> Option<AbiModelRangeStorage> {
     if !direct_io_fd_weight_cache_selected() || bytes == 0 {
         return None;
     }
-    upload_abi_async_fd_range(backend, abi_model_fd(model_map)?, offset, bytes, true)
+    upload_abi_async_fd_arena_range(backend, abi_model_fd(model_map)?, offset, bytes, true).map(
+        |(requested_device_ptr, used_direct)| {
+            if used_direct {
+                AbiModelRangeStorage::DirectIoFdArenaDeviceCopy {
+                    requested_device_ptr,
+                }
+            } else {
+                AbiModelRangeStorage::BufferedFdArenaDeviceCopy {
+                    requested_device_ptr,
+                }
+            }
+        },
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -580,12 +712,12 @@ fn try_upload_abi_direct_fd_range(
     model_map: *const c_void,
     offset: u64,
     bytes: u64,
-) -> Option<(DeviceBuffer<u8>, bool)> {
+) -> Option<AbiModelRangeStorage> {
     if !direct_io_fd_weight_cache_selected() || bytes == 0 {
         return None;
     }
     upload_abi_buffered_fd_range(backend, abi_model_fd(model_map)?, offset, bytes)
-        .map(|device| (device, false))
+        .map(AbiModelRangeStorage::BufferedFdDeviceCopy)
 }
 
 fn configure_abi_model_fd(control: &mut AbiModelControl, fd: c_int) {
@@ -791,15 +923,14 @@ fn with_cached_abi_model_range<T>(
     let source = unsafe { std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes) };
     let storage =
         match try_upload_abi_direct_fd_range(backend, model_map, offset as u64, bytes as u64) {
-            Some((device, true)) => AbiModelRangeStorage::DirectIoFdDeviceCopy(device),
-            Some((device, false)) => AbiModelRangeStorage::BufferedFdDeviceCopy(device),
+            Some(storage) => storage,
             None => match try_upload_abi_buffered_fd_range(
                 backend,
                 model_map,
                 offset as u64,
                 bytes as u64,
             ) {
-                Some(device) => AbiModelRangeStorage::BufferedFdDeviceCopy(device),
+                Some(storage) => storage,
                 None => {
                     match abi_registered_source(model_map, model_size, offset as u64, bytes as u64)
                         .and_then(|(registered_source, device_offset)| {
@@ -821,9 +952,17 @@ fn with_cached_abi_model_range<T>(
         };
     backend.synchronize().ok()?;
     let ptr = match &storage {
-        AbiModelRangeStorage::DeviceCopy(device)
-        | AbiModelRangeStorage::BufferedFdDeviceCopy(device)
+        AbiModelRangeStorage::DeviceCopy(device) => device.cu_deviceptr(),
+        #[cfg(not(target_os = "linux"))]
+        AbiModelRangeStorage::BufferedFdDeviceCopy(device)
         | AbiModelRangeStorage::DirectIoFdDeviceCopy(device) => device.cu_deviceptr(),
+        #[cfg(target_os = "linux")]
+        AbiModelRangeStorage::BufferedFdArenaDeviceCopy {
+            requested_device_ptr,
+        }
+        | AbiModelRangeStorage::DirectIoFdArenaDeviceCopy {
+            requested_device_ptr,
+        } => *requested_device_ptr,
         AbiModelRangeStorage::ReadOnlyRegistered {
             requested_device_ptr,
             ..
@@ -885,6 +1024,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             }
             if let Ok(mut model_ranges) = ABI_MODEL_RANGES.lock() {
                 model_ranges.clear();
+            }
+            #[cfg(target_os = "linux")]
+            if let Ok(mut model_arenas) = ABI_MODEL_ARENAS.lock() {
+                model_arenas.clear();
             }
             if let Ok(mut pageable_range) = ABI_PAGEABLE_MODEL_RANGE.lock() {
                 *pageable_range = None;
@@ -1524,6 +1667,8 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             }
             backend.synchronize().ok()?;
             ABI_MODEL_RANGES.lock().ok()?.clear();
+            #[cfg(target_os = "linux")]
+            ABI_MODEL_ARENAS.lock().ok()?.clear();
             *ABI_PAGEABLE_MODEL_RANGE.lock().ok()? = None;
             *ABI_COPIED_MODEL.lock().ok()? = None;
             *ABI_REGISTERED_MODEL.lock().ok()? = None;
@@ -1622,8 +1767,8 @@ mod tests {
     use std::ffi::CString;
 
     use super::{
-        abi_direct_io_error_disables, abi_model_copy_chunk_bytes_from_value,
-        disable_abi_direct_io_after_error, AbiModelControl,
+        abi_direct_io_error_disables, abi_model_arena_chunk_bytes_from_value,
+        abi_model_copy_chunk_bytes_from_value, disable_abi_direct_io_after_error, AbiModelControl,
     };
 
     #[test]
@@ -1682,6 +1827,35 @@ mod tests {
         assert_eq!(
             abi_model_copy_chunk_bytes_from_value(Some(&zero)),
             Some(64 * 1024 * 1024)
+        );
+    }
+
+    #[test]
+    fn public_fd_arena_chunk_override_matches_current_c_clamp_and_growth() {
+        let small = CString::new("8").expect("valid arena string");
+        let trailing = CString::new("512rest").expect("valid arena string");
+        let huge = CString::new("9000").expect("valid arena string");
+        let zero = CString::new("0").expect("valid arena string");
+
+        assert_eq!(
+            abi_model_arena_chunk_bytes_from_value(Some(&small), 1),
+            Some(256 * 1024 * 1024)
+        );
+        assert_eq!(
+            abi_model_arena_chunk_bytes_from_value(Some(&trailing), 1),
+            Some(512 * 1024 * 1024)
+        );
+        assert_eq!(
+            abi_model_arena_chunk_bytes_from_value(Some(&huge), 1),
+            Some(8192 * 1024 * 1024)
+        );
+        assert_eq!(
+            abi_model_arena_chunk_bytes_from_value(Some(&zero), 1),
+            Some(1792 * 1024 * 1024)
+        );
+        assert_eq!(
+            abi_model_arena_chunk_bytes_from_value(Some(&small), 300 * 1024 * 1024),
+            Some(512 * 1024 * 1024)
         );
     }
 }

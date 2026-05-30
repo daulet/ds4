@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2 Arena Budget And Residual Model-Control Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b Cache Budget And Residual Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,23 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2a Public Fd Arena Suballocation ABI retains
+  Linux public fd-cache destinations in `ABI_MODEL_ARENAS`, applies the
+  current-C `DS4_CUDA_WEIGHT_ARENA_CHUNK_MB` clamp/growth rule and
+  256-byte-aligned suballocation, and clears retained arenas only after
+  synchronized replacement or cleanup. A C-linked B300 consumer sets the
+  256 MiB arena override, admits two disjoint buffered fd ranges, observes
+  fd-sourced weighted outputs over divergent host bytes, and preserves both
+  retained results after rewriting the file. The public output does not
+  expose internal arena count; the retained M14.1b2b3b2 lower-level B300
+  baseline records one arena serving two admitted ranges. Local library
+  tests pass with 104 tests; B300 release-feature tests pass with 109 tests,
+  and the static library retains 29 exports. The arena checker passes with
+  104 checks and unified parity passes with 190 passed, 45 skipped, and no
+  failures. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Cache-budget fallback,
+  source-page/progress policy, residual selection, whole-archive retention,
+  route promotion, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b2b1 Public Buffered Fd Async Staging ABI routes the
   `DS4_CUDA_NO_DIRECT_IO=1` public fd-cache path through the shared
   four-slot event-backed uploader. A C-linked B300 consumer requests five
