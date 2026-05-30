@@ -2513,6 +2513,17 @@ The fixture records paired unequal-width and HC-expansion Q8 matmul execution
 on B300. It proves optional HC block addition while leaving DP4A
 acceleration, dispatch, route, and removal ownership unclaimed.
 
+Validate the M14.3d4 Rust CUDA Q8 DP4A and dispatch-policy smoke:
+
+```sh
+python3 ds4-parity/check_q8_dp4a_dispatch_smoke.py --negative-test
+```
+
+The fixture records signed packed-i8 DP4A execution and current-C-compatible
+Q8 dispatch policy on B300. It proves emitted `dp4a.s32.s32` PTX plus the
+scalar partial-block fallback while leaving runtime route activation and C
+CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

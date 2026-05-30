@@ -5,9 +5,9 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
-cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7", optional = true }
-cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7", optional = true }
-cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7", optional = true }
+cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "485bdd86fc1c900ad15ebd421b3b187619fe0903", optional = true }
+cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "485bdd86fc1c900ad15ebd421b3b187619fe0903", optional = true }
+cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "485bdd86fc1c900ad15ebd421b3b187619fe0903", optional = true }
 libc = { version = "0.2", optional = true }
 
 [features]
@@ -196,4 +196,9 @@ required-features = ["cuda-oxide-kernels"]
 [[bin]]
 name = "ds4-cuda-q8-specialized-matmul-smoke"
 path = "src/bin/q8_specialized_matmul_smoke.rs"
+required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-q8-dp4a-dispatch-smoke"
+path = "src/bin/q8_dp4a_dispatch_smoke.rs"
 required-features = ["cuda-oxide-kernels"]

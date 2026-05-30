@@ -1,0 +1,82 @@
+{
+  "schema": "ds4.q8_dp4a_dispatch_smoke.v1",
+  "milestone": "M14.3d4",
+  "status": "b300-pass",
+  "id": "m14.3d4-q8-dp4a-acceleration-and-dispatch-policy",
+  "goal": "Prove opt-in Rust cuda-oxide DP4A Q8 execution and current-C-compatible Q8 path selection without claiming runtime route activation.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "485bdd86fc1c900ad15ebd421b3b187619fe0903",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] with signed packed-i8 DP4A and scalar partial-block fallback",
+    "dependency_work": [
+      "typed cuda_device::integer::dp4a_i8 surface",
+      "signed MIR result preservation",
+      "LLVM-18-compatible inline PTX lowering to dp4a.s32.s32"
+    ]
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "dot_i8x32_dp4a full Q8 block acceleration",
+      "dot_i8_block scalar partial-block fallback",
+      "cuda_matmul_q8_0_tensor_labeled BLAS/warp8/batch-warp/generic selection order",
+      "DS4_CUDA_NO_Q8_DP4A disable policy"
+    ],
+    "excluded_behavior": [
+      "runtime graph integration and default CUDA route activation",
+      "C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "cuda-oxide signed DP4A device/lowering support",
+      "executable-local accelerated packed-Q8 matmul launch proof",
+      "current-C-compatible Q8 matmul dispatch and DP4A enable policy"
+    ],
+    "not_claimed_in_this_stage": [
+      "runtime graph integration or default CUDA route",
+      "C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "owns_cuda_oxide_dp4a_i8_intrinsic": true,
+    "owns_dp4a_acceleration": true,
+    "owns_q8_matmul_dispatch_policy": true,
+    "owns_runtime_graph_integration": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "llvm_llc_version": "18.1.3",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 50,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-q8-dp4a-dispatch-smoke",
+    "backend_selected_target": "sm_80",
+    "ptx_instruction": "dp4a.s32.s32",
+    "ptxas_validation": true,
+    "stdout": {
+      "milestone": "M14.3d4",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "dp4a_full_block_output_matches": true,
+      "scalar_tail_fallback_output_matches": true,
+      "single_token_warp8_dispatch_matches": true,
+      "batched_warp8_dispatch_matches": true,
+      "generic_dispatch_matches": true,
+      "dp4a_disable_policy_matches": true,
+      "uses_cuda_oxide_dp4a_i8": true,
+      "owns_dp4a_acceleration": true,
+      "owns_q8_matmul_dispatch_policy": true,
+      "owns_runtime_graph_integration": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.4a Standalone RoPE Tail And FP8 KV Quantization Kernels"
+}

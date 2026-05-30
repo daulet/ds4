@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.3d4 Q8 DP4A Acceleration And Dispatch Policy
+- Active item: M14.4a Standalone RoPE Tail And FP8 KV Quantization Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -48,8 +48,10 @@
   ownership is claimed. M14.3d begins Q8 execution with M14.3d1
   dequantization/activation quantization and M14.3d2 base/prequantized
   matmul, then M14.3d3 paired/HC-expansion before M14.3d4 DP4A/dispatch
-  ownership.
-- Last validated source before the active item: M14.3d3 Paired And HC-Expansion Q8 Matmul Kernels.
+  ownership. M14.3 is complete; M14.4 begins with standalone RoPE tail and
+  FP8 KV quantization before storage, compressor, or attention execution.
+- Last validated source before the active item: M14.3d4 Q8 DP4A Acceleration And Dispatch Policy.
+- Earlier M14.3d3 Paired And HC-Expansion Q8 Matmul Kernels.
 - Earlier M14.3d2 Base And Prequantized Q8 Matmul Kernels.
 - Earlier M14.3d1 Q8 Dequantization And Activation Quantization Kernels.
 - Earlier M14.3c3 F16 And F32 BLAS Dispatch And Activation Conversion.
@@ -186,6 +188,22 @@
 
 ## Last Evidence
 
+- M14.3d4 Q8 DP4A Acceleration And Dispatch Policy adds cuda-oxide signed
+  `dp4a_i8` device support with LLVM-18-compatible inline PTX lowering,
+  executable-local Rust accelerated packed-Q8 matmul execution, and
+  current-C-compatible `select_q8_matmul_path` / `q8_dp4a_enabled` policy.
+  On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+  with 50 tests and live cargo-oxide execution emitted portable `sm_80` PTX.
+  `ptxas` accepted the emitted `dp4a.s32.s32` instruction, and execution
+  proved full-block acceleration, partial-block scalar fallback, and dispatch
+  disable/gating behavior on `NVIDIA B300 SXM6 AC`. Its fixture and checker
+  are `ds4-parity/baselines/backend/m14.3d4/q8-dp4a-dispatch-smoke.json`
+  and `ds4-parity/check_q8_dp4a_dispatch_smoke.py --negative-test`.
+  Runtime graph integration, route activation, and C CUDA removal remain
+  unclaimed.
+  Local formatting, diff, library tests, the 64-check comparator, retained
+  M14 checks, and unified parity passed with 134 passed, 50 skipped, and
+  0 failed.
 - M14.3d3 Paired And HC-Expansion Q8 Matmul Kernels adds executable-local
   Rust cuda-oxide `matmul_q8_0_pair_preq_warp8_kernel` and
   `matmul_q8_0_hc_expand_preq_warp8_kernel` with packed Q8 scalar integer-dot

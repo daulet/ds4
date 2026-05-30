@@ -934,6 +934,62 @@ pub const M14_3D3_SCOPE: Q8SpecializedMatmulKernelScope = Q8SpecializedMatmulKer
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Q8MatmulPath {
+    ExpandedF32Blas,
+    ExpandedF16Blas,
+    PrequantizedWarp8,
+    PrequantizedBatchWarp8,
+    PrequantizedGeneric,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Q8MatmulDispatchOptions {
+    pub cublas_ready: bool,
+    pub expanded_f32_blas_ready: bool,
+    pub expanded_f16_blas_ready: bool,
+    pub n_tokens: u64,
+    pub blocks: u64,
+    pub no_batch_warp: bool,
+}
+
+pub const fn select_q8_matmul_path(options: Q8MatmulDispatchOptions) -> Q8MatmulPath {
+    if options.cublas_ready && options.n_tokens > 1 && options.expanded_f32_blas_ready {
+        Q8MatmulPath::ExpandedF32Blas
+    } else if options.cublas_ready && options.n_tokens > 1 && options.expanded_f16_blas_ready {
+        Q8MatmulPath::ExpandedF16Blas
+    } else if options.n_tokens == 1 {
+        Q8MatmulPath::PrequantizedWarp8
+    } else if !options.no_batch_warp && options.blocks <= 32 {
+        Q8MatmulPath::PrequantizedBatchWarp8
+    } else {
+        Q8MatmulPath::PrequantizedGeneric
+    }
+}
+
+pub const fn q8_dp4a_enabled(no_q8_dp4a: bool) -> bool {
+    !no_q8_dp4a
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Q8Dp4aDispatchScope {
+    pub opt_in_only: bool,
+    pub owns_cuda_oxide_dp4a_i8_intrinsic: bool,
+    pub owns_dp4a_acceleration: bool,
+    pub owns_q8_matmul_dispatch_policy: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_3D4_SCOPE: Q8Dp4aDispatchScope = Q8Dp4aDispatchScope {
+    opt_in_only: true,
+    owns_cuda_oxide_dp4a_i8_intrinsic: true,
+    owns_dp4a_acceleration: true,
+    owns_q8_matmul_dispatch_policy: true,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -946,18 +1002,20 @@ pub mod substrate;
 #[cfg(test)]
 mod tests {
     use super::{
-        select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
-        select_indexer_score_kernel, select_indexer_topk_kernel, should_sort_indexed_topk,
-        F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath,
-        F32ProjectionPath, IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
-        IndexerTopkDispatchOptions, IndexerTopkKernel, CUDA_OXIDE_REVISION, M14_1A_SCOPE,
-        M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE, M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE,
-        M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE, M14_1B3A_SCOPE, M14_1B3B_SCOPE,
-        M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE, M14_2C_SCOPE, M14_2D1_SCOPE,
-        M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
-        M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
-        M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE, M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE,
-        M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
+        q8_dp4a_enabled, select_f16_pair_projection_path, select_f16_projection_path,
+        select_f32_projection_path, select_indexer_score_kernel, select_indexer_topk_kernel,
+        select_q8_matmul_path, should_sort_indexed_topk, F16PairProjectionDispatch,
+        F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath, F32ProjectionPath,
+        IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
+        IndexerTopkDispatchOptions, IndexerTopkKernel, Q8MatmulDispatchOptions, Q8MatmulPath,
+        CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
+        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
+        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
+        M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
+        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
+        M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
+        M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
+        M14_3D4_SCOPE,
     };
 
     #[test]
@@ -1351,6 +1409,69 @@ mod tests {
         assert!(!M14_3D3_SCOPE.owns_dp4a_acceleration);
         assert!(!M14_3D3_SCOPE.owns_q8_matmul_dispatch_policy);
         assert!(!M14_3D3_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn q8_dp4a_dispatch_scope_leaves_runtime_route_pending() {
+        assert!(M14_3D4_SCOPE.opt_in_only);
+        assert!(M14_3D4_SCOPE.owns_cuda_oxide_dp4a_i8_intrinsic);
+        assert!(M14_3D4_SCOPE.owns_dp4a_acceleration);
+        assert!(M14_3D4_SCOPE.owns_q8_matmul_dispatch_policy);
+        assert!(!M14_3D4_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_3D4_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn q8_matmul_dispatch_paths_match_current_c_priority() {
+        let base = Q8MatmulDispatchOptions {
+            cublas_ready: true,
+            expanded_f32_blas_ready: true,
+            expanded_f16_blas_ready: true,
+            n_tokens: 2,
+            blocks: 2,
+            no_batch_warp: false,
+        };
+        assert_eq!(select_q8_matmul_path(base), Q8MatmulPath::ExpandedF32Blas);
+        assert_eq!(
+            select_q8_matmul_path(Q8MatmulDispatchOptions {
+                expanded_f32_blas_ready: false,
+                ..base
+            }),
+            Q8MatmulPath::ExpandedF16Blas
+        );
+        assert_eq!(
+            select_q8_matmul_path(Q8MatmulDispatchOptions {
+                cublas_ready: false,
+                n_tokens: 1,
+                ..base
+            }),
+            Q8MatmulPath::PrequantizedWarp8
+        );
+        assert_eq!(
+            select_q8_matmul_path(Q8MatmulDispatchOptions {
+                cublas_ready: false,
+                ..base
+            }),
+            Q8MatmulPath::PrequantizedBatchWarp8
+        );
+        assert_eq!(
+            select_q8_matmul_path(Q8MatmulDispatchOptions {
+                cublas_ready: false,
+                no_batch_warp: true,
+                ..base
+            }),
+            Q8MatmulPath::PrequantizedGeneric
+        );
+        assert_eq!(
+            select_q8_matmul_path(Q8MatmulDispatchOptions {
+                cublas_ready: false,
+                blocks: 33,
+                ..base
+            }),
+            Q8MatmulPath::PrequantizedGeneric
+        );
+        assert!(q8_dp4a_enabled(false));
+        assert!(!q8_dp4a_enabled(true));
     }
 
     #[test]

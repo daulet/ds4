@@ -26,7 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 RECORDED_DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
-CURRENT_DEPENDENCY_REVISION = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7"
+CURRENT_DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide head_rms_norm_rope_tail_kernel launch proof",
     "combined head RMS normalization and RoPE-tail tensor validation",

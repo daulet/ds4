@@ -26,7 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 RECORDED_DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
-CURRENT_DEPENDENCY_REVISION = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7"
+CURRENT_DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide rms_norm_plain_kernel launch proof",
     "executable-local cuda-oxide rms_norm_weight_kernel launch proof",
@@ -194,7 +194,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.3" in texts["status"], "next active M14.3 stage missing")
+    report.check("Active item: M14." in texts["status"], "next active M14 stage missing")
     report.check("M14.3a Plain And Weighted RMS Norm Kernels" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

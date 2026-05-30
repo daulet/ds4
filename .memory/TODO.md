@@ -8049,9 +8049,7 @@
 
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
-- Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2,
-  M14.3c1, M14.3c2, M14.3c3, M14.3d1, M14.3d2, and M14.3d3 are done, and
-  M14.3d4 is active
+- Status: done through M14.3d4
 - Goal: port dense projection, Q8 conversion, and normalization kernels
   through bounded Rust CUDA slices with current C retained as the oracle.
 
@@ -8292,6 +8290,35 @@
 
 ##### M14.3d4: Q8 DP4A Acceleration And Dispatch Policy
 
-- Status: active
+- Status: done
 - Goal: add the remaining DP4A accelerated integer-dot path and Q8 dispatch
   policy before any runtime route or C-removal claim.
+- Oracle: current-C `dot_i8x32_dp4a`, `dot_i8_block`,
+  `cuda_q8_use_dp4a`, and `cuda_matmul_q8_0_tensor_labeled` path order.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3d4/q8-dp4a-dispatch-smoke.json`.
+- Comparator: `ds4-parity/check_q8_dp4a_dispatch_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution and PTX assembly validation.
+- Evidence: added cuda-oxide signed `dp4a_i8` support with LLVM-18-compatible
+  `dp4a.s32.s32` inline PTX lowering and an executable-local Rust accelerated
+  Q8 matmul proof. Added current-C-compatible `select_q8_matmul_path` and
+  `q8_dp4a_enabled` policy. B300 feature-enabled tests passed with 50 tests;
+  live cargo-oxide emitted portable `sm_80` PTX, `ptxas` accepted its DP4A
+  instruction, and output matched for both full accelerated blocks and
+  partial scalar tails on `NVIDIA B300 SXM6 AC`. Runtime graph integration,
+  route activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, library tests, the 64-check comparator, retained
+  M14 checks, and unified parity passed with 134 passed, 50 skipped, and
+  0 failed.
+
+#### M14.4: RoPE KV Compressor And Attention Kernels
+
+- Status: active; split before implementation beginning with M14.4a
+- Goal: port the current-C RoPE, KV quantization/storage, compressor, and
+  attention operation family through bounded Rust CUDA slices.
+
+##### M14.4a: Standalone RoPE Tail And FP8 KV Quantization Kernels
+
+- Status: active
+- Goal: port standalone `rope_tail_kernel` and `fp8_kv_quantize_kernel`
+  behavior before claiming KV storage, compressor, or attention execution.
