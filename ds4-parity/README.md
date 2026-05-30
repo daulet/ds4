@@ -3796,6 +3796,22 @@ prefill, attention, routed MoE, remaining graph compute, whole-archive
 retention policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public general compressor prefill ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_compressor_prefill_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public non-replay prefill wrapper
+through one embedded pool kernel composed with state-row placement, weighted
+RMS, stride-by-ratio RoPE, and optional FP8 processing. It proves ratio-4
+previous/remainder state banks, general-ratio remainder state, `n_comp == 0`
+state-only success, zero-RoPE compressed output, wrapped positions, and
+validation rejection. Attention, routed MoE, remaining graph compute,
+whole-archive retention policy, route promotion, C CUDA removal, and the
+embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

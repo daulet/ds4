@@ -3447,6 +3447,318 @@ pub unsafe extern "C" fn ds4_gpu_compressor_update_tensor(
 #[cfg(feature = "cuda-oxide-kernels")]
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_compressor_prefill_tensor(
+    comp_cache: *mut Ds4GpuTensor,
+    state_kv: *mut Ds4GpuTensor,
+    state_score: *mut Ds4GpuTensor,
+    kv: *const Ds4GpuTensor,
+    sc: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    ape_offset: u64,
+    ape_type: u32,
+    norm_offset: u64,
+    norm_type: u32,
+    head_dim: u32,
+    ratio: u32,
+    pos0: u32,
+    n_tokens: u32,
+    n_rot: u32,
+    n_ctx_orig: u32,
+    quantize_fp8: bool,
+    freq_base: f32,
+    freq_scale: f32,
+    ext_factor: f32,
+    attn_factor: f32,
+    beta_fast: f32,
+    beta_slow: f32,
+    rms_eps: f32,
+) -> c_int {
+    status(|| {
+        let Some(comp_cache) = (unsafe { tensor_ref(comp_cache.cast_const()) }) else {
+            return false;
+        };
+        let Some(state_kv) = (unsafe { tensor_ref(state_kv.cast_const()) }) else {
+            return false;
+        };
+        let Some(state_score) = (unsafe { tensor_ref(state_score.cast_const()) }) else {
+            return false;
+        };
+        let Some(kv) = (unsafe { tensor_ref(kv) }) else {
+            return false;
+        };
+        let Some(sc) = (unsafe { tensor_ref(sc) }) else {
+            return false;
+        };
+        if model_map.is_null()
+            || head_dim == 0
+            || ratio == 0
+            || n_tokens == 0
+            || n_rot > head_dim
+            || n_rot & 1 != 0
+            || ape_type > 1
+            || norm_type != 0
+        {
+            return false;
+        }
+        let coff = if ratio == 4 { 2_u32 } else { 1_u32 };
+        let Some(width) = coff.checked_mul(head_dim) else {
+            return false;
+        };
+        let Some(state_rows) = coff.checked_mul(ratio) else {
+            return false;
+        };
+        let n_comp = n_tokens / ratio;
+        let cutoff = n_comp * ratio;
+        let rem = n_tokens - cutoff;
+        let Some(input_elements) = u64::from(n_tokens).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Some(state_elements) = u64::from(state_rows).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Some(comp_elements) = u64::from(n_comp).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(ape_elements) = u64::from(ratio).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Some(input_bytes) = input_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(state_bytes) = state_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(comp_bytes) = comp_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let ape_element_bytes = if ape_type == 1 {
+            size_of::<u16>() as u64
+        } else {
+            size_of::<f32>() as u64
+        };
+        let Some(ape_bytes) = ape_elements.checked_mul(ape_element_bytes) else {
+            return false;
+        };
+        let norm_bytes = u64::from(head_dim) * size_of::<f32>() as u64;
+        let Some(previous_elements) = u64::from(ratio).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Some(remainder_elements) = u64::from(rem).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Ok(previous_blocks) = u32::try_from(previous_elements.div_ceil(256_u64)) else {
+            return false;
+        };
+        let Ok(remainder_blocks) = u32::try_from(remainder_elements.div_ceil(256_u64)) else {
+            return false;
+        };
+        let Some(pairs) = n_comp.checked_mul(n_rot / 2) else {
+            return false;
+        };
+        if width == 0
+            || ape_offset > model_size
+            || ape_bytes > model_size - ape_offset
+            || norm_offset > model_size
+            || norm_bytes > model_size - norm_offset
+            || kv.bytes < input_bytes
+            || sc.bytes < input_bytes
+            || state_kv.bytes < state_bytes
+            || state_score.bytes < state_bytes
+            || (n_comp != 0 && comp_cache.bytes < comp_bytes)
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                ape_offset,
+                ape_bytes,
+                |ape_ptr| {
+                    backend.context().bind_to_thread().ok()?;
+                    let state_len = usize::try_from(state_elements).ok()?;
+                    // SAFETY: state spans and element count were validated;
+                    // fills precede every placement and output launch.
+                    unsafe {
+                        cuda_core::sys::cuMemsetD32Async(
+                            state_kv.device_ptr(),
+                            0.0_f32.to_bits(),
+                            state_len,
+                            backend.stream().cu_stream(),
+                        )
+                    }
+                    .result()
+                    .ok()?;
+                    unsafe {
+                        cuda_core::sys::cuMemsetD32Async(
+                            state_score.device_ptr(),
+                            f32::NEG_INFINITY.to_bits(),
+                            state_len,
+                            backend.stream().cu_stream(),
+                        )
+                    }
+                    .result()
+                    .ok()?;
+                    let placed = with_abi_kernels(backend, |kernels| {
+                        if ratio == 4 && cutoff >= ratio {
+                            // SAFETY: the final completed ratio-4 block,
+                            // initialized state, APE span, and grid are valid.
+                            if !unsafe {
+                                kernels.compressor_set_rows_tensor(
+                                    backend.stream(),
+                                    kv.device_ptr(),
+                                    sc.device_ptr(),
+                                    state_kv.device_ptr(),
+                                    state_score.device_ptr(),
+                                    ape_ptr,
+                                    input_elements,
+                                    state_elements,
+                                    ape_elements,
+                                    ape_type,
+                                    width,
+                                    ratio,
+                                    pos0,
+                                    cutoff - ratio,
+                                    0,
+                                    ratio,
+                                    previous_blocks,
+                                )
+                            } {
+                                return Some(false);
+                            }
+                        }
+                        if rem != 0 {
+                            let destination = if ratio == 4 { ratio } else { 0 };
+                            // SAFETY: remainder rows, destination state bank,
+                            // selected APE span, and grid are validated.
+                            if !unsafe {
+                                kernels.compressor_set_rows_tensor(
+                                    backend.stream(),
+                                    kv.device_ptr(),
+                                    sc.device_ptr(),
+                                    state_kv.device_ptr(),
+                                    state_score.device_ptr(),
+                                    ape_ptr,
+                                    input_elements,
+                                    state_elements,
+                                    ape_elements,
+                                    ape_type,
+                                    width,
+                                    ratio,
+                                    pos0,
+                                    cutoff,
+                                    destination,
+                                    rem,
+                                    remainder_blocks,
+                                )
+                            } {
+                                return Some(false);
+                            }
+                        }
+                        Some(true)
+                    })?;
+                    if !placed || n_comp == 0 {
+                        return Some(placed);
+                    }
+                    let pooled = with_abi_kernels(backend, |kernels| {
+                        // SAFETY: input, output, selected APE span, and
+                        // checked nonzero compressed-row geometry are valid.
+                        Some(unsafe {
+                            kernels.compressor_prefill_pool_tensor(
+                                backend.stream(),
+                                comp_cache.device_ptr(),
+                                kv.device_ptr(),
+                                sc.device_ptr(),
+                                ape_ptr,
+                                input_elements,
+                                comp_elements,
+                                ape_elements,
+                                ape_type,
+                                head_dim,
+                                ratio,
+                                pos0,
+                                n_comp,
+                            )
+                        })
+                    })?;
+                    if !pooled {
+                        return Some(false);
+                    }
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        norm_offset,
+                        norm_bytes,
+                        |norm_ptr| {
+                            with_abi_kernels(backend, |kernels| {
+                                if !unsafe {
+                                    kernels.rms_norm_weight_rows_tensor(
+                                        backend.stream(),
+                                        comp_cache.device_ptr(),
+                                        comp_cache.device_ptr(),
+                                        norm_ptr,
+                                        head_dim,
+                                        n_comp,
+                                        rms_eps,
+                                    )
+                                } {
+                                    return Some(false);
+                                }
+                                if n_rot != 0
+                                    && !unsafe {
+                                        kernels.rope_tail_tensor(
+                                            backend.stream(),
+                                            comp_cache.device_ptr(),
+                                            n_comp,
+                                            1,
+                                            head_dim,
+                                            n_rot,
+                                            pos0,
+                                            ratio,
+                                            n_ctx_orig,
+                                            false,
+                                            freq_base,
+                                            freq_scale,
+                                            ext_factor,
+                                            attn_factor,
+                                            beta_fast,
+                                            beta_slow,
+                                            pairs,
+                                        )
+                                    }
+                                {
+                                    return Some(false);
+                                }
+                                if quantize_fp8
+                                    && !unsafe {
+                                        kernels.dsv4_fp8_kv_quantize_tensor(
+                                            backend.stream(),
+                                            comp_cache.device_ptr(),
+                                            n_comp,
+                                            head_dim,
+                                            n_rot,
+                                        )
+                                    }
+                                {
+                                    return Some(false);
+                                }
+                                Some(true)
+                            })
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn ds4_gpu_compressor_prefill_state_ratio4_tensor(
     state_kv: *mut Ds4GpuTensor,
     state_score: *mut Ds4GpuTensor,

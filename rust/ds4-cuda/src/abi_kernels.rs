@@ -928,6 +928,155 @@ mod kernels {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_compressor_prefill_pool_kernel(
+        head_dim: u32,
+        ratio: u32,
+        pos0: u32,
+        n_comp: u32,
+        ape_type: u32,
+        kv: &[f32],
+        sc: &[f32],
+        ape_f32: &[f32],
+        ape_f16: &[f16],
+        mut comp: DisjointSlice<f32>,
+    ) {
+        let dimension = thread::blockIdx_x() * thread::blockDim_x() + thread::threadIdx_x();
+        let compressed = thread::blockIdx_y();
+        if dimension >= head_dim || compressed >= n_comp {
+            return;
+        }
+        let width = if ratio == 4 { 2 * head_dim } else { head_dim };
+        let mut max_score = f32::NEG_INFINITY;
+        if ratio == 4 {
+            if compressed > 0 {
+                let base = (compressed - 1) * ratio;
+                let mut row = 0_u32;
+                while row < 4 {
+                    let token = base + row;
+                    let phase = pos0.wrapping_add(token) % ratio;
+                    let index = (token * width + dimension) as usize;
+                    let ape_index = (phase * width + dimension) as usize;
+                    let ape = if ape_type == 1 {
+                        ape_f16[ape_index] as f32
+                    } else {
+                        ape_f32[ape_index]
+                    };
+                    let score = sc[index] + ape;
+                    if score > max_score {
+                        max_score = score;
+                    }
+                    row += 1;
+                }
+            }
+            let base = compressed * ratio;
+            let mut row = 0_u32;
+            while row < 4 {
+                let token = base + row;
+                let phase = pos0.wrapping_add(token) % ratio;
+                let index = (token * width + head_dim + dimension) as usize;
+                let ape_index = (phase * width + head_dim + dimension) as usize;
+                let ape = if ape_type == 1 {
+                    ape_f16[ape_index] as f32
+                } else {
+                    ape_f32[ape_index]
+                };
+                let score = sc[index] + ape;
+                if score > max_score {
+                    max_score = score;
+                }
+                row += 1;
+            }
+        } else {
+            let base = compressed * ratio;
+            let mut row = 0_u32;
+            while row < ratio {
+                let token = base + row;
+                let phase = pos0.wrapping_add(token) % ratio;
+                let index = (token * width + dimension) as usize;
+                let ape_index = (phase * width + dimension) as usize;
+                let ape = if ape_type == 1 {
+                    ape_f16[ape_index] as f32
+                } else {
+                    ape_f32[ape_index]
+                };
+                let score = sc[index] + ape;
+                if score > max_score {
+                    max_score = score;
+                }
+                row += 1;
+            }
+        }
+
+        let mut denominator = 0.0_f32;
+        let mut accumulator = 0.0_f32;
+        if ratio == 4 {
+            if compressed > 0 {
+                let base = (compressed - 1) * ratio;
+                let mut row = 0_u32;
+                while row < 4 {
+                    let token = base + row;
+                    let phase = pos0.wrapping_add(token) % ratio;
+                    let index = (token * width + dimension) as usize;
+                    let ape_index = (phase * width + dimension) as usize;
+                    let ape = if ape_type == 1 {
+                        ape_f16[ape_index] as f32
+                    } else {
+                        ape_f32[ape_index]
+                    };
+                    let weight = (sc[index] + ape - max_score).exp();
+                    denominator += weight;
+                    accumulator += kv[index] * weight;
+                    row += 1;
+                }
+            }
+            let base = compressed * ratio;
+            let mut row = 0_u32;
+            while row < 4 {
+                let token = base + row;
+                let phase = pos0.wrapping_add(token) % ratio;
+                let index = (token * width + head_dim + dimension) as usize;
+                let ape_index = (phase * width + head_dim + dimension) as usize;
+                let ape = if ape_type == 1 {
+                    ape_f16[ape_index] as f32
+                } else {
+                    ape_f32[ape_index]
+                };
+                let weight = (sc[index] + ape - max_score).exp();
+                denominator += weight;
+                accumulator += kv[index] * weight;
+                row += 1;
+            }
+        } else {
+            let base = compressed * ratio;
+            let mut row = 0_u32;
+            while row < ratio {
+                let token = base + row;
+                let phase = pos0.wrapping_add(token) % ratio;
+                let index = (token * width + dimension) as usize;
+                let ape_index = (phase * width + dimension) as usize;
+                let ape = if ape_type == 1 {
+                    ape_f16[ape_index] as f32
+                } else {
+                    ape_f32[ape_index]
+                };
+                let weight = (sc[index] + ape - max_score).exp();
+                denominator += weight;
+                accumulator += kv[index] * weight;
+                row += 1;
+            }
+        }
+        unsafe {
+            *comp.get_unchecked_mut((compressed * head_dim + dimension) as usize) =
+                if denominator != 0.0 {
+                    accumulator / denominator
+                } else {
+                    0.0
+                };
+        }
+    }
+
     #[kernel]
     pub fn abi_compressor_update_pool_kernel(
         head_dim: u32,
@@ -2044,6 +2193,7 @@ pub(crate) struct AbiKernelModule {
     compressor_store_kernel: CudaFunction,
     compressor_set_rows_kernel: CudaFunction,
     compressor_prefill_ratio4_replay_pool_kernel: CudaFunction,
+    compressor_prefill_pool_kernel: CudaFunction,
     compressor_update_pool_kernel: CudaFunction,
     compressor_shift_ratio4_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
@@ -2125,6 +2275,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             compressor_prefill_ratio4_replay_pool_kernel: module
                 .load_function("abi_compressor_prefill_ratio4_replay_pool_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            compressor_prefill_pool_kernel: module
+                .load_function("abi_compressor_prefill_pool_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             compressor_update_pool_kernel: module
                 .load_function("abi_compressor_update_pool_kernel")
@@ -3366,6 +3519,75 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.compressor_prefill_ratio4_replay_pool_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn compressor_prefill_pool_tensor(
+        &self,
+        stream: &CudaStream,
+        comp_ptr: u64,
+        kv_ptr: u64,
+        sc_ptr: u64,
+        ape_ptr: u64,
+        input_elements: u64,
+        comp_elements: u64,
+        ape_elements: u64,
+        ape_type: u32,
+        head_dim: u32,
+        ratio: u32,
+        pos0: u32,
+        n_comp: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (head_dim.div_ceil(THREADS_PER_BLOCK), n_comp, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut head_dim = head_dim;
+        let mut ratio = ratio;
+        let mut pos0 = pos0;
+        let mut n_comp = n_comp;
+        let mut ape_type = ape_type;
+        let mut kv_ptr = kv_ptr;
+        let mut kv_len = input_elements;
+        let mut sc_ptr = sc_ptr;
+        let mut sc_len = input_elements;
+        let mut ape_f32_ptr = ape_ptr;
+        let mut ape_f32_len = if ape_type == 0 { ape_elements } else { 0 };
+        let mut ape_f16_ptr = ape_ptr;
+        let mut ape_f16_len = if ape_type == 1 { ape_elements } else { 0 };
+        let mut comp_ptr = comp_ptr;
+        let mut comp_len = comp_elements;
+        let mut params = [
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut ratio as *mut u32).cast::<c_void>(),
+            (&mut pos0 as *mut u32).cast::<c_void>(),
+            (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut ape_type as *mut u32).cast::<c_void>(),
+            (&mut kv_ptr as *mut u64).cast::<c_void>(),
+            (&mut kv_len as *mut u64).cast::<c_void>(),
+            (&mut sc_ptr as *mut u64).cast::<c_void>(),
+            (&mut sc_len as *mut u64).cast::<c_void>(),
+            (&mut ape_f32_ptr as *mut u64).cast::<c_void>(),
+            (&mut ape_f32_len as *mut u64).cast::<c_void>(),
+            (&mut ape_f16_ptr as *mut u64).cast::<c_void>(),
+            (&mut ape_f16_len as *mut u64).cast::<c_void>(),
+            (&mut comp_ptr as *mut u64).cast::<c_void>(),
+            (&mut comp_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates the complete prefill input, output, and
+        // selected cached APE spans before the nonzero launch is submitted.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.compressor_prefill_pool_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

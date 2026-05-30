@@ -11864,6 +11864,51 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public general compressor prefill wrapper is independently
+  comparable before attention, routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public General Compressor Prefill ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_compressor_prefill_tensor` through state
+  reconstruction, non-replay pooling, and optional post-processing without
+  claiming attention, routed MoE, remaining graph compute, or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-compressor-prefill-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_compressor_prefill_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the wrapper with checked
+    ratio-dependent geometry, APE-before-mutation ordering, and state-only
+    success when no complete compressed rows exist.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds one non-replay pool kernel while
+    reusing state-row placement, weighted RMS, stride-by-ratio RoPE, and
+    optional FP8 paths.
+  - A C-linked B300 consumer proves ratio-4 FP16 output and both state banks,
+    optional FP8 composition, general-ratio FP32 output/remainder state,
+    state-only `n_comp == 0`, successful zero-RoPE output, wrapped positions,
+    invalid-range preservation, invalid-shape/overflow rejection, and null
+    rejection.
+  - Local library tests pass with 146 tests; B300 release-feature tests pass
+    with 153 tests; the static library exposes 62 Rust ABI symbols and embeds
+    39 kernels.
+  - All 56 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 60 CUDA ABI comparators
+    pass.
+  - The unified report passes with 232 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Attention, routed MoE, production route promotion, and C CUDA removal
+    remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

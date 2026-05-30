@@ -75,6 +75,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_compressor_prefill_state_ratio4_tensor",
         "ds4_gpu_compressor_prefill_ratio4_replay_tensor",
         "ds4_gpu_compressor_update_tensor",
+        "ds4_gpu_compressor_prefill_tensor",
 ]
 
 
