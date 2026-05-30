@@ -2053,6 +2053,18 @@ transfer/readback, zeroed allocation/readback, and managed-buffer lifetime. It
 does not claim DS4 compute-kernel ownership, runtime route activation, or CUDA
 source removal.
 
+Validate the M14.1b1 bounded model-residency handles B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_residency_handles_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-residency-smoke` against a bounded prefix read from the pinned
+GGUF: managed advice/prefetch, mapped-host device-pointer creation, and
+registered caller-owned host lifetime. It does not claim complete model-map
+or range-cache ownership, DS4 kernels, or runtime route activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

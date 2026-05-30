@@ -7243,13 +7243,59 @@
 
 ##### M14.1b: Model Residency And Command Lifetime
 
-- Status: active
-- Goal: move model map/cache/prefetch, command synchronization, tensor fill,
-  quality mode, and memory reporting ownership onto the Rust substrate.
+- Status: split before implementation into M14.1b1 through M14.1b4.
+- Goal: move model residency, caching/policy, and command-lifetime ownership
+  onto the Rust substrate in separately executable cuts.
 - Oracle: current-C model-backed B300 resource behavior.
-- Comparator: resource and memory-policy fixture bundle.
-- Validation needed: B300 model-backed comparison and no default-route change.
+- Comparator: stage-specific B300 resource fixtures and closure checks.
+- Validation needed: each cut passes its B300 model-backed comparison and
+  preserves the default route.
 - Owner path: Rust CUDA substrate and M14.1 artifacts.
+
+###### M14.1b1: Bounded Model Residency Handles
+
+- Status: done
+- Goal: prove cuda-oxide managed advice/prefetch, mapped-host device pointer,
+  and registered caller-owned host lifetime on a bounded window read from the
+  real B300 model.
+- Oracle: current-C model prefetch and host-registration intent, without
+  claiming model-range cache selection or graph consumption.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b1/model-residency-handles-smoke.json`.
+- Comparator: `ds4-parity/check_model_residency_handles_smoke.py
+  --negative-test` plus B300 execution of the Rust smoke binary.
+- Validation needed: feature-enabled B300 run over the pinned model window;
+  local default-feature workspace tests and unified report remain passing; no
+  complete-model-map, kernel, or route claim.
+- Owner path: `rust/ds4-cuda/`, `ds4-parity/`, `.memory/`.
+- Evidence: the feature-enabled B300 smoke used a 4096-byte prefix of
+  `/workspace/ds4/ds4flash.gguf` and passed managed advice/prefetch,
+  mapped-host device-pointer, and registered-host lifetime checks on
+  `NVIDIA B300 SXM6 AC`, while explicitly reporting no complete-model-map,
+  kernel, or route ownership. A live SHA256 refresh confirmed
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`.
+  Local workspace tests, the 64-check M14.1b1 gate, prior M14.1a/M14.0
+  gates, and unified parity (97 passed, 50 skipped, 0 failed) passed;
+  non-interactive Claude was unavailable due missing CLI login, and
+  self-review closed the hash-evidence gap.
+
+###### M14.1b2: Model Map And Range Cache Policy
+
+- Status: active
+- Goal: port model-map, model-range, fd, and model-cache ownership with
+  current-C retained as oracle.
+
+###### M14.1b3: Allocation And Quality Policy
+
+- Status: planned
+- Goal: port managed-KV, Q8/F16 cache, quality-mode, and memory-report policy
+  without adding compute kernels.
+
+###### M14.1b4: Fill Kernel And Command Lifetime
+
+- Status: planned
+- Goal: port tensor fill and command synchronization after proving the
+  cuda-oxide kernel compiler toolchain on B300.
 
 ##### M14.1c: Substrate Route Closure Gate
 

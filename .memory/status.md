@@ -3,11 +3,13 @@
 - Date: 2026-05-25 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b Model Residency And Command Lifetime
+- Active item: M14.1b2 Model Map And Range Cache Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
-  M14.1c before implementation; the active cut proves only feature-gated
-  context/stream and buffer ownership.
-- Last validated source before the active item: M14.0 CUDA Rust Ownership Inventory And Adoption Contract.
+  M14.1c before implementation; M14.1b is further split into M14.1b1 through
+  M14.1b4 because bounded residency handles, model-cache policy, allocation
+  policy, and kernel command lifetime have distinct evidence boundaries.
+- Last validated source before the active item: M14.1b1 Bounded Model Residency Handles.
+- Earlier M14.1a Host Substrate Buffer Roundtrip.
 - Earlier M14.0 CUDA Rust Ownership Inventory And Adoption Contract.
 - Earlier post-M13 roadmap decision.
 - Earlier M13.5 Embedding/Indexer Route Gate And Closure.
@@ -107,6 +109,25 @@
 
 ## Last Evidence
 
+- M14.1b1 Bounded Model Residency Handles extends the opt-in `rust/ds4-cuda`
+  crate with managed read-mostly/preferred-device advice and prefetch,
+  mapped-host allocation, and registered-host range guards. Its B300 smoke
+  reads a 4096-byte prefix from pinned model
+  `/workspace/ds4/ds4flash.gguf` (86,720,111,488 bytes, SHA256
+  `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`)
+  and passed managed advice/prefetch, mapped device-pointer, and registered
+  host-pointer checks on `NVIDIA B300 SXM6 AC`. The fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b1/model-residency-handles-smoke.json`
+  and `ds4-parity/check_model_residency_handles_smoke.py --negative-test`;
+  complete-model-map, kernel, and route ownership remain false. A live
+  `sha256sum` refresh confirmed the model identity above after adversarial
+  self-review identified that the smoke output itself records size but not
+  hash. Validation passed `cargo test --workspace`, `cargo fmt --all --
+  --check`, the M14.1b1 checker with 64 checks, the retained M14.1a/M14.0
+  gates, `git diff --check`, and unified parity with 97 passed, 50 skipped,
+  and 0 failed. Non-interactive Claude review could not run because the local
+  CLI reported `Not logged in`; post-fix self-review found no material
+  lifetime, synchronization, bounded-claim, or default-route issue.
 - M14.1a Host Substrate Buffer Roundtrip adds the opt-in `rust/ds4-cuda`
   crate, pinned `cuda-core` dependency from `cuda-oxide` revision
   `0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200`, executable

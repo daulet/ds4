@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use cuda_core::{CudaContext, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer};
+use cuda_core::{
+    CudaContext, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer,
+    MappedHostBuffer, MemoryAdvice, MemoryLocation, RegisteredHostMemory, StreamAttachment,
+};
 
 /// Rust-owned CUDA host resources used before DS4 kernels move off `ds4_cuda.cu`.
 ///
@@ -48,5 +51,46 @@ impl CudaOxideSubstrate {
         len: usize,
     ) -> Result<ManagedBuffer<T>, DriverError> {
         ManagedBuffer::zeroed(&self.context, len)
+    }
+
+    pub fn managed_from_slice<T: DeviceCopy>(
+        &self,
+        data: &[T],
+    ) -> Result<ManagedBuffer<T>, DriverError> {
+        ManagedBuffer::from_slice(&self.context, data)
+    }
+
+    pub fn prefetch_read_mostly_to_device<T: DeviceCopy>(
+        &self,
+        buffer: &ManagedBuffer<T>,
+    ) -> Result<(), DriverError> {
+        let device = MemoryLocation::Device(self.context.cu_device());
+        buffer.advise(MemoryAdvice::SetReadMostly)?;
+        buffer.advise(MemoryAdvice::SetPreferredLocation(device))?;
+        buffer.prefetch_to(&self.stream, device)?;
+        buffer.attach_to_stream(&self.stream, StreamAttachment::Single)
+    }
+
+    pub fn return_managed_to_host<T: DeviceCopy>(
+        &self,
+        buffer: &ManagedBuffer<T>,
+    ) -> Result<(), DriverError> {
+        buffer.prefetch_to(&self.stream, MemoryLocation::Host)?;
+        buffer.attach_to_stream(&self.stream, StreamAttachment::Global)?;
+        self.synchronize()
+    }
+
+    pub fn mapped_from_slice<T: DeviceCopy>(
+        &self,
+        data: &[T],
+    ) -> Result<MappedHostBuffer<T>, DriverError> {
+        MappedHostBuffer::from_slice(&self.context, data)
+    }
+
+    pub fn register_host_range<'a, T: DeviceCopy>(
+        &self,
+        data: &'a mut [T],
+    ) -> Result<RegisteredHostMemory<'a, T>, DriverError> {
+        RegisteredHostMemory::new(&self.context, data)
     }
 }

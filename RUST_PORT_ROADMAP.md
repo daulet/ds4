@@ -6697,16 +6697,80 @@ Stage split:
 
 ##### M14.1b: Model Residency And Command Lifetime
 
+- Status: split before implementation into M14.1b1 through M14.1b4.
+- Goal: move model residency, caching/policy, and command-lifetime ownership
+  onto the Rust substrate in separately executable cuts.
+- Oracle: current-C model-backed B300 resource behavior.
+- Comparator: stage-specific B300 resource fixtures and closure checks.
+- Acceptance: each substage proves only its named Rust-owned resource
+  behavior without changing the default runtime route.
+- Drift policy: any model-residency or command-order drift requires refreshed
+  B300 evidence and a current-C comparison.
+
+###### M14.1b1: Bounded Model Residency Handles
+
+- Status: complete.
+- Goal: prove cuda-oxide managed advice/prefetch, mapped-host device address,
+  and registered caller-owned host lifetime on a bounded window read from the
+  real B300 model.
+- Oracle: current `cuda_model_prefetch_range` and
+  `ds4_gpu_set_model_map` resource intent, limited to host residency handles
+  rather than cache selection or graph consumption.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b1/model-residency-handles-smoke.json`.
+- Comparator: `ds4-parity/check_model_residency_handles_smoke.py
+  --negative-test` plus executable Rust B300 smoke over a bounded GGUF window.
+- Acceptance: the opt-in Rust crate owns a managed prefetch/advice sequence,
+  a mapped-host allocation, and a registered caller-owned range with
+  device-visible pointers; it does not claim the complete model map, DS4
+  kernels, or route ownership.
+- Drift policy: model identity, model-window size, cuda-oxide revision, or
+  live CUDA/toolchain drift requires a new B300 capture.
+- Evidence:
+  - Extended `rust/ds4-cuda` with managed read-mostly/preferred-device
+    advice and prefetch, mapped-host allocation, and registered-host range
+    guards; the scope contract keeps complete-model-map, kernel, and route
+    ownership false.
+  - Added
+    `ds4-parity/baselines/backend/m14.1b1/model-residency-handles-smoke.json`
+    and `ds4-parity/check_model_residency_handles_smoke.py --negative-test`.
+  - On B300 pod `ds4-rust-port-b300`, the feature-enabled Rust smoke read a
+    4096-byte prefix of the pinned 86,720,111,488-byte GGUF and passed
+    managed advice/prefetch, mapped device-pointer, and registered
+    host-pointer checks on `NVIDIA B300 SXM6 AC`; a live `sha256sum` refresh
+    confirmed model SHA256
+    `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`.
+  - Validation passed: `cargo test --workspace`, `cargo fmt --all -- --check`,
+    `python3 ds4-parity/check_model_residency_handles_smoke.py
+    --negative-test` (64 checks),
+    `python3 ds4-parity/check_cuda_oxide_substrate_smoke.py --negative-test`
+    (53 checks), `python3 ds4-parity/check_cuda_rust_ownership_inventory.py
+    --negative-test` (124 checks), `git diff --check`, and `python3
+    ds4-parity/run_parity_report.py --skip-local-oracles` (97 passed, 50
+    skipped, 0 failed).
+  - Non-interactive Claude review could not run because the local CLI reported
+    `Not logged in`; adversarial self-review found and closed the missing
+    current model-SHA confirmation, then found no material lifetime,
+    synchronization, bounded-claim, or default-route issue.
+
+###### M14.1b2: Model Map And Range Cache Policy
+
 - Status: active.
-- Goal: port model-map registration/cache/prefetch, command
-  synchronization, quality/memory-report policy, and tensor fill support to
-  the Rust CUDA substrate.
-- Oracle: current-C memory report and model-backed resource smokes on B300.
-- Comparator: model residency/cache and command-lifetime fixtures with
-  current-C/Rust output and allocation-policy comparison.
-- Acceptance: all M14.1 assigned exports are represented by Rust-owned
-  behavior or a justified fail-closed unsupported path.
-- Drift policy: policy changes require explicit memory/quality oracle refresh.
+- Goal: port `ds4_gpu_set_model_map`, `ds4_gpu_set_model_map_range`,
+  `ds4_gpu_set_model_fd`, and `ds4_gpu_cache_model_range` ownership onto the
+  Rust substrate with the current-C model route retained as oracle.
+
+###### M14.1b3: Allocation And Quality Policy
+
+- Status: planned.
+- Goal: port managed-KV selection, Q8/F16 range-cache policy, quality mode,
+  and memory-report behavior without porting compute kernels.
+
+###### M14.1b4: Fill Kernel And Command Lifetime
+
+- Status: planned.
+- Goal: port `ds4_gpu_tensor_fill_f32` and command synchronization after the
+  cuda-oxide kernel compilation toolchain is verified on B300.
 
 ##### M14.1c: Substrate Route Closure Gate
 
