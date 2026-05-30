@@ -129,7 +129,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
-    report.check(len(symbols) == 32, "Rust ABI export implementation count drift")
+    report.check(len(symbols) == 35, "Rust ABI export implementation count drift")
     report.check("ds4_gpu_matmul_f16_tensor" in symbols, "F16 public export missing")
     report.check("ds4_gpu_matmul_f16_pair_tensor" in symbols, "paired F16 public export missing")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
@@ -143,7 +143,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         "n_tok == 0",
         "blas_ready: n_tok > 1",
         "backend.blas_handle()",
-        "ABI_NO_TF32_AT_INIT",
+        "apply_abi_blas_math(&blas)",
         "BlasMathMode::Tf32TensorOp",
         "with_cached_abi_model_range(",
         "DeviceBuffer::<f16>::from_raw_parts(",

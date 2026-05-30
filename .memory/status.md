@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba: Public Q8 Cache And Quality Controls ABI
+  is validated. Rust exports `ds4_gpu_cache_q8_f16_range`,
+  `ds4_gpu_print_memory_report`, and `ds4_gpu_set_quality`, retaining Q8
+  F16/F32 converted preload buffers through embedded dequant kernels and
+  applying mutable quality/default-math selection to existing dense BLAS
+  projections. A C-linked B300 witness observes F16 allocation and reuse,
+  quality suppression and re-enable allocation, optional F32 preload,
+  callable memory reporting, and quality versus `DS4_CUDA_NO_TF32` BLAS
+  output. Local tests pass with 125 tests; B300 feature tests pass with 132
+  tests; the static library exposes 35 symbols; sixteen predecessor linked
+  consumers pass with the known executable-stack warning. The focused
+  comparator and default unified report pass with 211 passed, 45 skipped,
+  and 0 failed. Pre-implementation and final pass-end Claude review attempts
+  each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed
+  findings. Public Q8 matmul consumers, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbba: Public Multi-Token F16 BLAS Projection ABI
   is validated. Rust extends `ds4_gpu_matmul_f16_tensor` through retained,
   synchronously allocated F16 activation scratch, reusable `abi_f32_to_f16_kernel`, and cuda-oxide
@@ -17,8 +33,8 @@
   comparator and default unified report pass with 210 passed, 45 skipped, and
   0 failed. Pre-implementation and final pass-end Claude review attempts each
   returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
-  Q8/F16 cache hooks,
-  quality-mode mutation, remaining graph compute, whole-archive/route
+  Public Q8 controls are consumed by the successor above; remaining graph
+  compute and whole-archive/route
   promotion, C CUDA removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbba: Public Multi-Token F32 BLAS Projection ABI
   is validated. Rust extends `ds4_gpu_matmul_f32_tensor` so `n_tok > 1`

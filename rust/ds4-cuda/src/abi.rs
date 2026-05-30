@@ -1,4 +1,4 @@
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_void, CStr};
 use std::mem::ManuallyDrop;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
@@ -13,6 +13,7 @@ use cuda_core::{
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::abi_kernels::AbiKernelModule;
 use crate::allocation_policy::managed_kv_decision;
+use crate::q8_policy::{q8_preload_format, Q8CacheOptions, Q8CacheState, Q8PreloadFormat};
 use crate::substrate::CudaOxideSubstrate;
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::{
@@ -25,6 +26,17 @@ static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_F16_ACTIVATIONS: Mutex<Option<DeviceBuffer<f16>>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_Q8_CACHE: Mutex<AbiQ8Cache> = Mutex::new(AbiQ8Cache {
+    f16_ranges: Vec::new(),
+    f32_ranges: Vec::new(),
+    state: Q8CacheState {
+        f16_cached_bytes: 0,
+        f16_disabled_after_failure: false,
+        f16_budget_notice_printed: false,
+        optional_preload_disabled: false,
+    },
+});
 static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
 #[cfg(target_os = "linux")]
 static ABI_MODEL_ARENAS: Mutex<AbiModelArenaState> = Mutex::new(AbiModelArenaState {
@@ -47,7 +59,8 @@ static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::n
 static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
 static ABI_REGISTERED_MODEL: Mutex<Option<AbiRegisteredModel>> = Mutex::new(None);
 static ABI_MODEL_RANGE_MAPPING_SUPPORTED: AtomicBool = AtomicBool::new(true);
-static ABI_NO_TF32_AT_INIT: AtomicBool = AtomicBool::new(false);
+static ABI_QUALITY_MODE: AtomicBool = AtomicBool::new(false);
+static ABI_DEFAULT_BLAS_MATH: AtomicBool = AtomicBool::new(false);
 static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_map: 0,
     model_size: 0,
@@ -65,6 +78,33 @@ struct AbiModelRange {
     offset: u64,
     bytes: u64,
     storage: AbiModelRangeStorage,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiQ8F16Range {
+    model_map: usize,
+    offset: u64,
+    weight_bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+    _device: DeviceBuffer<f16>,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiQ8F32Range {
+    model_map: usize,
+    offset: u64,
+    weight_bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+    _device: DeviceBuffer<f32>,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiQ8Cache {
+    f16_ranges: Vec<AbiQ8F16Range>,
+    f32_ranges: Vec<AbiQ8F32Range>,
+    state: Q8CacheState,
 }
 
 #[cfg(target_os = "linux")]
@@ -331,6 +371,79 @@ fn with_abi_f16_activations<T>(
         });
     }
     operation(activations.as_mut()?)
+}
+
+fn abi_no_tf32_selected() -> bool {
+    std::env::var_os("DS4_CUDA_NO_TF32").is_some()
+}
+
+fn update_abi_blas_math_state() {
+    ABI_DEFAULT_BLAS_MATH.store(
+        ABI_QUALITY_MODE.load(Ordering::Relaxed) || abi_no_tf32_selected(),
+        Ordering::Relaxed,
+    );
+}
+
+fn apply_abi_blas_math(blas: &cuda_core::Blas) -> bool {
+    let mode = if ABI_DEFAULT_BLAS_MATH.load(Ordering::Relaxed) {
+        BlasMathMode::Default
+    } else {
+        BlasMathMode::Tf32TensorOp
+    };
+    blas.set_math_mode(mode).is_ok()
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn abi_mib_env(name: &str) -> Option<u64> {
+    let value = std::env::var(name).ok()?.parse::<u64>().ok()?;
+    Some(value.checked_mul(1024 * 1024).unwrap_or(u64::MAX))
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn abi_q8_cache_options() -> Q8CacheOptions {
+    Q8CacheOptions {
+        quality_mode: ABI_QUALITY_MODE.load(Ordering::Relaxed),
+        no_q8_f16_cache: std::env::var_os("DS4_CUDA_NO_Q8_F16_CACHE").is_some(),
+        q8_f16_all: std::env::var_os("DS4_CUDA_Q8_F16_ALL").is_some(),
+        no_attention_output_f16_cache: std::env::var_os("DS4_CUDA_NO_ATTENTION_OUTPUT_F16_CACHE")
+            .is_some(),
+        no_attn_q_b_f16_cache: std::env::var_os("DS4_CUDA_NO_ATTN_Q_B_F16_CACHE").is_some(),
+        attention_output_preload: std::env::var_os("DS4_CUDA_ATTENTION_OUTPUT_PRELOAD").is_some(),
+        q8_f16_limit_bytes: abi_mib_env("DS4_CUDA_Q8_F16_CACHE_MB"),
+        q8_f16_reserve_bytes: abi_mib_env("DS4_CUDA_Q8_F16_CACHE_RESERVE_MB"),
+        no_q8_f32_cache: std::env::var_os("DS4_CUDA_NO_Q8_F32_CACHE").is_some(),
+        q8_f32_all: std::env::var_os("DS4_CUDA_Q8_F32_ALL").is_some(),
+        attn_q_b_f32_cache: std::env::var_os("DS4_CUDA_ATTN_Q_B_F32_CACHE").is_some(),
+        q8_f32_large: std::env::var_os("DS4_CUDA_Q8_F32_LARGE").is_some(),
+        q8_f32_preload: std::env::var_os("DS4_CUDA_Q8_F32_PRELOAD").is_some(),
+        weight_cache_verbose: std::env::var_os("DS4_CUDA_WEIGHT_CACHE_VERBOSE").is_some(),
+    }
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn clear_abi_q8_converted_ranges(cache: &mut AbiQ8Cache) {
+    cache.f16_ranges.clear();
+    cache.f32_ranges.clear();
+    let optional_preload_disabled = cache.state.optional_preload_disabled;
+    cache.state = Q8CacheState {
+        optional_preload_disabled,
+        ..Q8CacheState::default()
+    };
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn q8_range_matches<T>(
+    ranges: &[T],
+    matches: impl Fn(&T) -> (usize, u64, u64, u64, u64),
+    model_map: *const c_void,
+    offset: u64,
+    weight_bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+) -> bool {
+    ranges
+        .iter()
+        .any(|range| matches(range) == (model_map as usize, offset, weight_bytes, in_dim, out_dim))
 }
 
 fn abi_page_bounded_source(
@@ -1428,6 +1541,206 @@ fn abi_model_range_is_cached(
     })
 }
 
+#[cfg(feature = "cuda-oxide-kernels")]
+fn abi_q8_shape(in_dim: u64, out_dim: u64) -> Option<(u64, usize, u64)> {
+    if in_dim == 0 || out_dim == 0 {
+        return None;
+    }
+    let elements = in_dim.checked_mul(out_dim)?;
+    let elements_usize = usize::try_from(elements).ok()?;
+    let packed_bytes = out_dim.checked_mul(in_dim.div_ceil(32))?.checked_mul(34)?;
+    Some((elements, elements_usize, packed_bytes))
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn cache_abi_q8_f16_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+    label: &str,
+) -> bool {
+    let Some((elements, elements_usize, packed_bytes)) = abi_q8_shape(in_dim, out_dim) else {
+        return true;
+    };
+    if packed_bytes > bytes {
+        return true;
+    }
+    let Ok(mut cache) = ABI_Q8_CACHE.lock() else {
+        return false;
+    };
+    if q8_range_matches(
+        &cache.f16_ranges,
+        |range| {
+            (
+                range.model_map,
+                range.offset,
+                range.weight_bytes,
+                range.in_dim,
+                range.out_dim,
+            )
+        },
+        model_map,
+        offset,
+        bytes,
+        in_dim,
+        out_dim,
+    ) {
+        return true;
+    }
+    let Some(out_bytes) = elements.checked_mul(size_of::<f16>() as u64) else {
+        return true;
+    };
+    let options = abi_q8_cache_options();
+    let admission = cache.state.admit_f16_bytes(
+        options,
+        Some(label),
+        in_dim,
+        out_dim,
+        out_bytes,
+        backend.memory_capacity().ok(),
+        true,
+    );
+    if !admission.admitted {
+        cache.state.disable_optional_preload_after_failure();
+        return true;
+    }
+    let Ok(device) = backend.zeroed::<f16>(elements_usize) else {
+        cache.f16_ranges.clear();
+        cache.state.disable_f16_after_failure();
+        cache.state.disable_optional_preload_after_failure();
+        return true;
+    };
+    let launched = with_cached_abi_model_range(
+        backend,
+        model_map,
+        model_size,
+        offset,
+        bytes,
+        |weights_ptr| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: the public range and packed Q8 shape were checked
+                // above; the retained converted buffer survives queued use.
+                Some(unsafe {
+                    kernels.dequant_q8_f16_tensor(
+                        backend.stream(),
+                        weights_ptr,
+                        device.cu_deviceptr(),
+                        bytes,
+                        elements,
+                        in_dim,
+                        out_dim,
+                    )
+                })
+            })
+        },
+    )
+    .unwrap_or(false);
+    if !launched {
+        let _ = backend.synchronize();
+        cache.f16_ranges.clear();
+        cache.state.disable_f16_after_failure();
+        cache.state.disable_optional_preload_after_failure();
+        return true;
+    }
+    cache.state.record_f16_success(out_bytes);
+    cache.f16_ranges.push(AbiQ8F16Range {
+        model_map: model_map as usize,
+        offset,
+        weight_bytes: bytes,
+        in_dim,
+        out_dim,
+        _device: device,
+    });
+    true
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn cache_abi_q8_f32_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+) -> bool {
+    let Some((elements, elements_usize, packed_bytes)) = abi_q8_shape(in_dim, out_dim) else {
+        return true;
+    };
+    if packed_bytes > bytes {
+        return true;
+    }
+    let Ok(mut cache) = ABI_Q8_CACHE.lock() else {
+        return false;
+    };
+    if q8_range_matches(
+        &cache.f32_ranges,
+        |range| {
+            (
+                range.model_map,
+                range.offset,
+                range.weight_bytes,
+                range.in_dim,
+                range.out_dim,
+            )
+        },
+        model_map,
+        offset,
+        bytes,
+        in_dim,
+        out_dim,
+    ) {
+        return true;
+    }
+    let Ok(device) = backend.zeroed::<f32>(elements_usize) else {
+        cache.state.disable_optional_preload_after_failure();
+        return true;
+    };
+    let launched = with_cached_abi_model_range(
+        backend,
+        model_map,
+        model_size,
+        offset,
+        bytes,
+        |weights_ptr| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: the public range and packed Q8 shape were checked
+                // above; the retained converted buffer survives queued use.
+                Some(unsafe {
+                    kernels.dequant_q8_f32_tensor(
+                        backend.stream(),
+                        weights_ptr,
+                        device.cu_deviceptr(),
+                        bytes,
+                        elements,
+                        in_dim,
+                        out_dim,
+                    )
+                })
+            })
+        },
+    )
+    .unwrap_or(false);
+    if !launched {
+        let _ = backend.synchronize();
+        cache.state.disable_optional_preload_after_failure();
+        return true;
+    }
+    cache.f32_ranges.push(AbiQ8F32Range {
+        model_map: model_map as usize,
+        offset,
+        weight_bytes: bytes,
+        in_dim,
+        out_dim,
+        _device: device,
+    });
+    true
+}
+
 fn allocation_len(bytes: u64) -> Option<(u64, usize)> {
     let bytes = bytes.max(1);
     Some((bytes, usize::try_from(bytes).ok()?))
@@ -1455,10 +1768,7 @@ pub extern "C" fn ds4_gpu_init() -> c_int {
             let Ok(opened) = CudaOxideSubstrate::open(0) else {
                 return false;
             };
-            ABI_NO_TF32_AT_INIT.store(
-                std::env::var_os("DS4_CUDA_NO_TF32").is_some(),
-                Ordering::Relaxed,
-            );
+            update_abi_blas_math_state();
             *backend = Some(opened);
         }
         true
@@ -1479,6 +1789,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut activations) = ABI_F16_ACTIVATIONS.lock() {
                 *activations = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut q8_cache) = ABI_Q8_CACHE.lock() {
+                clear_abi_q8_converted_ranges(&mut q8_cache);
             }
             if let Ok(mut model_ranges) = ABI_MODEL_RANGES.lock() {
                 model_ranges.clear();
@@ -1899,12 +2213,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f16_tensor(
                         let Ok(blas) = backend.blas_handle() else {
                             return Some(false);
                         };
-                        let math_mode = if ABI_NO_TF32_AT_INIT.load(Ordering::Relaxed) {
-                            BlasMathMode::Default
-                        } else {
-                            BlasMathMode::Tf32TensorOp
-                        };
-                        if blas.set_math_mode(math_mode).is_err() {
+                        if !apply_abi_blas_math(&blas) {
                             return Some(false);
                         }
                         let Some(weight_elements) = usize::try_from(weight_elements).ok() else {
@@ -2184,12 +2493,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f32_tensor(
                         let Ok(blas) = backend.blas_handle() else {
                             return Some(false);
                         };
-                        let math_mode = if ABI_NO_TF32_AT_INIT.load(Ordering::Relaxed) {
-                            BlasMathMode::Default
-                        } else {
-                            BlasMathMode::Tf32TensorOp
-                        };
-                        if blas.set_math_mode(math_mode).is_err() {
+                        if !apply_abi_blas_math(&blas) {
                             return Some(false);
                         }
                         let Some(weight_elements) = usize::try_from(weight_elements).ok() else {
@@ -2575,6 +2879,11 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             }
             backend.synchronize().ok()?;
             ABI_MODEL_RANGES.lock().ok()?.clear();
+            #[cfg(feature = "cuda-oxide-kernels")]
+            {
+                let mut q8_cache = ABI_Q8_CACHE.lock().ok()?;
+                clear_abi_q8_converted_ranges(&mut q8_cache);
+            }
             #[cfg(target_os = "linux")]
             {
                 let mut model_arenas = ABI_MODEL_ARENAS.lock().ok()?;
@@ -2668,6 +2977,94 @@ pub unsafe extern "C" fn ds4_gpu_cache_model_range(
         })
         .unwrap_or(false)
     })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_cache_q8_f16_range(
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+    label: *const c_char,
+) -> c_int {
+    status(|| {
+        if model_map.is_null() || bytes == 0 {
+            return true;
+        }
+        if offset > model_size || bytes > model_size - offset {
+            return false;
+        }
+        let label = if label.is_null() {
+            "q8_0".into()
+        } else {
+            // SAFETY: the C ABI supplies a NUL-terminated optional label for
+            // the duration of this synchronous policy decision.
+            unsafe { CStr::from_ptr(label) }.to_string_lossy()
+        };
+        with_backend(|backend| {
+            let format = {
+                let cache = ABI_Q8_CACHE.lock().ok()?;
+                q8_preload_format(
+                    abi_q8_cache_options(),
+                    Some(label.as_ref()),
+                    in_dim,
+                    out_dim,
+                    cache.state,
+                )
+            };
+            Some(match format {
+                Some(Q8PreloadFormat::F16) => cache_abi_q8_f16_range(
+                    backend,
+                    model_map,
+                    model_size,
+                    offset,
+                    bytes,
+                    in_dim,
+                    out_dim,
+                    label.as_ref(),
+                ),
+                Some(Q8PreloadFormat::F32) => cache_abi_q8_f32_range(
+                    backend, model_map, model_size, offset, bytes, in_dim, out_dim,
+                ),
+                None => true,
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ds4_gpu_print_memory_report(label: *const c_char) {
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let label = if label.is_null() {
+            "".into()
+        } else {
+            // SAFETY: the C ABI supplies a NUL-terminated optional label for
+            // the duration of this synchronous diagnostic call.
+            unsafe { CStr::from_ptr(label) }.to_string_lossy()
+        };
+        let _ = with_backend(|backend| {
+            let memory = backend.memory_capacity().ok()?;
+            eprintln!(
+                "ds4: CUDA memory report {}: free {:.2} MiB total {:.2} MiB",
+                label,
+                memory.free_bytes as f64 / 1048576.0,
+                memory.total_bytes as f64 / 1048576.0
+            );
+            Some(())
+        });
+    }));
+}
+
+#[no_mangle]
+pub extern "C" fn ds4_gpu_set_quality(quality: bool) {
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        ABI_QUALITY_MODE.store(quality, Ordering::Relaxed);
+        update_abi_blas_math_state();
+    }));
 }
 
 #[no_mangle]

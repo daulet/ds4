@@ -10431,7 +10431,46 @@
 
 ################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb because public Q8
+  preload, memory-report, and quality controls have a bounded linked
+  comparator independently from Q8 matmul and route work.
 - Goal: connect q8/f16 cache hooks, quality-mode mutation, remaining graph
   compute, whole-archive retention policy, and production route-promotion
   work without claiming C CUDA removal before those gates pass.
+
+################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba: Public Q8 Cache And Quality Controls ABI
+
+- Status: done
+- Goal: Rust-own public Q8 converted-cache preload, memory reporting, and
+  quality-mode BLAS mutation through current-C-compatible policy without
+  claiming Q8 matmul or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba/abi-q8-quality-controls-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_q8_quality_controls_smoke.py --negative-test`.
+- Evidence: Rust now exports `ds4_gpu_cache_q8_f16_range`,
+  `ds4_gpu_print_memory_report`, and `ds4_gpu_set_quality`, retaining
+  ABI-owned converted F16/F32 Q8 buffers and using embedded
+  `abi_dequant_q8_0_to_f16_kernel` and `abi_dequant_q8_0_to_f32_kernel`.
+  Existing multi-token dense BLAS projections consume mutable effective math
+  selection after quality changes. A C-linked B300 consumer proves live
+  converted-buffer allocation/reuse, quality suppression and re-enable
+  allocation, optional F32 preload, callable memory reporting, and distinct
+  TF32 versus default-math outputs. Local library tests pass with 125 tests;
+  B300 release-feature tests pass with 132 tests; the static library exposes
+  35 Rust ABI symbols; sixteen predecessor linked consumers pass with the
+  known executable-stack warning. The focused comparator and default
+  unified parity report pass with 211 passed, 45 skipped, and 0 failed.
+  Pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+  completed findings. Q8 matmul compute,
+  remaining graph compute, whole-archive retention, route promotion, C CUDA
+  removal, and the warning remain pending.
+
+################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active
+- Goal: connect public Q8 matmul consumers, remaining graph compute,
+  whole-archive retention policy, and production route-promotion work
+  without claiming C CUDA removal before those gates pass.

@@ -3493,6 +3493,22 @@ activation fallback is retained. Q8/F16 cache hooks, quality-mode mutation,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba Rust CUDA
+public Q8 cache and quality-controls ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_q8_quality_controls_smoke.py --negative-test
+```
+
+The C-linked B300 fixture preloads eligible packed Q8 ranges into retained
+F16 and optional F32 converted buffers, verifies exact preload reuse and
+quality-mode cache suppression through device-memory deltas, calls the
+public memory-report hook, and uses multi-token F32 BLAS output to prove
+quality and `DS4_CUDA_NO_TF32` change effective math selection. Public Q8
+matmul consumers, remaining graph compute, whole-archive retention policy,
+route promotion, C CUDA removal, and the embedded-object executable-stack
+warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

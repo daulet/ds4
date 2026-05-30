@@ -2984,6 +2984,38 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBA_SCOPE: CudaAbiF16BlasProj
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiQ8QualityControlsScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub consumes_multi_token_dense_blas_projection: bool,
+    pub owns_cache_q8_f16_range: bool,
+    pub owns_q8_f16_converted_buffers: bool,
+    pub owns_q8_f32_optional_preload: bool,
+    pub owns_quality_mode_mutation: bool,
+    pub owns_memory_report: bool,
+    pub owns_q8_matmul_compute_abi: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE: CudaAbiQ8QualityControlsScope =
+    CudaAbiQ8QualityControlsScope {
+        exported_abi_symbol_count: 35,
+        exported_compute_symbol_count: 12,
+        consumes_multi_token_dense_blas_projection: true,
+        owns_cache_q8_f16_range: true,
+        owns_q8_f16_converted_buffers: true,
+        owns_q8_f32_optional_preload: true,
+        owns_quality_mode_mutation: true,
+        owns_memory_report: true,
+        owns_q8_matmul_compute_abi: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -3045,6 +3077,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -4816,6 +4849,33 @@ mod tests {
         );
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBA_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_q8_quality_controls_scope_leaves_q8_compute_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.exported_abi_symbol_count,
+            35
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.exported_compute_symbol_count,
+            12
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE
+                .consumes_multi_token_dense_blas_projection
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_cache_q8_f16_range);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_q8_f16_converted_buffers);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_q8_f32_optional_preload);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_quality_mode_mutation);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_memory_report);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_q8_matmul_compute_abi);
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_remaining_graph_compute_abi
+        );
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE.changes_default_route);
     }
 
     #[test]

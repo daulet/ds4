@@ -10966,10 +10966,56 @@ Stage split:
 
 ################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb because the public
+  Q8 preload, memory-report, and quality controls can be proved independently
+  from Q8 matmul consumers and remaining graph route work.
 - Goal: connect q8/f16 cache hooks, quality-mode mutation, remaining graph
   compute, whole-archive retention policy, and production route-promotion
   work without claiming C CUDA removal before those gates pass.
+
+################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba: Public Q8 Cache And Quality Controls ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_cache_q8_f16_range`,
+  `ds4_gpu_print_memory_report`, and `ds4_gpu_set_quality` through the
+  current-C Q8 converted-preload and mutable cuBLAS math-selection boundary
+  without claiming Q8 matmul or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba/abi-q8-quality-controls-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_q8_quality_controls_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` retains ABI-owned Q8 F16 and optional F32
+    converted buffers, applies existing Q8 admission policy to the public
+    preload hook, exports the memory diagnostic, and records a mutable
+    quality/default-math state consumed by existing dense BLAS projections.
+  - `rust/ds4-cuda/src/abi_kernels.rs` promotes
+    `abi_dequant_q8_0_to_f16_kernel` and `abi_dequant_q8_0_to_f32_kernel`
+    into the embedded public ABI module.
+  - A C-linked B300 consumer observes F16 preload allocation and exact-cache
+    reuse, quality suppression and re-enable allocation, optional F32
+    preload allocation, callable memory reporting, and quality versus
+    `DS4_CUDA_NO_TF32` selection through multi-token F32 BLAS output.
+  - Local library tests pass with 125 tests; B300 release-feature tests pass
+    with 132 tests; the static library exposes 35 Rust ABI symbols, and
+    sixteen predecessor C-linked consumers pass against the rebuilt archive,
+    retaining the known embedded-object executable-stack warning.
+  - The focused comparator passes, and the default unified parity report
+    passes with 211 passed, 45 skipped, and 0 failed.
+  - Pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+    completed findings.
+  - Q8 matmul compute exports, remaining graph compute, whole-archive
+    retention policy, route promotion, C CUDA removal, and the generated
+    embedded-object executable-stack warning remain open.
+
+################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: connect public Q8 matmul consumers, remaining graph compute,
+  whole-archive retention policy, and production route-promotion work
+  without claiming C CUDA removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 

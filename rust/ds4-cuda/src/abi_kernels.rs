@@ -235,6 +235,60 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_dequant_q8_0_to_f16_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        blocks: u64,
+        weights: &[u8],
+        mut output: DisjointSlice<f16>,
+    ) {
+        let index = thread::index_1d();
+        let gid = index.get() as u64;
+        let count = in_dim * out_dim;
+        if gid >= count {
+            return;
+        }
+        let row = gid / in_dim;
+        let column = gid - row * in_dim;
+        let block = column / 32;
+        let lane = column - block * 32;
+        let base = ((row * blocks + block) * 34) as usize;
+        let scale_bits = weights[base] as u16 | ((weights[base + 1] as u16) << 8);
+        let scale = f16::from_bits(scale_bits) as f32;
+        let value = weights[base + 2 + lane as usize] as i8 as f32;
+        if let Some(element) = output.get_mut(index) {
+            *element = (scale * value) as f16;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_dequant_q8_0_to_f32_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        blocks: u64,
+        weights: &[u8],
+        mut output: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d();
+        let gid = index.get() as u64;
+        let count = in_dim * out_dim;
+        if gid >= count {
+            return;
+        }
+        let row = gid / in_dim;
+        let column = gid - row * in_dim;
+        let block = column / 32;
+        let lane = column - block * 32;
+        let base = ((row * blocks + block) * 34) as usize;
+        let scale_bits = weights[base] as u16 | ((weights[base + 1] as u16) << 8);
+        let scale = f16::from_bits(scale_bits) as f32;
+        let value = weights[base + 2 + lane as usize] as i8 as f32;
+        if let Some(element) = output.get_mut(index) {
+            *element = scale * value;
+        }
+    }
+
+    #[kernel]
     pub fn abi_f32_to_f16_kernel(count: u64, x: &[f32], mut out: DisjointSlice<f16>) {
         let index = thread::index_1d();
         let offset = index.get();
@@ -484,6 +538,8 @@ pub(crate) struct AbiKernelModule {
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
+    dequant_q8_0_to_f16_kernel: CudaFunction,
+    dequant_q8_0_to_f32_kernel: CudaFunction,
     f32_to_f16_kernel: CudaFunction,
     matmul_f16_kernel: CudaFunction,
     matmul_f16_serial_kernel: CudaFunction,
@@ -513,6 +569,12 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            dequant_q8_0_to_f16_kernel: module
+                .load_function("abi_dequant_q8_0_to_f16_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            dequant_q8_0_to_f32_kernel: module
+                .load_function("abi_dequant_q8_0_to_f32_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             f32_to_f16_kernel: module
                 .load_function("abi_f32_to_f16_kernel")
@@ -805,6 +867,94 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.rms_norm_weight_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn dequant_q8_f16_tensor(
+        &self,
+        stream: &CudaStream,
+        weights_ptr: u64,
+        output_ptr: u64,
+        weights_len: u64,
+        output_len: u64,
+        in_dim: u64,
+        out_dim: u64,
+    ) -> bool {
+        let Some(config) = launch_config(output_len) else {
+            return false;
+        };
+        let mut in_dim = in_dim;
+        let mut out_dim = out_dim;
+        let mut blocks = in_dim.div_ceil(32);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = weights_len;
+        let mut output_ptr = output_ptr;
+        let mut output_len = output_len;
+        let mut params = [
+            (&mut in_dim as *mut u64).cast::<c_void>(),
+            (&mut out_dim as *mut u64).cast::<c_void>(),
+            (&mut blocks as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut output_ptr as *mut u64).cast::<c_void>(),
+            (&mut output_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates packed-weight and output bounds and
+        // retains both buffers through launch submission and subsequent use.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.dequant_q8_0_to_f16_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn dequant_q8_f32_tensor(
+        &self,
+        stream: &CudaStream,
+        weights_ptr: u64,
+        output_ptr: u64,
+        weights_len: u64,
+        output_len: u64,
+        in_dim: u64,
+        out_dim: u64,
+    ) -> bool {
+        let Some(config) = launch_config(output_len) else {
+            return false;
+        };
+        let mut in_dim = in_dim;
+        let mut out_dim = out_dim;
+        let mut blocks = in_dim.div_ceil(32);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = weights_len;
+        let mut output_ptr = output_ptr;
+        let mut output_len = output_len;
+        let mut params = [
+            (&mut in_dim as *mut u64).cast::<c_void>(),
+            (&mut out_dim as *mut u64).cast::<c_void>(),
+            (&mut blocks as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut output_ptr as *mut u64).cast::<c_void>(),
+            (&mut output_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates packed-weight and output bounds and
+        // retains both buffers through launch submission and subsequent use.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.dequant_q8_0_to_f32_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

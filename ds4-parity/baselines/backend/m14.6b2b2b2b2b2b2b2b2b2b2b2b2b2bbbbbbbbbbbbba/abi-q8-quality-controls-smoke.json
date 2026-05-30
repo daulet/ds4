@@ -1,0 +1,79 @@
+{
+  "schema": "ds4.cuda_abi_q8_quality_controls_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-q8-quality-controls-abi",
+  "goal": "Rust-own the public Q8 converted-cache preload, memory-report, and quality-mode control ABI through current-C-compatible policy and device behavior without claiming Q8 matmul or graph-route ownership.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_cache_q8_f16_range",
+      "ds4_gpu_print_memory_report",
+      "ds4_gpu_set_quality"
+    ],
+    "semantics": [
+      "current C optionally preloads eligible packed Q8 ranges into retained F16 or F32 converted device buffers",
+      "current C suppresses F16 caching in quality mode and updates cuBLAS default versus TF32 math when quality changes",
+      "current C exposes free and total device memory reporting as a public diagnostic side effect"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba/abi_q8_quality_controls_link_smoke.c",
+    "converted_cache_path": "ABI_Q8_CACHE retains Q8 F16 and optional F32 converted buffers after q8_preload_format admission and with_cached_abi_model_range source resolution",
+    "kernel_path": "abi_dequant_q8_0_to_f16_kernel and abi_dequant_q8_0_to_f32_kernel execute through the reusable embedded ABI module",
+    "quality_path": "ABI_QUALITY_MODE and ABI_DEFAULT_BLAS_MATH drive subsequent dense BLAS handle math selection through apply_abi_blas_math",
+    "remaining_compute_boundary": "Q8 matmul compute exports, remaining graph compute, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 35,
+    "exported_compute_symbol_count": 12,
+    "public_gpu_abi_function_count": 81,
+    "consumes_multi_token_dense_blas_projection": true,
+    "owns_cache_q8_f16_range": true,
+    "owns_q8_f16_converted_buffers": true,
+    "owns_q8_f32_optional_preload": true,
+    "owns_quality_mode_mutation": true,
+    "owns_memory_report": true,
+    "owns_q8_matmul_compute_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 125,
+    "feature_release_test_count": 132,
+    "staticlib_export_count": 35,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "q8_f16_preload_allocation_observed": true,
+      "q8_f16_exact_cache_reuse_observed": true,
+      "quality_suppresses_new_q8_f16_preload": true,
+      "quality_disable_reenables_q8_f16_preload": true,
+      "q8_f32_optional_preload_allocation_observed": true,
+      "memory_report_callable": true,
+      "quality_math_mutation_changes_f32_blas_output": true,
+      "no_tf32_quality_update_uses_default_math": true,
+      "invalid_range_rejected": true,
+      "null_optional_cache_accepted": true,
+      "embedded_q8_dequant_kernels_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 16,
+      "predecessor_relink_executable_stack_warning_count": 16
+    }
+  },
+  "integration_risks": [
+    "this control leaf materializes converted Q8 preload buffers but does not yet export the public Q8 matmul consumers that use them during graph execution",
+    "production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
