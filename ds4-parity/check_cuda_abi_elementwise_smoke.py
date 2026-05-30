@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.6b2a Rust CUDA tensor-fill ABI smoke."""
+"""Validate the M14.6b2b1 Rust CUDA embedded elementwise ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,13 +14,12 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2a/abi-tensor-fill-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b1/abi-elementwise-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
-CUDA_CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/abi_tensor_fill_smoke.rs"
-GPU_CARGO = ROOT / "rust/ds4-gpu/Cargo.toml"
+CUDA_KERNELS = ROOT / "rust/ds4-cuda/src/abi_kernels.rs"
+HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b1/abi_elementwise_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -30,11 +29,13 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 EXPECTED_SYMBOLS = [
+    "ds4_gpu_add_tensor",
     "ds4_gpu_begin_commands",
     "ds4_gpu_cleanup",
     "ds4_gpu_end_commands",
     "ds4_gpu_flush_commands",
     "ds4_gpu_init",
+    "ds4_gpu_repeat_hc_tensor",
     "ds4_gpu_should_use_managed_kv_cache",
     "ds4_gpu_synchronize",
     "ds4_gpu_tensor_alloc",
@@ -48,7 +49,6 @@ EXPECTED_SYMBOLS = [
     "ds4_gpu_tensor_view",
     "ds4_gpu_tensor_write",
 ]
-CURRENT_SUCCESSOR_SYMBOLS = ["ds4_gpu_add_tensor", "ds4_gpu_repeat_hc_tensor"]
 
 
 @dataclass
@@ -71,11 +71,10 @@ def main(argv: Iterable[str]) -> int:
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     texts = {
         "cuda_c": CUDA_C.read_text(encoding="utf-8"),
-        "cargo": CUDA_CARGO.read_text(encoding="utf-8"),
         "lib": CUDA_LIB.read_text(encoding="utf-8"),
         "abi": CUDA_ABI.read_text(encoding="utf-8"),
-        "smoke": SMOKE.read_text(encoding="utf-8"),
-        "gpu_cargo": GPU_CARGO.read_text(encoding="utf-8"),
+        "kernels": CUDA_KERNELS.read_text(encoding="utf-8"),
+        "harness": HARNESS.read_text(encoding="utf-8"),
         "gpu_build": GPU_BUILD.read_text(encoding="utf-8"),
         "gpu_sys": GPU_SYS.read_text(encoding="utf-8"),
         "roadmap": ROADMAP.read_text(encoding="utf-8"),
@@ -89,7 +88,7 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.6b2a Rust CUDA tensor-fill ABI smoke: {status} ({report.checks} checks)")
+    print(f"M14.6b2b1 Rust CUDA embedded elementwise ABI smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
@@ -102,10 +101,13 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.cuda_abi_tensor_fill_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.6b2a", "milestone drift")
-    report.check(fixture.get("status") == "b300-pass-first-compute-abi-export", "status drift")
-    report.check(fixture.get("exported_symbols") == EXPECTED_SYMBOLS, "exported symbol fixture drift")
+    report.check(fixture.get("schema") == "ds4.cuda_abi_elementwise_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.6b2b1", "milestone drift")
+    report.check(
+        fixture.get("status") == "b300-pass-staticlib-embedded-elementwise-abi",
+        "status drift",
+    )
+    report.check(fixture.get("exported_symbols") == EXPECTED_SYMBOLS, "exported symbol drift")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
@@ -115,12 +117,12 @@ def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]
 def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     oracle = require_dict(report, fixture.get("oracle"), "oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
-    report.check(oracle.get("symbol") == "ds4_gpu_tensor_fill_f32", "oracle symbol drift")
+    report.check(oracle.get("symbols") == ["ds4_gpu_add_tensor", "ds4_gpu_repeat_hc_tensor"], "oracle symbol drift")
     for marker in [
-        'extern "C" int ds4_gpu_tensor_fill_f32',
-        "count > tensor->bytes / sizeof(float)",
-        "fill_f32_kernel<<<(count + 255u) / 256u, 256>>>",
-        "__global__ static void fill_f32_kernel",
+        'extern "C" int ds4_gpu_add_tensor',
+        "add_kernel<<<(n + 255) / 256, 256>>>",
+        'extern "C" int ds4_gpu_repeat_hc_tensor',
+        "repeat_hc_kernel<<<(n + 255) / 256, 256>>>",
     ]:
         report.check(marker in texts["cuda_c"], f"current-C oracle marker missing: {marker}")
 
@@ -128,138 +130,122 @@ def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[st
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
-        ("exported_abi_symbol_count", 17),
-        ("exported_compute_symbol_count", 1),
+        ("exported_abi_symbol_count", 19),
+        ("exported_compute_symbol_count", 3),
         ("public_gpu_abi_function_count", 81),
         ("owns_tensor_fill_f32", True),
-        ("owns_graph_compute_abi", False),
+        ("owns_add_tensor", True),
+        ("owns_repeat_hc_tensor", True),
+        ("uses_embedded_rust_kernel_module", True),
+        ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
         ("changes_default_route", False),
         ("production_build_still_compiles_ds4_cuda_cu", True),
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     symbols = sorted(set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"])))
-    report.check(
-        symbols == sorted(EXPECTED_SYMBOLS + CURRENT_SUCCESSOR_SYMBOLS),
-        "Rust ABI symbol successor progression drift",
-    )
+    report.check(symbols == EXPECTED_SYMBOLS, "Rust ABI symbol implementation drift")
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(set(EXPECTED_SYMBOLS) <= ffi_symbols, "Rust exports do not match public GPU ABI")
-    implementation = require_dict(report, fixture.get("implementation"), "implementation")
-    report.check(
-        implementation.get("driver_primitive") == "cuda_core::sys::cuMemsetD32Async",
-        "driver primitive drift",
-    )
-    report.check(implementation.get("float_bit_source") == "value.to_bits()", "float bit source drift")
-    report.check(implementation.get("embedded_kernel_required") is False, "embedded kernel claim drift")
     for marker in [
-        'crate-type = ["rlib", "staticlib"]',
-        'name = "ds4-cuda-abi-tensor-fill-smoke"',
-        'path = "src/bin/abi_tensor_fill_smoke.rs"',
-        'required-features = ["cuda-oxide-backend"]',
-    ]:
-        report.check(marker in texts["cargo"], f"Cargo marker missing: {marker}")
-    for marker in [
-        "pub unsafe extern \"C\" fn ds4_gpu_tensor_fill_f32",
-        "cuda_core::sys::cuMemsetD32Async",
-        "value.to_bits()",
-        "count.checked_mul(size_of::<f32>() as u64)",
+        "pub unsafe extern \"C\" fn ds4_gpu_add_tensor",
+        "pub unsafe extern \"C\" fn ds4_gpu_repeat_hc_tensor",
+        "with_abi_kernels(backend",
+        "preserves current-C support for input/output aliasing",
     ]:
         report.check(marker in texts["abi"], f"Rust ABI implementation marker missing: {marker}")
     for marker in [
-        "pub const M14_6B2A_SCOPE",
-        "exported_abi_symbol_count: 17",
-        "exported_compute_symbol_count: 1",
-        "owns_tensor_fill_f32: true",
-        "owns_graph_compute_abi: false",
+        'const ABI_KERNEL_ARTIFACT: &str = "ds4-cuda";',
+        "#[cuda_module]",
+        "pub fn abi_add_kernel",
+        "pub fn abi_repeat_hc_kernel",
+        "cuda_core::launch_kernel_on_stream",
+    ]:
+        report.check(marker in texts["kernels"], f"embedded kernel marker missing: {marker}")
+    report.check("DeviceBuffer" not in texts["kernels"], "FFI kernel path reintroduced transient typed ownership")
+    for marker in [
+        "pub const M14_6B2B1_SCOPE",
+        "exported_abi_symbol_count: 19",
+        "exported_compute_symbol_count: 3",
+        "owns_add_tensor: true",
+        "owns_repeat_hc_tensor: true",
+        "uses_embedded_rust_kernel_module: true",
+        "owns_remaining_graph_compute_abi: false",
         "owns_complete_ds4_gpu_abi: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
-    report.check("ds4-cuda" not in texts["gpu_cargo"], "production GPU crate prematurely links Rust CUDA")
     report.check('.arg("ds4_cuda.cu")' in texts["gpu_build"], "current C CUDA link marker missing")
 
 
 def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
+    implementation = require_dict(report, fixture.get("implementation"), "implementation")
+    report.check(implementation.get("artifact_name") == "ds4-cuda", "artifact module name drift")
+    report.check("--whole-archive" in implementation.get("linkage_requirement", ""), "artifact retention requirement missing")
     execution = require_dict(report, fixture.get("b300_execution"), "b300_execution")
     for key, expected in [
         ("date_utc", "2026-05-30"),
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 88),
-        ("feature_test_count", 90),
-        ("local_cuda_feature_build_blocker", "/usr/local/cuda/include/cuda.h"),
+        ("local_library_test_count", 89),
+        ("feature_test_count", 91),
+        ("generated_artifact_target", "sm_80"),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
-    report.check("--bin ds4-cuda-abi-tensor-fill-smoke" in execution.get("smoke_command", ""), "smoke command drift")
-    report.check("target/debug/libds4_cuda.a" in execution.get("staticlib_command", ""), "staticlib command drift")
+    report.check("--features cuda-oxide-kernels" in execution.get("staticlib_build_command", ""), "staticlib build command drift")
+    report.check("--whole-archive" in execution.get("c_link_command", ""), "C link command retention drift")
+    report.check("-lcuda" in execution.get("c_link_command", ""), "C link command CUDA driver drift")
     observed = require_dict(report, execution.get("observed"), "observed")
-    for key, expected in [
-        ("milestone", "M14.6b2a"),
-        ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("rust_exported_tensor_fill_abi", True),
-        ("exported_abi_symbol_count", 17),
-        ("exported_compute_symbol_count", 1),
-        ("prefix_fill_matches", True),
-        ("view_offset_fill_matches", True),
-        ("signed_zero_bits_match", True),
-        ("negative_infinity_fill_matches", True),
-        ("zero_count_is_noop", True),
-        ("managed_fill_matches", True),
-        ("bounds_rejected", True),
-        ("null_rejected", True),
-        ("owns_tensor_fill_f32", True),
-        ("owns_graph_compute_abi", False),
-        ("owns_complete_ds4_gpu_abi", False),
-        ("changes_default_route", False),
+    for key in [
+        "c_linked_rust_staticlib",
+        "embedded_rust_kernel_module_loaded",
+        "add_output_matches",
+        "add_alias_output_matches",
+        "repeat_hc_output_matches",
+        "invalid_shape_rejected",
+        "null_rejected",
     ]:
-        report.check(observed.get(key) == expected, f"observed smoke drift: {key}")
+        report.check(observed.get(key) is True, f"observed smoke drift: {key}")
     for marker in [
-        "ds4_gpu_tensor_fill_f32(tensor, -3.5, 4)",
-        "ds4_gpu_tensor_fill_f32(suffix, -0.0, 2)",
-        "f32::NEG_INFINITY",
-        "ds4_gpu_tensor_fill_f32(managed, 2.25, 2)",
-        "M14_6B2A_SCOPE.owns_graph_compute_abi",
+        "ds4_gpu_add_tensor(sum, a, b, 4)",
+        "ds4_gpu_add_tensor(a, a, b, 4)",
+        "ds4_gpu_repeat_hc_tensor(repeated, row, 3, 3)",
+        "ds4_gpu_add_tensor(NULL, a, b, 4)",
+        "embedded_rust_kernel_module_loaded",
     ]:
-        report.check(marker in texts["smoke"], f"smoke source marker missing: {marker}")
+        report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
+    risks = fixture.get("integration_risks", [])
+    report.check(any("retaining symbol" in value for value in risks), "retention risk missing")
+    report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    fixture_path = "ds4-parity/baselines/backend/m14.6b2a/abi-tensor-fill-smoke.json"
-    checker = "check_cuda_abi_tensor_fill_smoke.py"
-    item = "M14.6b2a: Rust CUDA Tensor Fill ABI Export"
+    fixture_path = "ds4-parity/baselines/backend/m14.6b2b1/abi-elementwise-smoke.json"
+    checker = "check_cuda_abi_elementwise_smoke.py"
+    item = "M14.6b2b1: Rust CUDA Elementwise ABI Module"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
-    report.check(
-        any(
-            marker in texts["status"]
-            for marker in [
-                "Active item: M14.6b2 Rust CUDA Compute ABI Assembly",
-                "Active item: M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly",
-            ]
-        ),
-        "active item missing",
-    )
-    report.check("M14.6b2a Rust CUDA Tensor Fill ABI Export" in texts["status"], "status evidence missing")
+    report.check("Active item: M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly" in texts["status"], "active item missing")
+    report.check("M14.6b2b1 Rust CUDA Elementwise ABI Module" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(
-        fixture.get("next_required_stage") == "M14.6b2b Rust CUDA Kernel ABI Assembly",
+        fixture.get("next_required_stage") == "M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly",
         "next stage drift",
     )
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("missing tensor-fill export", lambda value: value["exported_symbols"].remove("ds4_gpu_tensor_fill_f32")),
-        ("graph ABI overclaim", lambda value: value["ownership"].update({"owns_graph_compute_abi": True})),
+        ("missing add export", lambda value: value["exported_symbols"].remove("ds4_gpu_add_tensor")),
+        ("remaining compute overclaim", lambda value: value["ownership"].update({"owns_remaining_graph_compute_abi": True})),
         ("route promotion overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
-        ("managed fill failure", lambda value: value["b300_execution"]["observed"].update({"managed_fill_matches": False})),
-        ("signed-zero bit failure", lambda value: value["b300_execution"]["observed"].update({"signed_zero_bits_match": False})),
+        ("alias failure", lambda value: value["b300_execution"]["observed"].update({"add_alias_output_matches": False})),
+        ("artifact load failure", lambda value: value["b300_execution"]["observed"].update({"embedded_rust_kernel_module_loaded": False})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)

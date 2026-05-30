@@ -1408,6 +1408,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b1 Rust CUDA embedded elementwise ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_elementwise_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

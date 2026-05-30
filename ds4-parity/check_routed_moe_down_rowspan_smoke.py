@@ -192,7 +192,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.6b2 Rust CUDA Compute ABI Assembly" in texts["status"], "next active missing")
+    report.check("M14.6b2b1 Rust CUDA Elementwise ABI Module" in texts["status"], "next active missing")
     report.check(item.replace(":", "") in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report wiring missing")

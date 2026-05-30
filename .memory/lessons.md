@@ -3,6 +3,24 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-05-30: Staticlib Embedded Kernels Need Final-Link Retention And Package Module Names
+
+- Symptom: library-owned `add_kernel` and `repeat_hc_kernel` compiled into
+  `libds4_cuda.a`, but a downstream Rust binary exposed no embedded modules;
+  a C-linked archive consumer then found module `ds4-cuda` while lookup of
+  `ds4_cuda` returned `ModuleNotFound`; once loaded, the full feature test
+  matrix rejected duplicate entry-point symbols shared with the older
+  executable-local smoke.
+- Root cause: cuda-oxide emits the embedded PTX bundle as a no-symbol archive
+  object named for the Cargo package, so dependency linking does not propagate
+  that artifact and conventional static-library extraction does not retain it.
+- Permanent rule: load embedded library modules by Cargo package name, prefix
+  reusable ABI kernel entry points distinctly from executable smokes, and
+  explicitly retain the archive's embedded object at the final link boundary
+  until production integration supplies a more selective retaining symbol.
+  Also track the generated object's missing `.note.GNU-stack` warning before
+  production route promotion.
+
 ## 2026-05-30: Embedded Kernel Proofs Need Final-Binary Ownership And Portable PTX Targets
 
 - Symptom: an M14.1b4 `#[cuda_module]` placed in `ds4-cuda` library code

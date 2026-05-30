@@ -2952,6 +2952,20 @@ memset primitive, with exact float-bit behavior verified on B300. Remaining
 graph compute exports, production linker selection, and route promotion remain
 pending.
 
+Validate the M14.6b2b1 Rust CUDA embedded elementwise ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_elementwise_smoke.py --negative-test
+```
+
+The fixture records the first linkable Rust embedded-kernel compute exports:
+`ds4_gpu_add_tensor` and `ds4_gpu_repeat_hc_tensor` execute through a C
+consumer of `libds4_cuda.a` on B300, including valid in-place add aliasing.
+The static-library consumer must currently retain the embedded artifact object
+with `--whole-archive`, and the generated object emits an executable-stack
+linker warning; production linker selection and remaining graph exports remain
+pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

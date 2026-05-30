@@ -46,7 +46,11 @@ EXPECTED_SYMBOLS = [
     "ds4_gpu_tensor_view",
     "ds4_gpu_tensor_write",
 ]
-CURRENT_SUCCESSOR_SYMBOLS = ["ds4_gpu_tensor_fill_f32"]
+CURRENT_SUCCESSOR_SYMBOLS = [
+    "ds4_gpu_tensor_fill_f32",
+    "ds4_gpu_add_tensor",
+    "ds4_gpu_repeat_hc_tensor",
+]
 
 
 @dataclass
@@ -205,7 +209,16 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.6b2 Rust CUDA Compute ABI Assembly" in texts["status"], "active item missing")
+    report.check(
+        any(
+            marker in texts["status"]
+            for marker in [
+                "Active item: M14.6b2 Rust CUDA Compute ABI Assembly",
+                "Active item: M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly",
+            ]
+        ),
+        "active item missing",
+    )
     report.check("M14.6b1 Rust CUDA Resource ABI Exports" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

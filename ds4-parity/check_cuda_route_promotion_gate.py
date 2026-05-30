@@ -184,7 +184,16 @@ def validate_wiring(report: ReportState, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.6b2 Rust CUDA Compute ABI Assembly" in texts["status"], "active stage missing")
+    report.check(
+        any(
+            marker in texts["status"]
+            for marker in [
+                "Active item: M14.6b2 Rust CUDA Compute ABI Assembly",
+                "Active item: M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly",
+            ]
+        ),
+        "active stage missing",
+    )
     report.check("M14.6a Production Route Linkage Blocker" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

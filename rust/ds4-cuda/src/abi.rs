@@ -5,10 +5,14 @@ use std::sync::Mutex;
 
 use cuda_core::{DeviceBuffer, IntoResult, ManagedBuffer};
 
+#[cfg(feature = "cuda-oxide-kernels")]
+use crate::abi_kernels::AbiKernelModule;
 use crate::allocation_policy::managed_kv_decision;
 use crate::substrate::CudaOxideSubstrate;
 
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 
 enum TensorStorage {
     Device(DeviceBuffer<u8>),
@@ -46,6 +50,18 @@ fn pointer<T>(operation: impl FnOnce() -> *mut T) -> *mut T {
 fn with_backend<T>(operation: impl FnOnce(&CudaOxideSubstrate) -> Option<T>) -> Option<T> {
     let backend = BACKEND.lock().ok()?;
     operation(backend.as_ref()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_kernels<T>(
+    backend: &CudaOxideSubstrate,
+    operation: impl FnOnce(&AbiKernelModule) -> Option<T>,
+) -> Option<T> {
+    let mut kernels = ABI_KERNELS.lock().ok()?;
+    if kernels.is_none() {
+        *kernels = Some(AbiKernelModule::load(backend.context()).ok()?);
+    }
+    operation(kernels.as_ref()?)
 }
 
 fn allocation_len(bytes: u64) -> Option<(u64, usize)> {
@@ -87,6 +103,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
         if let Ok(mut backend) = BACKEND.lock() {
             if let Some(active) = backend.as_ref() {
                 let _ = active.synchronize_device();
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut kernels) = ABI_KERNELS.lock() {
+                *kernels = None;
             }
             *backend = None;
         }
@@ -211,6 +231,91 @@ pub unsafe extern "C" fn ds4_gpu_tensor_fill_f32(
             }
             .result();
             Some(result.is_ok())
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_add_tensor(
+    out: *mut Ds4GpuTensor,
+    a: *const Ds4GpuTensor,
+    b: *const Ds4GpuTensor,
+    count: u32,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(a) = (unsafe { tensor_ref(a) }) else {
+            return false;
+        };
+        let Some(b) = (unsafe { tensor_ref(b) }) else {
+            return false;
+        };
+        let bytes = u64::from(count) * size_of::<f32>() as u64;
+        if out.bytes < bytes || a.bytes < bytes || b.bytes < bytes {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: bounds above cover each device pointer; raw launch
+                // preserves current-C support for input/output aliasing.
+                Some(unsafe {
+                    kernels.add_tensor(
+                        backend.stream(),
+                        out.device_ptr(),
+                        a.device_ptr(),
+                        b.device_ptr(),
+                        count,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_repeat_hc_tensor(
+    out: *mut Ds4GpuTensor,
+    row: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(row) = (unsafe { tensor_ref(row) }) else {
+            return false;
+        };
+        let Some(count) = u64::from(n_embd).checked_mul(u64::from(n_hc)) else {
+            return false;
+        };
+        let Some(out_bytes) = count.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let row_bytes = u64::from(n_embd) * size_of::<f32>() as u64;
+        if n_embd == 0 || n_hc == 0 || out.bytes < out_bytes || row.bytes < row_bytes {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: bounds above cover each device pointer; raw launch
+                // preserves current-C support for input/output aliasing.
+                Some(unsafe {
+                    kernels.repeat_hc_tensor(
+                        backend.stream(),
+                        out.device_ptr(),
+                        row.device_ptr(),
+                        n_embd,
+                        n_hc,
+                    )
+                })
+            })
         })
         .unwrap_or(false)
     })

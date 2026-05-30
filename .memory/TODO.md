@@ -9128,6 +9128,38 @@
 
 ##### M14.6b2b: Rust CUDA Kernel ABI Assembly
 
-- Status: active
+- Status: active; split into M14.6b2b1 and M14.6b2b2
 - Goal: export the remaining validated graph compute symbols from reusable
   Rust-owned modules before any production linker or route promotion.
+
+##### M14.6b2b1: Rust CUDA Elementwise ABI Module
+
+- Status: done
+- Goal: export `ds4_gpu_add_tensor` and `ds4_gpu_repeat_hc_tensor` through
+  reusable embedded Rust CUDA kernels while preserving current-C in-place add
+  behavior through the C ABI.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b1/abi-elementwise-smoke.json`
+- Comparator: `ds4-parity/check_cuda_abi_elementwise_smoke.py --negative-test`.
+- Evidence: `rust/ds4-cuda/src/abi_kernels.rs` defines library-owned
+  `abi_add_kernel` and `abi_repeat_hc_kernel` names disjoint from retained
+  executable smokes, and `abi.rs` exports the two new ABI
+  symbols using raw launch parameters so `out == a` remains valid. A C
+  executable linked from `libds4_cuda.a` on `NVIDIA B300 SXM6 AC` passes
+  add, aliasing, repeat, invalid-shape, and null checks; `nm` confirms 19
+  exported `ds4_gpu_*` symbols. The embedded artifact currently requires
+  `--whole-archive` retention and produces a missing `.note.GNU-stack`
+  linker warning. Validation: 89 local library tests and 91 B300 kernel-
+  feature tests pass; the elementwise ABI checker and unified parity report
+  pass with 175 passed, 45 skipped, and no failures. Remaining graph compute
+  ABI and production-route promotion are not claimed. The required
+  non-interactive Claude review timed out after 60 seconds without a completed
+  result; adversarial self-review fixed the embedded module-name mismatch and
+  duplicate kernel-symbol collision while retaining raw alias-preserving
+  launches.
+
+##### M14.6b2b2: Remaining Rust CUDA Kernel ABI Assembly
+
+- Status: active
+- Goal: export the remaining graph compute ABI symbols and resolve embedded
+  artifact production-link integration before selecting a Rust CUDA route.

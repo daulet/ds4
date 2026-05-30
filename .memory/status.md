@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2 Rust CUDA Compute ABI Assembly
+- Active item: M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,7 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.6b1 Rust CUDA Resource ABI Exports.
+- Last validated source before the active item: M14.6b2b1 Rust CUDA Elementwise ABI Module.
 - Earlier M14.6a Production Route Linkage Blocker.
 - Earlier M14.5d Hyperconnection Split And Expansion Kernels.
 - Earlier M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE.
@@ -225,6 +225,24 @@
 
 ## Last Evidence
 
+- M14.6b2b1 Rust CUDA Elementwise ABI Module exports
+  `ds4_gpu_add_tensor` and `ds4_gpu_repeat_hc_tensor` from reusable,
+  ABI-prefixed cuda-oxide kernels in `rust/ds4-cuda/src/abi_kernels.rs`,
+  keeping their entry names disjoint from executable smoke kernels. The C-linked
+  static-library smoke on `NVIDIA B300 SXM6 AC` passes add, valid in-place
+  `out == a` add, repeated hyperconnection-row output, invalid-shape, and
+  null-input checks, and `nm` confirms 19 exported `ds4_gpu_*` symbols.
+  Static-library embedded PTX must currently be retained with
+  `--whole-archive`; the generated embed object warns that it lacks
+  `.note.GNU-stack`, so production integration remains pending. Local library
+  tests pass with 89 tests, B300 kernel-feature tests pass with 91 tests, and
+  the elementwise ABI checker and unified parity report pass with 175 passed,
+  45 skipped, and no failures. Remaining graph compute ABI ownership,
+  production-link selection, and default-route promotion remain false;
+  M14.6b2b2 owns that work. The required non-interactive Claude review timed
+  out after 60 seconds without a completed result; adversarial self-review
+  fixed the embedded module-name mismatch and duplicate kernel-symbol
+  collision while retaining raw alias-preserving launches.
 - M14.6b2a Rust CUDA Tensor Fill ABI Export adds the first linkable compute
   operation to the Rust static library: `ds4_gpu_tensor_fill_f32` is
   implemented with stream-ordered `cuda_core::sys::cuMemsetD32Async` using

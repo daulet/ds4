@@ -9278,10 +9278,53 @@ Stage split:
 
 ##### M14.6b2b: Rust CUDA Kernel ABI Assembly
 
-- Status: active.
+- Status: active; split into M14.6b2b1 and M14.6b2b2 after the first
+  reusable embedded-kernel ABI exports required a separately testable static
+  library retention contract.
 - Goal: export the remaining validated graph compute operation ABI from
   reusable Rust-owned CUDA modules before any production linker or route
   promotion.
+
+##### M14.6b2b1: Rust CUDA Elementwise ABI Module
+
+- Status: done.
+- Goal: export `ds4_gpu_add_tensor` and `ds4_gpu_repeat_hc_tensor` from a
+  reusable Rust-owned embedded CUDA module while retaining current-C
+  input/output aliasing behavior at the C ABI boundary.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b1/abi-elementwise-smoke.json`.
+- Comparator: `ds4-parity/check_cuda_abi_elementwise_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` now owns cuda-oxide
+    `abi_add_kernel` and `abi_repeat_hc_kernel`, with names disjoint from
+    executable-local smoke kernels, loaded from the static library's embedded
+    `ds4-cuda` module; `abi.rs` submits raw driver launch parameters so valid
+    `out == a` addition remains supported.
+  - A C consumer fixture links the Rust static library on
+    `ds4-rust-port-b300` (`NVIDIA B300 SXM6 AC`) and passes add, in-place
+    add, repeated hyperconnection-row output, invalid-range, and null-input
+    checks; `nm` confirms 19 `ds4_gpu_*` exports.
+  - The static-library embedded artifact has no retaining symbol, so this
+    proof links it with `--whole-archive`; the generated embedded object also
+    emits a missing `.note.GNU-stack` linker warning that remains a required
+    production-integration cleanup before route promotion.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 89 tests and
+    B300 feature tests pass with 91 tests. The elementwise ABI comparator and
+    unified parity report pass with 175 passed, 45 skipped, and no failures.
+  - The required non-interactive Claude review was invoked with the source,
+    oracle, comparator, B300 proof, and known-linker-risk bundle, but timed
+    out after 60 seconds without a completed result. Adversarial self-review
+    fixed the embedded module-name mismatch and duplicate kernel-symbol
+    collision, and retained raw launches to preserve valid add aliasing.
+  - Remaining graph compute ABI symbols, production linker selection, and
+    default-route promotion remain pending.
+
+##### M14.6b2b2: Remaining Rust CUDA Kernel ABI Assembly
+
+- Status: active.
+- Goal: export the remaining validated graph compute symbols from reusable
+  Rust-owned modules, and address embedded-artifact production-link
+  integration before any route promotion.
 
 ## Removal Criteria for C Host Code
 
