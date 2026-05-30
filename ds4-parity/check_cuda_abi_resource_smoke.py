@@ -54,6 +54,8 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_swiglu_tensor",
     "ds4_gpu_rms_norm_plain_rows_tensor",
     "ds4_gpu_rms_norm_plain_tensor",
+    "ds4_gpu_rms_norm_weight_rows_tensor",
+    "ds4_gpu_rms_norm_weight_tensor",
 ]
 
 
@@ -222,6 +224,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
                 "M14.6b2b2a Directional Steering ABI Export",
                 "M14.6b2b2b1 SwiGLU Libdevice ABI Export",
                 "M14.6b2b2b2a Plain RMS Norm ABI Export",
+                "M14.6b2b2b2b1 Weighted RMS Device-Copy ABI Export",
             ]
         ),
         "active item missing",

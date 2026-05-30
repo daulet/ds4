@@ -180,6 +180,59 @@ mod kernels {
             i += nth;
         }
     }
+
+    #[kernel]
+    pub fn abi_rms_norm_weight_kernel(
+        n: u32,
+        rows: u32,
+        eps: f32,
+        x: &[f32],
+        weight: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x();
+        if row >= rows {
+            return;
+        }
+        let tid = thread::threadIdx_x() as usize;
+        let nth = thread::blockDim_x() as usize;
+        let n = n as usize;
+        let base = row as usize * n;
+
+        let mut sum = 0.0_f32;
+        let mut i = tid;
+        while i < n {
+            let value = x[base + i];
+            sum += value * value;
+            i += nth;
+        }
+        unsafe {
+            PARTIAL[tid] = sum;
+        }
+        thread::sync_threads();
+
+        let mut stride = nth >> 1;
+        while stride > 0 {
+            if tid < stride {
+                unsafe {
+                    PARTIAL[tid] += PARTIAL[tid + stride];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+
+        let scale = 1.0_f32 / (unsafe { PARTIAL[0] } / n as f32 + eps).sqrt();
+        i = tid;
+        while i < n {
+            unsafe {
+                *out.get_unchecked_mut(base + i) = x[base + i] * scale * weight[i];
+            }
+            i += nth;
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -189,6 +242,7 @@ pub(crate) struct AbiKernelModule {
     directional_steering_project_kernel: CudaFunction,
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
+    rms_norm_weight_kernel: CudaFunction,
 }
 
 impl AbiKernelModule {
@@ -209,6 +263,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_plain_kernel: module
                 .load_function("abi_rms_norm_plain_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            rms_norm_weight_kernel: module
+                .load_function("abi_rms_norm_weight_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
         })
     }
@@ -432,6 +489,57 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.rms_norm_plain_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn rms_norm_weight_rows_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        x_ptr: u64,
+        weight_ptr: u64,
+        n: u32,
+        rows: u32,
+        eps: f32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (rows, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let count = u64::from(n) * u64::from(rows);
+        let mut n = n;
+        let mut rows = rows;
+        let mut eps = eps;
+        let mut x_ptr = x_ptr;
+        let mut x_len = count;
+        let mut weight_ptr = weight_ptr;
+        let mut weight_len = u64::from(n);
+        let mut out_ptr = out_ptr;
+        let mut out_len = count;
+        let mut params = [
+            (&mut n as *mut u32).cast::<c_void>(),
+            (&mut rows as *mut u32).cast::<c_void>(),
+            (&mut eps as *mut f32).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+            (&mut weight_ptr as *mut u64).cast::<c_void>(),
+            (&mut weight_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates every device range and retains
+        // cached model weights through launch submission and later syncs.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.rms_norm_weight_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

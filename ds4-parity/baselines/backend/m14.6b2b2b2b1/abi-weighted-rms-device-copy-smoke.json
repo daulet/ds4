@@ -1,0 +1,108 @@
+{
+  "schema": "ds4.cuda_abi_weighted_rms_device_copy_smoke.v1",
+  "milestone": "M14.6b2b2b2b1",
+  "status": "b300-pass-staticlib-weighted-rms-device-copy-abi",
+  "goal": "Rust-own ds4_gpu_rms_norm_weight_tensor and ds4_gpu_rms_norm_weight_rows_tensor through a per-call model-map device-copy range cache without claiming the public model-map control ABI, remaining graph compute, or production route.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_rms_norm_weight_tensor",
+      "ds4_gpu_rms_norm_weight_rows_tensor"
+    ],
+    "semantics": [
+      "validate model map offset and float weight range before launch",
+      "compute weighted per-row reciprocal RMS scaling through the model-backed weight pointer",
+      "allow output/input aliasing and preserve zero-width success for a nonzero row grid"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b1/abi_rms_norm_weight_link_smoke.c",
+    "kernel_entry": "abi_rms_norm_weight_kernel",
+    "range_path": "with_cached_abi_model_range copies validated immutable host model weight bytes into cached DeviceBuffer storage and synchronizes the initial upload before launching the weighted kernel",
+    "artifact_name": "ds4-cuda",
+    "artifact_target": "sm_80",
+    "linked_cubin_target": "sm_103",
+    "libdevice_path": "cuda_host::ltoir::build_cubin_from_ptx_with_libdevice",
+    "linkage_requirement": "-Wl,--whole-archive target-staticlib/release/libds4_cuda.a -Wl,--no-whole-archive -lcuda",
+    "remaining_model_control_boundary": "ds4_gpu_set_model_map, ds4_gpu_set_model_fd, ds4_gpu_set_model_map_range, and ds4_gpu_cache_model_range remain unexported by ds4-cuda"
+  },
+  "exported_symbols": [
+    "ds4_gpu_add_tensor",
+    "ds4_gpu_begin_commands",
+    "ds4_gpu_cleanup",
+    "ds4_gpu_directional_steering_project_tensor",
+    "ds4_gpu_end_commands",
+    "ds4_gpu_flush_commands",
+    "ds4_gpu_init",
+    "ds4_gpu_repeat_hc_tensor",
+    "ds4_gpu_rms_norm_plain_rows_tensor",
+    "ds4_gpu_rms_norm_plain_tensor",
+    "ds4_gpu_rms_norm_weight_rows_tensor",
+    "ds4_gpu_rms_norm_weight_tensor",
+    "ds4_gpu_should_use_managed_kv_cache",
+    "ds4_gpu_swiglu_tensor",
+    "ds4_gpu_synchronize",
+    "ds4_gpu_tensor_alloc",
+    "ds4_gpu_tensor_alloc_managed",
+    "ds4_gpu_tensor_bytes",
+    "ds4_gpu_tensor_contents",
+    "ds4_gpu_tensor_copy",
+    "ds4_gpu_tensor_fill_f32",
+    "ds4_gpu_tensor_free",
+    "ds4_gpu_tensor_read",
+    "ds4_gpu_tensor_view",
+    "ds4_gpu_tensor_write"
+  ],
+  "ownership": {
+    "exported_abi_symbol_count": 25,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_rms_norm_weight_tensor": true,
+    "owns_rms_norm_weight_rows_tensor": true,
+    "owns_weight_range_device_copy_cache": true,
+    "uses_embedded_libdevice_link_path": true,
+    "owns_public_model_map_control_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 93,
+    "feature_release_test_count": 95,
+    "non_release_feature_test_blocker": "the shared reusable module still includes SwiGLU, whose std::f32::<impl f32>::exp device code is rejected by non-release cuda-oxide code generation before libdevice lowering",
+    "staticlib_build_command": "cargo build --locked --release --features cuda-oxide-kernels -p ds4-cuda --lib with rustc-codegen-cuda",
+    "c_link_command": "cc -I. -o /tmp/ds4_abi_rms_norm_weight_link_smoke ds4-parity/fixtures/backend/m14.6b2b2b2b1/abi_rms_norm_weight_link_smoke.c -Wl,--whole-archive target-staticlib/release/libds4_cuda.a -Wl,--no-whole-archive -lcuda -ldl -lpthread -lm -lrt -lutil",
+    "cleanup_check_command": "test -z \"$(find /tmp -maxdepth 2 -path '/tmp/ds4-cuda-abi-*/*' -type f -print)\"",
+    "generated_artifact_target": "sm_80",
+    "linked_cubin_target": "sm_103",
+    "linker_warning": "generated embed object lacks .note.GNU-stack and currently warns about an executable stack",
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "embedded_libdevice_module_loaded": true,
+      "weighted_single_row_output_matches": true,
+      "weighted_rows_output_matches": true,
+      "weighted_alias_output_matches": true,
+      "alternate_weight_offset_matches": true,
+      "undersized_output_rejected": true,
+      "invalid_weight_range_rejected": true,
+      "zero_rows_rejected": true,
+      "zero_width_preserved": true,
+      "null_model_rejected": true,
+      "temporary_link_artifacts_cleaned": true
+    }
+  },
+  "integration_risks": [
+    "the weighted ABI currently owns only an immutable per-range device-copy cache and does not implement the public model-map fd, preload, direct-I/O, registration, or HMM control surfaces",
+    "the embedded module object has no retaining symbol, so consumers must retain the complete static archive until production build integration provides an equivalent mechanism",
+    "the generated embed object currently produces an executable-stack linker warning that should be resolved before production route promotion",
+    "the cuda-oxide non-release feature build remains blocked by reusable-library SwiGLU exponential device code in the shared module"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2 Public Model-Map Control ABI Assembly"
+}

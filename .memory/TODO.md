@@ -9254,7 +9254,39 @@
 
 ##### M14.6b2b2b2b: Weighted RMS And Model-Backed ABI Assembly
 
+- Status: active; split into M14.6b2b2b2b1 and M14.6b2b2b2b2 because the
+  weighted RMS calls contain their model range arguments, while full runtime
+  replacement still needs public model-map control and preload policy.
+- Goal: export model-backed graph-compute symbols while assembling the public
+  model-map control ABI required by a complete route.
+
+##### M14.6b2b2b2b1: Weighted RMS Device-Copy ABI Export
+
+- Status: done
+- Goal: export `ds4_gpu_rms_norm_weight_tensor` and
+  `ds4_gpu_rms_norm_weight_rows_tensor` through a retained device-copy
+  weight-range cache without claiming public model-map controls.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b1/abi-weighted-rms-device-copy-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_weighted_rms_device_copy_smoke.py --negative-test`.
+- Evidence: the Rust ABI validates each requested model weight range, copies
+  immutable bytes into cached device storage with a completed initial upload,
+  and releases those ranges at cleanup; `abi_rms_norm_weight_kernel` then
+  executes from a C-linked static-library consumer on B300. Single-row,
+  batched-row, in-place alias, alternate-offset, invalid-range, zero-row,
+  current-C zero-width, and null-model cases pass, and `nm` confirms 25
+  exports. Local library tests pass with 93 tests and B300 release-feature
+  tests pass with 95 tests. The weighted ABI checker passes with 102 checks,
+  and unified parity passes with 179 passed, 45 skipped, and no failures.
+  The required non-interactive Claude adversarial review timed out after 60
+  seconds without a completed result; self-review kept public residency
+  controls out of this leaf. Public model-map control exports, whole-archive
+  retention, the `.note.GNU-stack` warning, and the shared-module non-release
+  SwiGLU codegen blocker remain pending.
+
+##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
+
 - Status: active
-- Goal: establish a Rust-owned model-map range boundary required by weighted
-  RMS and subsequent model-backed graph-compute exports before exposing those
-  ABI symbols.
+- Goal: export model-map, file-descriptor, map-range, and cache-range
+  controls without weakening the current-C residency-policy contract.

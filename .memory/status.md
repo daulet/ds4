@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b Weighted RMS And Model-Backed ABI Assembly
+- Active item: M14.6b2b2b2b2 Public Model-Map Control ABI Assembly
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,7 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.6b2b2b2a Plain RMS Norm ABI Export.
+- Last validated source before the active item: M14.6b2b2b2b1 Weighted RMS Device-Copy ABI Export.
 - Earlier M14.6a Production Route Linkage Blocker.
 - Earlier M14.5d Hyperconnection Split And Expansion Kernels.
 - Earlier M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE.
@@ -225,6 +225,26 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b1 Weighted RMS Device-Copy ABI Export adds the Rust-owned
+  `ds4_gpu_rms_norm_weight_tensor` and
+  `ds4_gpu_rms_norm_weight_rows_tensor` surfaces through
+  `abi_rms_norm_weight_kernel`. The ABI validates each per-call host model
+  range, performs and synchronizes an immutable device-copy on first use,
+  retains cached weight bytes through submitted launches, and releases the
+  cache at cleanup; public `ds4_gpu_set_model_map`, fd, preload, and
+  cache-range controls remain unowned. A C-linked static-library consumer on
+  `NVIDIA B300 SXM6 AC` passes single-row, two-row, output/input alias,
+  alternate-weight-offset, invalid-range, zero-row, current-C zero-width,
+  and null-model checks; `nm` confirms 25 exported `ds4_gpu_*` symbols.
+  Local library tests pass with 93 tests and B300 release-feature tests pass
+  with 95 tests. The weighted ABI checker passes with 102 checks, and unified
+  parity passes with 179 passed, 45 skipped, and no failures. The required
+  non-interactive Claude adversarial review timed out after 60 seconds without
+  a completed result; self-review kept public residency controls outside this
+  leaf. Whole-archive retention, the generated embedded object's
+  executable-stack warning, public model-map control assembly, and the
+  shared-module non-release SwiGLU codegen blocker remain active before route
+  promotion.
 - M14.6b2b2b2a Plain RMS Norm ABI Export adds the Rust-owned
   `ds4_gpu_rms_norm_plain_tensor` and
   `ds4_gpu_rms_norm_plain_rows_tensor` surfaces through

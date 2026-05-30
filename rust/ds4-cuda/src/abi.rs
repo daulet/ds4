@@ -13,6 +13,17 @@ use crate::substrate::CudaOxideSubstrate;
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiModelRange {
+    model_map: usize,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+    device: DeviceBuffer<u8>,
+}
 
 enum TensorStorage {
     Device(DeviceBuffer<u8>),
@@ -64,6 +75,58 @@ fn with_abi_kernels<T>(
     operation(kernels.as_ref()?)
 }
 
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_cached_abi_model_range<T>(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+    operation: impl FnOnce(u64) -> Option<T>,
+) -> Option<T> {
+    if model_map.is_null() || offset > model_size || bytes > model_size - offset {
+        return None;
+    }
+    if bytes == 0 {
+        let ptr = (model_map as usize).checked_add(usize::try_from(offset).ok()?)?;
+        return operation(ptr as u64);
+    }
+    let end = offset.checked_add(bytes)?;
+    let mut ranges = ABI_MODEL_RANGES.lock().ok()?;
+    if let Some(range) = ranges.iter().find(|range| {
+        range.model_map == model_map as usize
+            && range.model_size == model_size
+            && offset >= range.offset
+            && range
+                .offset
+                .checked_add(range.bytes)
+                .is_some_and(|range_end| end <= range_end)
+    }) {
+        let ptr = range
+            .device
+            .cu_deviceptr()
+            .checked_add(offset - range.offset)?;
+        return operation(ptr);
+    }
+    let offset = usize::try_from(offset).ok()?;
+    let bytes = usize::try_from(bytes).ok()?;
+    // SAFETY: the public C ABI requires `model_map` to remain readable for
+    // `model_size` bytes while this operation executes; bounds were checked
+    // above and the asynchronous upload is synchronized before returning.
+    let source = unsafe { std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes) };
+    let device = backend.upload(source).ok()?;
+    backend.synchronize().ok()?;
+    let ptr = device.cu_deviceptr();
+    ranges.push(AbiModelRange {
+        model_map: model_map as usize,
+        model_size,
+        offset: offset as u64,
+        bytes: bytes as u64,
+        device,
+    });
+    operation(ptr)
+}
+
 fn allocation_len(bytes: u64) -> Option<(u64, usize)> {
     let bytes = bytes.max(1);
     Some((bytes, usize::try_from(bytes).ok()?))
@@ -107,6 +170,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut kernels) = ABI_KERNELS.lock() {
                 *kernels = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut model_ranges) = ABI_MODEL_RANGES.lock() {
+                model_ranges.clear();
             }
             *backend = None;
         }
@@ -491,6 +558,102 @@ pub unsafe extern "C" fn ds4_gpu_rms_norm_plain_rows_tensor(
     eps: f32,
 ) -> c_int {
     status(|| unsafe { rms_norm_plain_rows_impl(out, x, n, rows, eps) })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+unsafe fn rms_norm_weight_rows_impl(
+    out: *mut Ds4GpuTensor,
+    x: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    n: u32,
+    rows: u32,
+    eps: f32,
+) -> bool {
+    let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+        return false;
+    };
+    let Some(x) = (unsafe { tensor_ref(x) }) else {
+        return false;
+    };
+    let Some(count) = u64::from(n).checked_mul(u64::from(rows)) else {
+        return false;
+    };
+    let Some(bytes) = count.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let weight_bytes = u64::from(n) * size_of::<f32>() as u64;
+    if model_map.is_null()
+        || rows == 0
+        || weight_offset > model_size
+        || weight_bytes > model_size - weight_offset
+        || out.bytes < bytes
+        || x.bytes < bytes
+    {
+        return false;
+    }
+    with_backend(|backend| {
+        with_cached_abi_model_range(
+            backend,
+            model_map,
+            model_size,
+            weight_offset,
+            weight_bytes,
+            |weight_ptr| {
+                with_abi_kernels(backend, |kernels| {
+                    // SAFETY: tensor and model ranges above cover every
+                    // device pointer; row reductions complete before stores,
+                    // preserving current-C output/input aliasing.
+                    Some(unsafe {
+                        kernels.rms_norm_weight_rows_tensor(
+                            backend.stream(),
+                            out.device_ptr(),
+                            x.device_ptr(),
+                            weight_ptr,
+                            n,
+                            rows,
+                            eps,
+                        )
+                    })
+                })
+            },
+        )
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_rms_norm_weight_tensor(
+    out: *mut Ds4GpuTensor,
+    x: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    n: u32,
+    eps: f32,
+) -> c_int {
+    status(|| unsafe {
+        rms_norm_weight_rows_impl(out, x, model_map, model_size, weight_offset, n, 1, eps)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_rms_norm_weight_rows_tensor(
+    out: *mut Ds4GpuTensor,
+    x: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    n: u32,
+    rows: u32,
+    eps: f32,
+) -> c_int {
+    status(|| unsafe {
+        rms_norm_weight_rows_impl(out, x, model_map, model_size, weight_offset, n, rows, eps)
+    })
 }
 
 #[no_mangle]

@@ -9456,10 +9456,57 @@ Stage split:
 
 ##### M14.6b2b2b2b: Weighted RMS And Model-Backed ABI Assembly
 
+- Status: active; split into M14.6b2b2b2b1 and M14.6b2b2b2b2 because the
+  weighted RMS calls carry their own model range arguments and can execute
+  through a bounded immutable device-copy cache without first claiming the
+  full public model-map control and preload policy surface.
+- Goal: export model-backed graph-compute symbols while incrementally
+  assembling the public model-map control ABI required by a complete route.
+
+##### M14.6b2b2b2b1: Weighted RMS Device-Copy ABI Export
+
+- Status: done.
+- Goal: export `ds4_gpu_rms_norm_weight_tensor` and
+  `ds4_gpu_rms_norm_weight_rows_tensor` through an internal cached
+  device-copy weight-range path without claiming the public model-map
+  controls.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b1/abi-weighted-rms-device-copy-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_weighted_rms_device_copy_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` validates the per-call host model range,
+    copies immutable requested weight bytes to retained `DeviceBuffer`
+    storage, synchronizes the initial upload, and frees cached ranges at
+    cleanup; it does not export `ds4_gpu_set_model_map` or related controls.
+  - `rust/ds4-cuda/src/abi_kernels.rs` adds
+    `abi_rms_norm_weight_kernel`. A C consumer of `libds4_cuda.a` on
+    `ds4-rust-port-b300` (`NVIDIA B300 SXM6 AC`) passes single-row,
+    two-row, output/input alias, alternate-offset, invalid-range, zero-row,
+    current-C zero-width, and null-model checks; `nm` confirms 25 exported
+    `ds4_gpu_*` symbols.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 93 tests and
+    B300 `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 95 tests.
+  - `check_cuda_abi_weighted_rms_device_copy_smoke.py --negative-test`
+    passes with 102 checks, and unified parity passes with 179 passed, 45
+    skipped, and no failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the source, C oracle, comparators, B300 proof, and open-risk boundary, but
+    timed out after 60 seconds without a completed result. Adversarial
+    self-review retained only immutable weight-range device-copy ownership
+    and left all public model-map residency controls outside this leaf.
+  - Public model-map fd/preload/cache policy, whole-archive artifact
+    retention, the generated `.note.GNU-stack` linker warning, and the shared
+    module's non-release SwiGLU codegen blocker remain open before route
+    promotion.
+
+##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
+
 - Status: active.
-- Goal: establish a Rust-owned model-map range boundary required by weighted
-  RMS and the subsequent model-backed graph-compute exports before adding
-  those public ABI symbols.
+- Goal: export the model-map, file-descriptor, map-range, and cache-range
+  control surfaces needed to substitute Rust beneath model-backed runtime
+  callers without reducing the current-C residency policy contract.
 
 ## Removal Criteria for C Host Code
 

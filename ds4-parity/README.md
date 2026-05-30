@@ -3007,6 +3007,20 @@ reads weights through the model-map range ABI; whole-archive retention and
 the generated executable-stack warning also remain open before route
 promotion.
 
+Validate the M14.6b2b2b2b1 Rust CUDA weighted RMS device-copy ABI export:
+
+```sh
+python3 ds4-parity/check_cuda_abi_weighted_rms_device_copy_smoke.py --negative-test
+```
+
+The fixture records `ds4_gpu_rms_norm_weight_tensor` and
+`ds4_gpu_rms_norm_weight_rows_tensor` running from a C consumer of the Rust
+static library on B300 through an internal immutable weight-range device-copy
+cache. It covers batched rows, in-place aliasing, alternate model offsets,
+invalid ranges, and current-C zero-width behavior. Public model-map controls,
+whole-archive retention, and the generated executable-stack warning remain
+open before route promotion.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
