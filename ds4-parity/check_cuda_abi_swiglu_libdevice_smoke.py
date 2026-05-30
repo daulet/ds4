@@ -70,7 +70,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
     "ds4_gpu_hc_weighted_sum_tensor",
     "ds4_gpu_hc_weighted_sum_split_tensor",
-    "ds4_gpu_hc_split_sinkhorn_tensor", "ds4_gpu_hc_split_weighted_sum_tensor",
+    "ds4_gpu_hc_split_sinkhorn_tensor", "ds4_gpu_hc_split_weighted_sum_tensor", "ds4_gpu_hc_split_weighted_sum_norm_tensor",
 ]
 
 

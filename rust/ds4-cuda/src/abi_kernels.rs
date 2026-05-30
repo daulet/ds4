@@ -229,6 +229,93 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_hc_split_weighted_sum_norm_fused_kernel(
+        n_embd: u32,
+        n_hc: u32,
+        n_rows: u32,
+        sinkhorn_iters: u32,
+        eps: f32,
+        norm_eps: f32,
+        mix: &[f32],
+        residual_hc: &[f32],
+        scale: &[f32],
+        base: &[f32],
+        norm_weight: &[f32],
+        mut split: DisjointSlice<f32>,
+        mut out: DisjointSlice<f32>,
+        mut norm_out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+        const N_HC: u32 = 4;
+        const MIX_HC: u64 = 24;
+
+        let token = thread::blockIdx_x();
+        let lane = thread::threadIdx_x();
+        if token >= n_rows || n_hc != N_HC {
+            return;
+        }
+        if lane == 0 {
+            abi_hc4_split_one(
+                token as usize,
+                sinkhorn_iters,
+                eps,
+                mix,
+                scale,
+                base,
+                &mut split,
+            );
+        }
+        thread::sync_threads();
+        let split_ptr = split.as_mut_ptr();
+        let split_base = u64::from(token) * MIX_HC;
+        let mut sum = 0.0_f32;
+        let mut dimension = u64::from(lane);
+        while dimension < u64::from(n_embd) {
+            let mut accumulator = 0.0_f32;
+            let mut source_hc = 0_u64;
+            while source_hc < u64::from(N_HC) {
+                accumulator += residual_hc[((u64::from(token) * u64::from(N_HC) + source_hc)
+                    * u64::from(n_embd)
+                    + dimension) as usize]
+                    * unsafe { *split_ptr.add((split_base + source_hc) as usize) };
+                source_hc += 1;
+            }
+            unsafe {
+                *out.get_unchecked_mut(
+                    (u64::from(token) * u64::from(n_embd) + dimension) as usize,
+                ) = accumulator;
+            }
+            sum += accumulator * accumulator;
+            dimension += u64::from(thread::blockDim_x());
+        }
+        unsafe {
+            PARTIAL[lane as usize] = sum;
+        }
+        thread::sync_threads();
+        let mut stride = thread::blockDim_x() >> 1;
+        while stride > 0 {
+            if lane < stride {
+                unsafe {
+                    PARTIAL[lane as usize] += PARTIAL[(lane + stride) as usize];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        let norm_scale = 1.0_f32 / (unsafe { PARTIAL[0] } / n_embd as f32 + norm_eps).sqrt();
+        dimension = u64::from(lane);
+        while dimension < u64::from(n_embd) {
+            let index = (u64::from(token) * u64::from(n_embd) + dimension) as usize;
+            let value = unsafe { *out.as_mut_ptr().add(index) };
+            unsafe {
+                *norm_out.get_unchecked_mut(index) =
+                    value * norm_scale * norm_weight[dimension as usize];
+            }
+            dimension += u64::from(thread::blockDim_x());
+        }
+    }
+
+    #[kernel]
     pub fn abi_hc_weighted_sum_kernel(
         n_embd: u32,
         n_hc: u32,
@@ -1194,6 +1281,7 @@ pub(crate) struct AbiKernelModule {
     repeat_hc_kernel: CudaFunction,
     hc_split_sinkhorn_kernel: CudaFunction,
     hc_split_weighted_sum_fused_kernel: CudaFunction,
+    hc_split_weighted_sum_norm_fused_kernel: CudaFunction,
     hc_weighted_sum_kernel: CudaFunction,
     hc_expand_kernel: CudaFunction,
     directional_steering_project_kernel: CudaFunction,
@@ -1231,6 +1319,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             hc_split_weighted_sum_fused_kernel: module
                 .load_function("abi_hc_split_weighted_sum_fused_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            hc_split_weighted_sum_norm_fused_kernel: module
+                .load_function("abi_hc_split_weighted_sum_norm_fused_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             hc_weighted_sum_kernel: module
                 .load_function("abi_hc_weighted_sum_kernel")
@@ -1556,6 +1647,97 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.hc_split_weighted_sum_fused_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn hc_split_weighted_sum_norm_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        norm_out_ptr: u64,
+        split_ptr: u64,
+        mix_ptr: u64,
+        residual_hc_ptr: u64,
+        scale_ptr: u64,
+        base_ptr: u64,
+        norm_weight_ptr: u64,
+        n_embd: u32,
+        n_hc: u32,
+        n_rows: u32,
+        sinkhorn_iters: u32,
+        eps: f32,
+        norm_eps: f32,
+    ) -> bool {
+        if n_rows == 0 {
+            return false;
+        }
+        let config = LaunchConfig {
+            grid_dim: (n_rows, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mix_len = u64::from(n_rows) * 24;
+        let out_len = u64::from(n_rows) * u64::from(n_embd);
+        let residual_hc_len = out_len * u64::from(n_hc);
+        let mut n_embd = n_embd;
+        let mut n_hc = n_hc;
+        let mut n_rows = n_rows;
+        let mut sinkhorn_iters = sinkhorn_iters;
+        let mut eps = eps;
+        let mut norm_eps = norm_eps;
+        let mut mix_ptr = mix_ptr;
+        let mut mix_len = mix_len;
+        let mut residual_hc_ptr = residual_hc_ptr;
+        let mut residual_hc_len = residual_hc_len;
+        let mut scale_ptr = scale_ptr;
+        let mut scale_len = 3_u64;
+        let mut base_ptr = base_ptr;
+        let mut base_len = 24_u64;
+        let mut norm_weight_ptr = norm_weight_ptr;
+        let mut norm_weight_len = u64::from(n_embd);
+        let mut split_ptr = split_ptr;
+        let mut split_len = mix_len;
+        let mut out_ptr = out_ptr;
+        let mut out_len = out_len;
+        let mut norm_out_ptr = norm_out_ptr;
+        let mut norm_out_len = out_len;
+        let mut params = [
+            (&mut n_embd as *mut u32).cast::<c_void>(),
+            (&mut n_hc as *mut u32).cast::<c_void>(),
+            (&mut n_rows as *mut u32).cast::<c_void>(),
+            (&mut sinkhorn_iters as *mut u32).cast::<c_void>(),
+            (&mut eps as *mut f32).cast::<c_void>(),
+            (&mut norm_eps as *mut f32).cast::<c_void>(),
+            (&mut mix_ptr as *mut u64).cast::<c_void>(),
+            (&mut mix_len as *mut u64).cast::<c_void>(),
+            (&mut residual_hc_ptr as *mut u64).cast::<c_void>(),
+            (&mut residual_hc_len as *mut u64).cast::<c_void>(),
+            (&mut scale_ptr as *mut u64).cast::<c_void>(),
+            (&mut scale_len as *mut u64).cast::<c_void>(),
+            (&mut base_ptr as *mut u64).cast::<c_void>(),
+            (&mut base_len as *mut u64).cast::<c_void>(),
+            (&mut norm_weight_ptr as *mut u64).cast::<c_void>(),
+            (&mut norm_weight_len as *mut u64).cast::<c_void>(),
+            (&mut split_ptr as *mut u64).cast::<c_void>(),
+            (&mut split_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+            (&mut norm_out_ptr as *mut u64).cast::<c_void>(),
+            (&mut norm_out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer only selects this one-row fused launch after
+        // validating all tensor spans and the three cached model ranges.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.hc_split_weighted_sum_norm_fused_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

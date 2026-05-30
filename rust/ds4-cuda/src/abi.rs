@@ -2335,6 +2335,217 @@ pub unsafe extern "C" fn ds4_gpu_hc_split_weighted_sum_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn hc_split_weighted_sum_norm_fallback(
+    out: *mut Ds4GpuTensor,
+    norm_out: *mut Ds4GpuTensor,
+    split: *mut Ds4GpuTensor,
+    mix: *const Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    scale_offset: u64,
+    base_offset: u64,
+    norm_weight_offset: u64,
+    n_embd: u32,
+    n_hc: u32,
+    sinkhorn_iters: u32,
+    eps: f32,
+    norm_eps: f32,
+) -> bool {
+    unsafe {
+        ds4_gpu_hc_split_weighted_sum_tensor(
+            out,
+            split,
+            mix,
+            residual_hc,
+            model_map,
+            model_size,
+            scale_offset,
+            base_offset,
+            n_embd,
+            n_hc,
+            sinkhorn_iters,
+            eps,
+        ) != 0
+            && ds4_gpu_rms_norm_weight_tensor(
+                norm_out,
+                out.cast_const(),
+                model_map,
+                model_size,
+                norm_weight_offset,
+                n_embd,
+                norm_eps,
+            ) != 0
+    }
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_hc_split_weighted_sum_norm_tensor(
+    out: *mut Ds4GpuTensor,
+    norm_out: *mut Ds4GpuTensor,
+    split: *mut Ds4GpuTensor,
+    mix: *const Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    scale_offset: u64,
+    base_offset: u64,
+    norm_weight_offset: u64,
+    n_embd: u32,
+    n_hc: u32,
+    sinkhorn_iters: u32,
+    eps: f32,
+    norm_eps: f32,
+) -> c_int {
+    if std::env::var_os("DS4_CUDA_DISABLE_HC_SPLIT_NORM_FUSED").is_some() {
+        return status(|| unsafe {
+            hc_split_weighted_sum_norm_fallback(
+                out,
+                norm_out,
+                split,
+                mix,
+                residual_hc,
+                model_map,
+                model_size,
+                scale_offset,
+                base_offset,
+                norm_weight_offset,
+                n_embd,
+                n_hc,
+                sinkhorn_iters,
+                eps,
+                norm_eps,
+            )
+        });
+    }
+    status(|| {
+        const MIX_ELEMENTS: u64 = 24;
+        const SCALE_ELEMENTS: u64 = 3;
+
+        let Some(out_ref) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(norm_out_ref) = (unsafe { tensor_ref(norm_out.cast_const()) }) else {
+            return false;
+        };
+        let Some(split_ref) = (unsafe { tensor_ref(split.cast_const()) }) else {
+            return false;
+        };
+        let Some(mix_ref) = (unsafe { tensor_ref(mix) }) else {
+            return false;
+        };
+        let Some(residual_ref) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(out_row_bytes) = u64::from(n_embd).checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let mix_bytes = MIX_ELEMENTS * size_of::<f32>() as u64;
+        let scale_bytes = SCALE_ELEMENTS * size_of::<f32>() as u64;
+        if model_map.is_null()
+            || n_embd == 0
+            || n_hc != 4
+            || out_ref.bytes < out_row_bytes
+            || out_ref.bytes % out_row_bytes != 0
+            || norm_out_ref.bytes < out_ref.bytes
+            || scale_offset > model_size
+            || scale_bytes > model_size - scale_offset
+            || base_offset > model_size
+            || mix_bytes > model_size - base_offset
+            || norm_weight_offset > model_size
+            || out_row_bytes > model_size - norm_weight_offset
+        {
+            return false;
+        }
+        let rows = out_ref.bytes / out_row_bytes;
+        if rows != 1 {
+            return unsafe {
+                hc_split_weighted_sum_norm_fallback(
+                    out,
+                    norm_out,
+                    split,
+                    mix,
+                    residual_hc,
+                    model_map,
+                    model_size,
+                    scale_offset,
+                    base_offset,
+                    norm_weight_offset,
+                    n_embd,
+                    n_hc,
+                    sinkhorn_iters,
+                    eps,
+                    norm_eps,
+                )
+            };
+        }
+        let required_residual_bytes = u64::from(n_hc) * out_row_bytes;
+        if mix_ref.bytes < mix_bytes
+            || split_ref.bytes < mix_bytes
+            || residual_ref.bytes < required_residual_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                scale_offset,
+                scale_bytes,
+                |scale_ptr| {
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        base_offset,
+                        mix_bytes,
+                        |base_ptr| {
+                            with_cached_abi_model_range(
+                                backend,
+                                model_map,
+                                model_size,
+                                norm_weight_offset,
+                                out_row_bytes,
+                                |norm_weight_ptr| {
+                                    with_abi_kernels(backend, |kernels| {
+                                        // SAFETY: the one-row fused branch is
+                                        // selected only after all spans above.
+                                        Some(unsafe {
+                                            kernels.hc_split_weighted_sum_norm_tensor(
+                                                backend.stream(),
+                                                out_ref.device_ptr(),
+                                                norm_out_ref.device_ptr(),
+                                                split_ref.device_ptr(),
+                                                mix_ref.device_ptr(),
+                                                residual_ref.device_ptr(),
+                                                scale_ptr,
+                                                base_ptr,
+                                                norm_weight_ptr,
+                                                n_embd,
+                                                n_hc,
+                                                1,
+                                                sinkhorn_iters,
+                                                eps,
+                                                norm_eps,
+                                            )
+                                        })
+                                    })
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

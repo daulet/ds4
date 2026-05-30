@@ -11316,6 +11316,48 @@ Stage split:
 
 ######################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbb because the
+  normalized fused HC consumer and its fallback policy form a bounded public
+  ABI leaf independently from output-head HC weights.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+######################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbba: Public Hyperconnection Split Weighted Sum Norm ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_hc_split_weighted_sum_norm_tensor` through its
+  one-row fused kernel and current-C disabled-or-multi-row fallback without
+  claiming output-head HC weights or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbba/abi-hc-split-weighted-sum-norm-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_hc_split_weighted_sum_norm_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the normalized wrapper, retaining
+    current-C environment and row-count dispatch while resolving all fused
+    parameter spans through the established cached model-range path.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds
+    `abi_hc_split_weighted_sum_norm_fused_kernel`, reusing private split math
+    and performing its weighted RMS reduction behind thread-block barriers.
+  - A C-linked B300 consumer proves the one-row fused result, the disabled
+    and multi-row fallback behavior, alternate model parameter ranges, and
+    invalid-input rejection.
+  - Local library tests pass with 133 tests; B300 release-feature tests pass
+    with 140 tests; the static library exposes 47 Rust ABI symbols; all 43
+    preceding linked ABI consumers pass against the rebuilt archive with the
+    known generated embedded-object executable-stack warning.
+  - All 47 CUDA ABI comparators pass, and the unified parity report passes
+    with 219 passed, 45 skipped, and 0 failed.
+  - The pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Output HC weights, remaining graph compute, whole-archive retention
+    policy, route promotion, C CUDA removal, and the generated embedded-object
+    executable-stack warning remain open.
+
+######################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

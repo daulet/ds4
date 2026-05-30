@@ -3605,6 +3605,20 @@ reduction, output HC weights, remaining graph compute, whole-archive
 retention policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public hyperconnection split weighted-sum norm ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_hc_split_weighted_sum_norm_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the one-row fused normalization kernel,
+validates alternate cached model parameter ranges, and proves both
+environment-disabled and multi-row fallback behavior, then checks invalid
+normalization and tensor spans. Output HC weights, remaining graph compute,
+whole-archive retention policy, route promotion, C CUDA removal, and the
+embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

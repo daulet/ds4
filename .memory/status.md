@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbba: Public Hyperconnection Split Weighted Sum Norm ABI
+  is validated. Rust exports `ds4_gpu_hc_split_weighted_sum_norm_tensor`
+  through an embedded one-row fused normalization kernel and preserves the
+  current-C disabled-or-multi-row fallback through the prior split-weighted
+  and weighted-RMS exports. A C-linked B300 witness proves one-row fused
+  split/output/norm, current-C multi-row first-normalized-row fallback,
+  disabled-fusion fallback, alternate parameter ranges, and invalid-input
+  rejection. Local tests pass with 133 tests; B300 feature tests pass with
+  140 tests; the static library exposes 47 symbols; all 43 preceding linked
+  ABI consumers pass against the rebuilt archive with the known
+  executable-stack warning. All 47 CUDA ABI comparators pass, and the unified
+  report passes with 219 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review attempts
+  each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Output HC weights,
+  remaining graph compute, whole-archive/route promotion, C CUDA removal, and
+  the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbba: Public Hyperconnection Split Weighted Sum ABI
   is validated. Rust exports
   `ds4_gpu_hc_split_weighted_sum_tensor` through an embedded synchronized
