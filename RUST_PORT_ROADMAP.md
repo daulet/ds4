@@ -7237,7 +7237,10 @@ Stage split:
   warp reduction, tensor-core scoring, and specialized top-k selection use
   separate cuda-oxide surfaces; M14.2d2b split into M14.2d2b1 and
   M14.2d2b2 because cuda-oxide's `m16n8k16` surface proves the base
-  16-component tile independently from the widened multi-warp dispatch.
+  16-component tile independently from the widened multi-warp dispatch;
+  M14.2d2b2 split into M14.2d2b2a through M14.2d2b2c because the 32,
+  64, and 128-component branches and final priority wiring need separate
+  multi-warp evidence.
 - Goal: port the M14.2 operation family through bounded Rust CUDA kernel
   slices while retaining current-C oracles and the opt-in-only route.
 - Stage split:
@@ -7248,7 +7251,9 @@ Stage split:
   - M14.2d1: Scalar Indexer Selection Kernels.
   - M14.2d2a: Direct-One Indexer Score Kernel.
   - M14.2d2b1: Base Tensor-Core Indexer Score Kernel.
-  - M14.2d2b2: Widened Tensor-Core Indexer Score Dispatch.
+  - M14.2d2b2a: WMMA32 Tensor-Core Indexer Score Kernel.
+  - M14.2d2b2b: WMMA64 Tensor-Core Indexer Score Kernel.
+  - M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority.
   - M14.2d2c: Specialized Top-K Kernels.
   - M14.2e: M14.2 Kernel Closure Gate.
 
@@ -7522,9 +7527,56 @@ Stage split:
 
 ##### M14.2d2b2: Widened Tensor-Core Indexer Score Dispatch
 
-- Status: active.
+- Status: split before implementation into M14.2d2b2a through M14.2d2b2c.
 - Goal: port current-C's 32/64/128-component multi-warp WMMA branches and
   their dispatch priority after the base tile is proven.
+
+##### M14.2d2b2a: WMMA32 Tensor-Core Indexer Score Kernel
+
+- Status: done.
+- Goal: port current-C's 32-component two-warp WMMA score branch without
+  claiming the larger multi-warp branches or dispatch priority.
+- Oracle: current-C `indexer_scores_wmma32_kernel` and its
+  `indexer_scores_wmma32_kernel<<<grid, 64>>>` launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2b2a/indexer-wmma32-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_wmma32_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Acceptance: Rust owns only the 32-component two-warp WMMA score tile and
+  host-side bounds validation; WMMA64/WMMA128 dispatch, specialized top-k,
+  route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexer_scores_wmma32_kernel` using two
+    warps, native `f16` shared staging, and two cuda-oxide
+    `mma_m16n8k16_f32_f16` accumulators per warp to cover current-C's
+    `16 x 32` output tile.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 29 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved WMMA32 output across two 32-component blocks,
+    two-warp tile mapping, per-token weighting, NaN/negative suppression,
+    causal masking, and invalid-shape rejection on `NVIDIA B300 SXM6 AC`.
+  - Local workspace tests, formatter/diff checks, the 73-check WMMA32
+    comparator, and unified parity passed with 121 passed, 45 skipped, and
+    0 failed. Non-interactive Claude review produced no completed result
+    before its timeout; adversarial self-review compared the two-warp
+    staging, accumulator scatter, causal early exit, and explicit `fmaxf`
+    equivalent against current C.
+  - This stage remains opt-in; it does not claim WMMA64/WMMA128 score
+    dispatch, specialized top-k dispatch, runtime route, or C CUDA removal
+    ownership.
+
+##### M14.2d2b2b: WMMA64 Tensor-Core Indexer Score Kernel
+
+- Status: active.
+- Goal: port current-C's 64-component four-warp WMMA score branch after the
+  two-warp mapping is proven.
+
+##### M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority
+
+- Status: pending.
+- Goal: port current-C's 128-component eight-warp WMMA score branch and close
+  the 128/64/32/base priority selection contract.
 
 ##### M14.2d2c: Specialized Top-K Kernels
 

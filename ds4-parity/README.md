@@ -2299,6 +2299,18 @@ NaN/negative suppression, and causal masking while leaving widened WMMA
 dispatch, specialized top-k dispatch, runtime route, and C CUDA removal
 pending.
 
+Validate the M14.2d2b2a Rust CUDA WMMA32 tensor-core indexer score kernel smoke:
+
+```sh
+python3 ds4-parity/check_indexer_wmma32_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `indexer_scores_wmma32_kernel`
+execution on B300 through two warps covering the current-C `16 x 32`
+output tile. It proves WMMA32 scoring, weighted output, NaN/negative
+suppression, and causal masking while leaving WMMA64/WMMA128 dispatch,
+specialized top-k dispatch, runtime route, and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

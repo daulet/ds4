@@ -7592,13 +7592,16 @@
   M14.2d is split into scalar fallback proof and optimized dispatch ownership;
   M14.2d2 is split into direct-one, tensor-core score, and specialized top-k
   slices; M14.2d2b is split into base-tile and widened multi-warp score
-  ownership because those paths have separate launch and validation evidence.
+  ownership because those paths have separate launch and validation evidence;
+  M14.2d2b2 is split into WMMA32, WMMA64, and WMMA128/priority slices.
 - Stage split: M14.2a Add And Repeat Elementwise Kernels; M14.2b1
   Directional Steering Projection Kernel; M14.2b2 SwiGLU Libdevice Path;
   M14.2c Embedding Kernel Pair; M14.2d1 Scalar Indexer Selection Kernels;
   M14.2d2a Direct-One Indexer Score Kernel; M14.2d2b1 Base Tensor-Core
-  Indexer Score Kernel; M14.2d2b2 Widened Tensor-Core Indexer Score Dispatch;
-  M14.2d2c Specialized Top-K Kernels; M14.2e Kernel Closure Gate.
+  Indexer Score Kernel; M14.2d2b2a WMMA32 Tensor-Core Indexer Score Kernel;
+  M14.2d2b2b WMMA64 Tensor-Core Indexer Score Kernel; M14.2d2b2c WMMA128
+  Tensor-Core Indexer Score Kernel And Dispatch Priority; M14.2d2c
+  Specialized Top-K Kernels; M14.2e Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
 
@@ -7800,9 +7803,47 @@
 
 ##### M14.2d2b2: Widened Tensor-Core Indexer Score Dispatch
 
-- Status: active
+- Status: split before implementation into M14.2d2b2a through M14.2d2b2c
 - Goal: port current-C's 32/64/128-component WMMA score branches and
   dispatch priority after the base tile proof.
+
+##### M14.2d2b2a: WMMA32 Tensor-Core Indexer Score Kernel
+
+- Status: done
+- Goal: port current-C's two-warp, 32-component tensor-core score branch
+  without claiming larger WMMA dispatch.
+- Oracle: `indexer_scores_wmma32_kernel` and its 64-thread launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2b2a/indexer-wmma32-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_wmma32_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Evidence: added executable-local Rust `indexer_scores_wmma32_kernel` using
+  two warps, native `f16` staging, and cuda-oxide `m16n8k16` MMA calls.
+  B300 feature-enabled `ds4-cuda` tests passed with 29 tests and live
+  cargo-oxide execution emitted portable `sm_80` PTX and proved WMMA32
+  output over two 32-component blocks, two-warp tile mapping, per-token
+  weighting, NaN/negative suppression, causal masking, and invalid-shape
+  rejection on `NVIDIA B300 SXM6 AC`. WMMA64/WMMA128 dispatch, specialized
+  top-k dispatch, route activation, and C CUDA removal remain unclaimed.
+  Local formatter/diff checks, workspace tests, the 73-check WMMA32
+  comparator, and unified parity passed with 121 passed, 45 skipped, and 0
+  failed. Non-interactive Claude review produced no completed result before
+  its timeout; adversarial self-review compared two-warp staging,
+  accumulator scatter, causal early exit, and explicit `fmaxf` semantics
+  against current C.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
+
+##### M14.2d2b2b: WMMA64 Tensor-Core Indexer Score Kernel
+
+- Status: active
+- Goal: port current-C's four-warp, 64-component tensor-core score branch.
+
+##### M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority
+
+- Status: pending
+- Goal: port current-C's eight-warp, 128-component score branch and final
+  widened-WMMA priority contract.
 
 ##### M14.2d2c: Specialized Top-K Kernels
 
