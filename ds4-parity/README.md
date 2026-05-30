@@ -2676,6 +2676,18 @@ causal wrapped raw rows, and learned-sink softmax while leaving indexed
 sort/heads8 dispatch, output-Q8 attention, runtime route, and C CUDA removal
 unclaimed.
 
+Validate the M14.4d7 Rust CUDA optimized indexed attention smoke:
+
+```sh
+python3 ds4-parity/check_attention_indexed_optimized_smoke.py --negative-test
+```
+
+The fixture records integration of the prior indexed ascending-sort policy
+with `attention_indexed_mixed_heads8_online_kernel` and execution of
+`attention_indexed_mixed_heads8_rb4_kernel` on B300. It proves sorted-online
+and filtered/duplicate rb4 output plus current-C dispatch priority while
+leaving output-Q8 attention, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

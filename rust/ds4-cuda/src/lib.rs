@@ -1356,6 +1356,63 @@ pub const M14_4D6_SCOPE: AttentionIndexedGenericScope = AttentionIndexedGenericS
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttentionIndexedPath {
+    Heads8Online,
+    Heads8Rb4,
+    Generic,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionIndexedDispatchOptions {
+    pub n_tokens: u32,
+    pub head_dim: u32,
+    pub top_k: u32,
+    pub no_indexed_heads8: bool,
+    pub indexed_twopass: bool,
+}
+
+pub const fn select_attention_indexed_path(
+    options: AttentionIndexedDispatchOptions,
+) -> AttentionIndexedPath {
+    if options.n_tokens > 1
+        && options.head_dim == 512
+        && options.top_k <= 512
+        && !options.no_indexed_heads8
+    {
+        if options.indexed_twopass {
+            AttentionIndexedPath::Heads8Rb4
+        } else {
+            AttentionIndexedPath::Heads8Online
+        }
+    } else {
+        AttentionIndexedPath::Generic
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionIndexedOptimizedScope {
+    pub opt_in_only: bool,
+    pub consumes_indexed_topk_sort_policy: bool,
+    pub owns_indexed_heads8_online_kernel: bool,
+    pub owns_indexed_heads8_rb4_kernel: bool,
+    pub owns_indexed_attention_dispatch_policy: bool,
+    pub owns_output_q8_attention: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4D7_SCOPE: AttentionIndexedOptimizedScope = AttentionIndexedOptimizedScope {
+    opt_in_only: true,
+    consumes_indexed_topk_sort_policy: true,
+    owns_indexed_heads8_online_kernel: true,
+    owns_indexed_heads8_rb4_kernel: true,
+    owns_indexed_attention_dispatch_policy: true,
+    owns_output_q8_attention: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1368,10 +1425,11 @@ pub mod substrate;
 #[cfg(test)]
 mod tests {
     use super::{
-        q8_dp4a_enabled, select_attention_decode_path, select_attention_prefill_path,
-        select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
-        select_indexer_score_kernel, select_indexer_topk_kernel, select_q8_matmul_path,
-        should_sort_indexed_topk, AttentionDecodeDispatchOptions, AttentionDecodePath,
+        q8_dp4a_enabled, select_attention_decode_path, select_attention_indexed_path,
+        select_attention_prefill_path, select_f16_pair_projection_path, select_f16_projection_path,
+        select_f32_projection_path, select_indexer_score_kernel, select_indexer_topk_kernel,
+        select_q8_matmul_path, should_sort_indexed_topk, AttentionDecodeDispatchOptions,
+        AttentionDecodePath, AttentionIndexedDispatchOptions, AttentionIndexedPath,
         AttentionPrefillDispatchOptions, AttentionPrefillPath, F16PairProjectionDispatch,
         F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath, F32ProjectionPath,
         IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
@@ -1385,7 +1443,7 @@ mod tests {
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
         M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE, M14_4D5_SCOPE,
-        M14_4D6_SCOPE,
+        M14_4D6_SCOPE, M14_4D7_SCOPE,
     };
 
     #[test]
@@ -2011,6 +2069,51 @@ mod tests {
         assert!(!M14_4D6_SCOPE.owns_output_q8_attention);
         assert!(!M14_4D6_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4D6_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_optimized_indexed_scope_leaves_output_and_route_pending() {
+        assert!(M14_4D7_SCOPE.opt_in_only);
+        assert!(M14_4D7_SCOPE.consumes_indexed_topk_sort_policy);
+        assert!(M14_4D7_SCOPE.owns_indexed_heads8_online_kernel);
+        assert!(M14_4D7_SCOPE.owns_indexed_heads8_rb4_kernel);
+        assert!(M14_4D7_SCOPE.owns_indexed_attention_dispatch_policy);
+        assert!(!M14_4D7_SCOPE.owns_output_q8_attention);
+        assert!(!M14_4D7_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4D7_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_indexed_dispatch_paths_match_current_c_priority() {
+        let base = AttentionIndexedDispatchOptions {
+            n_tokens: 3,
+            head_dim: 512,
+            top_k: 512,
+            no_indexed_heads8: false,
+            indexed_twopass: false,
+        };
+        assert_eq!(
+            select_attention_indexed_path(base),
+            AttentionIndexedPath::Heads8Online
+        );
+        assert_eq!(
+            select_attention_indexed_path(AttentionIndexedDispatchOptions {
+                indexed_twopass: true,
+                ..base
+            }),
+            AttentionIndexedPath::Heads8Rb4
+        );
+        assert_eq!(
+            select_attention_indexed_path(AttentionIndexedDispatchOptions {
+                no_indexed_heads8: true,
+                ..base
+            }),
+            AttentionIndexedPath::Generic
+        );
+        assert_eq!(
+            select_attention_indexed_path(AttentionIndexedDispatchOptions { top_k: 513, ..base }),
+            AttentionIndexedPath::Generic
+        );
     }
 
     #[test]

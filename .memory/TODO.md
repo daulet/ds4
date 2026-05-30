@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d6 and split next into M14.4d7
+- Status: active; done through M14.4d7 and split next into M14.4d8
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8478,7 +8478,7 @@
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d6 and split next into M14.4d7
+- Status: active; done through M14.4d7 and split next into M14.4d8
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8631,6 +8631,30 @@
 
 ###### M14.4d7: Optimized Indexed Sort And Heads8 Attention Kernels
 
-- Status: active
+- Status: done
 - Goal: port indexed top-k sorting and optimized heads8 dispatch before
   output-Q8 attention ownership.
+- Oracle: current-C `indexed_topk_sort_512_asc_kernel`,
+  `attention_indexed_mixed_heads8_online_kernel`,
+  `attention_indexed_mixed_heads8_rb4_kernel`, and
+  `ds4_gpu_attention_indexed_mixed_batch_heads_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d7/attention-indexed-optimized-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_indexed_optimized_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local sorted-topk-to-online indexed attention
+  execution, rb4 filtered/duplicate indexed execution, and current-C branch
+  policy. B300 feature-enabled tests passed with 66 tests; live cargo-oxide
+  execution emitted portable `sm_80` PTX with libdevice linkage and matched
+  both optimized indexed outputs on `NVIDIA B300 SXM6 AC`. Output-Q8
+  attention, runtime route activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, library tests, the 68-check d7 comparator, retained
+  attention checks, and unified parity passed with 147 passed, 50 skipped,
+  and 0 failed.
+
+###### M14.4d8: Output Q8 Attention Projection Surfaces
+
+- Status: active
+- Goal: port attention output Q8 batch and low-rank projection surfaces
+  before attention-family closure.
