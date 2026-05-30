@@ -7336,9 +7336,27 @@
 
 ######## M14.1b2b2: Registered Range Strategy
 
-- Status: active
-- Goal: add page-aligned mapped registration after resolving current-C
-  read-only flag parity in `cuda-oxide`.
+- Status: done
+- Goal: add page-aligned read-only mapped registration selection and the
+  mmap-sourced device-copy fallback used when CUDA registration fails.
+- Oracle: current-C page-aligned `cudaHostRegisterMapped |
+  cudaHostRegisterReadOnly` attempt and its `cudaMemcpy` fallback after a
+  registration failure; the file-descriptor strategy remains M14.1b2b1.
+- Fixture: `ds4-parity/baselines/backend/m14.1b2b2/model-registered-range-smoke.json`.
+- Evidence: cuda-oxide revision `b938480882f208045bc36ecf29da1ec5531d55ba`
+  adds the immutable read-only registration handle. The B300 smoke expanded
+  requested range `13..4109` to page-aligned range `0..8192`, observed CUDA
+  error `801` (`operation not supported`) from read-only registration, then
+  read back the exact 4096 requested bytes through the mmap-copy fallback and
+  reused its cache entry. This is an explicit fallback proof, not a claim
+  that zero-copy registration succeeds on B300 or that current-C's
+  cross-range registration-disable state is already ported. Validation
+  passed: local workspace tests and formatting, the M14.1b2b2 checker,
+  retained M14 gates, `git diff --check`, B300 feature tests and predecessor
+  smoke, and unified parity (100 passed, 50 skipped, 0 failed).
+  Non-interactive Claude review was unavailable because the local CLI
+  reported `Not logged in`; self-review corrected the fallback source from
+  file staging to the current-C mmap copy branch before final validation.
 
 ######## M14.1b2b3: Pageable HMM And Direct-I/O Policy
 

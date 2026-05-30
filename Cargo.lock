@@ -87,7 +87,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 [[package]]
 name = "cublas-sys"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200#0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+source = "git+https://github.com/daulet/cuda-oxide?rev=b938480882f208045bc36ecf29da1ec5531d55ba#b938480882f208045bc36ecf29da1ec5531d55ba"
 dependencies = [
  "libloading",
  "thiserror",
@@ -96,7 +96,7 @@ dependencies = [
 [[package]]
 name = "cuda-bindings"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200#0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+source = "git+https://github.com/daulet/cuda-oxide?rev=b938480882f208045bc36ecf29da1ec5531d55ba#b938480882f208045bc36ecf29da1ec5531d55ba"
 dependencies = [
  "bindgen",
 ]
@@ -104,7 +104,7 @@ dependencies = [
 [[package]]
 name = "cuda-core"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200#0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+source = "git+https://github.com/daulet/cuda-oxide?rev=b938480882f208045bc36ecf29da1ec5531d55ba#b938480882f208045bc36ecf29da1ec5531d55ba"
 dependencies = [
  "anyhow",
  "cublas-sys",
@@ -117,13 +117,14 @@ dependencies = [
 [[package]]
 name = "cuda-lowp"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200#0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+source = "git+https://github.com/daulet/cuda-oxide?rev=b938480882f208045bc36ecf29da1ec5531d55ba#b938480882f208045bc36ecf29da1ec5531d55ba"
 
 [[package]]
 name = "ds4-cuda"
 version = "0.0.0"
 dependencies = [
  "cuda-core",
+ "libc",
 ]
 
 [[package]]
@@ -277,7 +278,7 @@ dependencies = [
 [[package]]
 name = "oxide-artifacts"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200#0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+source = "git+https://github.com/daulet/cuda-oxide?rev=b938480882f208045bc36ecf29da1ec5531d55ba#b938480882f208045bc36ecf29da1ec5531d55ba"
 dependencies = [
  "object",
 ]

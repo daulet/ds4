@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b2b2 Registered Range Strategy
+- Active item: M14.1b2b3 Pageable HMM And Direct-I/O Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -15,7 +15,8 @@
   the existing `cuda-oxide` buffer API, while page-aligned read-only
   registration and pageable-HMM/O_DIRECT policy need separate API and
   fallback evidence.
-- Last validated source before the active item: M14.1b2b1 File-Staged Range Strategy.
+- Last validated source before the active item: M14.1b2b2 Registered Range Strategy.
+- Earlier M14.1b2b1 File-Staged Range Strategy.
 - Earlier M14.1b2a Owned Mmap Device Range Copy.
 - Earlier M14.1b1 Bounded Model Residency Handles.
 - Earlier M14.1a Host Substrate Buffer Roundtrip.
@@ -118,6 +119,24 @@
 
 ## Last Evidence
 
+- M14.1b2b2 Registered Range Strategy pins cuda-oxide revision
+  `b938480882f208045bc36ecf29da1ec5531d55ba` and adds page-aligned
+  read-only mapped-host registration selection with an explicit mmap-sourced
+  device-copy fallback. On B300 pod `ds4-rust-port-b300`, requested range
+  `13..4109` expanded to registration range `0..8192`; CUDA returned error
+  `801` (`operation not supported`) for the read-only registration attempt,
+  and the fallback copied/read back the exact requested 4096 bytes and reused
+  its cache entry. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b2b2/model-registered-range-smoke.json`
+  and `ds4-parity/check_model_registered_range_smoke.py --negative-test`.
+  Successful B300 zero-copy registration, current-C cross-range suppression
+  after unsupported registration, pageable HMM, O_DIRECT/asynchronous staging
+  and cache-budget policy, DS4 kernels, and default-route ownership remain
+  false. Validation passed local workspace tests and formatting, B300 feature
+  tests and the prior strategy smoke, retained M14 comparator gates, and
+  unified parity with 100 passed, 50 skipped, and 0 failed. Non-interactive
+  Claude review was unavailable because the CLI reported `Not logged in`;
+  self-review corrected the fallback source to the current-C mmap copy branch.
 - M14.1b2b1 File-Staged Range Strategy adds explicit
   `ModelRangeStrategy::{MmapDeviceCopy, FileStagedDeviceCopy}` dispatch and
   strategy-keyed range cache entries under the opt-in `ds4-cuda` feature. On

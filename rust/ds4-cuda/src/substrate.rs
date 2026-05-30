@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use cuda_core::{
     CudaContext, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer,
-    MappedHostBuffer, MemoryAdvice, MemoryLocation, RegisteredHostMemory, StreamAttachment,
+    MappedHostBuffer, MemoryAdvice, MemoryLocation, ReadOnlyRegisteredHostMemory,
+    RegisteredHostMemory, StreamAttachment,
 };
 
 /// Rust-owned CUDA host resources used before DS4 kernels move off `ds4_cuda.cu`.
@@ -92,5 +93,36 @@ impl CudaOxideSubstrate {
         data: &'a mut [T],
     ) -> Result<RegisteredHostMemory<'a, T>, DriverError> {
         RegisteredHostMemory::new(&self.context, data)
+    }
+
+    pub fn register_read_only_host_range<'a, T: DeviceCopy>(
+        &self,
+        data: &'a [T],
+    ) -> Result<ReadOnlyRegisteredHostMemory<'a, T>, DriverError> {
+        ReadOnlyRegisteredHostMemory::new(&self.context, data)
+    }
+
+    /// Copies bytes from a device-readable pointer owned by a live residency guard.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must remain device-readable for `bytes` bytes until the stream
+    /// synchronization performed by this call completes.
+    pub unsafe fn download_u8_device_ptr(
+        &self,
+        ptr: cuda_core::sys::CUdeviceptr,
+        bytes: usize,
+    ) -> Result<Vec<u8>, DriverError> {
+        let mut host = vec![0_u8; bytes];
+        unsafe {
+            cuda_core::memory::memcpy_dtoh_async(
+                host.as_mut_ptr(),
+                ptr,
+                bytes,
+                self.stream.cu_stream(),
+            )?;
+        }
+        self.synchronize()?;
+        Ok(host)
     }
 }

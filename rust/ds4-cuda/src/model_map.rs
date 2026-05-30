@@ -8,7 +8,7 @@ use std::path::Path;
 use std::ptr::NonNull;
 use std::slice;
 
-use cuda_core::{DeviceBuffer, DriverError};
+use cuda_core::{DeviceBuffer, DriverError, ReadOnlyRegisteredHostMemory};
 
 use crate::substrate::CudaOxideSubstrate;
 
@@ -33,6 +33,7 @@ pub enum ModelRangeError {
     Io(std::io::Error),
     EmptyModel,
     ModelTooLarge,
+    InvalidPageSize,
     InvalidRange { offset: u64, bytes: u64, size: u64 },
     Cuda(DriverError),
     MissingCachedRange { offset: u64, bytes: u64 },
@@ -44,6 +45,7 @@ impl fmt::Display for ModelRangeError {
             Self::Io(err) => write!(f, "model mapping I/O failed: {err}"),
             Self::EmptyModel => write!(f, "model file is empty"),
             Self::ModelTooLarge => write!(f, "model file is too large to mmap"),
+            Self::InvalidPageSize => write!(f, "could not determine model mapping page size"),
             Self::InvalidRange {
                 offset,
                 bytes,
@@ -79,6 +81,7 @@ pub struct MappedModelFile {
     _file: File,
     ptr: NonNull<u8>,
     size: u64,
+    mapped_bytes: usize,
 }
 
 impl MappedModelFile {
@@ -88,11 +91,12 @@ impl MappedModelFile {
         if size == 0 {
             return Err(ModelRangeError::EmptyModel);
         }
-        let length = usize::try_from(size).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        let mapped_bytes = usize::try_from(round_up_to_page(size, page_size()?)?)
+            .map_err(|_| ModelRangeError::ModelTooLarge)?;
         let ptr = unsafe {
             mmap(
                 std::ptr::null_mut(),
-                length,
+                mapped_bytes,
                 PROT_READ,
                 MAP_PRIVATE,
                 file.as_raw_fd(),
@@ -104,7 +108,7 @@ impl MappedModelFile {
         }
         let ptr = NonNull::new(ptr.cast::<u8>()).ok_or_else(|| {
             unsafe {
-                let _ = munmap(ptr, length);
+                let _ = munmap(ptr, mapped_bytes);
             }
             ModelRangeError::Io(std::io::Error::other("mmap returned null pointer"))
         })?;
@@ -112,6 +116,7 @@ impl MappedModelFile {
             _file: file,
             ptr,
             size,
+            mapped_bytes,
         })
     }
 
@@ -139,14 +144,57 @@ impl MappedModelFile {
         self._file.read_exact_at(&mut staged, offset)?;
         Ok(staged)
     }
+
+    pub fn registered_range_layout(
+        &self,
+        offset: u64,
+        bytes: u64,
+    ) -> Result<RegisteredRangeLayout, ModelRangeError> {
+        self.range(offset, bytes)?;
+        let page_size = page_size()?;
+        let registered_offset = offset - (offset % page_size);
+        let end = offset + bytes;
+        let registered_end = round_up_to_page(end, page_size)?;
+        Ok(RegisteredRangeLayout {
+            page_size,
+            registered_offset,
+            registered_bytes: registered_end - registered_offset,
+            device_offset: offset - registered_offset,
+        })
+    }
+
+    fn registered_source(
+        &self,
+        offset: u64,
+        bytes: u64,
+    ) -> Result<(RegisteredRangeLayout, &[u8]), ModelRangeError> {
+        let layout = self.registered_range_layout(offset, bytes)?;
+        let registered_offset = usize::try_from(layout.registered_offset)
+            .map_err(|_| ModelRangeError::ModelTooLarge)?;
+        let registered_bytes =
+            usize::try_from(layout.registered_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        debug_assert!(registered_offset + registered_bytes <= self.mapped_bytes);
+        let source = unsafe {
+            slice::from_raw_parts(self.ptr.as_ptr().add(registered_offset), registered_bytes)
+        };
+        Ok((layout, source))
+    }
 }
 
 impl Drop for MappedModelFile {
     fn drop(&mut self) {
         unsafe {
-            let _ = munmap(self.ptr.as_ptr().cast::<c_void>(), self.size as usize);
+            let _ = munmap(self.ptr.as_ptr().cast::<c_void>(), self.mapped_bytes);
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RegisteredRangeLayout {
+    pub page_size: u64,
+    pub registered_offset: u64,
+    pub registered_bytes: u64,
+    pub device_offset: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -159,25 +207,41 @@ pub enum CacheOutcome {
 pub enum ModelRangeStrategy {
     MmapDeviceCopy,
     FileStagedDeviceCopy,
+    ReadOnlyRegisteredOrMmapDeviceCopy,
 }
 
-struct CachedModelRange {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RegisteredRangeResolution {
+    ReadOnlyMapped,
+    MmapDeviceCopyFallback(DriverError),
+}
+
+enum CachedRangeStorage<'model> {
+    Device(DeviceBuffer<u8>),
+    ReadOnlyRegistered {
+        _registration: ReadOnlyRegisteredHostMemory<'model, u8>,
+        requested_device_ptr: cuda_core::sys::CUdeviceptr,
+    },
+}
+
+struct CachedModelRange<'model> {
     strategy: ModelRangeStrategy,
     offset: u64,
     bytes: u64,
-    device: DeviceBuffer<u8>,
+    storage: CachedRangeStorage<'model>,
+    registered_resolution: Option<RegisteredRangeResolution>,
 }
 
 #[derive(Default)]
-pub struct ModelRangeCache {
-    ranges: Vec<CachedModelRange>,
+pub struct ModelRangeCache<'model> {
+    ranges: Vec<CachedModelRange<'model>>,
 }
 
-impl ModelRangeCache {
+impl<'model> ModelRangeCache<'model> {
     pub fn cache_range(
         &mut self,
         substrate: &CudaOxideSubstrate,
-        model: &MappedModelFile,
+        model: &'model MappedModelFile,
         offset: u64,
         bytes: u64,
     ) -> Result<CacheOutcome, ModelRangeError> {
@@ -193,7 +257,7 @@ impl ModelRangeCache {
     pub fn cache_range_with_strategy(
         &mut self,
         substrate: &CudaOxideSubstrate,
-        model: &MappedModelFile,
+        model: &'model MappedModelFile,
         offset: u64,
         bytes: u64,
         strategy: ModelRangeStrategy,
@@ -202,21 +266,42 @@ impl ModelRangeCache {
         if self.find(strategy, offset, bytes).is_some() {
             return Ok(CacheOutcome::Reused);
         }
-        let staged;
-        let source = match strategy {
-            ModelRangeStrategy::MmapDeviceCopy => model.range(offset, bytes)?,
+        let (storage, registered_resolution) = match strategy {
+            ModelRangeStrategy::MmapDeviceCopy => (
+                CachedRangeStorage::Device(substrate.upload(model.range(offset, bytes)?)?),
+                None,
+            ),
             ModelRangeStrategy::FileStagedDeviceCopy => {
-                staged = model.read_file_range(offset, bytes)?;
-                &staged
+                let staged = model.read_file_range(offset, bytes)?;
+                let device = substrate.upload(&staged)?;
+                substrate.synchronize()?;
+                (CachedRangeStorage::Device(device), None)
+            }
+            ModelRangeStrategy::ReadOnlyRegisteredOrMmapDeviceCopy => {
+                let (layout, source) = model.registered_source(offset, bytes)?;
+                match substrate.register_read_only_host_range(source) {
+                    Ok(registration) => (
+                        CachedRangeStorage::ReadOnlyRegistered {
+                            requested_device_ptr: registration.cu_deviceptr()
+                                + layout.device_offset,
+                            _registration: registration,
+                        },
+                        Some(RegisteredRangeResolution::ReadOnlyMapped),
+                    ),
+                    Err(err) => (
+                        CachedRangeStorage::Device(substrate.upload(model.range(offset, bytes)?)?),
+                        Some(RegisteredRangeResolution::MmapDeviceCopyFallback(err)),
+                    ),
+                }
             }
         };
-        let device = substrate.upload(source)?;
         substrate.synchronize()?;
         self.ranges.push(CachedModelRange {
             strategy,
             offset,
             bytes,
-            device,
+            storage,
+            registered_resolution,
         });
         Ok(CacheOutcome::Inserted)
     }
@@ -240,11 +325,33 @@ impl ModelRangeCache {
         let range = self
             .find(strategy, offset, bytes)
             .ok_or(ModelRangeError::MissingCachedRange { offset, bytes })?;
-        Ok(substrate.download(&range.device)?)
+        match &range.storage {
+            CachedRangeStorage::Device(device) => Ok(substrate.download(device)?),
+            CachedRangeStorage::ReadOnlyRegistered {
+                requested_device_ptr,
+                ..
+            } => {
+                let bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+                Ok(unsafe { substrate.download_u8_device_ptr(*requested_device_ptr, bytes)? })
+            }
+        }
     }
 
     pub fn len(&self) -> usize {
         self.ranges.len()
+    }
+
+    pub fn registered_resolution(
+        &self,
+        offset: u64,
+        bytes: u64,
+    ) -> Option<RegisteredRangeResolution> {
+        self.find(
+            ModelRangeStrategy::ReadOnlyRegisteredOrMmapDeviceCopy,
+            offset,
+            bytes,
+        )
+        .and_then(|range| range.registered_resolution)
     }
 
     fn find(
@@ -252,9 +359,24 @@ impl ModelRangeCache {
         strategy: ModelRangeStrategy,
         offset: u64,
         bytes: u64,
-    ) -> Option<&CachedModelRange> {
+    ) -> Option<&CachedModelRange<'model>> {
         self.ranges.iter().find(|range| {
             range.strategy == strategy && range.offset == offset && range.bytes == bytes
         })
     }
+}
+
+fn page_size() -> Result<u64, ModelRangeError> {
+    let size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if size <= 0 {
+        return Err(ModelRangeError::InvalidPageSize);
+    }
+    Ok(size as u64)
+}
+
+fn round_up_to_page(value: u64, page_size: u64) -> Result<u64, ModelRangeError> {
+    value
+        .checked_add(page_size - 1)
+        .map(|end| (end / page_size) * page_size)
+        .ok_or(ModelRangeError::ModelTooLarge)
 }

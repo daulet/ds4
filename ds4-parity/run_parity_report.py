@@ -21,8 +21,8 @@ The report has two jobs:
   M10.8g3c, M10.8g4a, M10.8g4b, M10.9a, M10.9b, M10.9c, M10.9d,
   M10.9e, M10.9f, M11.1, M11.2, M11.3, M11.4, M12.1, M12.2, M12.3, M12.4,
   M12.5, M12.6, M13.0, M13.1, M13.2, M13.3, M13.4, M13.5, the
-  post-M13 roadmap decision, M14.0, M14.1a, M14.1b1, M14.1b2a, and
-  M14.1b2b1.
+  post-M13 roadmap decision, M14.0, M14.1a, M14.1b1, M14.1b2a,
+  M14.1b2b1, and M14.1b2b2.
 
 Model-backed B300 oracle refreshes are intentionally skipped by default.  A
 skip is allowed only when the report gives the missing requirement and an exact
@@ -845,6 +845,14 @@ class ParityReport:
                 [
                     sys.executable,
                     "ds4-parity/check_model_range_strategy_smoke.py",
+                    "--negative-test",
+                ],
+            ),
+            (
+                "M14.1b2b2 cuda-oxide model registered range smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_model_registered_range_smoke.py",
                     "--negative-test",
                 ],
             ),

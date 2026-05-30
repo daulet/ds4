@@ -134,7 +134,7 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
         "fn munmap",
         "pub struct ModelRangeCache",
         "model.range(offset, bytes)",
-        "substrate.upload(source)",
+        "CachedRangeStorage::Device(substrate.upload(model.range(offset, bytes)?)?)",
         "substrate.synchronize()",
         "CacheOutcome::Reused",
     ]:

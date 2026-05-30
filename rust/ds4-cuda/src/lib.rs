@@ -1,4 +1,4 @@
-pub const CUDA_OXIDE_REVISION: &str = "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200";
+pub const CUDA_OXIDE_REVISION: &str = "b938480882f208045bc36ecf29da1ec5531d55ba";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostSubstrateScope {
@@ -84,6 +84,27 @@ pub const M14_1B2B1_SCOPE: ModelRangeStrategyScope = ModelRangeStrategyScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RegisteredRangeStrategyScope {
+    pub opt_in_only: bool,
+    pub owns_page_aligned_read_only_registration_attempt: bool,
+    pub owns_mmap_device_copy_fallback_after_registration_error: bool,
+    pub owns_pageable_hmm_strategy: bool,
+    pub owns_o_direct_staging: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B2B2_SCOPE: RegisteredRangeStrategyScope = RegisteredRangeStrategyScope {
+    opt_in_only: true,
+    owns_page_aligned_read_only_registration_attempt: true,
+    owns_mmap_device_copy_fallback_after_registration_error: true,
+    owns_pageable_hmm_strategy: false,
+    owns_o_direct_staging: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
 
@@ -94,13 +115,14 @@ pub mod substrate;
 mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
+        M14_1B2B2_SCOPE,
     };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
         assert_eq!(
             CUDA_OXIDE_REVISION,
-            "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+            "b938480882f208045bc36ecf29da1ec5531d55ba"
         );
         assert!(M14_1A_SCOPE.opt_in_only);
         assert!(M14_1A_SCOPE.owns_context_and_stream);
@@ -142,5 +164,16 @@ mod tests {
         assert!(!M14_1B2B1_SCOPE.owns_o_direct_staging);
         assert!(!M14_1B2B1_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B2B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn registered_range_scope_records_fallback_without_pending_policy_claims() {
+        assert!(M14_1B2B2_SCOPE.opt_in_only);
+        assert!(M14_1B2B2_SCOPE.owns_page_aligned_read_only_registration_attempt);
+        assert!(M14_1B2B2_SCOPE.owns_mmap_device_copy_fallback_after_registration_error);
+        assert!(!M14_1B2B2_SCOPE.owns_pageable_hmm_strategy);
+        assert!(!M14_1B2B2_SCOPE.owns_o_direct_staging);
+        assert!(!M14_1B2B2_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B2B2_SCOPE.changes_default_route);
     }
 }

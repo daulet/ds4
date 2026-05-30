@@ -2090,6 +2090,20 @@ then requires exact readback equality and per-strategy cache reuse. It does
 not claim `O_DIRECT`, registered mapped-host ranges, pageable HMM, DS4
 kernels, or runtime route activation.
 
+Validate the M14.1b2b2 registered range selection and fallback B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_registered_range_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-registered-range-smoke` against the pinned GGUF: an unaligned
+request is expanded to a page-aligned read-only registration attempt. On the
+captured B300 runtime CUDA returns error `801` (`operation not supported`), so
+the strategy must use and reuse the exact mmap-sourced device-copy fallback.
+It does not claim successful zero-copy registration on B300, pageable HMM,
+`O_DIRECT`, DS4 kernels, or runtime route activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

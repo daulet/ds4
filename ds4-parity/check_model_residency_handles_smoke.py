@@ -24,7 +24,8 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-REVISION = "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+FIXTURE_REVISION = "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+CURRENT_REVISION = "b938480882f208045bc36ecf29da1ec5531d55ba"
 MODEL_SHA256 = "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
 MODEL_SIZE = 86720111488
 WINDOW_BYTES = 4096
@@ -100,11 +101,14 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
 
 def validate_dependency(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("revision") == REVISION, "cuda-oxide revision drift")
+    report.check(oxide.get("revision") == FIXTURE_REVISION, "cuda-oxide fixture revision drift")
     report.check(oxide.get("dependency") == "cuda-core", "cuda-core dependency drift")
     report.check(oxide.get("feature") == "cuda-oxide-backend", "feature name drift")
-    report.check(f'rev = "{REVISION}"' in texts["cargo"], "crate revision pin missing")
-    report.check('cuda-oxide-backend = ["dep:cuda-core"]' in texts["cargo"], "feature wiring missing")
+    report.check(f'rev = "{CURRENT_REVISION}"' in texts["cargo"], "current crate revision pin missing")
+    report.check(
+        'cuda-oxide-backend = ["dep:cuda-core", "dep:libc"]' in texts["cargo"],
+        "current feature wiring missing",
+    )
 
 
 def validate_model_window(report: Report, fixture: dict[str, Any]) -> None:

@@ -6847,10 +6847,46 @@ Stage split:
 
 ######## M14.1b2b2: Registered Range Strategy
 
-- Status: active.
-- Goal: port page-aligned mapped host registration and its failure fallback
-  after reconciling current-C read-only registration flags with the available
-  `cuda-oxide` host API.
+- Status: complete.
+- Goal: port page-aligned read-only mapped host registration and the
+  mmap-sourced device-copy fallback taken when CUDA registration fails.
+- Oracle: the page-aligned `cudaHostRegister(... cudaHostRegisterMapped |
+  cudaHostRegisterReadOnly)` branch of current-C `cuda_model_range_ptr` and
+  its post-registration `cudaMemcpy` fallback; file-descriptor staging
+  remains the separately validated M14.1b2b1 branch.
+- Acceptance: an unaligned selected range produces an aligned registration
+  window; the Rust strategy either retains a live immutable registration
+  guard or records the CUDA unsupported result and reuses an exact mmap-copy
+  fallback cache entry without claiming B300 zero-copy support or current-C's
+  cross-range suppression of later registration attempts.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b2/model-registered-range-smoke.json`.
+- Comparator:
+  `ds4-parity/check_model_registered_range_smoke.py --negative-test` plus
+  executable Rust B300 smoke using the pinned GGUF.
+- Evidence:
+  - Pinned DS4 to cuda-oxide revision
+    `b938480882f208045bc36ecf29da1ec5531d55ba`, which exposes an immutable
+    read-only registered-host guard and propagates unsupported CUDA errors.
+  - On B300 pod `ds4-rust-port-b300`, the feature-enabled smoke expanded
+    requested range `13..4109` to registered range `0..8192`; CUDA returned
+    error `801` (`operation not supported`), and the mmap-sourced device-copy
+    fallback read back the exact requested 4096 bytes and reused its cache
+    entry.
+  - Successful zero-copy registration on B300, pageable HMM, O_DIRECT and
+    asynchronous staging policy, cross-range unsupported-registration
+    suppression, compute kernels, and runtime route activation remain
+    unclaimed.
+  - Validation passed: `cargo test --workspace`, `cargo fmt --all -- --check`,
+    `python3 ds4-parity/check_model_registered_range_smoke.py --negative-test`
+    (68 checks), retained M14 gates, `git diff --check`, B300 feature tests
+    and predecessor smoke, and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+    (100 passed, 50 skipped, 0 failed).
+  - Non-interactive Claude review could not run because the local CLI reported
+    `Not logged in`; adversarial self-review corrected the current-C fallback
+    source and retained cross-range registration suppression as an explicit
+    later-stage non-claim.
 
 ######## M14.1b2b3: Pageable HMM And Direct-I/O Policy
 
