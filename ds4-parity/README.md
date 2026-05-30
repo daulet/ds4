@@ -2445,6 +2445,18 @@ proves interpolated rotation, YARN forward rotation, inverse rotation, and
 shape rejection while leaving standalone RoPE, projection, Q8, route, and
 removal ownership unclaimed.
 
+Validate the M14.3c1 Rust CUDA base F16 and F32 projection smoke:
+
+```sh
+python3 ds4-parity/check_dense_projection_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `matmul_f16_kernel` and
+`matmul_f32_kernel` execution on B300 with shared reductions and primitive
+F16 weight loads. It proves base multi-token output layout while leaving
+serial/ordered/paired F16 variants, cuBLAS dispatch, Q8, route, and removal
+ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

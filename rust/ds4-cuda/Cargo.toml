@@ -167,3 +167,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-head-rms-rope-tail-smoke"
 path = "src/bin/head_rms_rope_tail_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-dense-projection-smoke"
+path = "src/bin/dense_projection_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

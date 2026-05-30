@@ -8049,8 +8049,8 @@
 
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
-- Status: split after M14.3a implementation; M14.3a, M14.3b1, and M14.3b2
-  are done, and M14.3c is active
+- Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2, and
+  M14.3c1 are done, and M14.3c2 is active
 - Goal: port dense projection, Q8 conversion, and normalization kernels
   through bounded Rust CUDA slices with current C retained as the oracle.
 
@@ -8134,6 +8134,37 @@
 
 ##### M14.3c: Dense F16 And F32 Projection Kernels
 
-- Status: active
+- Status: split into M14.3c1 base reductions and M14.3c2 ordered, paired,
+  and serial F16 kernels before cuBLAS dispatch policy is claimed
 - Goal: port dense F16/F32 projection execution as a separately comparable
   slice before claiming Q8 conversion or quantized matmul ownership.
+
+##### M14.3c1: Base F16 And F32 Projection Kernels
+
+- Status: done
+- Goal: prove direct base-reduction projection kernels with primitive F16
+  weight loads and F32 weights without claiming wrapper dispatch policy.
+- Oracle: current-C `matmul_f16_kernel` and `matmul_f32_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3c1/dense-projection-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_dense_projection_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust `matmul_f16_kernel` and
+  `matmul_f32_kernel` with current-C 256-thread shared reductions and
+  primitive F16 weight widening. B300 feature-enabled tests passed with 42
+  tests and live cargo-oxide emitted portable `sm_80` PTX while proving F16,
+  F32, multi-token stride, and invalid-shape behavior on
+  `NVIDIA B300 SXM6 AC`. Ordered/paired/serial F16 variants, cuBLAS
+  dispatch, Q8 kernels, route activation, and C CUDA removal remain
+  unclaimed.
+  Local formatting, diff, workspace tests, the 74-check comparator, and
+  unified parity passed with 133 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result;
+  adversarial self-review retained ordered/paired/serial, cuBLAS, Q8, and
+  route non-claims.
+
+##### M14.3c2: Ordered Paired And Serial F16 Projection Kernels
+
+- Status: active
+- Goal: port the remaining non-cuBLAS F16 projection kernels and their
+  bounded selection contract without claiming cuBLAS or Q8 execution.

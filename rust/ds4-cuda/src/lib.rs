@@ -721,6 +721,27 @@ pub const M14_3B2_SCOPE: HeadRmsRopeTailKernelScope = HeadRmsRopeTailKernelScope
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DenseProjectionKernelScope {
+    pub opt_in_only: bool,
+    pub owns_matmul_f16_kernel: bool,
+    pub owns_matmul_f32_kernel: bool,
+    pub owns_ordered_or_pair_f16_kernels: bool,
+    pub owns_f16_or_cublas_dispatch_policy: bool,
+    pub owns_q8_conversion_or_matmul_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_3C1_SCOPE: DenseProjectionKernelScope = DenseProjectionKernelScope {
+    opt_in_only: true,
+    owns_matmul_f16_kernel: true,
+    owns_matmul_f32_kernel: true,
+    owns_ordered_or_pair_f16_kernels: false,
+    owns_f16_or_cublas_dispatch_policy: false,
+    owns_q8_conversion_or_matmul_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -741,7 +762,7 @@ mod tests {
         M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE, M14_2C_SCOPE, M14_2D1_SCOPE,
         M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
         M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
-        M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
+        M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE, M14_3C1_SCOPE,
     };
 
     #[test]
@@ -1066,6 +1087,17 @@ mod tests {
         assert!(!M14_3B2_SCOPE.owns_qkv_fused_dispatch_policy);
         assert!(!M14_3B2_SCOPE.owns_dense_projection_or_q8_kernels);
         assert!(!M14_3B2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn dense_projection_base_scope_leaves_ordered_blas_q8_and_route_pending() {
+        assert!(M14_3C1_SCOPE.opt_in_only);
+        assert!(M14_3C1_SCOPE.owns_matmul_f16_kernel);
+        assert!(M14_3C1_SCOPE.owns_matmul_f32_kernel);
+        assert!(!M14_3C1_SCOPE.owns_ordered_or_pair_f16_kernels);
+        assert!(!M14_3C1_SCOPE.owns_f16_or_cublas_dispatch_policy);
+        assert!(!M14_3C1_SCOPE.owns_q8_conversion_or_matmul_kernels);
+        assert!(!M14_3C1_SCOPE.changes_default_route);
     }
 
     #[test]
