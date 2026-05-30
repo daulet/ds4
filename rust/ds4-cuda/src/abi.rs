@@ -2777,6 +2777,51 @@ pub unsafe extern "C" fn ds4_gpu_embed_tokens_hc_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_head_rms_norm_tensor(
+    x: *mut Ds4GpuTensor,
+    n_tok: u32,
+    n_head: u32,
+    head_dim: u32,
+    eps: f32,
+) -> c_int {
+    status(|| {
+        let Some(x) = (unsafe { tensor_ref(x.cast_const()) }) else {
+            return false;
+        };
+        let Some(rows) = u64::from(n_tok).checked_mul(u64::from(n_head)) else {
+            return false;
+        };
+        let Some(elements) = rows.checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(bytes) = elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if n_tok == 0 || n_head == 0 || head_dim == 0 || x.bytes < bytes {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: the mutable tensor span and all launch dimensions
+                // are validated above; the kernel only updates that span.
+                Some(unsafe {
+                    kernels.head_rms_norm_tensor(
+                        backend.stream(),
+                        x.device_ptr(),
+                        n_tok,
+                        n_head,
+                        head_dim,
+                        eps,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

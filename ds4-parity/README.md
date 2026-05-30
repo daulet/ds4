@@ -3648,6 +3648,19 @@ requests. Remaining graph compute, whole-archive retention policy, route
 promotion, C CUDA removal, and the embedded-object executable-stack warning
 remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public head RMS norm ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_head_rms_norm_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes multi-row in-place head normalization
+through the embedded Rust reduction kernel, then checks short-tensor,
+zero-dimension, and null rejection. RoPE, remaining graph compute,
+whole-archive retention policy, route promotion, C CUDA removal, and the
+embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

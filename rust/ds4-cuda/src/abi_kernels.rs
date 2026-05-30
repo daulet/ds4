@@ -555,6 +555,59 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_head_rms_norm_kernel(
+        n_tok: u32,
+        n_head: u32,
+        head_dim: u32,
+        eps: f32,
+        mut x: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x();
+        if row >= n_tok * n_head {
+            return;
+        }
+        let tid = thread::threadIdx_x() as usize;
+        let nth = thread::blockDim_x() as usize;
+        let head_dim = head_dim as usize;
+        let base = row as usize * head_dim;
+        let x_ptr = x.as_mut_ptr();
+
+        let mut sum = 0.0_f32;
+        let mut i = tid;
+        while i < head_dim {
+            let value = unsafe { *x_ptr.add(base + i) };
+            sum += value * value;
+            i += nth;
+        }
+        unsafe {
+            PARTIAL[tid] = sum;
+        }
+        thread::sync_threads();
+
+        let mut stride = nth >> 1;
+        while stride > 0 {
+            if tid < stride {
+                unsafe {
+                    PARTIAL[tid] += PARTIAL[tid + stride];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+
+        let scale = 1.0_f32 / (unsafe { PARTIAL[0] } / head_dim as f32 + eps).sqrt();
+        i = tid;
+        while i < head_dim {
+            unsafe {
+                *x.get_unchecked_mut(base + i) *= scale;
+            }
+            i += nth;
+        }
+    }
+
+    #[kernel]
     pub fn abi_rms_norm_weight_kernel(
         n: u32,
         rows: u32,
@@ -1357,6 +1410,7 @@ pub(crate) struct AbiKernelModule {
     directional_steering_project_kernel: CudaFunction,
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
+    head_rms_norm_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
     dequant_q8_0_to_f16_kernel: CudaFunction,
     dequant_q8_0_to_f32_kernel: CudaFunction,
@@ -1416,6 +1470,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_plain_kernel: module
                 .load_function("abi_rms_norm_plain_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            head_rms_norm_kernel: module
+                .load_function("abi_head_rms_norm_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
@@ -2195,6 +2252,54 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.rms_norm_plain_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn head_rms_norm_tensor(
+        &self,
+        stream: &CudaStream,
+        x_ptr: u64,
+        n_tok: u32,
+        n_head: u32,
+        head_dim: u32,
+        eps: f32,
+    ) -> bool {
+        let rows = u64::from(n_tok) * u64::from(n_head);
+        let Ok(grid_rows) = u32::try_from(rows) else {
+            return false;
+        };
+        let config = LaunchConfig {
+            grid_dim: (grid_rows, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let count = rows * u64::from(head_dim);
+        let mut n_tok = n_tok;
+        let mut n_head = n_head;
+        let mut head_dim = head_dim;
+        let mut eps = eps;
+        let mut x_ptr = x_ptr;
+        let mut x_len = count;
+        let mut params = [
+            (&mut n_tok as *mut u32).cast::<c_void>(),
+            (&mut n_head as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut eps as *mut f32).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates the complete mutable head buffer and
+        // nonzero dimensions before submitting the in-place launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.head_rms_norm_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

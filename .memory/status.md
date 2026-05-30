@@ -3,7 +3,21 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbba: Public Head RMS Norm ABI
+  is validated on B300. Rust exports `ds4_gpu_head_rms_norm_tensor` through
+  an embedded in-place reduction kernel. A C-linked B300 witness proves
+  multi-row normalization and invalid-input rejection. Local tests pass with
+  136 tests; B300 feature tests pass with 143 tests; the static library
+  exposes 51 symbols; all 46 preceding linked ABI consumers pass against the
+  rebuilt archive with the known executable-stack warning. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. All 50 CUDA ABI
+  comparators pass, and the unified report passes with 222 passed, 45
+  skipped, and 0 failed. Rust rejects zero-dimensional and oversized launch
+  grids rather than retaining current-C undefined launch behavior. RoPE,
+  remaining graph compute, whole-archive/route promotion, C CUDA removal,
+  and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba: Public Embedding Hyperconnection ABI
   is validated on B300. Rust exports `ds4_gpu_embed_token_hc_tensor` and
   `ds4_gpu_embed_tokens_hc_tensor` through embedded FP16 embedding kernels

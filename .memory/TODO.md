@@ -10833,6 +10833,39 @@
 
 ########################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbb because
+  public in-place head RMS normalization is independently comparable before
+  RoPE, KV, attention, compressor, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+############################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbba: Public Head RMS Norm ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_head_rms_norm_tensor` through its public in-place
+  reduction kernel without claiming RoPE, remaining graph compute, or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbba/abi-head-rms-norm-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_head_rms_norm_smoke.py --negative-test`.
+- Evidence: Rust exports the in-place public head RMS wrapper through an
+  embedded 256-thread reduction kernel. A C-linked B300 witness proves
+  multi-row normalization, short-tensor rejection, zero-dimension
+  rejection, and null rejection. Local tests pass with 136 tests; B300
+  feature tests pass with 143 tests; the static library exposes 51 symbols;
+  all 46 preceding linked ABI consumers pass against the rebuilt archive
+  with the known executable-stack warning. Rust rejects zero-dimensional and
+  oversized launch grids rather than retaining current-C undefined launch
+  behavior. All 50 CUDA ABI comparators pass, and the unified parity report
+  passes with 222 passed, 45 skipped, and 0 failed. The pre-implementation
+  and final pass-end non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+############################################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before
