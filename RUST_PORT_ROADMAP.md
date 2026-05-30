@@ -8164,7 +8164,7 @@ Stage split:
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d1 and split next into M14.4d2.
+- Status: active; done through M14.4d2 and split next into M14.4d3.
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8361,7 +8361,7 @@ Stage split:
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d1 and split next into M14.4d2.
+- Status: active; done through M14.4d2 and split next into M14.4d3.
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8394,11 +8394,43 @@ Stage split:
     checks, and unified parity passed with 141 passed, 50 skipped, and
     0 failed.
 
-###### M14.4d2: Batched And Online Attention Decode Kernels
+###### M14.4d2: Generic Batched Mixed Attention Decode Surfaces
+
+- Status: done.
+- Goal: port the generic batched raw and mixed decode surfaces before claiming
+  optimized heads8-online, prefill, indexed, or output-Q8 attention.
+- Oracle: current-C `attention_decode_batch_launch`,
+  `ds4_gpu_attention_decode_raw_batch_heads_tensor`,
+  `ds4_gpu_attention_decode_mixed_batch_heads_tensor`, and the generic
+  `attention_decode_mixed_kernel` launch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d2/attention-decode-batch-mixed-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_decode_batch_mixed_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in generic batched raw/mixed decode with causal
+  window selection, raw-ring wrap, compressed visibility/masking, learned
+  sink softmax, and raw-only batched output. Heads8-online dispatch,
+  prefill/indexed/output-Q8 attention, runtime graph integration, default
+  route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust generic batched mixed-attention execution
+    using current-C causal-window, compressed-visibility, and sink-softmax
+    semantics.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 58 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    with libdevice linkage and matched mixed/raw batched output, wrapped raw
+    rows, per-token compressed masks, and learned sink contribution on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 63-check d2 comparator,
+    retained M14 checks, and unified parity passed with 142 passed, 50
+    skipped, and 0 failed.
+
+###### M14.4d3: Heads8 Online Attention Decode Kernels
 
 - Status: active.
-- Goal: port batched/window mixed decode and optimized online decode behavior
-  before prefill, indexed, or output-Q8 attention ownership.
+- Goal: port optimized heads8-online decode and its dispatch selection before
+  prefill, indexed, or output-Q8 attention ownership.
 
 ## Removal Criteria for C Host Code
 

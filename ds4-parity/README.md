@@ -2610,6 +2610,21 @@ learned-sink softmax participation, and raw-only output while leaving
 batched/window/heads8, prefill/indexed/output-Q8 attention, runtime route,
 and C CUDA removal unclaimed.
 
+Validate the M14.4d2 Rust CUDA generic batched mixed attention decode smoke:
+
+```sh
+python3 ds4-parity/check_attention_decode_batch_mixed_smoke.py --negative-test
+```
+
+The fixture records executable-local generic
+`ds4_gpu_attention_decode_raw_batch_heads_tensor` and
+`ds4_gpu_attention_decode_mixed_batch_heads_tensor` semantics on B300. It
+proves causal raw-window selection, ring wrap, per-token compressed
+visibility and masking, learned-sink softmax participation, and raw-only
+batched output while leaving heads8-online dispatch,
+prefill/indexed/output-Q8 attention, runtime route, and C CUDA removal
+unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
