@@ -7108,9 +7108,48 @@ Stage split:
 
 ####### M14.1b3b: Q8 Cache And Quality Policy
 
-- Status: planned.
-- Goal: port Q8/F16 and Q8/F32 converted-cache admission/failure policy plus
-  quality-mode BLAS math selection without promoting the runtime route.
+- Status: complete.
+- Goal: port Q8/F16 and Q8/F32 admission/failure-disable policy plus quality-mode
+  BLAS math selection without promoting the runtime route or claiming the
+  dequant kernels assigned to M14.3.
+- Oracle: current-C `cuda_q8_f16_cache_reserve_bytes`,
+  `cuda_q8_f16_cache_allowed`, `cuda_q8_f16_preload_allowed`,
+  `cuda_q8_f16_cache_has_budget`,
+  `cuda_q8_f16_cache_disable_after_failure`,
+  `cuda_q8_f32_cache_allowed`, and `ds4_gpu_set_quality`.
+- Acceptance: Rust reproduces Q8/F16 label, preload, reserve, budget, and
+  failure-disable state policy; reproduces Q8/F32 optional-preload selection; and
+  applies TF32 versus default cuBLAS math policy through cuda-oxide on B300.
+  Converted Q8 device buffers and their failure-time synchronization/release,
+  dequant kernels, DS4 compute kernels, and default-route activation remain
+  rejected.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b3b/q8-quality-policy-smoke.json`.
+- Comparator:
+  `ds4-parity/check_q8_quality_policy_smoke.py --negative-test` plus
+  executable Rust B300 smoke using pinned cuda-oxide revision
+  `aabe10dc4fa0086375104458909e222d1ac1cfe3`.
+- Evidence:
+  - Added typed cuda-oxide `Blas::set_math_mode(BlasMathMode)` over the
+    header-verified `cublasSetMathMode` ABI and validated both math
+    selections with full B300 `cuda-core` tests.
+  - The Rust Q8 host policy covers F16 eligibility, attention-output preload
+    suppression, reserve and below-reserve rejection, notice-once/failure
+    disable state, and F32 optional preload selection. Exact reserve
+    equality remains admissible, matching current C.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests and
+    `ds4-cuda-q8-quality-policy-smoke` passed. The smoke applied fast TF32,
+    quality-mode default math, and `NO_TF32` default math through live
+    cuBLAS. Converted buffers and their failure-time release, dequant kernels,
+    compute kernels, and the default route remain unclaimed.
+  - Validation passed through local workspace tests, formatter and diff
+    checks, the 71-check comparator and retained M14 checks, B300
+    `cublas-sys` and full `cuda-core` tests, B300 feature-enabled `ds4-cuda`
+    tests, and unified parity with 106 passed, 50 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review corrected the reserve-equality boundary test and
+    narrowed failure ownership to disable-state policy before finding no
+    remaining policy, ABI, or bounded-claim defect.
 
 ###### M14.1b4: Fill Kernel And Command Lifetime
 

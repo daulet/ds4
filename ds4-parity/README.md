@@ -2174,6 +2174,19 @@ choices, and current-C-shaped memory-report formatting. It does not claim
 Q8 converted caches, quality-mode BLAS selection, DS4 kernels, or route
 activation.
 
+Validate the M14.1b3b Q8 admission and quality-mode policy B300 smoke:
+
+```sh
+python3 ds4-parity/check_q8_quality_policy_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-q8-quality-policy-smoke` using cuda-oxide cuBLAS math-mode control.
+It proves current-C Q8/F16 and Q8/F32 admission/failure-disable decisions plus
+live TF32/default-math selection. It does not claim converted Q8 buffers or
+their failure-time release, dequant kernels, DS4 compute kernels, or route
+activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

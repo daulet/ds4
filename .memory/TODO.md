@@ -7507,9 +7507,32 @@
 
 ####### M14.1b3b: Q8 Cache And Quality Policy
 
-- Status: planned
-- Goal: port converted Q8 cache admission/failure paths and quality-mode BLAS
-  selection without changing the default runtime route.
+- Status: done
+- Goal: port Q8 cache admission/failure-disable policy and quality-mode BLAS
+  selection without claiming converted buffers or changing the default
+  runtime route.
+- Oracle: current-C `cuda_q8_f16_cache_reserve_bytes`,
+  `cuda_q8_f16_cache_allowed`, `cuda_q8_f16_preload_allowed`,
+  `cuda_q8_f16_cache_has_budget`,
+  `cuda_q8_f16_cache_disable_after_failure`,
+  `cuda_q8_f32_cache_allowed`, and `ds4_gpu_set_quality`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b3b/q8-quality-policy-smoke.json`.
+- Evidence: cuda-oxide revision `aabe10dc4fa0086375104458909e222d1ac1cfe3`
+  adds typed `Blas::set_math_mode(BlasMathMode)` and passed its B300
+  `cublas-sys` plus full `cuda-core` tests. Rust Q8 policy covers F16
+  eligibility/preload/reserve/budget/failure-disable behavior and F32
+  optional-preload selection. The B300 DS4 smoke applied TF32 fast mode and
+  both default-math paths through live cuBLAS. Converted Q8 buffers and their
+  failure-time synchronization/release, dequant kernels assigned to M14.3,
+  compute kernels, and route activation remain unclaimed.
+- Validation: local workspace tests, formatter and diff checks, the 71-check
+  comparator and retained M14 comparators, B300 `cublas-sys` and full
+  `cuda-core` tests, B300 feature-enabled `ds4-cuda` tests, and unified
+  parity (106 passed, 50 skipped, 0 failed) passed. Non-interactive Claude
+  review timed out without a completed result; adversarial self-review fixed
+  the reserve-equality boundary test and narrowed failure ownership to
+  disable-state policy before recording no remaining bounded-claim defect.
 
 ###### M14.1b4: Fill Kernel And Command Lifetime
 

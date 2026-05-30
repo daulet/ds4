@@ -896,6 +896,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.1b3b cuda-oxide Q8/quality policy smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_q8_quality_policy_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

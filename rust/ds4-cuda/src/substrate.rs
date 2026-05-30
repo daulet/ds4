@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use cuda_core::{
-    CudaContext, CudaEvent, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer,
-    MappedHostBuffer, MemoryAdvice, MemoryLocation, PinnedHostBuffer, ReadOnlyPageableHostMemory,
-    ReadOnlyRegisteredHostMemory, RegisteredHostMemory, StreamAttachment,
+    Blas, BlasError, CudaContext, CudaEvent, CudaStream, DeviceBuffer, DeviceCopy, DriverError,
+    ManagedBuffer, MappedHostBuffer, MemoryAdvice, MemoryLocation, PinnedHostBuffer,
+    ReadOnlyPageableHostMemory, ReadOnlyRegisteredHostMemory, RegisteredHostMemory,
+    StreamAttachment,
 };
 
 use crate::allocation_policy::DeviceMemoryCapacity;
@@ -39,6 +40,10 @@ impl CudaOxideSubstrate {
             free_bytes: memory.free_bytes as u64,
             total_bytes: memory.total_bytes as u64,
         })
+    }
+
+    pub fn blas_handle(&self) -> Result<Blas, BlasError> {
+        Blas::new(&self.context)
     }
 
     pub fn synchronize(&self) -> Result<(), DriverError> {

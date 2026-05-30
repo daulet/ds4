@@ -1,4 +1,4 @@
-pub const CUDA_OXIDE_REVISION: &str = "0ec61156a7c5d65802402898b7a197bfff266d31";
+pub const CUDA_OXIDE_REVISION: &str = "aabe10dc4fa0086375104458909e222d1ac1cfe3";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostSubstrateScope {
@@ -216,7 +216,31 @@ pub const M14_1B3A_SCOPE: AllocationPolicyScope = AllocationPolicyScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Q8QualityPolicyScope {
+    pub opt_in_only: bool,
+    pub owns_q8_cache_admission_policy: bool,
+    pub owns_q8_cache_failure_disable_policy: bool,
+    pub owns_quality_blas_selection: bool,
+    pub owns_converted_q8_buffers: bool,
+    pub owns_dequant_kernels: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B3B_SCOPE: Q8QualityPolicyScope = Q8QualityPolicyScope {
+    opt_in_only: true,
+    owns_q8_cache_admission_policy: true,
+    owns_q8_cache_failure_disable_policy: true,
+    owns_quality_blas_selection: true,
+    owns_converted_q8_buffers: false,
+    owns_dequant_kernels: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
+pub mod q8_policy;
 
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
@@ -229,14 +253,14 @@ mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
-        M14_1B3A_SCOPE,
+        M14_1B3A_SCOPE, M14_1B3B_SCOPE,
     };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
         assert_eq!(
             CUDA_OXIDE_REVISION,
-            "0ec61156a7c5d65802402898b7a197bfff266d31"
+            "aabe10dc4fa0086375104458909e222d1ac1cfe3"
         );
         assert!(M14_1A_SCOPE.opt_in_only);
         assert!(M14_1A_SCOPE.owns_context_and_stream);
@@ -347,5 +371,17 @@ mod tests {
         assert!(!M14_1B3A_SCOPE.owns_quality_mode);
         assert!(!M14_1B3A_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B3A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn q8_quality_policy_leaves_conversion_kernels_and_route_pending() {
+        assert!(M14_1B3B_SCOPE.opt_in_only);
+        assert!(M14_1B3B_SCOPE.owns_q8_cache_admission_policy);
+        assert!(M14_1B3B_SCOPE.owns_q8_cache_failure_disable_policy);
+        assert!(M14_1B3B_SCOPE.owns_quality_blas_selection);
+        assert!(!M14_1B3B_SCOPE.owns_converted_q8_buffers);
+        assert!(!M14_1B3B_SCOPE.owns_dequant_kernels);
+        assert!(!M14_1B3B_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B3B_SCOPE.changes_default_route);
     }
 }

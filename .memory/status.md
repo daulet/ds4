@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b3b Q8 Cache And Quality Policy
+- Active item: M14.1b4 Fill Kernel And Command Lifetime
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -17,7 +17,8 @@
   M14.1b3a and M14.1b3b because managed-KV/memory-report policy only needs a
   memory-capacity query, while Q8 caches and quality mode need BLAS or kernel
   ownership.
-- Last validated source before the active item: M14.1b3a Managed KV And Memory Report Policy.
+- Last validated source before the active item: M14.1b3b Q8 Cache And Quality Policy.
+- Earlier M14.1b3a Managed KV And Memory Report Policy.
 - Earlier M14.1b2c Model Map Cache Closure.
 - Earlier M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy.
 - Earlier M14.1b2b3b1 Direct-I/O Pinned Read Selection.
@@ -126,6 +127,28 @@
 
 ## Last Evidence
 
+- M14.1b3b Q8 Cache And Quality Policy pins cuda-oxide revision
+  `aabe10dc4fa0086375104458909e222d1ac1cfe3`, which adds typed
+  `Blas::set_math_mode(BlasMathMode)` over the header-verified
+  `cublasSetMathMode` ABI. The Rust host policy reproduces current-C Q8/F16
+  eligibility, attention-output preload suppression, reserve/budget and
+  failure-disable transitions, Q8/F32 optional-preload selection, and
+  TF32/default-math quality decisions. On B300 pod `ds4-rust-port-b300`,
+  `cublas-sys`, full `cuda-core`, and feature-enabled `ds4-cuda` tests
+  passed; the live smoke applied TF32 fast mode and both default-math paths
+  through cuBLAS. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b3b/q8-quality-policy-smoke.json` and
+  `ds4-parity/check_q8_quality_policy_smoke.py --negative-test`. Converted
+  Q8 buffers and their failure-time synchronization/release, dequant kernels
+  assigned to M14.3, DS4 compute kernels, and default-route ownership remain
+  unclaimed. Local workspace tests, formatter/diff checks, the 71-check
+  comparator and retained M14 checks, B300 `cublas-sys` and full
+  `cuda-core` tests, B300 feature-enabled `ds4-cuda` tests, and unified
+  parity (106 passed, 50 skipped, 0 failed) passed. Non-interactive Claude
+  review timed out without a completed result; adversarial self-review fixed
+  the reserve-equality boundary test and narrowed failure ownership to
+  disable-state policy before finding no remaining policy, ABI, or
+  bounded-claim defect.
 - M14.1b3a Managed KV And Memory Report Policy pins cuda-oxide revision
   `0ec61156a7c5d65802402898b7a197bfff266d31`, which adds the reusable
   `CudaContext::memory_info()` API. The opt-in Rust policy reproduces
