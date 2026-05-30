@@ -3067,6 +3067,21 @@ window. Chunked-copy success/allocation-failure routing, global HMM reads
 outside that window, fd staging, q8/f16 cache hooks, whole-archive retention,
 and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b1 Rust CUDA chunk-selected model-copy ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_chunk_selected_copy_smoke.py --negative-test
+```
+
+The fixture drives the deterministic successful `DS4_CUDA_COPY_MODEL_CHUNKED`
+public route through a C-linked consumer, mutates the host weights after
+map-range setup, calls map-range again, and requires weighted RMS to observe
+the original copied device image. Preceding whole-map registration
+precedence, allocation/transfer-failure HMM fallback, copy-chunk override and
+discard/progress effects, unconsumed ranges, fd-backed staging, remaining
+cache policy, whole-archive retention, and the executable-stack warning
+remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

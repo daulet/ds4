@@ -9504,9 +9504,10 @@ Stage split:
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
 - Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1,
-  M14.6b2b2b2b2b2a, and M14.6b2b2b2b2b2b because baseline public linkage,
-  bounded registered-range fallback, and deterministic pageable HMM fallback
-  can be validated separately from chunked-copy and fd-backed policy.
+  M14.6b2b2b2b2b2a, M14.6b2b2b2b2b2b1, and M14.6b2b2b2b2b2b2
+  because baseline public linkage, bounded registered-range fallback,
+  deterministic pageable HMM fallback, and successful chunk-selected copy
+  can be validated separately from fd-backed and residual policy.
 - Goal: export the model-map, file-descriptor, map-range, and cache-range
   control surfaces needed to substitute Rust beneath model-backed runtime
   callers without reducing the current-C residency policy contract.
@@ -9642,11 +9643,59 @@ Stage split:
 
 ###### M14.6b2b2b2b2b2b: Chunked Copy And Fd-Backed Model-Control Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b1 and M14.6b2b2b2b2b2b2
+  because deterministic successful chunk-selected copying is separately
+  testable from fd-backed staging and remaining failure/cache policy.
 - Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
   staging, registration-disable, preload/copy selection, and remaining
   cache-policy branches to the public model-control ABI without claiming
   remaining graph compute or route promotion.
+
+####### M14.6b2b2b2b2b2b1: Chunk-Selected Model Copy ABI
+
+- Status: done.
+- Goal: connect the deterministic successful `DS4_CUDA_COPY_MODEL_CHUNKED`
+  public map-range route through a retained copied device image without
+  claiming copy-failure routing or fd-backed policy.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b1/abi-model-control-chunk-selected-copy-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_chunk_selected_copy_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` retains an `AbiCopiedModel` device image when
+    chunk-selected copy is enabled without the current-C suppression
+    variables. It copies only the public header plus consumed tensor-data
+    window using bounded pinned transfers, and consults that device image
+    before pageable or per-range caching.
+  - The C-linked B300 consumer mutates its host weights after the initial
+    map-range call, invokes map-range again, and still observes the original
+    weighted-RMS result. This proves same-map calls reuse the retained copied
+    image and do not silently recopy changed host bytes.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 97 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features cuda-oxide-kernels
+    --lib` passes with 99 tests, the static library rebuilds, and the Rust
+    export set remains 29 symbols.
+  - `check_cuda_abi_model_control_chunk_selected_copy_smoke.py --negative-test`
+    passes with 92 checks, and unified parity passes with 183 passed, 45
+    skipped, and no failures.
+  - Self-review found and fixed a same-map repeat mismatch: current C retains
+    `g_model_device_owned`, while the initial Rust draft would have recopied
+    mutated host bytes on a second map-range call.
+  - The required non-interactive Claude adversarial review was invoked with
+    the copy-selection boundary, C oracle, comparator, and B300 evidence, but
+    timed out after 60 seconds without completed findings.
+  - Preceding whole-map registration precedence, allocation/transfer-failure
+    fallback into HMM, model-copy chunk override and discard/progress side
+    effects, unconsumed model ranges, fd-backed staging,
+    registration-disable policy, q8/f16 cache hooks, whole-archive retention,
+    and the generated `.note.GNU-stack` warning remain open.
+
+####### M14.6b2b2b2b2b2b2: Fd-Backed And Remaining Model-Control Policy
+
+- Status: active.
+- Goal: connect whole-map registration precedence, fd-backed direct-I/O
+  staging, chunk-copy failure routing and residual selection/cache policy
+  without claiming remaining graph compute or route promotion.
 
 ## Removal Criteria for C Host Code
 

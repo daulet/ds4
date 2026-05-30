@@ -252,7 +252,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b Chunked Copy And Fd-Backed Model-Control Policy"
+        "Active item: M14.6b2b2b2b2b2b2 Fd-Backed And Remaining Model-Control Policy"
         in texts["status"],
         "active item missing",
     )
@@ -264,6 +264,10 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(
         "M14.6b2b2b2b2b2a Pageable HMM Fallback ABI" in texts["status"],
         "successor status missing",
+    )
+    report.check(
+        "M14.6b2b2b2b2b2b1 Chunk-Selected Model Copy ABI" in texts["status"],
+        "chunk-copy successor status missing",
     )
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

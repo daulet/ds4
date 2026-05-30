@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b Chunked Copy And Fd-Backed Model-Control Policy
+- Active item: M14.6b2b2b2b2b2b2 Fd-Backed And Remaining Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,23 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b1 Chunk-Selected Model Copy ABI adds the deterministic
+  successful public `DS4_CUDA_COPY_MODEL_CHUNKED` subset: Rust retains a
+  device image containing the public consumed prefix, copied through bounded
+  pinned transfers, and model-backed weighted RMS resolves against it before
+  pageable or range caching. The C-linked B300 consumer mutates its host
+  weights after map-range setup, invokes map-range again, and still matches
+  the original output; self-review added same-map reuse to match current C
+  rather than recopying changed host bytes. Local library tests pass with 97
+  tests, B300 release-feature tests pass with 99 tests, and the static library
+  retains 29 exports. The chunk-selected copy checker passes with 92 checks,
+  and unified parity passes with 183 passed, 45 skipped, and no failures. The
+  required non-interactive Claude review timed out after 60 seconds without
+  completed findings. Whole-map registration precedence,
+  allocation/transfer-failure HMM routing, copy-chunk override and
+  discard/progress effects, unconsumed model ranges, fd-backed staging,
+  registration disable, q8/f16 cache hooks, whole-archive retention, the
+  executable-stack warning, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2a Pageable HMM Fallback ABI adds the deterministic public
   pageable-HMM fallback subset: when chunked model copy is selected but
   explicitly suppressed and prefetch exclusions are absent, Rust retains a

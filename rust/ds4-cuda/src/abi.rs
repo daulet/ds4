@@ -18,6 +18,7 @@ static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
 static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::new(None);
+static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
 static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_map: 0,
     model_size: 0,
@@ -79,6 +80,33 @@ impl AbiPageableModelRange {
         self.pageable
             .cu_deviceptr()
             .checked_add(offset - self.offset)
+    }
+}
+
+struct AbiCopiedModel {
+    model_map: usize,
+    model_size: u64,
+    copied_bytes: u64,
+    device: DeviceBuffer<u8>,
+}
+
+impl AbiCopiedModel {
+    fn matches(&self, model_map: *const c_void, model_size: u64) -> bool {
+        self.model_map == model_map as usize && self.model_size == model_size
+    }
+
+    fn device_ptr(
+        &self,
+        model_map: *const c_void,
+        model_size: u64,
+        offset: u64,
+        bytes: u64,
+    ) -> Option<u64> {
+        let end = offset.checked_add(bytes)?;
+        if !self.matches(model_map, model_size) || end > self.copied_bytes {
+            return None;
+        }
+        self.device.cu_deviceptr().checked_add(offset)
     }
 }
 
@@ -199,6 +227,77 @@ fn pageable_hmm_direct_read_selected() -> bool {
         && std::env::var_os("DS4_CUDA_WEIGHT_PRELOAD").is_none()
 }
 
+const ABI_MODEL_COPY_CHUNK_BYTES: usize = 64 * 1024 * 1024;
+
+fn chunk_selected_model_copy_selected() -> bool {
+    std::env::var_os("DS4_CUDA_COPY_MODEL_CHUNKED").is_some()
+        && std::env::var_os("DS4_CUDA_NO_MODEL_COPY").is_none()
+        && std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_none()
+        && std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_none()
+        && std::env::var_os("DS4_CUDA_WEIGHT_PRELOAD").is_none()
+}
+
+fn try_copy_abi_model_window(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    model_size: u64,
+    map_offset: u64,
+    map_size: u64,
+) -> bool {
+    if map_size == 0 || map_offset > model_size || map_size > model_size - map_offset {
+        return false;
+    }
+    if ABI_COPIED_MODEL.lock().ok().is_some_and(|active| {
+        active
+            .as_ref()
+            .is_some_and(|model| model.matches(model_map, model_size))
+    }) {
+        return true;
+    }
+    let Some(copied_bytes) = map_offset.checked_add(map_size) else {
+        return false;
+    };
+    let Ok(model_len) = usize::try_from(model_size) else {
+        return false;
+    };
+    let Ok(copied_len) = usize::try_from(copied_bytes) else {
+        return false;
+    };
+    let Ok(device) = backend.zeroed::<u8>(model_len) else {
+        return false;
+    };
+    let Ok(mut staging) = backend.pinned_zeroed::<u8>(copied_len.min(ABI_MODEL_COPY_CHUNK_BYTES))
+    else {
+        return false;
+    };
+    let mut copied = 0usize;
+    while copied < copied_len {
+        let bytes = (copied_len - copied).min(ABI_MODEL_COPY_CHUNK_BYTES);
+        // SAFETY: bounds were checked against the active public mapping and
+        // each pinned transfer completes before its source buffer is reused.
+        let source =
+            unsafe { std::slice::from_raw_parts(model_map.cast::<u8>().add(copied), bytes) };
+        staging.as_mut_slice()[..bytes].copy_from_slice(source);
+        if unsafe { backend.enqueue_pinned_u8_range_async(&device, copied, &staging, 0, bytes) }
+            .is_err()
+            || backend.synchronize().is_err()
+        {
+            return false;
+        }
+        copied += bytes;
+    }
+    let Ok(mut active) = ABI_COPIED_MODEL.lock() else {
+        return false;
+    };
+    *active = Some(AbiCopiedModel {
+        model_map: model_map as usize,
+        model_size,
+        copied_bytes,
+        device,
+    });
+    true
+}
+
 fn try_prefetch_abi_pageable_range(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
@@ -250,6 +349,14 @@ fn with_cached_abi_model_range<T>(
     if bytes == 0 {
         let ptr = (model_map as usize).checked_add(usize::try_from(offset).ok()?)?;
         return operation(ptr as u64);
+    }
+    let copied_ptr = ABI_COPIED_MODEL
+        .lock()
+        .ok()?
+        .as_ref()
+        .and_then(|model| model.device_ptr(model_map, model_size, offset, bytes));
+    if let Some(ptr) = copied_ptr {
+        return operation(ptr);
     }
     let pageable_ptr = if pageable_hmm_direct_read_selected() {
         ABI_PAGEABLE_MODEL_RANGE
@@ -366,6 +473,9 @@ pub extern "C" fn ds4_gpu_cleanup() {
             }
             if let Ok(mut pageable_range) = ABI_PAGEABLE_MODEL_RANGE.lock() {
                 *pageable_range = None;
+            }
+            if let Ok(mut copied_model) = ABI_COPIED_MODEL.lock() {
+                *copied_model = None;
             }
             if let Ok(mut control) = ABI_MODEL_CONTROL.lock() {
                 control.model_map = 0;
@@ -996,6 +1106,7 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             backend.synchronize().ok()?;
             ABI_MODEL_RANGES.lock().ok()?.clear();
             *ABI_PAGEABLE_MODEL_RANGE.lock().ok()? = None;
+            *ABI_COPIED_MODEL.lock().ok()? = None;
             control.model_map = model_map as usize;
             control.model_size = model_size;
             Some(true)
@@ -1024,6 +1135,16 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map_range(
 ) -> c_int {
     if unsafe { ds4_gpu_set_model_map(model_map, model_size) } == 0 {
         return 0;
+    }
+    if chunk_selected_model_copy_selected()
+        && with_backend(|backend| {
+            Some(try_copy_abi_model_window(
+                backend, model_map, model_size, map_offset, map_size,
+            ))
+        })
+        .unwrap_or(false)
+    {
+        return 1;
     }
     if pageable_hmm_fallback_selected() {
         let _ = with_backend(|backend| {

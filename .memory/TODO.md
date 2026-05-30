@@ -9288,9 +9288,10 @@
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
 - Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1,
-  M14.6b2b2b2b2b2a, and M14.6b2b2b2b2b2b because baseline public linkage,
-  bounded registered-range fallback, and deterministic pageable HMM fallback
-  can be validated separately from remaining optimized residency policy.
+  M14.6b2b2b2b2b2a, M14.6b2b2b2b2b2b1, and M14.6b2b2b2b2b2b2 because
+  baseline public linkage, bounded registered-range fallback, deterministic
+  pageable HMM fallback, and successful chunk-selected copy can be validated
+  separately from fd-backed and residual policy.
 - Goal: export model-map, file-descriptor, map-range, and cache-range
   controls without weakening the current-C residency-policy contract.
 
@@ -9385,8 +9386,46 @@
 
 ###### M14.6b2b2b2b2b2b: Chunked Copy And Fd-Backed Model-Control Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b1 and M14.6b2b2b2b2b2b2
+  because deterministic successful chunk-selected copying is independently
+  testable from fd-backed staging and residual failure/cache policy.
 - Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
   staging, registration-disable, preload/copy selection, and remaining
   cache-policy branches without claiming graph-compute closure or route
+  promotion.
+
+####### M14.6b2b2b2b2b2b1: Chunk-Selected Model Copy ABI
+
+- Status: done
+- Goal: connect deterministic successful `DS4_CUDA_COPY_MODEL_CHUNKED`
+  public map-range behavior through a retained copied device image while
+  leaving copy failure and fd policy pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b1/abi-model-control-chunk-selected-copy-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_chunk_selected_copy_smoke.py --negative-test`.
+- Evidence: Rust retains a copied device image for the unsuppressed
+  chunk-selected route, fills the public consumed prefix through bounded
+  pinned transfers, and serves model-backed weighted RMS from that image
+  before pageable or per-range caching. The C-linked B300 consumer mutates
+  host weights after the initial map-range call, calls map-range a second
+  time, and still matches the original weighted output, proving same-map
+  reuse. Local library tests pass with 97 tests and B300 release-feature
+  tests pass with 99 tests; the static library retains 29 exports. The
+  chunk-selected copy checker passes with 92 checks, and unified parity
+  passes with 183 passed, 45 skipped, and no failures. Self-review found and
+  fixed the repeated-map recopy mismatch against current C. The required
+  non-interactive Claude review timed out after 60 seconds without completed
+  findings. Whole-map registration precedence, allocation/transfer-failure
+  fallback to HMM, copy-chunk override and discard/progress side effects,
+  unconsumed model ranges, fd staging, registration-disable, q8/f16 cache
+  hooks, whole-archive retention, and the `.note.GNU-stack` warning remain
+  pending.
+
+####### M14.6b2b2b2b2b2b2: Fd-Backed And Remaining Model-Control Policy
+
+- Status: active
+- Goal: connect whole-map registration precedence, fd-backed direct-I/O
+  staging, chunk-copy failure routing and remaining model-control
+  selection/cache policy without claiming graph compute closure or route
   promotion.
