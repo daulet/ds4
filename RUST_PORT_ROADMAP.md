@@ -11358,6 +11358,49 @@ Stage split:
 
 ######################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbb because public
+  output-head hyperconnection weight generation is a bounded ABI leaf
+  independently from remaining graph compute and route promotion.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+########################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbba: Public Output Hyperconnection Weights ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_output_hc_weights_tensor` through its public
+  sigmoid-plus-eps output-weight kernel without claiming remaining graph
+  compute or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbba/abi-output-hc-weights-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_output_hc_weights_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the public output-weight wrapper,
+    deriving complete `n_hc` rows and resolving scale/base parameter spans
+    through the established cached model-range path.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds
+    `abi_output_hc_weights_kernel`, computing current-C
+    `sigmoid(pre * scale + base) + eps` output weights.
+  - A C-linked B300 consumer proves multi-token and single-token output,
+    alternate model parameter ranges, and invalid-input rejection.
+  - Local library tests pass with 134 tests; B300 release-feature tests pass
+    with 141 tests; the static library exposes 48 Rust ABI symbols; all 44
+    preceding linked ABI consumers pass against the rebuilt archive with the
+    known generated embedded-object executable-stack warning.
+  - All 48 CUDA ABI comparators pass, and the unified parity report passes
+    with 220 passed, 45 skipped, and 0 failed.
+  - The pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Rust rejects output token counts above `u32::MAX` instead of retaining
+    current-C launch-argument narrowing for oversized tensors.
+  - Remaining graph compute, whole-archive retention policy, route promotion,
+    C CUDA removal, and the generated embedded-object executable-stack warning
+    remain open.
+
+########################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

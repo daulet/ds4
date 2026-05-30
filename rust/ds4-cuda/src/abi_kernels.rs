@@ -316,6 +316,28 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_output_hc_weights_kernel(
+        n_hc: u32,
+        n_tokens: u32,
+        eps: f32,
+        pre: &[f32],
+        scale: &[f32],
+        base: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d().get() as u64;
+        let count = u64::from(n_tokens) * u64::from(n_hc);
+        if index >= count {
+            return;
+        }
+        let hc = (index % u64::from(n_hc)) as usize;
+        let z = pre[index as usize] * scale[0] + base[hc];
+        unsafe {
+            *out.get_unchecked_mut(index as usize) = 1.0 / (1.0 + (-z).exp()) + eps;
+        }
+    }
+
+    #[kernel]
     pub fn abi_hc_weighted_sum_kernel(
         n_embd: u32,
         n_hc: u32,
@@ -1282,6 +1304,7 @@ pub(crate) struct AbiKernelModule {
     hc_split_sinkhorn_kernel: CudaFunction,
     hc_split_weighted_sum_fused_kernel: CudaFunction,
     hc_split_weighted_sum_norm_fused_kernel: CudaFunction,
+    output_hc_weights_kernel: CudaFunction,
     hc_weighted_sum_kernel: CudaFunction,
     hc_expand_kernel: CudaFunction,
     directional_steering_project_kernel: CudaFunction,
@@ -1322,6 +1345,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             hc_split_weighted_sum_norm_fused_kernel: module
                 .load_function("abi_hc_split_weighted_sum_norm_fused_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            output_hc_weights_kernel: module
+                .load_function("abi_output_hc_weights_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             hc_weighted_sum_kernel: module
                 .load_function("abi_hc_weighted_sum_kernel")
@@ -1738,6 +1764,60 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.hc_split_weighted_sum_norm_fused_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn output_hc_weights_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        pre_ptr: u64,
+        scale_ptr: u64,
+        base_ptr: u64,
+        n_hc: u32,
+        n_tokens: u32,
+        eps: f32,
+    ) -> bool {
+        let count = u64::from(n_tokens) * u64::from(n_hc);
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut n_hc = n_hc;
+        let mut n_tokens = n_tokens;
+        let mut eps = eps;
+        let mut pre_ptr = pre_ptr;
+        let mut pre_len = count;
+        let mut scale_ptr = scale_ptr;
+        let mut scale_len = 1_u64;
+        let mut base_ptr = base_ptr;
+        let mut base_len = u64::from(n_hc);
+        let mut out_ptr = out_ptr;
+        let mut out_len = count;
+        let mut params = [
+            (&mut n_hc as *mut u32).cast::<c_void>(),
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut eps as *mut f32).cast::<c_void>(),
+            (&mut pre_ptr as *mut u64).cast::<c_void>(),
+            (&mut pre_len as *mut u64).cast::<c_void>(),
+            (&mut scale_ptr as *mut u64).cast::<c_void>(),
+            (&mut scale_len as *mut u64).cast::<c_void>(),
+            (&mut base_ptr as *mut u64).cast::<c_void>(),
+            (&mut base_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates complete output rows, matching
+        // input coverage, and both cached model ranges before launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.output_hc_weights_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

@@ -2546,6 +2546,84 @@ pub unsafe extern "C" fn ds4_gpu_hc_split_weighted_sum_norm_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_output_hc_weights_tensor(
+    out: *mut Ds4GpuTensor,
+    pre: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    scale_offset: u64,
+    base_offset: u64,
+    n_hc: u32,
+    eps: f32,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(pre) = (unsafe { tensor_ref(pre) }) else {
+            return false;
+        };
+        let Some(row_bytes) = u64::from(n_hc).checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_hc == 0
+            || row_bytes == 0
+            || out.bytes < row_bytes
+            || out.bytes % row_bytes != 0
+            || pre.bytes < out.bytes
+            || scale_offset > model_size
+            || size_of::<f32>() as u64 > model_size - scale_offset
+            || base_offset > model_size
+            || row_bytes > model_size - base_offset
+        {
+            return false;
+        }
+        let Ok(n_tokens) = u32::try_from(out.bytes / row_bytes) else {
+            return false;
+        };
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                scale_offset,
+                size_of::<f32>() as u64,
+                |scale_ptr| {
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        base_offset,
+                        row_bytes,
+                        |base_ptr| {
+                            with_abi_kernels(backend, |kernels| {
+                                // SAFETY: output rows, input coverage, and
+                                // cached scale/base spans are validated above.
+                                Some(unsafe {
+                                    kernels.output_hc_weights_tensor(
+                                        backend.stream(),
+                                        out.device_ptr(),
+                                        pre.device_ptr(),
+                                        scale_ptr,
+                                        base_ptr,
+                                        n_hc,
+                                        n_tokens,
+                                        eps,
+                                    )
+                                })
+                            })
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,
