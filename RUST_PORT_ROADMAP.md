@@ -7857,7 +7857,8 @@ Stage split:
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
 - Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2,
-  M14.3c1, M14.3c2, M14.3c3, and M14.3d1 are done, and M14.3d2 is active.
+  M14.3c1, M14.3c2, M14.3c3, M14.3d1, and M14.3d2 are done, and M14.3d3
+  is active.
 - Goal: port the M14.3 dense projection, Q8 conversion, and normalization
   operation family through bounded Rust CUDA slices.
 
@@ -8076,9 +8077,39 @@ Stage split:
 
 ##### M14.3d2: Base And Prequantized Q8 Matmul Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port base and prequantized Q8 matmul execution before claiming paired
   or HC-expansion kernels and final Q8 dispatch policy.
+- Oracle: current-C `matmul_q8_0_kernel`, `matmul_q8_0_preq_kernel`,
+  `matmul_q8_0_preq_warp8_kernel`, and
+  `matmul_q8_0_preq_batch_warp8_kernel` scalar integer-dot behavior.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3d2/q8-matmul-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_q8_matmul_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: DP4A acceleration, paired and HC-expansion kernels, final Q8
+  dispatch, runtime route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `matmul_q8_0_kernel`,
+    `matmul_q8_0_preq_kernel`, `matmul_q8_0_preq_warp8_kernel`, and
+    `matmul_q8_0_preq_batch_warp8_kernel` with packed Q8 scalar integer-dot
+    execution.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 47 tests. Live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and proved direct quantizing, generic prequantized,
+    single-token warp8, batched warp8, partial-block, and invalid-shape
+    behavior on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 81-check comparator, and
+    unified parity passed with 137 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained DP4A, pair/HC-expansion, dispatch,
+    route, and removal non-claims.
+
+##### M14.3d3: Paired And HC-Expansion Q8 Matmul Kernels
+
+- Status: active.
+- Goal: port paired and HC-expansion Q8 matmul kernels before claiming DP4A
+  acceleration, final Q8 dispatch policy, or runtime route ownership.
 
 ## Removal Criteria for C Host Code
 

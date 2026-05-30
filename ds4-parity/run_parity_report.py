@@ -1104,6 +1104,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.3d2 cuda-oxide Q8 matmul kernel smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_q8_matmul_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -888,6 +888,31 @@ pub const M14_3D1_SCOPE: Q8ConversionKernelScope = Q8ConversionKernelScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Q8MatmulKernelScope {
+    pub opt_in_only: bool,
+    pub owns_matmul_q8_0_kernel: bool,
+    pub owns_matmul_q8_0_preq_kernel: bool,
+    pub owns_matmul_q8_0_preq_warp8_kernel: bool,
+    pub owns_matmul_q8_0_preq_batch_warp8_kernel: bool,
+    pub owns_dp4a_acceleration: bool,
+    pub owns_pair_or_hc_expand_kernels: bool,
+    pub owns_q8_matmul_dispatch_policy: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_3D2_SCOPE: Q8MatmulKernelScope = Q8MatmulKernelScope {
+    opt_in_only: true,
+    owns_matmul_q8_0_kernel: true,
+    owns_matmul_q8_0_preq_kernel: true,
+    owns_matmul_q8_0_preq_warp8_kernel: true,
+    owns_matmul_q8_0_preq_batch_warp8_kernel: true,
+    owns_dp4a_acceleration: false,
+    owns_pair_or_hc_expand_kernels: false,
+    owns_q8_matmul_dispatch_policy: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -911,7 +936,7 @@ mod tests {
         M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
         M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
         M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE, M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE,
-        M14_3D1_SCOPE,
+        M14_3D1_SCOPE, M14_3D2_SCOPE,
     };
 
     #[test]
@@ -1281,6 +1306,19 @@ mod tests {
         assert!(!M14_3D1_SCOPE.owns_quantized_matmul_kernels);
         assert!(!M14_3D1_SCOPE.owns_q8_matmul_dispatch_policy);
         assert!(!M14_3D1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn q8_matmul_scope_leaves_acceleration_specialization_and_route_pending() {
+        assert!(M14_3D2_SCOPE.opt_in_only);
+        assert!(M14_3D2_SCOPE.owns_matmul_q8_0_kernel);
+        assert!(M14_3D2_SCOPE.owns_matmul_q8_0_preq_kernel);
+        assert!(M14_3D2_SCOPE.owns_matmul_q8_0_preq_warp8_kernel);
+        assert!(M14_3D2_SCOPE.owns_matmul_q8_0_preq_batch_warp8_kernel);
+        assert!(!M14_3D2_SCOPE.owns_dp4a_acceleration);
+        assert!(!M14_3D2_SCOPE.owns_pair_or_hc_expand_kernels);
+        assert!(!M14_3D2_SCOPE.owns_q8_matmul_dispatch_policy);
+        assert!(!M14_3D2_SCOPE.changes_default_route);
     }
 
     #[test]

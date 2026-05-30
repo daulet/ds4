@@ -2492,6 +2492,17 @@ quantization execution on B300. It proves nearest-even rounding and
 partial-block padding while leaving Q8 matmul, dispatch, route, and removal
 ownership unclaimed.
 
+Validate the M14.3d2 Rust CUDA Q8 matmul kernel smoke:
+
+```sh
+python3 ds4-parity/check_q8_matmul_kernel_smoke.py --negative-test
+```
+
+The fixture records direct-quantizing, generic prequantized, single-token
+warp8, and batched warp8 Q8 matmul execution on B300. It proves packed Q8
+scalar integer-dot behavior while leaving DP4A acceleration, pair/HC
+expansion, dispatch, route, and removal ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
