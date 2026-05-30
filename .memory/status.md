@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6 CUDA Route Promotion And C CUDA Removal Gate
+- Active item: M14.6b Rust CUDA ABI Backend Assembly
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.5d Hyperconnection Split And Expansion Kernels.
+- Last validated source before the active item: M14.6a Production Route Linkage Blocker.
+- Earlier M14.5d Hyperconnection Split And Expansion Kernels.
 - Earlier M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE.
 - Earlier M14.5c2e Shared-Cache Expert-Tile Projection.
 - Earlier M14.5c2d Single-Token Q4_K Routed MoE.
@@ -223,6 +224,20 @@
 
 ## Last Evidence
 
+- M14.6a Production Route Linkage Blocker establishes that the Rust
+  cuda-oxide operation proofs are not yet a production backend:
+  `rust/ds4-gpu/build.rs` still compiles and archives `ds4_cuda.cu`;
+  `rust/ds4-gpu` does not depend on `rust/ds4-cuda`; `rust/ds4-cuda`
+  packages CUDA kernels as executable-local proof modules instead of
+  exporting the 81-function `ds4_gpu_*` ABI; and `rust/ds4-engine` still
+  rejects `--runtime-graph graph`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.6a/production-route-blocker.json` and
+  `ds4-parity/check_cuda_route_promotion_gate.py --negative-test`.
+  Validation passed with 86 local `ds4-cuda` library tests, 88 B300
+  cuda-oxide-backend feature tests, 56 production-linkage checker checks,
+  and a unified parity report of 172 passes, 45 skips, and no failures.
+  Default-route promotion and `ds4_cuda.cu` removal are blocked; M14.6b must
+  assemble the production Rust CUDA ABI backend.
 - M14.5d Hyperconnection Split And Expansion Kernels adds an opt-in
   executable-local Rust smoke binary for `hc_split_sinkhorn_kernel`,
   `hc_weighted_sum_kernel`, `hc_expand_kernel`,

@@ -200,7 +200,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6 CUDA Route Promotion And C CUDA Removal Gate" in texts["status"],
+        "Active item: M14.6b Rust CUDA ABI Backend Assembly" in texts["status"],
         "next active stage missing",
     )
     report.check(item.replace(":", "") in texts["status"], "status evidence missing")

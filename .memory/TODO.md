@@ -9045,7 +9045,8 @@
 
 #### M14.6: CUDA Route Promotion And C CUDA Removal Gate
 
-- Status: active
+- Status: active; split into M14.6a and M14.6b after production linkage
+  inspection
 - Goal: determine whether all validated Rust CUDA operation families can be
   integrated into the default runtime route and whether `ds4_cuda.cu`
   linkage can be removed.
@@ -9054,3 +9055,28 @@
 - Acceptance: only promote the default route or remove C CUDA after exported
   API coverage and same-B300 end-to-end comparisons pass; otherwise record
   the precise blocker and retain the C route.
+
+##### M14.6a: Production Route Linkage Blocker
+
+- Status: done
+- Goal: determine whether the validated cuda-oxide operations are already
+  reachable through the production Rust runtime route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6a/production-route-blocker.json`
+- Comparator: `ds4-parity/check_cuda_route_promotion_gate.py --negative-test`.
+- Evidence: Linux `rust/ds4-gpu/build.rs` still compiles and archives
+  `ds4_cuda.cu`; `rust/ds4-gpu` does not depend on `rust/ds4-cuda`;
+  `rust/ds4-cuda` exposes executable-local CUDA proof modules rather than a
+  linkable `ds4_gpu_*` implementation; and `rust/ds4-engine` still rejects
+  `--runtime-graph graph`. Default-route promotion and C CUDA removal are
+  therefore blocked rather than overclaimed. Validation: 86 local
+  `ds4-cuda` library tests passed, 88 B300 feature tests passed, the
+  production-linkage checker passed with 56 checks, and the unified parity
+  report passed with 172 passes, 45 skips, and no failures.
+
+##### M14.6b: Rust CUDA ABI Backend Assembly
+
+- Status: active
+- Goal: assemble the validated cuda-oxide operations behind the production
+  `ds4_gpu_*` ABI and use that linkable backend for same-B300 route
+  comparison before any C CUDA removal.

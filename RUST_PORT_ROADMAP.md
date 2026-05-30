@@ -9156,7 +9156,9 @@ Stage split:
 
 #### M14.6: CUDA Route Promotion And C CUDA Removal Gate
 
-- Status: active.
+- Status: active; split into M14.6a and M14.6b after production linkage
+  inspection showed that operation proof does not yet provide a Rust ABI
+  backend.
 - Goal: determine whether the Rust CUDA backend can replace the current-C
   default CUDA path now that all assigned operation families have opt-in Rust
   execution proofs.
@@ -9167,6 +9169,44 @@ Stage split:
 - Acceptance: promote the Rust CUDA default route and remove `ds4_cuda.cu`
   linkage only if exported-function coverage and end-to-end gates pass;
   otherwise record the exact blocker and retain current C.
+
+##### M14.6a: Production Route Linkage Blocker
+
+- Status: done.
+- Goal: test whether the validated cuda-oxide kernels are already reachable
+  through the production Rust CUDA runtime before attempting route promotion.
+- Oracle: `rust/ds4-gpu/build.rs`, `rust/ds4-gpu-sys/src/lib.rs`,
+  `rust/ds4-cuda`, and `rust/ds4-engine/src/lib.rs`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6a/production-route-blocker.json`.
+- Comparator: `ds4-parity/check_cuda_route_promotion_gate.py --negative-test`.
+- Acceptance: fail closed when production still compiles `ds4_cuda.cu`, the
+  Rust cuda-oxide crate does not implement the `ds4_gpu_*` ABI, or the Rust
+  runtime graph route remains unavailable.
+- Evidence:
+  - Confirmed that Linux `ds4-gpu` still compiles and archives
+    `ds4_cuda.o`, exposes the 81-function GPU ABI through FFI, and has no
+    dependency on `ds4-cuda`.
+  - Confirmed that `ds4-cuda` currently packages kernels in executable-local
+    modules and does not export a linkable `ds4_gpu_*` implementation, while
+    `ds4-engine` still rejects `--runtime-graph graph`.
+  - The gate records default-route promotion and C CUDA removal as blocked,
+    with Rust ABI backend assembly required next.
+  - `cargo test --locked -p ds4-cuda --lib` passed with 86 tests locally;
+    B300 `cargo test --locked -p ds4-cuda --features cuda-oxide-backend --
+    --nocapture` passed with 88 tests; the production-linkage checker passed
+    with 56 checks; and the unified parity report passed with 172 passes,
+    45 skips, and no failures.
+
+##### M14.6b: Rust CUDA ABI Backend Assembly
+
+- Status: active.
+- Goal: consolidate the validated cuda-oxide substrate and kernel families
+  behind a linkable Rust implementation of the production `ds4_gpu_*` ABI,
+  then compare the resulting route end to end before removing current C.
+- Acceptance: the production Linux CUDA build can select a Rust-owned ABI
+  backend without compiling `ds4_cuda.cu`, and same-B300 output, quality,
+  long-context, server, and benchmark gates pass before default promotion.
 
 ## Removal Criteria for C Host Code
 

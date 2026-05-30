@@ -1,0 +1,45 @@
+{
+  "schema": "ds4.cuda_route_promotion_gate.v1",
+  "milestone": "M14.6a",
+  "status": "blocked-production-rust-abi-not-assembled",
+  "id": "m14.6a-production-route-blocker",
+  "goal": "Determine whether validated Rust cuda-oxide operation proofs are wired into the production CUDA runtime before permitting default-route promotion or C CUDA removal.",
+  "validated_operation_families": [
+    "M14.1 cuda-oxide substrate and tensor residency",
+    "M14.2 embedding, indexer, and elementwise kernels",
+    "M14.3 dense projection, quantization, and norm kernels",
+    "M14.4 RoPE, KV, compressor, and attention kernels",
+    "M14.5 router, routed-MoE, and hyperconnection kernels"
+  ],
+  "production_boundary": {
+    "runtime_gpu_crate": "rust/ds4-gpu",
+    "rust_kernel_crate": "rust/ds4-cuda",
+    "ffi_crate": "rust/ds4-gpu-sys",
+    "production_build_still_compiles_ds4_cuda_cu": true,
+    "production_gpu_depends_on_ds4_cuda": false,
+    "rust_cuda_library_exports_ds4_gpu_abi": false,
+    "rust_cuda_kernel_modules_are_executable_local": true,
+    "runtime_graph_route_implemented": false,
+    "public_gpu_abi_function_count": 81,
+    "cuda_only_exported_helper_count": 2
+  },
+  "decision": {
+    "operation_families_validated": true,
+    "default_route_promotion_allowed": false,
+    "c_cuda_removal_allowed": false,
+    "blockers": [
+      "rust/ds4-gpu/build.rs still compiles and archives ds4_cuda.cu for the Linux CUDA backend",
+      "rust/ds4-gpu does not depend on rust/ds4-cuda and rust/ds4-cuda does not export the ds4_gpu ABI",
+      "rust/ds4-engine still rejects the runtime graph route instead of executing a Rust CUDA backend"
+    ],
+    "next_required_stage": "M14.6b Rust CUDA ABI Backend Assembly"
+  },
+  "validation": {
+    "date_utc": "2026-05-30",
+    "local_test_command": "cargo test --locked -p ds4-cuda --lib",
+    "local_test_count": 86,
+    "b300_test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "b300_test_count": 88,
+    "local_cuda_kernel_build_blocker": "/usr/local/cuda/include/cuda.h"
+  }
+}

@@ -1940,6 +1940,25 @@ pub const M14_5D_SCOPE: HyperconnectionScope = HyperconnectionScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaRoutePromotionGate {
+    pub operation_families_validated: bool,
+    pub production_build_still_compiles_ds4_cuda_cu: bool,
+    pub rust_exports_ds4_gpu_abi: bool,
+    pub runtime_graph_route_implemented: bool,
+    pub can_promote_default_route: bool,
+    pub can_remove_c_cuda: bool,
+}
+
+pub const M14_6A_GATE: CudaRoutePromotionGate = CudaRoutePromotionGate {
+    operation_families_validated: true,
+    production_build_still_compiles_ds4_cuda_cu: true,
+    rust_exports_ds4_gpu_abi: false,
+    runtime_graph_route_implemented: false,
+    can_promote_default_route: false,
+    can_remove_c_cuda: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1976,7 +1995,7 @@ mod tests {
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
         M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE, M14_5C2F_SCOPE,
-        M14_5D_SCOPE,
+        M14_5D_SCOPE, M14_6A_GATE,
     };
 
     #[test]
@@ -2973,6 +2992,16 @@ mod tests {
         assert!(M14_5D_SCOPE.owns_output_hc_weights_kernel);
         assert!(!M14_5D_SCOPE.owns_shared_expert_wrapper_or_runtime_graph);
         assert!(!M14_5D_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn route_promotion_gate_records_production_abi_blocker() {
+        assert!(M14_6A_GATE.operation_families_validated);
+        assert!(M14_6A_GATE.production_build_still_compiles_ds4_cuda_cu);
+        assert!(!M14_6A_GATE.rust_exports_ds4_gpu_abi);
+        assert!(!M14_6A_GATE.runtime_graph_route_implemented);
+        assert!(!M14_6A_GATE.can_promote_default_route);
+        assert!(!M14_6A_GATE.can_remove_c_cuda);
     }
 
     #[test]

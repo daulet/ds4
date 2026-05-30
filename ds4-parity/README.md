@@ -2918,6 +2918,17 @@ fused split-plus-normalization, and output weights. It closes M14.5
 operation-family ownership while leaving default-route promotion and C CUDA
 removal to M14.6.
 
+Validate the M14.6a production route linkage blocker:
+
+```sh
+python3 ds4-parity/check_cuda_route_promotion_gate.py --negative-test
+```
+
+The fixture rejects route promotion while the production Linux Rust build
+still compiles `ds4_cuda.cu`, the cuda-oxide crate has no linkable
+`ds4_gpu_*` ABI backend, and the Rust runtime graph route is unimplemented.
+M14.6b owns that backend assembly work.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
