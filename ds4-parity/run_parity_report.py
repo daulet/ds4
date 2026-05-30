@@ -1168,6 +1168,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.4c3b cuda-oxide compressor prefill orchestration smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_compressor_prefill_orchestration_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

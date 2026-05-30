@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4c3a and split next into M14.4c3b
+- Status: active; done through M14.4c3b and split next into M14.4d1
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8367,7 +8367,7 @@
 
 ##### M14.4c: Composed KV Storage And Compressor Kernels
 
-- Status: active; done through M14.4c3a and split next into M14.4c3b
+- Status: done through M14.4c3b
 - Goal: port composed KV storage and bounded compressor kernels before
   claiming attention execution.
 
@@ -8450,7 +8450,40 @@
 
 ###### M14.4c3b: Compressor Prefill And Replay Orchestration
 
-- Status: active
+- Status: done
 - Goal: compose owned compressor kernels with normalization, RoPE, and
   optional FP8 operations into the current-C prefill and replay surfaces
   before claiming attention execution.
+- Oracle: current-C `ds4_gpu_compressor_prefill_tensor`,
+  `ds4_gpu_compressor_prefill_ratio4_replay_tensor`,
+  `ds4_gpu_compressor_prefill_state_ratio4_tensor`,
+  `compressor_set_rows_kernel`, `compressor_prefill_pool_kernel`,
+  `rms_norm_weight_kernel`, `rope_tail_kernel`, and
+  `fp8_kv_quantize_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4c3b/compressor-prefill-orchestration-smoke.json`.
+- Comparator:
+  `ds4-parity/check_compressor_prefill_orchestration_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust state initialization, set-row
+  placement, pooled compressed output, weighted RMS, YARN RoPE, and optional
+  FP8 processing across general prefill, ratio-4 prefill/replay, and ratio-4
+  state-only cases. B300 feature-enabled tests passed with 56 tests; live
+  cargo-oxide execution emitted portable `sm_80` PTX with libdevice linkage
+  and matched state placement, replay ordering, and optional FP8 outputs on
+  `NVIDIA B300 SXM6 AC`. Attention, runtime route activation, and C CUDA
+  removal remain unclaimed. Local formatting, diff, library tests, the c3b
+  comparator, retained M14 checks, and unified parity passed with 140 passed,
+  50 skipped, and 0 failed.
+
+##### M14.4d: Attention Kernels
+
+- Status: active; split first into M14.4d1
+- Goal: port current-C attention decode, prefill, indexed, and output-Q8
+  device behavior after compressor surfaces are proved.
+
+###### M14.4d1: Attention Decode Mixed Kernels
+
+- Status: active
+- Goal: port base mixed attention decode behavior and its bounded host
+  surface before optimized heads8, prefill/indexed, or output-Q8 ownership.

@@ -2586,6 +2586,18 @@ on B300. It proves ratio-4 non-emission, ratio-4 emission with F16 APE and a
 nonzero compressed row, and general-ratio emission while leaving prefill and
 replay orchestration, attention, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.4c3b Rust CUDA compressor prefill orchestration smoke:
+
+```sh
+python3 ds4-parity/check_compressor_prefill_orchestration_smoke.py --negative-test
+```
+
+The fixture records executable-local general prefill, ratio-4 prefill/replay,
+and ratio-4 state-only orchestration on B300. It proves state initialization,
+remainder placement, replay output ordering, weighted RMS/RoPE composition,
+F16 APE input, and optional FP8 compressed output while leaving attention,
+runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
