@@ -1856,6 +1856,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust CUDA public compressor update ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_compressor_update_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -3202,6 +3202,251 @@ pub unsafe extern "C" fn ds4_gpu_compressor_store_batch_tensor(
 #[cfg(feature = "cuda-oxide-kernels")]
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_compressor_update_tensor(
+    kv_cur: *const Ds4GpuTensor,
+    sc_cur: *const Ds4GpuTensor,
+    state_kv: *mut Ds4GpuTensor,
+    state_score: *mut Ds4GpuTensor,
+    comp_cache: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    ape_offset: u64,
+    ape_type: u32,
+    norm_offset: u64,
+    norm_type: u32,
+    head_dim: u32,
+    ratio: u32,
+    pos: u32,
+    comp_row: u32,
+    n_rot: u32,
+    n_ctx_orig: u32,
+    freq_base: f32,
+    freq_scale: f32,
+    ext_factor: f32,
+    attn_factor: f32,
+    beta_fast: f32,
+    beta_slow: f32,
+    rms_eps: f32,
+) -> c_int {
+    status(|| {
+        let Some(kv_cur_ref) = (unsafe { tensor_ref(kv_cur) }) else {
+            return false;
+        };
+        let Some(sc_cur_ref) = (unsafe { tensor_ref(sc_cur) }) else {
+            return false;
+        };
+        let Some(state_kv_ref) = (unsafe { tensor_ref(state_kv.cast_const()) }) else {
+            return false;
+        };
+        let Some(state_score_ref) = (unsafe { tensor_ref(state_score.cast_const()) }) else {
+            return false;
+        };
+        let Some(comp_cache_ref) = (unsafe { tensor_ref(comp_cache.cast_const()) }) else {
+            return false;
+        };
+        if model_map.is_null()
+            || head_dim == 0
+            || ratio == 0
+            || n_rot > head_dim
+            || n_rot & 1 != 0
+            || ape_type > 1
+            || norm_type != 0
+        {
+            return false;
+        }
+        let coff = if ratio == 4 { 2_u32 } else { 1_u32 };
+        let Some(width) = coff.checked_mul(head_dim) else {
+            return false;
+        };
+        let Some(state_rows) = coff.checked_mul(ratio) else {
+            return false;
+        };
+        let input_elements = u64::from(width);
+        let Some(state_elements) = u64::from(state_rows).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Some(input_bytes) = input_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(state_bytes) = state_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(ape_elements) = u64::from(width).checked_mul(u64::from(ratio)) else {
+            return false;
+        };
+        let ape_element_bytes = if ape_type == 1 {
+            size_of::<u16>() as u64
+        } else {
+            size_of::<f32>() as u64
+        };
+        let Some(ape_bytes) = ape_elements.checked_mul(ape_element_bytes) else {
+            return false;
+        };
+        let norm_bytes = u64::from(head_dim) * size_of::<f32>() as u64;
+        let emit = pos.wrapping_add(1) % ratio == 0;
+        let mut row_ptr = 0_u64;
+        if emit {
+            let Some(comp_rows) = comp_row.checked_add(1) else {
+                return false;
+            };
+            let Some(comp_elements) = u64::from(comp_rows).checked_mul(u64::from(head_dim)) else {
+                return false;
+            };
+            let Some(comp_bytes) = comp_elements.checked_mul(size_of::<f32>() as u64) else {
+                return false;
+            };
+            let Some(row_offset) = u64::from(comp_row)
+                .checked_mul(u64::from(head_dim))
+                .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+            else {
+                return false;
+            };
+            let Some((device_ptr, _)) = checked_range(comp_cache_ref, row_offset, norm_bytes)
+            else {
+                return false;
+            };
+            if comp_cache_ref.bytes < comp_bytes {
+                return false;
+            }
+            row_ptr = device_ptr;
+        }
+        if width == 0
+            || ape_offset > model_size
+            || ape_bytes > model_size - ape_offset
+            || norm_offset > model_size
+            || norm_bytes > model_size - norm_offset
+            || kv_cur_ref.bytes < input_bytes
+            || sc_cur_ref.bytes < input_bytes
+            || state_kv_ref.bytes < state_bytes
+            || state_score_ref.bytes < state_bytes
+        {
+            return false;
+        }
+        // The current-C wrapper validates output/model spans before mutating
+        // state, then always stores the current row before deciding to emit.
+        if unsafe {
+            ds4_gpu_compressor_store_batch_tensor(
+                kv_cur,
+                sc_cur,
+                state_kv,
+                state_score,
+                model_map,
+                model_size,
+                ape_offset,
+                ape_type,
+                head_dim,
+                ratio,
+                pos,
+                1,
+            )
+        } == 0
+        {
+            return false;
+        }
+        if !emit {
+            return true;
+        }
+        with_backend(|backend| {
+            let pooled = with_abi_kernels(backend, |kernels| {
+                // SAFETY: the output row and updated state spans plus the
+                // checked ratio-dependent geometry were validated above.
+                Some(unsafe {
+                    kernels.compressor_update_pool_tensor(
+                        backend.stream(),
+                        row_ptr,
+                        state_kv_ref.device_ptr(),
+                        state_score_ref.device_ptr(),
+                        state_elements,
+                        head_dim,
+                        ratio,
+                    )
+                })
+            })?;
+            if !pooled {
+                return Some(false);
+            }
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                norm_offset,
+                norm_bytes,
+                |norm_ptr| {
+                    with_abi_kernels(backend, |kernels| {
+                        // SAFETY: emitted row and cached norm spans are valid;
+                        // launches are sequenced after the published store.
+                        if !unsafe {
+                            kernels.rms_norm_weight_rows_tensor(
+                                backend.stream(),
+                                row_ptr,
+                                row_ptr,
+                                norm_ptr,
+                                head_dim,
+                                1,
+                                rms_eps,
+                            )
+                        } {
+                            return Some(false);
+                        }
+                        if n_rot == 0 {
+                            // Current C reaches a zero-grid RoPE submission
+                            // after store/pool/RMS and fails before shifting.
+                            return Some(false);
+                        }
+                        if !unsafe {
+                            kernels.rope_tail_tensor(
+                                backend.stream(),
+                                row_ptr,
+                                1,
+                                1,
+                                head_dim,
+                                n_rot,
+                                pos.wrapping_add(1).wrapping_sub(ratio),
+                                1,
+                                n_ctx_orig,
+                                false,
+                                freq_base,
+                                freq_scale,
+                                ext_factor,
+                                attn_factor,
+                                beta_fast,
+                                beta_slow,
+                                n_rot / 2,
+                            )
+                        } {
+                            return Some(false);
+                        }
+                        if ratio == 4 {
+                            let shift_elements = 4_u64 * u64::from(width);
+                            let Ok(shift_blocks) = u32::try_from(shift_elements.div_ceil(256_u64))
+                            else {
+                                return Some(false);
+                            };
+                            if !unsafe {
+                                kernels.compressor_shift_ratio4_tensor(
+                                    backend.stream(),
+                                    state_kv_ref.device_ptr(),
+                                    state_score_ref.device_ptr(),
+                                    state_elements,
+                                    width,
+                                    shift_blocks,
+                                )
+                            } {
+                                return Some(false);
+                            }
+                        }
+                        Some(true)
+                    })
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn ds4_gpu_compressor_prefill_state_ratio4_tensor(
     state_kv: *mut Ds4GpuTensor,
     state_score: *mut Ds4GpuTensor,

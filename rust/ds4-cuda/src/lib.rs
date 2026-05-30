@@ -3524,6 +3524,36 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiCompressorUpdateScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub consumes_cached_model_ranges: bool,
+    pub owns_compressor_update_tensor: bool,
+    pub owns_compressor_update_pool_kernel: bool,
+    pub owns_compressor_shift_ratio4_kernel: bool,
+    pub reuses_store_norm_rope_kernels: bool,
+    pub owns_general_prefill: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE:
+    CudaAbiCompressorUpdateScope = CudaAbiCompressorUpdateScope {
+    exported_abi_symbol_count: 61,
+    exported_compute_symbol_count: 38,
+    consumes_cached_model_ranges: true,
+    owns_compressor_update_tensor: true,
+    owns_compressor_update_pool_kernel: true,
+    owns_compressor_shift_ratio4_kernel: true,
+    reuses_store_norm_rope_kernels: true,
+    owns_general_prefill: false,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -3605,6 +3635,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -6113,6 +6144,56 @@ mod tests {
         );
         assert!(
             !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .changes_default_route
+        );
+    }
+
+    #[test]
+    fn public_compressor_update_scope_keeps_general_prefill_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_abi_symbol_count,
+            61
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_compute_symbol_count,
+            38
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .consumes_cached_model_ranges
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_compressor_update_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_compressor_update_pool_kernel
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_compressor_shift_ratio4_kernel
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .reuses_store_norm_rope_kernels
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_general_prefill
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_remaining_graph_compute_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_ds4_gpu_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
                 .changes_default_route
         );
     }

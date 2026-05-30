@@ -3780,6 +3780,22 @@ rejection. Compressor update/general prefill, attention, routed MoE, remaining
 graph compute, whole-archive retention policy, route promotion, C CUDA
 removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public compressor update ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_compressor_update_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public update wrapper through embedded
+update-pool and ratio-4 shift kernels composed with store, weighted RMS, and
+stride-1 RoPE paths. It proves store-only non-emission, ratio-4 and
+general-ratio emission, wrapped-position emission, and the emitted
+zero-RoPE partial-failure boundary, then checks validation rejection. General
+prefill, attention, routed MoE, remaining graph compute, whole-archive
+retention policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

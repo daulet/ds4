@@ -929,6 +929,100 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_compressor_update_pool_kernel(
+        head_dim: u32,
+        ratio: u32,
+        state_kv: &[f32],
+        state_score: &[f32],
+        mut row: DisjointSlice<f32>,
+    ) {
+        let dimension = thread::blockIdx_x() * thread::blockDim_x() + thread::threadIdx_x();
+        if dimension >= head_dim {
+            return;
+        }
+        let width = if ratio == 4 { 2 * head_dim } else { head_dim };
+        let mut max_score = f32::NEG_INFINITY;
+        let mut candidate = 0_u32;
+        if ratio == 4 {
+            while candidate < 4 {
+                let prior = (candidate * width + dimension) as usize;
+                let active = ((ratio + candidate) * width + head_dim + dimension) as usize;
+                let prior_score = state_score[prior];
+                let active_score = state_score[active];
+                if prior_score > max_score {
+                    max_score = prior_score;
+                }
+                if active_score > max_score {
+                    max_score = active_score;
+                }
+                candidate += 1;
+            }
+        } else {
+            while candidate < ratio {
+                let score = state_score[(candidate * width + dimension) as usize];
+                if score > max_score {
+                    max_score = score;
+                }
+                candidate += 1;
+            }
+        }
+
+        let mut denominator = 0.0_f32;
+        let mut accumulator = 0.0_f32;
+        candidate = 0;
+        if ratio == 4 {
+            while candidate < 4 {
+                let prior = (candidate * width + dimension) as usize;
+                let active = ((ratio + candidate) * width + head_dim + dimension) as usize;
+                let prior_weight = (state_score[prior] - max_score).exp();
+                let active_weight = (state_score[active] - max_score).exp();
+                denominator += prior_weight + active_weight;
+                accumulator += state_kv[prior] * prior_weight + state_kv[active] * active_weight;
+                candidate += 1;
+            }
+        } else {
+            while candidate < ratio {
+                let index = (candidate * width + dimension) as usize;
+                let weight = (state_score[index] - max_score).exp();
+                denominator += weight;
+                accumulator += state_kv[index] * weight;
+                candidate += 1;
+            }
+        }
+        unsafe {
+            *row.get_unchecked_mut(dimension as usize) = if denominator != 0.0 {
+                accumulator / denominator
+            } else {
+                0.0
+            };
+        }
+    }
+
+    #[kernel]
+    pub fn abi_compressor_shift_ratio4_kernel(
+        width: u32,
+        mut state_kv: DisjointSlice<f32>,
+        mut state_score: DisjointSlice<f32>,
+    ) {
+        let index = u64::from(thread::blockIdx_x()) * u64::from(thread::blockDim_x())
+            + u64::from(thread::threadIdx_x());
+        let half = 4_u64 * u64::from(width);
+        if index >= half {
+            return;
+        }
+        let source = (half + index) as usize;
+        let destination = index as usize;
+        let kv = unsafe { *state_kv.as_mut_ptr().add(source) };
+        let score = unsafe { *state_score.as_mut_ptr().add(source) };
+        unsafe {
+            *state_kv.get_unchecked_mut(destination) = kv;
+            *state_score.get_unchecked_mut(destination) = score;
+            *state_kv.get_unchecked_mut(source) = kv;
+            *state_score.get_unchecked_mut(source) = score;
+        }
+    }
+
+    #[kernel]
     pub fn abi_fp8_kv_quantize_kernel(
         n_tok: u32,
         head_dim: u32,
@@ -1950,6 +2044,8 @@ pub(crate) struct AbiKernelModule {
     compressor_store_kernel: CudaFunction,
     compressor_set_rows_kernel: CudaFunction,
     compressor_prefill_ratio4_replay_pool_kernel: CudaFunction,
+    compressor_update_pool_kernel: CudaFunction,
+    compressor_shift_ratio4_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
@@ -2029,6 +2125,12 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             compressor_prefill_ratio4_replay_pool_kernel: module
                 .load_function("abi_compressor_prefill_ratio4_replay_pool_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            compressor_update_pool_kernel: module
+                .load_function("abi_compressor_update_pool_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            compressor_shift_ratio4_kernel: module
+                .load_function("abi_compressor_shift_ratio4_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             fp8_kv_quantize_kernel: module
                 .load_function("abi_fp8_kv_quantize_kernel")
@@ -3264,6 +3366,95 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.compressor_prefill_ratio4_replay_pool_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn compressor_update_pool_tensor(
+        &self,
+        stream: &CudaStream,
+        row_ptr: u64,
+        state_kv_ptr: u64,
+        state_score_ptr: u64,
+        state_elements: u64,
+        head_dim: u32,
+        ratio: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (head_dim.div_ceil(THREADS_PER_BLOCK), 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut head_dim = head_dim;
+        let mut ratio = ratio;
+        let mut state_kv_ptr = state_kv_ptr;
+        let mut state_kv_len = state_elements;
+        let mut state_score_ptr = state_score_ptr;
+        let mut state_score_len = state_elements;
+        let mut row_ptr = row_ptr;
+        let mut row_len = u64::from(head_dim);
+        let mut params = [
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut ratio as *mut u32).cast::<c_void>(),
+            (&mut state_kv_ptr as *mut u64).cast::<c_void>(),
+            (&mut state_kv_len as *mut u64).cast::<c_void>(),
+            (&mut state_score_ptr as *mut u64).cast::<c_void>(),
+            (&mut state_score_len as *mut u64).cast::<c_void>(),
+            (&mut row_ptr as *mut u64).cast::<c_void>(),
+            (&mut row_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates output/state spans and checked nonzero
+        // geometry before the emitted update pool is submitted.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.compressor_update_pool_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn compressor_shift_ratio4_tensor(
+        &self,
+        stream: &CudaStream,
+        state_kv_ptr: u64,
+        state_score_ptr: u64,
+        state_elements: u64,
+        width: u32,
+        grid_blocks: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (grid_blocks, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut width = width;
+        let mut state_kv_ptr = state_kv_ptr;
+        let mut state_kv_len = state_elements;
+        let mut state_score_ptr = state_score_ptr;
+        let mut state_score_len = state_elements;
+        let mut params = [
+            (&mut width as *mut u32).cast::<c_void>(),
+            (&mut state_kv_ptr as *mut u64).cast::<c_void>(),
+            (&mut state_kv_len as *mut u64).cast::<c_void>(),
+            (&mut state_score_ptr as *mut u64).cast::<c_void>(),
+            (&mut state_score_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: fixed ratio-4 state spans and the checked shift launch
+        // extent cover both the source and duplicated destination halves.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.compressor_shift_ratio4_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,
