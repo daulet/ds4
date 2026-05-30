@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d3 and split next into M14.4d4
+- Status: active; done through M14.4d4 and split next into M14.4d5
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8478,7 +8478,7 @@
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d3 and split next into M14.4d4
+- Status: active; done through M14.4d4 and split next into M14.4d5
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8556,6 +8556,31 @@
 
 ###### M14.4d4: Generic Raw And Mixed Attention Prefill Kernels
 
-- Status: active
+- Status: done
 - Goal: port generic raw and mixed prefill kernels before claiming optimized
   static-online/CUBLAS prefill, indexed, or output-Q8 attention.
+- Oracle: current-C `attention_prefill_raw_kernel`,
+  `attention_prefill_mixed_kernel`, `ds4_gpu_attention_prefill_raw_heads_tensor`,
+  `attention_prefill_mixed_launch`,
+  `ds4_gpu_attention_prefill_static_mixed_heads_tensor`, and
+  `ds4_gpu_attention_prefill_masked_mixed_heads_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d4/attention-prefill-generic-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_prefill_generic_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust generic raw and mixed prefill kernels
+  with static and masked compressed-row cases. B300 feature-enabled tests
+  passed with 61 tests; live cargo-oxide execution emitted portable `sm_80`
+  PTX with libdevice linkage and matched generic raw/static/masked mixed
+  output on `NVIDIA B300 SXM6 AC`. Static heads8-online/CUBLAS prefill
+  dispatch, indexed/output-Q8 attention, runtime route activation, and C CUDA
+  removal remain unclaimed. Local formatting, diff, library tests, the
+  68-check d4 comparator, retained attention checks, and unified parity
+  passed with 149 passed, 45 skipped, and 0 failed.
+
+###### M14.4d5: Static Heads8 Online And CUBLAS Attention Prefill Dispatch
+
+- Status: active
+- Goal: port optimized static heads8-online and CUBLAS attention prefill
+  dispatch before claiming indexed or output-Q8 attention.

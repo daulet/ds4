@@ -2638,6 +2638,19 @@ behavior, ring wrap, compressed visibility, learned-sink softmax, and both
 score-buffer-overflow and window-attention selection while leaving prefill,
 indexed, output-Q8 attention, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.4d4 Rust CUDA generic attention prefill smoke:
+
+```sh
+python3 ds4-parity/check_attention_prefill_generic_smoke.py --negative-test
+```
+
+The fixture records executable-local `attention_prefill_raw_kernel` and
+`attention_prefill_mixed_kernel` semantics on B300. It proves generic raw,
+static mixed, and masked mixed output with causal windows, compressed-row
+visibility and masking, and learned-sink softmax while leaving static
+heads8-online/CUBLAS prefill dispatch, indexed/output-Q8 attention, runtime
+route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
