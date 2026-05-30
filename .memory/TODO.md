@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2b2
+- Status: active; split beginning with M14.5a through M14.5c2c
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8805,6 +8805,25 @@
 
 ##### M14.5c2b2: Sorted-Pair P2 Quantized Projection
 
-- Status: active
+- Status: done
 - Goal: port no-expert-tiles/default-P2 batched IQ2-XXS/Q2_K gate/down
   projection over sorted metadata before expert-tile and atomic-down variants.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2b2/routed-moe-sorted-p2-smoke.json`
+- Comparator: `ds4-parity/check_routed_moe_sorted_p2_smoke.py --negative-test`
+- Evidence: executable-local Rust sorted P2 kernels compose atomic sorted-pair
+  metadata, Q8_K quantization, IQ2-XXS/Q8_K gate/up projection, Q2_K/Q8_K
+  down projection, and token summation for two-token batched input. B300
+  feature-enabled tests passed with 76 tests; live cargo-oxide execution
+  emitted portable `sm_80` PTX through libdevice and matched sorted P2 output
+  behavior on `NVIDIA B300 SXM6 AC`. Expert-tile or atomic-down scheduling,
+  Q4_K, hyperconnection, runtime route activation, and C CUDA removal remain
+  unclaimed. Local formatting, diff, library tests, the M14.5c2b2 comparator,
+  retained M14 checks, and unified parity passed with 155 passed, 50 skipped,
+  and 0 failed.
+
+##### M14.5c2c: Expert-Tile And Atomic Batch Scheduling
+
+- Status: active
+- Goal: port current-C expert-tile batched IQ2-XXS/Q2_K execution and
+  atomic-down scheduling after no-expert-tiles/default-P2 closure.

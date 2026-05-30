@@ -1646,6 +1646,33 @@ pub const M14_5C2B1_SCOPE: RoutedMoeSortedPairsScope = RoutedMoeSortedPairsScope
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeSortedP2Scope {
+    pub opt_in_only: bool,
+    pub consumes_sorted_pair_metadata_surface: bool,
+    pub uses_q8_k_activation_quantization: bool,
+    pub owns_moe_gate_up_mid_sorted_p2_qwarp32_kernel: bool,
+    pub owns_moe_down_sorted_p2_qwarp32_kernel: bool,
+    pub owns_no_expert_tiles_p2_batch_dispatch: bool,
+    pub uses_moe_sum_surface: bool,
+    pub owns_expert_tile_or_atomic_down: bool,
+    pub owns_q4_k_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2B2_SCOPE: RoutedMoeSortedP2Scope = RoutedMoeSortedP2Scope {
+    opt_in_only: true,
+    consumes_sorted_pair_metadata_surface: true,
+    uses_q8_k_activation_quantization: true,
+    owns_moe_gate_up_mid_sorted_p2_qwarp32_kernel: true,
+    owns_moe_down_sorted_p2_qwarp32_kernel: true,
+    owns_no_expert_tiles_p2_batch_dispatch: true,
+    uses_moe_sum_surface: true,
+    owns_expert_tile_or_atomic_down: false,
+    owns_q4_k_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1679,7 +1706,7 @@ mod tests {
         M14_3D3_SCOPE, M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE,
         M14_4C3A_SCOPE, M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
-        M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE,
+        M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
     };
 
     #[test]
@@ -2523,6 +2550,20 @@ mod tests {
         assert!(!M14_5C2B1_SCOPE.owns_expert_tile_or_atomic_down);
         assert!(!M14_5C2B1_SCOPE.owns_q4_k_or_runtime_graph);
         assert!(!M14_5C2B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_sorted_p2_scope_leaves_tiles_q4_and_route_pending() {
+        assert!(M14_5C2B2_SCOPE.opt_in_only);
+        assert!(M14_5C2B2_SCOPE.consumes_sorted_pair_metadata_surface);
+        assert!(M14_5C2B2_SCOPE.uses_q8_k_activation_quantization);
+        assert!(M14_5C2B2_SCOPE.owns_moe_gate_up_mid_sorted_p2_qwarp32_kernel);
+        assert!(M14_5C2B2_SCOPE.owns_moe_down_sorted_p2_qwarp32_kernel);
+        assert!(M14_5C2B2_SCOPE.owns_no_expert_tiles_p2_batch_dispatch);
+        assert!(M14_5C2B2_SCOPE.uses_moe_sum_surface);
+        assert!(!M14_5C2B2_SCOPE.owns_expert_tile_or_atomic_down);
+        assert!(!M14_5C2B2_SCOPE.owns_q4_k_or_runtime_graph);
+        assert!(!M14_5C2B2_SCOPE.changes_default_route);
     }
 
     #[test]

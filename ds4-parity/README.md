@@ -2775,6 +2775,19 @@ duplicate pair preservation, and negative-expert bucket-zero semantics. It
 leaves sorted projection, expert-tile/atomic-down execution, Q4_K,
 hyperconnection, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2b2 Rust CUDA sorted-P2 routed MoE smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_sorted_p2_smoke.py --negative-test
+```
+
+The fixture records current-C no-expert-tiles/default-P2 batched IQ2/Q2
+quantized routed MoE behavior on B300: sorted metadata consumption, batched
+Q8_K input quantization, pair-indexed gate/up and down projection, final
+per-token summation, partial row/pair tiles, and negative-expert fallback. It
+leaves expert-tile/atomic-down scheduling, Q4_K, hyperconnection, runtime
+route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2b2.
+- Status: active; split beginning with M14.5a through M14.5c2c.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8805,10 +8805,40 @@ Stage split:
 
 ##### M14.5c2b2: Sorted-Pair P2 Quantized Projection
 
-- Status: active.
+- Status: done.
 - Goal: port the no-expert-tiles/default-P2 batched IQ2-XXS/Q2_K gate/down
   projection kernels over the sorted metadata before expert-tile and
   atomic-down scheduling variants.
+- Oracle: current-C `use_p2_sorted` dispatch,
+  `moe_gate_up_mid_sorted_p2_qwarp32_kernel`,
+  `moe_down_sorted_p2_qwarp32_kernel`, and `moe_sum_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2b2/routed-moe-sorted-p2-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_sorted_p2_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in no-expert-tiles/default-P2 batched IQ2/Q2
+  quantized routed-MoE projection over sorted metadata, including pair-indexed
+  weighted activation/down output and final per-token summation. Expert-tile
+  or atomic-down scheduling, Q4_K, hyperconnection, runtime graph integration,
+  default route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust sorted P2 kernels composed with the already
+    ported metadata, Q8_K quantization, and sum surfaces; the fixture covers
+    two tokens, duplicate experts, negative-expert fallback, and partial rows.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 76 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and matched sorted P2 gate/up, down, and summed output
+    behavior on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2b2 comparator, retained
+    M14 checks, and unified parity passed with 155 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2c: Expert-Tile And Atomic Batch Scheduling
+
+- Status: active.
+- Goal: port current-C expert-tile batched IQ2-XXS/Q2_K execution and
+  atomic-down scheduling branches after the no-expert-tiles P2 route is
+  closed.
 
 ## Removal Criteria for C Host Code
 

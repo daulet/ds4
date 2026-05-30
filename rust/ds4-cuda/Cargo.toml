@@ -302,3 +302,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-routed-moe-sorted-pairs-smoke"
 path = "src/bin/routed_moe_sorted_pairs_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-routed-moe-sorted-p2-smoke"
+path = "src/bin/routed_moe_sorted_p2_smoke.rs"
+required-features = ["cuda-oxide-kernels"]
