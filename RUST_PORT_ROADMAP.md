@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c3.
+- Status: active; split beginning with M14.5a through M14.5c2c4.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8892,10 +8892,37 @@ Stage split:
 
 ##### M14.5c2c3: Tile4 Row32 Projection
 
-- Status: active.
+- Status: done.
 - Goal: port the optional four-pair row32 expert-tile gate/down projection
   path before atomic-down, tile16, rowspan, and shared-cache optimization
   boundaries.
+- Oracle: current-C `moe_gate_up_mid_expert_tile4_row32_kernel`,
+  `moe_down_expert_tile4_row32_kernel`, and `DS4_CUDA_MOE_TILE4` selection.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c3/routed-moe-tile4-row32-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_tile4_row32_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in functional tile4 row32 gate/up and non-atomic
+  down projection over validated expert-tile descriptors, including a
+  three-tile same-expert group and partial tile. Shared-cache specialization,
+  atomic-down/tile16/rowspan dispatch, Q4_K, hyperconnection, runtime graph
+  integration, default route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added `DS4_CUDA_MOE_TILE4`-selected executable-local Rust tile4 row32
+    projection kernels over the shared functional row32 proof harness.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 79 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and matched tile4 gate/up and down outputs on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2c3 comparator, retained
+    M14 checks, and unified parity passed with 158 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2c4: Atomic Expert-Tile Down Output
+
+- Status: active.
+- Goal: port token-indexed atomic accumulation for expert-tile down projection
+  before tile16 and widened-row scheduling variants.
 
 ## Removal Criteria for C Host Code
 

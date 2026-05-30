@@ -2813,6 +2813,19 @@ metadata. It leaves shared-cache specialization, tile4,
 atomic-down/tile16/rowspan execution, Q4_K, hyperconnection, runtime route,
 and C CUDA removal unclaimed.
 
+Validate the M14.5c2c3 Rust CUDA routed MoE tile4 row32 smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_tile4_row32_smoke.py --negative-test
+```
+
+The fixture records current-C functional `DS4_CUDA_MOE_TILE4` row32 expert
+projection behavior on B300: three-tile and partial-tile IQ2-XXS/Q8_K
+gate/up output, Q2_K/Q8_K non-atomic down output, and negative-expert
+bucketing through tile metadata. It leaves shared-cache specialization,
+atomic-down/tile16/rowspan execution, Q4_K, hyperconnection, runtime route,
+and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

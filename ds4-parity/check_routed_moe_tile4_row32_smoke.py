@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.5c2a Rust CUDA default single-token quantized routed MoE smoke."""
+"""Validate the M14.5c2c3 Rust CUDA routed MoE tile4 row32 smoke."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.5c2a/routed-moe-quantized-single-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.5c2c3/routed-moe-tile4-row32-smoke.json"
 CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/routed_moe_quantized_single_smoke.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/routed_moe_tile8_row32_smoke.rs"
 CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -27,13 +27,13 @@ REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
 EXPECTED_OWNED = [
-    "executable-local Q8_K activation quantization and packed IQ2/Q2 quantized dot proof",
-    "default single-token IQ2-XXS/Q2_K routed MoE compute path with direct six-expert down output",
-    "optional gate/up auxiliary write behavior and negative-expert fallback",
+    "executable-local functional tile4 row32 IQ2-XXS/Q8_K gate/up projection proof",
+    "executable-local functional tile4 row32 Q2_K/Q8_K non-atomic down projection proof",
+    "optional DS4_CUDA_MOE_TILE4 row32 projection dispatch over expert-tile metadata",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "batched sorted or tiled routed-MoE dispatch and Q4_K route",
-    "hyperconnection, runtime graph integration, default CUDA route, or C CUDA removal",
+    "shared-cache optimization, atomic-down, tile16, or rowspan dispatch",
+    "Q4_K, hyperconnection, runtime graph integration, default CUDA route, or C CUDA removal",
 ]
 
 
@@ -72,7 +72,7 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.5c2a quantized single-token routed MoE smoke: {status} ({report.checks} checks)")
+    print(f"M14.5c2c3 routed MoE tile4 row32 smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
@@ -85,17 +85,14 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.routed_moe_quantized_single_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.5c2a", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.routed_moe_tile4_row32_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.5c2c3", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "revision drift")
     report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "dependency pin missing")
     report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lock pin missing")
-    report.check(
-        'name = "ds4-cuda-routed-moe-quantized-single-smoke"' in texts["cargo"],
-        "binary missing",
-    )
+    report.check('name = "ds4-cuda-routed-moe-tile8-row32-smoke"' in texts["cargo"], "binary missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
@@ -106,13 +103,12 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
     for marker in [
-        "__global__ static void q8_K_quantize_kernel(",
-        "__device__ static float dev_dot_iq2_xxs_q8_K_block(",
-        "__device__ static float dev_dot_q2_K_q8_K_block(",
-        "__global__ static void moe_gate_up_mid_decode_lut_qwarp32_kernel(",
-        "__global__ static void moe_down_sum6_qwarp32_kernel(",
-        "n_tokens == 1u && xq_blocks <= 16u",
-        "n_tokens == 1u && n_expert == 6u",
+        "__global__ static void moe_gate_up_mid_expert_tile4_row32_kernel(",
+        "__global__ static void moe_down_expert_tile4_row32_kernel(",
+        'const uint32_t expert_tile_m = getenv("DS4_CUDA_MOE_TILE4") ? 4u : 8u;',
+        "moe_gate_up_mid_expert_tile4_row32_kernel<<<tgrid, 256>>>",
+        "moe_down_expert_tile4_row32_kernel<<<tgrid, 256>>>",
+        "down_out[(uint64_t)pair[p] * out_dim + row] = acc[p];",
     ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
 
@@ -120,33 +116,28 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
 def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     report.check(ownership.get("rust_owned_in_this_stage") == EXPECTED_OWNED, "owned scope drift")
-    report.check(
-        ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED,
-        "non-claim scope drift",
-    )
+    report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim drift")
     for key, expected in [
         ("opt_in_only", True),
-        ("consumes_f32_fallback_surface", True),
-        ("owns_q8_k_activation_quantization", True),
-        ("owns_iq2_xxs_q8_k_gate_up_decode_lut", True),
-        ("owns_q2_k_q8_k_direct_sum6_down", True),
-        ("owns_default_single_token_iq2_q2_dispatch", True),
-        ("owns_optional_gate_up_aux_write", True),
-        ("owns_batched_sorted_or_tiled_dispatch", False),
-        ("owns_q4_k_dispatch", False),
-        ("owns_hyperconnection_or_runtime_graph", False),
+        ("consumes_expert_tile_metadata_surface", True),
+        ("uses_previously_owned_q8_k_inputs", True),
+        ("owns_moe_gate_up_mid_expert_tile4_row32_kernel", True),
+        ("owns_moe_down_expert_tile4_row32_non_atomic_surface", True),
+        ("owns_optional_tile4_row32_projection_dispatch", True),
+        ("owns_atomic_down_or_rowspan_dispatch", False),
+        ("owns_shared_cache_specialization", False),
+        ("owns_q4_k_or_runtime_graph", False),
         ("changes_default_route", False),
         ("retains_current_c_cuda_oracle", True),
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_5C2A_SCOPE",
-        "owns_q8_k_activation_quantization: true",
-        "owns_iq2_xxs_q8_k_gate_up_decode_lut: true",
-        "owns_q2_k_q8_k_direct_sum6_down: true",
-        "owns_default_single_token_iq2_q2_dispatch: true",
-        "owns_batched_sorted_or_tiled_dispatch: false",
-        "owns_q4_k_dispatch: false",
+        "pub const M14_5C2C3_SCOPE",
+        "owns_moe_gate_up_mid_expert_tile4_row32_kernel: true",
+        "owns_moe_down_expert_tile4_row32_non_atomic_surface: true",
+        "owns_optional_tile4_row32_projection_dispatch: true",
+        "owns_atomic_down_or_rowspan_dispatch: false",
+        "owns_shared_cache_specialization: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -157,63 +148,57 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("kube_context") == "hou2-prod1", "B300 context drift")
     report.check(execution.get("pod") == "ds4-rust-port-b300", "B300 pod drift")
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
-    report.check(execution.get("test_count") == 74, "feature test count drift")
+    report.check(execution.get("test_count") == 79, "feature test count drift")
     report.check(execution.get("backend_selected_target") == "sm_80", "target drift")
-    report.check(execution.get("uses_libdevice_link_path") is True, "libdevice proof missing")
     command = execution.get("command", "")
+    report.check("DS4_CUDA_MOE_TILE4=1" in command, "tile4 selector missing")
     report.check("--features cuda-oxide-kernels" in command, "kernel command missing")
-    report.check("--bin ds4-cuda-routed-moe-quantized-single-smoke" in command, "smoke command missing")
+    report.check("--bin ds4-cuda-routed-moe-tile8-row32-smoke" in command, "smoke command missing")
     expected = {
-        "milestone": "M14.5c2a",
+        "milestone": "M14.5c2c3",
         "device_name": "NVIDIA B300 SXM6 AC",
         "rust_kernel_toolchain": True,
-        "q8_k_input_quantize_matches": True,
-        "q8_k_mid_quantize_matches": True,
-        "packed_iq2_q8_k_decode_matches": True,
-        "packed_q2_q8_k_sum6_matches": True,
-        "default_single_token_output_matches": True,
-        "optional_gate_up_write_matches": True,
-        "negative_expert_fallback_matches": True,
-        "zero_quantize_matches": True,
+        "tile4_gate_up_matches": True,
+        "tile4_down_matches": True,
+        "three_tile_expert_matches": True,
+        "partial_tile_matches": True,
+        "negative_expert_bucket_zero_matches": True,
         "invalid_shape_rejected": True,
         "uses_quarter_warp_shuffle_reduction": True,
         "uses_libdevice_link_path": True,
-        "consumes_f32_fallback_surface": True,
-        "owns_q8_k_activation_quantization": True,
-        "owns_iq2_xxs_q8_k_gate_up_decode_lut": True,
-        "owns_q2_k_q8_k_direct_sum6_down": True,
-        "owns_default_single_token_iq2_q2_dispatch": True,
-        "owns_optional_gate_up_aux_write": True,
-        "owns_batched_sorted_or_tiled_dispatch": False,
-        "owns_q4_k_dispatch": False,
-        "owns_hyperconnection_or_runtime_graph": False,
+        "consumes_expert_tile_metadata_surface": True,
+        "uses_previously_owned_q8_k_inputs": True,
+        "owns_moe_gate_up_mid_expert_tile4_row32_kernel": True,
+        "owns_moe_down_expert_tile4_row32_non_atomic_surface": True,
+        "owns_optional_tile4_row32_projection_dispatch": True,
+        "owns_atomic_down_or_rowspan_dispatch": False,
+        "owns_shared_cache_specialization": False,
+        "owns_q4_k_or_runtime_graph": False,
         "changes_default_route": False,
     }
     report.check(require_dict(report, execution.get("stdout"), "stdout") == expected, "stdout drift")
     for marker in [
-        "pub fn q8_k_quantize_kernel",
-        "pub fn moe_gate_up_mid_decode_lut_qwarp32_kernel",
-        "pub fn moe_down_sum6_qwarp32_kernel",
-        "fn dev_dot_iq2_xxs_q8_k_block",
-        "fn dev_dot_q2_k_q8_k_block",
-        "warp::shuffle_xor_f32",
-        "values[17] = -0.75",
+        "pub fn moe_gate_up_mid_expert_tile4_row32_kernel",
+        "pub fn moe_down_expert_tile4_row32_kernel",
+        'std::env::var_os("DS4_CUDA_MOE_TILE4")',
+        "expert_tile_metadata(&selected_values, if tile4 { 4 } else { 8 })",
+        "while entry < 4",
+        "quarter_warp_sum_f32",
+        "expected_gate_up_mid",
+        "expected_down",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture = "ds4-parity/baselines/backend/m14.5c2a/routed-moe-quantized-single-smoke.json"
-    checker = "check_routed_moe_quantized_single_smoke.py"
-    item = "M14.5c2a: Default Single-Token Quantized Routed MoE Dispatch"
+    fixture = "ds4-parity/baselines/backend/m14.5c2c3/routed-moe-tile4-row32-smoke.json"
+    checker = "check_routed_moe_tile4_row32_smoke.py"
+    item = "M14.5c2c3: Tile4 Row32 Projection"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check(
-        "Active item: M14.5c2c4 Atomic Expert-Tile Down Output" in texts["status"],
-        "next active stage missing",
-    )
+    report.check("Active item: M14.5c2c4 Atomic Expert-Tile Down Output" in texts["status"], "next active missing")
     report.check(item.replace(":", "") in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report wiring missing")
@@ -221,20 +206,9 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        (
-            "Q8_K execution absent",
-            lambda value: value["b300_execution"]["stdout"].update({"q8_k_mid_quantize_matches": False}),
-        ),
-        (
-            "direct sum-six output absent",
-            lambda value: value["b300_execution"]["stdout"].update(
-                {"packed_q2_q8_k_sum6_matches": False}
-            ),
-        ),
-        (
-            "batch overclaim",
-            lambda value: value["ownership"].update({"owns_batched_sorted_or_tiled_dispatch": True}),
-        ),
+        ("gate output absent", lambda value: value["b300_execution"]["stdout"].update({"tile4_gate_up_matches": False})),
+        ("down output absent", lambda value: value["b300_execution"]["stdout"].update({"tile4_down_matches": False})),
+        ("atomic down overclaim", lambda value: value["ownership"].update({"owns_atomic_down_or_rowspan_dispatch": True})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)

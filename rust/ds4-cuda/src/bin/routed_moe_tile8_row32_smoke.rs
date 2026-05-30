@@ -5,7 +5,7 @@ use std::fmt;
 use cuda_core::{DeviceBuffer, DriverError, LaunchConfig};
 use cuda_device::{cuda_module, kernel, thread, warp, DisjointSlice};
 use cuda_host::ltoir;
-use ds4_cuda::{substrate::CudaOxideSubstrate, M14_5C2C2_SCOPE};
+use ds4_cuda::{substrate::CudaOxideSubstrate, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE};
 
 const QK_K: usize = 256;
 const IQ2_BLOCK_BYTES: usize = 66;
@@ -30,6 +30,156 @@ const IQ2_SIGNS: [u8; 4] = [0, 129, 130, 3];
 #[cuda_module]
 mod kernels {
     use super::*;
+
+    #[kernel]
+    pub fn moe_gate_up_mid_expert_tile4_row32_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq_scales: &[f32],
+        xq_values: &[i8],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        route_weights: &[f32],
+        iq2_grids: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        if row >= expert_mid_dim {
+            return;
+        }
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        let row_blocks = ((expert * expert_mid_dim + row) * xq_blocks) as usize;
+        let mut entry = 0_u32;
+        while entry < 4 {
+            let local_pair = local_start + entry;
+            if local_pair < counts[expert as usize] {
+                let pair = sorted_pairs[(offsets[expert as usize] + local_pair) as usize];
+                let token = pair / n_expert;
+                let mut gate = 0.0_f32;
+                let mut up = 0.0_f32;
+                let mut block = lane;
+                while block < xq_blocks {
+                    let q8_block = (token * xq_blocks + block) as usize;
+                    gate += dev_dot_iq2_xxs_q8_k_block(
+                        gate_weights,
+                        row_blocks + block as usize,
+                        xq_scales,
+                        xq_values,
+                        q8_block,
+                        iq2_grids,
+                        iq2_signs,
+                    );
+                    up += dev_dot_iq2_xxs_q8_k_block(
+                        up_weights,
+                        row_blocks + block as usize,
+                        xq_scales,
+                        xq_values,
+                        q8_block,
+                        iq2_grids,
+                        iq2_signs,
+                    );
+                    block += 8;
+                }
+                gate = quarter_warp_sum_f32(gate);
+                up = quarter_warp_sum_f32(up);
+                if lane == 0 {
+                    if clamp > 1.0e-6 {
+                        if gate > clamp {
+                            gate = clamp;
+                        }
+                        if up > clamp {
+                            up = clamp;
+                        }
+                        if up < -clamp {
+                            up = -clamp;
+                        }
+                    }
+                    let offset = (pair * expert_mid_dim + row) as usize;
+                    unsafe {
+                        *gate_out.get_unchecked_mut(offset) = gate;
+                        *up_out.get_unchecked_mut(offset) = up;
+                        *mid_out.get_unchecked_mut(offset) =
+                            (gate / (1.0 + (-gate).exp())) * up * route_weights[pair as usize];
+                    }
+                }
+            }
+            entry += 1;
+        }
+    }
+
+    #[kernel]
+    pub fn moe_down_expert_tile4_row32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        down_weights: &[u8],
+        midq_scales: &[f32],
+        midq_values: &[i8],
+        midq_bsums: &[i32],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        if row >= out_dim {
+            return;
+        }
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        let row_blocks = ((expert * out_dim + row) * midq_blocks) as usize;
+        let mut entry = 0_u32;
+        while entry < 4 {
+            let local_pair = local_start + entry;
+            if local_pair < counts[expert as usize] {
+                let pair = sorted_pairs[(offsets[expert as usize] + local_pair) as usize];
+                let mut accumulator = 0.0_f32;
+                let mut block = lane;
+                while block < midq_blocks {
+                    accumulator += dev_dot_q2_k_q8_k_block(
+                        down_weights,
+                        row_blocks + block as usize,
+                        midq_scales,
+                        midq_values,
+                        midq_bsums,
+                        (pair * midq_blocks + block) as usize,
+                    );
+                    block += 8;
+                }
+                accumulator = quarter_warp_sum_f32(accumulator);
+                if lane == 0 {
+                    unsafe {
+                        *down_out.get_unchecked_mut((pair * out_dim + row) as usize) = accumulator;
+                    }
+                }
+            }
+            entry += 1;
+        }
+    }
 
     #[kernel]
     pub fn moe_gate_up_mid_expert_tile8_row32_kernel(
@@ -288,6 +438,7 @@ mod kernels {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tile4 = std::env::var_os("DS4_CUDA_MOE_TILE4").is_some();
     let substrate = CudaOxideSubstrate::open(0)?;
     let raw_module = ltoir::load_kernel_module(
         substrate.context(),
@@ -299,7 +450,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let down_values = packed_q2_weights(19);
     let selected_values = selected_values();
     let route_values = route_values();
-    let metadata = expert_tile_metadata(&selected_values);
+    let metadata = expert_tile_metadata(&selected_values, if tile4 { 4 } else { 8 });
+    if tile4 {
+        assert!(metadata
+            .tile_experts
+            .iter()
+            .zip(&metadata.tile_starts)
+            .any(|(&expert, &start)| expert == 1 && start == 8));
+    }
     let xq = expected_quantized_rows(&input_values(), N_TOKENS);
     let expected_gate = expected_gate_up_mid(
         &gate_values,
@@ -317,6 +475,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &xq,
         &metadata,
         &route_values,
+        tile4,
     )?;
     substrate.flush_commands()?;
     assert_close(&substrate.download(&actual_gate.gate)?, &expected_gate.gate);
@@ -325,7 +484,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let midq = expected_quantized_rows(&expected_gate.mid, PAIR_COUNT);
     let expected_down = expected_down(&down_values, &midq, &selected_values);
-    let actual_down = run_down(&substrate, &module, &down_values, &midq, &metadata)?;
+    let actual_down = run_down(&substrate, &module, &down_values, &midq, &metadata, tile4)?;
     substrate.end_commands()?;
     assert_close(&substrate.download(&actual_down)?, &expected_down);
 
@@ -334,23 +493,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..metadata
     };
     assert!(matches!(
-        run_down(&substrate, &module, &down_values, &midq, &short_tiles),
+        run_down(
+            &substrate,
+            &module,
+            &down_values,
+            &midq,
+            &short_tiles,
+            tile4
+        ),
         Err(TileProjectionError::InvalidShape)
     ));
 
-    println!(
-        "{{\"milestone\":\"M14.5c2c2\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"tile8_gate_up_matches\":true,\"tile8_down_matches\":true,\"multi_tile_expert_matches\":true,\"partial_tile_matches\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"consumes_expert_tile_metadata_surface\":{},\"uses_previously_owned_q8_k_inputs\":{},\"owns_moe_gate_up_mid_expert_tile8_row32_kernel\":{},\"owns_moe_down_expert_tile8_row32_non_atomic_surface\":{},\"owns_default_tile8_row32_projection_dispatch\":{},\"owns_atomic_down_or_rowspan_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
-        substrate.device_name()?,
-        M14_5C2C2_SCOPE.consumes_expert_tile_metadata_surface,
-        M14_5C2C2_SCOPE.uses_previously_owned_q8_k_inputs,
-        M14_5C2C2_SCOPE.owns_moe_gate_up_mid_expert_tile8_row32_kernel,
-        M14_5C2C2_SCOPE.owns_moe_down_expert_tile8_row32_non_atomic_surface,
-        M14_5C2C2_SCOPE.owns_default_tile8_row32_projection_dispatch,
-        M14_5C2C2_SCOPE.owns_atomic_down_or_rowspan_dispatch,
-        M14_5C2C2_SCOPE.owns_shared_cache_specialization,
-        M14_5C2C2_SCOPE.owns_q4_k_or_runtime_graph,
-        M14_5C2C2_SCOPE.changes_default_route,
-    );
+    if tile4 {
+        println!(
+            "{{\"milestone\":\"M14.5c2c3\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"tile4_gate_up_matches\":true,\"tile4_down_matches\":true,\"three_tile_expert_matches\":true,\"partial_tile_matches\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"consumes_expert_tile_metadata_surface\":{},\"uses_previously_owned_q8_k_inputs\":{},\"owns_moe_gate_up_mid_expert_tile4_row32_kernel\":{},\"owns_moe_down_expert_tile4_row32_non_atomic_surface\":{},\"owns_optional_tile4_row32_projection_dispatch\":{},\"owns_atomic_down_or_rowspan_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2C3_SCOPE.consumes_expert_tile_metadata_surface,
+            M14_5C2C3_SCOPE.uses_previously_owned_q8_k_inputs,
+            M14_5C2C3_SCOPE.owns_moe_gate_up_mid_expert_tile4_row32_kernel,
+            M14_5C2C3_SCOPE.owns_moe_down_expert_tile4_row32_non_atomic_surface,
+            M14_5C2C3_SCOPE.owns_optional_tile4_row32_projection_dispatch,
+            M14_5C2C3_SCOPE.owns_atomic_down_or_rowspan_dispatch,
+            M14_5C2C3_SCOPE.owns_shared_cache_specialization,
+            M14_5C2C3_SCOPE.owns_q4_k_or_runtime_graph,
+            M14_5C2C3_SCOPE.changes_default_route,
+        );
+    } else {
+        println!(
+            "{{\"milestone\":\"M14.5c2c2\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"tile8_gate_up_matches\":true,\"tile8_down_matches\":true,\"multi_tile_expert_matches\":true,\"partial_tile_matches\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"consumes_expert_tile_metadata_surface\":{},\"uses_previously_owned_q8_k_inputs\":{},\"owns_moe_gate_up_mid_expert_tile8_row32_kernel\":{},\"owns_moe_down_expert_tile8_row32_non_atomic_surface\":{},\"owns_default_tile8_row32_projection_dispatch\":{},\"owns_atomic_down_or_rowspan_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2C2_SCOPE.consumes_expert_tile_metadata_surface,
+            M14_5C2C2_SCOPE.uses_previously_owned_q8_k_inputs,
+            M14_5C2C2_SCOPE.owns_moe_gate_up_mid_expert_tile8_row32_kernel,
+            M14_5C2C2_SCOPE.owns_moe_down_expert_tile8_row32_non_atomic_surface,
+            M14_5C2C2_SCOPE.owns_default_tile8_row32_projection_dispatch,
+            M14_5C2C2_SCOPE.owns_atomic_down_or_rowspan_dispatch,
+            M14_5C2C2_SCOPE.owns_shared_cache_specialization,
+            M14_5C2C2_SCOPE.owns_q4_k_or_runtime_graph,
+            M14_5C2C2_SCOPE.changes_default_route,
+        );
+    }
     Ok(())
 }
 
@@ -389,6 +571,7 @@ fn run_gate_up_mid(
     xq: &QuantizedRows,
     metadata: &ExpertTileMetadata,
     route_values: &[f32],
+    tile4: bool,
 ) -> Result<GateOutput, TileProjectionError> {
     validate_metadata(metadata)?;
     let gate_weights = substrate.upload(gate_values)?;
@@ -407,34 +590,62 @@ fn run_gate_up_mid(
     let mut gate = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
     let mut up = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
     let mut mid = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
-    module.moe_gate_up_mid_expert_tile8_row32_kernel(
-        substrate.stream(),
-        LaunchConfig {
-            grid_dim: (EXPERT_MID_DIM.div_ceil(32), metadata.tile_total[0], 1),
-            block_dim: (THREADS, 1, 1),
-            shared_mem_bytes: 0,
-        },
-        1,
-        EXPERT_MID_DIM,
-        N_ROUTED,
-        CLAMP,
-        &gate_weights,
-        &up_weights,
-        &scales,
-        &values,
-        &sorted_pairs,
-        &offsets,
-        &counts,
-        &tile_total,
-        &tile_experts,
-        &tile_starts,
-        &route_weights,
-        &grids,
-        &signs,
-        &mut gate,
-        &mut up,
-        &mut mid,
-    )?;
+    let launch = LaunchConfig {
+        grid_dim: (EXPERT_MID_DIM.div_ceil(32), metadata.tile_total[0], 1),
+        block_dim: (THREADS, 1, 1),
+        shared_mem_bytes: 0,
+    };
+    if tile4 {
+        module.moe_gate_up_mid_expert_tile4_row32_kernel(
+            substrate.stream(),
+            launch,
+            1,
+            EXPERT_MID_DIM,
+            N_ROUTED,
+            CLAMP,
+            &gate_weights,
+            &up_weights,
+            &scales,
+            &values,
+            &sorted_pairs,
+            &offsets,
+            &counts,
+            &tile_total,
+            &tile_experts,
+            &tile_starts,
+            &route_weights,
+            &grids,
+            &signs,
+            &mut gate,
+            &mut up,
+            &mut mid,
+        )?;
+    } else {
+        module.moe_gate_up_mid_expert_tile8_row32_kernel(
+            substrate.stream(),
+            launch,
+            1,
+            EXPERT_MID_DIM,
+            N_ROUTED,
+            CLAMP,
+            &gate_weights,
+            &up_weights,
+            &scales,
+            &values,
+            &sorted_pairs,
+            &offsets,
+            &counts,
+            &tile_total,
+            &tile_experts,
+            &tile_starts,
+            &route_weights,
+            &grids,
+            &signs,
+            &mut gate,
+            &mut up,
+            &mut mid,
+        )?;
+    }
     Ok(GateOutput { gate, up, mid })
 }
 
@@ -444,6 +655,7 @@ fn run_down(
     down_values: &[u8],
     midq: &QuantizedRows,
     metadata: &ExpertTileMetadata,
+    tile4: bool,
 ) -> Result<DeviceBuffer<f32>, TileProjectionError> {
     validate_metadata(metadata)?;
     let down_weights = substrate.upload(down_values)?;
@@ -457,27 +669,48 @@ fn run_down(
     let tile_experts = substrate.upload(&metadata.tile_experts)?;
     let tile_starts = substrate.upload(&metadata.tile_starts)?;
     let mut down = substrate.zeroed::<f32>((PAIR_COUNT * OUT_DIM) as usize)?;
-    module.moe_down_expert_tile8_row32_kernel(
-        substrate.stream(),
-        LaunchConfig {
-            grid_dim: (OUT_DIM.div_ceil(32), metadata.tile_total[0], 1),
-            block_dim: (THREADS, 1, 1),
-            shared_mem_bytes: 0,
-        },
-        1,
-        OUT_DIM,
-        &down_weights,
-        &scales,
-        &values,
-        &bsums,
-        &sorted_pairs,
-        &offsets,
-        &counts,
-        &tile_total,
-        &tile_experts,
-        &tile_starts,
-        &mut down,
-    )?;
+    let launch = LaunchConfig {
+        grid_dim: (OUT_DIM.div_ceil(32), metadata.tile_total[0], 1),
+        block_dim: (THREADS, 1, 1),
+        shared_mem_bytes: 0,
+    };
+    if tile4 {
+        module.moe_down_expert_tile4_row32_kernel(
+            substrate.stream(),
+            launch,
+            1,
+            OUT_DIM,
+            &down_weights,
+            &scales,
+            &values,
+            &bsums,
+            &sorted_pairs,
+            &offsets,
+            &counts,
+            &tile_total,
+            &tile_experts,
+            &tile_starts,
+            &mut down,
+        )?;
+    } else {
+        module.moe_down_expert_tile8_row32_kernel(
+            substrate.stream(),
+            launch,
+            1,
+            OUT_DIM,
+            &down_weights,
+            &scales,
+            &values,
+            &bsums,
+            &sorted_pairs,
+            &offsets,
+            &counts,
+            &tile_total,
+            &tile_experts,
+            &tile_starts,
+            &mut down,
+        )?;
+    }
     Ok(down)
 }
 
@@ -495,7 +728,7 @@ fn validate_metadata(metadata: &ExpertTileMetadata) -> Result<(), TileProjection
     Ok(())
 }
 
-fn expert_tile_metadata(selected: &[i32]) -> ExpertTileMetadata {
+fn expert_tile_metadata(selected: &[i32], tile_size: u32) -> ExpertTileMetadata {
     let mut counts = vec![0_u32; 256];
     let mut grouped = vec![Vec::<u32>::new(); 256];
     for (pair, &expert) in selected.iter().enumerate() {
@@ -517,7 +750,7 @@ fn expert_tile_metadata(selected: &[i32]) -> ExpertTileMetadata {
         while start < count {
             tile_experts.push(expert as u32);
             tile_starts.push(start);
-            start += 8;
+            start += tile_size;
         }
     }
     ExpertTileMetadata {
@@ -796,7 +1029,7 @@ impl fmt::Display for TileProjectionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidShape => {
-                formatter.write_str("tile8 row32 projection input shape is invalid")
+                formatter.write_str("tile row32 projection input shape is invalid")
             }
             Self::Driver(error) => error.fmt(formatter),
         }

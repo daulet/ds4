@@ -1725,6 +1725,33 @@ pub const M14_5C2C2_SCOPE: RoutedMoeTile8Row32Scope = RoutedMoeTile8Row32Scope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeTile4Row32Scope {
+    pub opt_in_only: bool,
+    pub consumes_expert_tile_metadata_surface: bool,
+    pub uses_previously_owned_q8_k_inputs: bool,
+    pub owns_moe_gate_up_mid_expert_tile4_row32_kernel: bool,
+    pub owns_moe_down_expert_tile4_row32_non_atomic_surface: bool,
+    pub owns_optional_tile4_row32_projection_dispatch: bool,
+    pub owns_atomic_down_or_rowspan_dispatch: bool,
+    pub owns_shared_cache_specialization: bool,
+    pub owns_q4_k_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2C3_SCOPE: RoutedMoeTile4Row32Scope = RoutedMoeTile4Row32Scope {
+    opt_in_only: true,
+    consumes_expert_tile_metadata_surface: true,
+    uses_previously_owned_q8_k_inputs: true,
+    owns_moe_gate_up_mid_expert_tile4_row32_kernel: true,
+    owns_moe_down_expert_tile4_row32_non_atomic_surface: true,
+    owns_optional_tile4_row32_projection_dispatch: true,
+    owns_atomic_down_or_rowspan_dispatch: false,
+    owns_shared_cache_specialization: false,
+    owns_q4_k_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1759,7 +1786,7 @@ mod tests {
         M14_4C3A_SCOPE, M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
-        M14_5C2C1_SCOPE, M14_5C2C2_SCOPE,
+        M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE,
     };
 
     #[test]
@@ -2644,6 +2671,20 @@ mod tests {
         assert!(!M14_5C2C2_SCOPE.owns_shared_cache_specialization);
         assert!(!M14_5C2C2_SCOPE.owns_q4_k_or_runtime_graph);
         assert!(!M14_5C2C2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_tile4_row32_scope_leaves_atomic_and_cache_routes_pending() {
+        assert!(M14_5C2C3_SCOPE.opt_in_only);
+        assert!(M14_5C2C3_SCOPE.consumes_expert_tile_metadata_surface);
+        assert!(M14_5C2C3_SCOPE.uses_previously_owned_q8_k_inputs);
+        assert!(M14_5C2C3_SCOPE.owns_moe_gate_up_mid_expert_tile4_row32_kernel);
+        assert!(M14_5C2C3_SCOPE.owns_moe_down_expert_tile4_row32_non_atomic_surface);
+        assert!(M14_5C2C3_SCOPE.owns_optional_tile4_row32_projection_dispatch);
+        assert!(!M14_5C2C3_SCOPE.owns_atomic_down_or_rowspan_dispatch);
+        assert!(!M14_5C2C3_SCOPE.owns_shared_cache_specialization);
+        assert!(!M14_5C2C3_SCOPE.owns_q4_k_or_runtime_graph);
+        assert!(!M14_5C2C3_SCOPE.changes_default_route);
     }
 
     #[test]
