@@ -10,7 +10,7 @@ use cuda_device::{
 use cuda_host::ltoir;
 use ds4_cuda::{
     substrate::CudaOxideSubstrate, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE,
-    M14_5C2C5_SCOPE, M14_5C2C6_SCOPE,
+    M14_5C2C5_SCOPE, M14_5C2C6_SCOPE, M14_5C2C7_SCOPE,
 };
 
 const QK_K: usize = 256;
@@ -535,6 +535,75 @@ mod kernels {
         }
     }
 
+    #[kernel]
+    pub fn moe_down_expert_tile16_rowspan_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        row_span: u32,
+        down_weights: &[u8],
+        midq_scales: &[f32],
+        midq_values: &[i8],
+        midq_bsums: &[i32],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        atomic_out: &[f32],
+    ) {
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] {
+            return;
+        }
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        if local_start & 8 != 0 {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let mut row_offset = 0_u32;
+        while row_offset < row_span {
+            let row = thread::blockIdx_x() * row_span + row_lane + row_offset;
+            if row < out_dim {
+                let row_blocks = ((expert * out_dim + row) * midq_blocks) as usize;
+                let mut entry = 0_u32;
+                while entry < 16 {
+                    let local_pair = local_start + entry;
+                    if local_pair < counts[expert as usize] {
+                        let pair = sorted_pairs[(offsets[expert as usize] + local_pair) as usize];
+                        let mut accumulator = 0.0_f32;
+                        let mut block = lane;
+                        while block < midq_blocks {
+                            accumulator += dev_dot_q2_k_q8_k_block(
+                                down_weights,
+                                row_blocks + block as usize,
+                                midq_scales,
+                                midq_values,
+                                midq_bsums,
+                                (pair * midq_blocks + block) as usize,
+                            );
+                            block += 8;
+                        }
+                        accumulator = quarter_warp_sum_f32(accumulator);
+                        if lane == 0 {
+                            let token = pair / n_expert;
+                            let offset = (token * out_dim + row) as usize;
+                            let output = unsafe {
+                                &*(atomic_out.as_ptr().add(offset) as *const DeviceAtomicF32)
+                            };
+                            output.fetch_add(accumulator, AtomicOrdering::Relaxed);
+                        }
+                    }
+                    entry += 1;
+                }
+            }
+            row_offset += 32;
+        }
+    }
+
     fn dev_dot_iq2_xxs_q8_k_block(
         packed: &[u8],
         block: usize,
@@ -646,8 +715,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let atomic_down = std::env::var_os("DS4_CUDA_MOE_ATOMIC_DOWN").is_some();
     let tile16 = std::env::var_os("DS4_CUDA_MOE_DOWN_TILE16").is_some();
     let gate_rowspan = std::env::var_os("DS4_CUDA_MOE_GATE_ROWSPAN").is_some();
+    let down_rowspan = std::env::var_os("DS4_CUDA_MOE_DOWN_ROWSPAN").is_some();
     assert!(!tile16 || (atomic_down && !tile4));
     assert!(!gate_rowspan || (!tile4 && !atomic_down && !tile16));
+    assert!(!down_rowspan || (atomic_down && tile16 && !tile4 && !gate_rowspan));
     let substrate = CudaOxideSubstrate::open(0)?;
     let raw_module = ltoir::load_kernel_module(
         substrate.context(),
@@ -714,38 +785,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let midq = expected_quantized_rows(&expected_gate.mid, PAIR_COUNT);
     let expected_down = expected_down(&down_values, &midq, &selected_values);
-    let actual_down = run_down(
-        &substrate,
-        &module,
-        &down_values,
-        &midq,
-        &down_metadata,
-        tile4,
-        atomic_down,
-        tile16,
-    )?;
-    substrate.end_commands()?;
-    if atomic_down {
-        let expected_atomic = expected_atomic_down(&expected_down);
-        assert_close(&substrate.download(&actual_down)?, &expected_atomic);
-        if !tile16 {
-            let alternate_metadata =
-                expert_tile_metadata(&selected_values, if tile4 { 8 } else { 4 });
-            let alternate = run_down(
-                &substrate,
-                &module,
-                &down_values,
-                &midq,
-                &alternate_metadata,
-                !tile4,
-                true,
-                false,
-            )?;
-            substrate.end_commands()?;
-            assert_close(&substrate.download(&alternate)?, &expected_atomic);
-        }
+    let down_spans = if down_rowspan {
+        vec![Some(512_u32), Some(1024_u32), Some(2048_u32)]
     } else {
-        assert_close(&substrate.download(&actual_down)?, &expected_down);
+        vec![None]
+    };
+    for row_span in down_spans {
+        let actual_down = run_down(
+            &substrate,
+            &module,
+            &down_values,
+            &midq,
+            &down_metadata,
+            tile4,
+            atomic_down,
+            tile16,
+            row_span,
+        )?;
+        substrate.end_commands()?;
+        if atomic_down {
+            assert_close(
+                &substrate.download(&actual_down)?,
+                &expected_atomic_down(&expected_down),
+            );
+        } else {
+            assert_close(&substrate.download(&actual_down)?, &expected_down);
+        }
+    }
+    if atomic_down && !tile16 {
+        let alternate_metadata = expert_tile_metadata(&selected_values, if tile4 { 8 } else { 4 });
+        let alternate = run_down(
+            &substrate,
+            &module,
+            &down_values,
+            &midq,
+            &alternate_metadata,
+            !tile4,
+            true,
+            false,
+            None,
+        )?;
+        substrate.end_commands()?;
+        assert_close(
+            &substrate.download(&alternate)?,
+            &expected_atomic_down(&expected_down),
+        );
     }
 
     let short_tiles = ExpertTileMetadata {
@@ -761,12 +845,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &short_tiles,
             tile4,
             atomic_down,
-            tile16
+            tile16,
+            if down_rowspan { Some(512) } else { None }
         ),
         Err(TileProjectionError::InvalidShape)
     ));
 
-    if gate_rowspan {
+    if down_rowspan {
+        println!(
+            "{{\"milestone\":\"M14.5c2c7\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"down_row512_matches\":true,\"down_row1024_matches\":true,\"down_row2048_matches\":true,\"partial_row_span_matches\":true,\"tile16_descriptor_metadata_retained\":true,\"token_indexed_accumulation_matches\":true,\"device_zero_before_atomic_matches\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_device_atomic_f32_fetch_add\":true,\"consumes_tile16_row32_atomic_surface\":{},\"owns_moe_down_expert_tile16_rowspan_kernel\":{},\"owns_down_row512_row1024_and_row2048_atomic_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2C7_SCOPE.consumes_tile16_row32_atomic_surface,
+            M14_5C2C7_SCOPE.owns_moe_down_expert_tile16_rowspan_kernel,
+            M14_5C2C7_SCOPE.owns_down_row512_row1024_and_row2048_atomic_dispatch,
+            M14_5C2C7_SCOPE.owns_shared_cache_specialization,
+            M14_5C2C7_SCOPE.owns_q4_k_or_runtime_graph,
+            M14_5C2C7_SCOPE.changes_default_route,
+        );
+    } else if gate_rowspan {
         println!(
             "{{\"milestone\":\"M14.5c2c6\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"gate_row512_matches\":true,\"gate_row1024_matches\":true,\"gate_row2048_matches\":true,\"partial_row_span_matches\":true,\"tile8_descriptor_metadata_retained\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"consumes_tile8_row32_projection_surface\":{},\"owns_moe_gate_up_mid_expert_tile8_rowspan_kernel\":{},\"owns_gate_row512_row1024_and_row2048_dispatch\":{},\"owns_down_rowspan_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
             substrate.device_name()?,
@@ -990,6 +1086,7 @@ fn run_down(
     tile4: bool,
     atomic_mode: bool,
     tile16: bool,
+    row_span: Option<u32>,
 ) -> Result<DeviceBuffer<f32>, TileProjectionError> {
     validate_metadata(metadata)?;
     let down_weights = substrate.upload(down_values)?;
@@ -1016,15 +1113,38 @@ fn run_down(
             N_TOKENS * OUT_DIM,
         )?;
     }
-    let launch = LaunchConfig {
-        grid_dim: (OUT_DIM.div_ceil(32), metadata.tile_total[0], 1),
-        block_dim: (THREADS, 1, 1),
-        shared_mem_bytes: 0,
-    };
-    if tile16 {
+    if let Some(row_span) = row_span {
+        module.moe_down_expert_tile16_rowspan_kernel(
+            substrate.stream(),
+            LaunchConfig {
+                grid_dim: (OUT_DIM.div_ceil(row_span), metadata.tile_total[0], 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
+            1,
+            OUT_DIM,
+            N_ROUTED,
+            row_span,
+            &down_weights,
+            &scales,
+            &values,
+            &bsums,
+            &sorted_pairs,
+            &offsets,
+            &counts,
+            &tile_total,
+            &tile_experts,
+            &tile_starts,
+            &atomic_output,
+        )?;
+    } else if tile16 {
         module.moe_down_expert_tile16_row32_kernel(
             substrate.stream(),
-            launch,
+            LaunchConfig {
+                grid_dim: (OUT_DIM.div_ceil(32), metadata.tile_total[0], 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
             1,
             OUT_DIM,
             N_ROUTED,
@@ -1043,7 +1163,11 @@ fn run_down(
     } else if tile4 {
         module.moe_down_expert_tile4_row32_kernel(
             substrate.stream(),
-            launch,
+            LaunchConfig {
+                grid_dim: (OUT_DIM.div_ceil(32), metadata.tile_total[0], 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
             1,
             OUT_DIM,
             N_ROUTED,
@@ -1064,7 +1188,11 @@ fn run_down(
     } else {
         module.moe_down_expert_tile8_row32_kernel(
             substrate.stream(),
-            launch,
+            LaunchConfig {
+                grid_dim: (OUT_DIM.div_ceil(32), metadata.tile_total[0], 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
             1,
             OUT_DIM,
             N_ROUTED,

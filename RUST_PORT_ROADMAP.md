@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c7.
+- Status: active; split beginning with M14.5a through M14.5c2d.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -9004,9 +9004,38 @@ Stage split:
 
 ##### M14.5c2c7: Down Tile16 Rowspan Projection
 
-- Status: active.
+- Status: done.
 - Goal: port the tile16 widened-row atomic down scheduling variants after
   row32 atomic down and widened gate scheduling are established.
+- Oracle: current-C `moe_down_expert_tile16_rowspan_kernel<512>`,
+  `moe_down_expert_tile16_rowspan_kernel<1024>`, and
+  `moe_down_expert_tile16_row2048_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c7/routed-moe-down-rowspan-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_down_rowspan_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in functional tile16 atomic down projection for
+  row512, row1024, and row2048 scheduling variants over retained tile16
+  descriptors, including partial row spans. Shared-cache specialization,
+  Q4_K, hyperconnection, runtime graph integration, default route activation,
+  and C CUDA removal remain pending.
+- Evidence:
+  - Added an executable-local Rust parameterized tile16 atomic down-rowspan
+    kernel selected by the smoke harness for all three current-C spans.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 83 tests; live cargo-oxide execution found eight kernels, emitted
+    portable `sm_80` PTX through libdevice, lowered the device float atomic
+    operation, and matched all three down-span outputs on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2c7 comparator, retained
+    routed-MoE checks, and unified parity passed with 162 passed, 50 skipped,
+    and 0 failed.
+
+##### M14.5c2d: Single-Token Q4_K Routed MoE
+
+- Status: active.
+- Goal: port the current-C single-token Q4_K gate/up and direct down-sum
+  branch after the IQ2/Q2 tiled routed-MoE family is functionally covered.
 
 ## Removal Criteria for C Host Code
 

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.5c2c7 Down Tile16 Rowspan Projection
+- Active item: M14.5c2d Single-Token Q4_K Routed MoE
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.5c2c6 Gate Tile8 Rowspan Projection.
+- Last validated source before the active item: M14.5c2c7 Down Tile16 Rowspan Projection.
+- Earlier M14.5c2c6 Gate Tile8 Rowspan Projection.
 - Earlier M14.5c2c5 Tile16 Row32 Atomic Down.
 - Earlier M14.5c2c4 Atomic Expert-Tile Down Output.
 - Earlier M14.5c2c3 Tile4 Row32 Projection.
@@ -218,6 +219,20 @@
 
 ## Last Evidence
 
+- M14.5c2c7 Down Tile16 Rowspan Projection adds an executable-local Rust
+  cuda-oxide tile16 atomic down kernel parameterized over row spans `512`,
+  `1024`, and `2048`, composed with retained tile16 expert descriptors. On
+  B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with
+  83 tests; live cargo-oxide execution found eight kernels, emitted portable
+  `sm_80` PTX through libdevice, lowered the device float atomic operation,
+  and matched each widened down output on `NVIDIA B300 SXM6 AC`. Its fixture
+  and checker are
+  `ds4-parity/baselines/backend/m14.5c2c7/routed-moe-down-rowspan-smoke.json`
+  and `ds4-parity/check_routed_moe_down_rowspan_smoke.py --negative-test`.
+  Shared-cache specialization, Q4_K, hyperconnection, runtime route
+  activation, and C CUDA removal remain unclaimed. Local formatting, diff,
+  library tests, the M14.5c2c7 comparator, retained routed-MoE checks, and
+  unified parity passed with 162 passed, 50 skipped, and 0 failed.
 - M14.5c2c6 Gate Tile8 Rowspan Projection adds an executable-local Rust
   cuda-oxide tile8 gate kernel parameterized over row spans `512`, `1024`,
   and `2048`, composed with retained expert-tile descriptors and row32 down

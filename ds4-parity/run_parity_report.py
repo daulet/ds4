@@ -1344,6 +1344,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.5c2c7 cuda-oxide routed MoE down-rowspan smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_routed_moe_down_rowspan_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -1823,6 +1823,27 @@ pub const M14_5C2C6_SCOPE: RoutedMoeGateRowspanScope = RoutedMoeGateRowspanScope
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeDownRowspanScope {
+    pub opt_in_only: bool,
+    pub consumes_tile16_row32_atomic_surface: bool,
+    pub owns_moe_down_expert_tile16_rowspan_kernel: bool,
+    pub owns_down_row512_row1024_and_row2048_atomic_dispatch: bool,
+    pub owns_shared_cache_specialization: bool,
+    pub owns_q4_k_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2C7_SCOPE: RoutedMoeDownRowspanScope = RoutedMoeDownRowspanScope {
+    opt_in_only: true,
+    consumes_tile16_row32_atomic_surface: true,
+    owns_moe_down_expert_tile16_rowspan_kernel: true,
+    owns_down_row512_row1024_and_row2048_atomic_dispatch: true,
+    owns_shared_cache_specialization: false,
+    owns_q4_k_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1858,7 +1879,7 @@ mod tests {
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
-        M14_5C2C6_SCOPE,
+        M14_5C2C6_SCOPE, M14_5C2C7_SCOPE,
     };
 
     #[test]
@@ -2794,6 +2815,17 @@ mod tests {
         assert!(!M14_5C2C6_SCOPE.owns_shared_cache_specialization);
         assert!(!M14_5C2C6_SCOPE.owns_q4_k_or_runtime_graph);
         assert!(!M14_5C2C6_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_down_rowspan_scope_leaves_cache_and_q4_pending() {
+        assert!(M14_5C2C7_SCOPE.opt_in_only);
+        assert!(M14_5C2C7_SCOPE.consumes_tile16_row32_atomic_surface);
+        assert!(M14_5C2C7_SCOPE.owns_moe_down_expert_tile16_rowspan_kernel);
+        assert!(M14_5C2C7_SCOPE.owns_down_row512_row1024_and_row2048_atomic_dispatch);
+        assert!(!M14_5C2C7_SCOPE.owns_shared_cache_specialization);
+        assert!(!M14_5C2C7_SCOPE.owns_q4_k_or_runtime_graph);
+        assert!(!M14_5C2C7_SCOPE.changes_default_route);
     }
 
     #[test]

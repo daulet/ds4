@@ -2862,6 +2862,17 @@ expert-tile descriptors. It leaves widened down scheduling, shared-cache
 specialization, Q4_K, hyperconnection, runtime route, and C CUDA removal
 unclaimed.
 
+Validate the M14.5c2c7 Rust CUDA routed MoE down-rowspan smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_down_rowspan_smoke.py --negative-test
+```
+
+The fixture records current-C widened tile16 atomic-down scheduling behavior
+on B300: functional row512, row1024, and row2048 output equivalence over
+retained tile16 descriptors. It leaves shared-cache specialization, Q4_K,
+hyperconnection, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
