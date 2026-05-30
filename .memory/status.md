@@ -3,7 +3,22 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbba: Public Multi-Token F32 BLAS Projection ABI
+  is validated. Rust extends `ds4_gpu_matmul_f32_tensor` so `n_tok > 1`
+  dispatches through the cuda-oxide `project_f32` cuBLAS adapter while
+  retaining its one-token embedded kernel and current-C initialization-time
+  default TF32 versus `DS4_CUDA_NO_TF32` selection. Local tests pass with
+  123 tests, B300 feature
+  tests pass with 130 tests, the static library remains at 32 symbols, and
+  sixteen unaffected predecessor C-linked consumers pass against the rebuilt
+  archive with the known executable-stack warning. The focused comparator
+  and default unified report pass with 209 passed, 45 skipped, and 0 failed.
+  Required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Multi-token F16 BLAS, Q8/F16 cache hooks,
+  quality-mode mutation, remaining graph compute, whole-archive/route
+  promotion, and the embedded-object executable-stack warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbba: Public Single-Token F32 Projection ABI
   is validated. Rust exports `ds4_gpu_matmul_f32_tensor` for one-token base
   kernel projection through cached F32 model ranges; local tests pass with
@@ -12,8 +27,9 @@
   the rebuilt archive, retaining the known executable-stack warning. The
   focused comparator and default unified report pass with 208 passed, 45
   skipped, and 0 failed; required non-interactive Claude review returned
-  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Multi-token
-  F16/F32 BLAS, Q8/F16 cache hooks, remaining graph compute,
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Its recorded
+  multi-token rejection is historical after the successor above. Multi-token
+  F16 BLAS, Q8/F16 cache hooks, remaining graph compute,
   whole-archive/route promotion, and the embedded-object executable-stack
   warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba: Public Single-Token Paired F16 Projection ABI

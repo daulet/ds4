@@ -3460,10 +3460,24 @@ python3 ds4-parity/check_cuda_abi_matmul_f32_single_token_smoke.py --negative-te
 
 The C-linked B300 fixture dispatches `ds4_gpu_matmul_f32_tensor` through its
 single-token base kernel, then mutates host model bytes to verify the cached
-F32 range remains authoritative. It rejects multi-token projection until the
-cuBLAS boundary is owned. Q8/F16 cache hooks, remaining graph compute,
-whole-archive retention policy, route promotion, C CUDA removal, and the
-embedded-object executable-stack warning remain open.
+F32 range remains authoritative. Its recorded rejection of multi-token
+projection is a historical boundary now consumed by the successor below.
+
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbba Rust CUDA
+public multi-token F32 BLAS projection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_matmul_f32_multi_token_blas_smoke.py --negative-test
+```
+
+The C-linked B300 fixture first exercises the retained single-token base
+kernel, then mutates host model bytes and dispatches two tokens through the
+cuda-oxide cuBLAS adapter to prove cached F32 weights remain authoritative
+across both branches; it also unsets an initialization-time
+`DS4_CUDA_NO_TF32` before BLAS execution to verify the math-mode selection is
+retained. Multi-token F16 BLAS, Q8/F16 cache hooks, quality-mode mutation,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
 
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 

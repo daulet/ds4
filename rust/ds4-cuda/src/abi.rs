@@ -1,12 +1,13 @@
 use std::ffi::{c_char, c_int, c_void};
+use std::mem::ManuallyDrop;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use cuda_core::{
-    CudaEvent, DeviceBuffer, IntoResult, ManagedBuffer, PinnedHostBuffer,
-    ReadOnlyPageableHostMemory, ReadOnlyRegisteredHostMemory,
+    BlasMathMode, CudaEvent, DeviceBuffer, IntoResult, ManagedBuffer, PinnedHostBuffer,
+    ProjectionConfig, ReadOnlyPageableHostMemory, ReadOnlyRegisteredHostMemory,
 };
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -44,6 +45,7 @@ static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::n
 static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
 static ABI_REGISTERED_MODEL: Mutex<Option<AbiRegisteredModel>> = Mutex::new(None);
 static ABI_MODEL_RANGE_MAPPING_SUPPORTED: AtomicBool = AtomicBool::new(true);
+static ABI_NO_TF32_AT_INIT: AtomicBool = AtomicBool::new(false);
 static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_map: 0,
     model_size: 0,
@@ -1422,6 +1424,10 @@ pub extern "C" fn ds4_gpu_init() -> c_int {
             let Ok(opened) = CudaOxideSubstrate::open(0) else {
                 return false;
             };
+            ABI_NO_TF32_AT_INIT.store(
+                std::env::var_os("DS4_CUDA_NO_TF32").is_some(),
+                Ordering::Relaxed,
+            );
             *backend = Some(opened);
         }
         true
@@ -2018,16 +2024,22 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f32_tensor(
         let Some(weight_bytes) = weight_elements.checked_mul(size_of::<f32>() as u64) else {
             return false;
         };
-        let Some(x_bytes) = in_dim.checked_mul(size_of::<f32>() as u64) else {
+        let Some(x_bytes) = in_dim
+            .checked_mul(n_tok)
+            .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+        else {
             return false;
         };
-        let Some(out_bytes) = out_dim.checked_mul(size_of::<f32>() as u64) else {
+        let Some(out_bytes) = out_dim
+            .checked_mul(n_tok)
+            .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+        else {
             return false;
         };
         if model_map.is_null()
             || in_dim == 0
             || out_dim == 0
-            || n_tok != 1
+            || n_tok == 0
             || weight_offset > model_size
             || weight_bytes > model_size - weight_offset
             || x.bytes < x_bytes
@@ -2035,7 +2047,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f32_tensor(
         {
             return false;
         }
-        let path = select_f32_projection_path(false, n_tok);
+        let path = select_f32_projection_path(n_tok > 1, n_tok);
         with_backend(|backend| {
             with_cached_abi_model_range(
                 backend,
@@ -2044,6 +2056,73 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f32_tensor(
                 weight_offset,
                 weight_bytes,
                 |weight_ptr| {
+                    if path == crate::F32ProjectionPath::Blas {
+                        let Ok(blas) = backend.blas_handle() else {
+                            return Some(false);
+                        };
+                        let math_mode = if ABI_NO_TF32_AT_INIT.load(Ordering::Relaxed) {
+                            BlasMathMode::Default
+                        } else {
+                            BlasMathMode::Tf32TensorOp
+                        };
+                        if blas.set_math_mode(math_mode).is_err() {
+                            return Some(false);
+                        }
+                        let Some(weight_elements) = usize::try_from(weight_elements).ok() else {
+                            return Some(false);
+                        };
+                        let Some(x_elements) = usize::try_from(in_dim.checked_mul(n_tok)?).ok()
+                        else {
+                            return Some(false);
+                        };
+                        let Some(out_elements) = usize::try_from(out_dim.checked_mul(n_tok)?).ok()
+                        else {
+                            return Some(false);
+                        };
+                        let Some(in_dim) = usize::try_from(in_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(out_dim) = usize::try_from(out_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(n_tok) = usize::try_from(n_tok).ok() else {
+                            return Some(false);
+                        };
+                        // SAFETY: the wrappers borrow caller-owned device
+                        // allocations for the duration of this queued BLAS
+                        // operation; ManuallyDrop prevents duplicate frees.
+                        let weights = ManuallyDrop::new(unsafe {
+                            DeviceBuffer::<f32>::from_raw_parts(
+                                weight_ptr,
+                                weight_elements,
+                                backend.context().clone(),
+                            )
+                        });
+                        let activations = ManuallyDrop::new(unsafe {
+                            DeviceBuffer::<f32>::from_raw_parts(
+                                x.device_ptr(),
+                                x_elements,
+                                backend.context().clone(),
+                            )
+                        });
+                        let mut output = ManuallyDrop::new(unsafe {
+                            DeviceBuffer::<f32>::from_raw_parts(
+                                out.device_ptr(),
+                                out_elements,
+                                backend.context().clone(),
+                            )
+                        });
+                        return Some(
+                            blas.project_f32(
+                                backend.stream(),
+                                ProjectionConfig::new(in_dim, out_dim, n_tok),
+                                &weights,
+                                &activations,
+                                &mut output,
+                            )
+                            .is_ok(),
+                        );
+                    }
                     with_abi_kernels(backend, |kernels| {
                         // SAFETY: this leaf validates the single-token tensor
                         // and cached F32 weight bounds before launching the

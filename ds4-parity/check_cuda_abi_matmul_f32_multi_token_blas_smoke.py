@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Rust CUDA public single-token F32 projection ABI smoke."""
+"""Validate the Rust CUDA public multi-token F32 BLAS projection ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-matmul-f32-single-token-smoke.json"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-matmul-f32-multi-token-blas-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
 CUDA_KERNELS = ROOT / "rust/ds4-cuda/src/abi_kernels.rs"
-HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_matmul_f32_single_token_link_smoke.c"
+HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_matmul_f32_multi_token_blas_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -70,16 +70,16 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA public single-token F32 projection ABI smoke: {state} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA public multi-token F32 BLAS projection ABI smoke: {state} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
 
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.cuda_abi_matmul_f32_single_token_smoke.v1", "schema drift")
+    report.check(fixture.get("schema") == "ds4.cuda_abi_matmul_f32_multi_token_blas_smoke.v1", "schema drift")
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
-    report.check(fixture.get("status") == "b300-pass-staticlib-single-token-f32-projection-abi", "status drift")
+    report.check(fixture.get("status") == "b300-pass-staticlib-multi-token-f32-blas-abi", "status drift")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
@@ -92,11 +92,13 @@ def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(oracle.get("symbols") == ["ds4_gpu_matmul_f32_tensor"], "oracle symbol drift")
     for marker in [
         'extern "C" int ds4_gpu_matmul_f32_tensor',
-        "cublasSgemm",
         "g_cublas_ready && n_tok > 1",
+        "cublasSgemm(g_cublas",
+        "CUBLAS_TF32_TENSOR_OP_MATH",
+        "DS4_CUDA_NO_TF32",
         "matmul_f32_kernel<<<grid, 256>>>",
     ]:
-        report.check(marker in texts["cuda_c"], f"current-C F32 oracle marker missing: {marker}")
+        report.check(marker in texts["cuda_c"], f"current-C F32 BLAS oracle marker missing: {marker}")
 
 
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -105,9 +107,11 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         ("exported_abi_symbol_count", 32),
         ("exported_compute_symbol_count", 12),
         ("public_gpu_abi_function_count", 81),
-        ("owns_matmul_f32_single_token_tensor", True),
-        ("owns_live_model_range_f32_projection_observation", True),
-        ("owns_multi_token_blas_projection", False),
+        ("consumes_single_token_f32_projection", True),
+        ("owns_matmul_f32_multi_token_blas_tensor", True),
+        ("owns_default_f32_blas_math_selection", True),
+        ("owns_quality_mode_mutation", False),
+        ("owns_multi_token_f16_blas_projection", False),
         ("owns_q8_f16_cache_hook", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
@@ -126,25 +130,29 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         "n_tok == 0",
         "select_f32_projection_path(n_tok > 1, n_tok)",
         "with_cached_abi_model_range(",
+        "backend.blas_handle()",
+        "ABI_NO_TF32_AT_INIT",
+        "BlasMathMode::Tf32TensorOp",
+        "DS4_CUDA_NO_TF32",
+        "DeviceBuffer::<f32>::from_raw_parts(",
+        "blas.project_f32(",
         "kernels.matmul_f32_tensor(",
     ]:
-        report.check(marker in texts["abi"], f"Rust F32 ABI marker missing: {marker}")
+        report.check(marker in texts["abi"], f"Rust F32 BLAS ABI marker missing: {marker}")
     for marker in [
         "pub fn abi_matmul_f32_kernel",
-        "matmul_f32_tensor(",
         "matmul_f32_kernel: CudaFunction",
         'load_function("abi_matmul_f32_kernel")',
-        "crate::F32ProjectionPath::Blas",
-        "cuda_core::launch_kernel_on_stream",
     ]:
-        report.check(marker in texts["kernels"], f"embedded F32 kernel marker missing: {marker}")
+        report.check(marker in texts["kernels"], f"embedded single-token F32 marker missing: {marker}")
     for marker in [
-        "pub struct CudaAbiF32SingleTokenProjectionScope",
-        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE",
-        "exported_abi_symbol_count: 32",
-        "exported_compute_symbol_count: 12",
-        "owns_matmul_f32_single_token_tensor: true",
-        "owns_multi_token_blas_projection: false",
+        "pub struct CudaAbiF32BlasProjectionScope",
+        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBA_SCOPE",
+        "consumes_single_token_f32_projection: true",
+        "owns_matmul_f32_multi_token_blas_tensor: true",
+        "owns_default_f32_blas_math_selection: true",
+        "owns_quality_mode_mutation: false",
+        "owns_multi_token_f16_blas_projection: false",
         "owns_q8_f16_cache_hook: false",
         "changes_default_route: false",
     ]:
@@ -155,8 +163,8 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
 def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
     report.check("with_cached_abi_model_range" in implementation.get("weight_range_path", ""), "weight range path missing")
-    report.check("single-token" in implementation.get("owned_dispatch_boundary", ""), "owned dispatch boundary missing")
-    report.check("multi-token" in implementation.get("remaining_compute_boundary", ""), "remaining boundary missing")
+    report.check("project_f32" in implementation.get("owned_dispatch_boundary", ""), "owned dispatch boundary missing")
+    report.check("F16" in implementation.get("remaining_compute_boundary", ""), "remaining F16 boundary missing")
     report.check("--whole-archive" in implementation.get("linkage_requirement", ""), "artifact retention missing")
     execution = require_dict(report, fixture.get("b300_execution"), "b300_execution")
     for key, expected in [
@@ -164,21 +172,23 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 122),
-        ("feature_release_test_count", 129),
+        ("local_library_test_count", 123),
+        ("feature_release_test_count", 130),
         ("staticlib_export_count", 32),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
-        "single_token_base_output_matches",
-        "cached_f32_weights_survive_host_mutation",
-        "multi_token_blas_rejected_until_owned",
+        "single_token_base_predecessor_matches",
+        "multi_token_cublas_output_matches",
+        "cached_f32_weights_survive_blas_after_host_mutation",
+        "no_tf32_init_selection_survives_env_unset",
+        "zero_token_rejected",
         "invalid_model_range_rejected",
         "null_model_rejected",
-        "embedded_rust_kernel_module_loaded",
-        "f16_pair_single_token_predecessor_regression_passed",
+        "cuda_oxide_blas_adapter_loaded",
+        "historical_single_token_negative_witness_superseded",
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
     report.check(observed.get("predecessor_c_linked_regression_consumers_passed") == 16, "predecessor regression count drift")
@@ -186,19 +196,23 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
     for marker in [
         "ds4_gpu_matmul_f32_tensor(",
         "model[i] = 0.0f",
-        "multi_token_blas_rejected_until_owned",
+        "setenv(\"DS4_CUDA_NO_TF32\", \"1\", 1)",
+        "unsetenv(\"DS4_CUDA_NO_TF32\")",
+        "multi_token_cublas_output_matches",
+        "zero_token_rejected",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
     risks = fixture.get("integration_risks", [])
-    report.check(any("multi-token" in value for value in risks), "multi-token boundary missing")
+    report.check(any("historical" in value for value in risks), "superseded-witness note missing")
+    report.check(any("F16" in value for value in risks), "F16 boundary missing")
     report.check(any("q8" in value.lower() for value in risks), "q8 boundary missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-matmul-f32-single-token-smoke.json"
-    checker = "check_cuda_abi_matmul_f32_single_token_smoke.py"
-    item = f"{MILESTONE}: Public Single-Token F32 Projection ABI"
+    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-matmul-f32-multi-token-blas-smoke.json"
+    checker = "check_cuda_abi_matmul_f32_multi_token_blas_smoke.py"
+    item = f"{MILESTONE}: Public Multi-Token F32 BLAS Projection ABI"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
@@ -208,16 +222,17 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(
         fixture.get("next_required_stage")
-        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy",
+        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy",
         "next stage drift",
     )
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("base observation removed", lambda value: value["b300_execution"]["observed"].update({"single_token_base_output_matches": False})),
-        ("cached range observation removed", lambda value: value["b300_execution"]["observed"].update({"cached_f32_weights_survive_host_mutation": False})),
-        ("multi-token overclaim", lambda value: value["ownership"].update({"owns_multi_token_blas_projection": True})),
+        ("BLAS output removed", lambda value: value["b300_execution"]["observed"].update({"multi_token_cublas_output_matches": False})),
+        ("cached range observation removed", lambda value: value["b300_execution"]["observed"].update({"cached_f32_weights_survive_blas_after_host_mutation": False})),
+        ("quality overclaim", lambda value: value["ownership"].update({"owns_quality_mode_mutation": True})),
+        ("F16 overclaim", lambda value: value["ownership"].update({"owns_multi_token_f16_blas_projection": True})),
         ("q8 overclaim", lambda value: value["ownership"].update({"owns_q8_f16_cache_hook": True})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
