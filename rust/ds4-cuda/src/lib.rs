@@ -1066,6 +1066,33 @@ pub const M14_4C1_SCOPE: ComposedKvCompressorStoreKernelScope =
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompressorPoolShiftKernelScope {
+    pub opt_in_only: bool,
+    pub owns_compressor_prefill_pool_kernel: bool,
+    pub owns_general_and_ratio4_prefill_branches: bool,
+    pub owns_ratio4_replay_branch: bool,
+    pub owns_compressor_update_pool_kernel: bool,
+    pub owns_compressor_shift_ratio4_kernel: bool,
+    pub owns_compressor_wrapper_orchestration: bool,
+    pub owns_attention_kernels: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4C2_SCOPE: CompressorPoolShiftKernelScope = CompressorPoolShiftKernelScope {
+    opt_in_only: true,
+    owns_compressor_prefill_pool_kernel: true,
+    owns_general_and_ratio4_prefill_branches: true,
+    owns_ratio4_replay_branch: true,
+    owns_compressor_update_pool_kernel: true,
+    owns_compressor_shift_ratio4_kernel: true,
+    owns_compressor_wrapper_orchestration: false,
+    owns_attention_kernels: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1091,7 +1118,7 @@ mod tests {
         M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
         M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
-        M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE,
+        M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE,
     };
 
     #[test]
@@ -1534,6 +1561,20 @@ mod tests {
         assert!(!M14_4C1_SCOPE.owns_attention_kernels);
         assert!(!M14_4C1_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4C1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn compressor_pool_shift_scope_leaves_wrappers_attention_and_route_pending() {
+        assert!(M14_4C2_SCOPE.opt_in_only);
+        assert!(M14_4C2_SCOPE.owns_compressor_prefill_pool_kernel);
+        assert!(M14_4C2_SCOPE.owns_general_and_ratio4_prefill_branches);
+        assert!(M14_4C2_SCOPE.owns_ratio4_replay_branch);
+        assert!(M14_4C2_SCOPE.owns_compressor_update_pool_kernel);
+        assert!(M14_4C2_SCOPE.owns_compressor_shift_ratio4_kernel);
+        assert!(!M14_4C2_SCOPE.owns_compressor_wrapper_orchestration);
+        assert!(!M14_4C2_SCOPE.owns_attention_kernels);
+        assert!(!M14_4C2_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4C2_SCOPE.changes_default_route);
     }
 
     #[test]

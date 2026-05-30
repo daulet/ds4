@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.4c2 Compressor Pooling And Ratio-4 Shift Kernels
+- Active item: M14.4c3 Compressor Update And Prefill Orchestration
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -50,8 +50,10 @@
   matmul, then M14.3d3 paired/HC-expansion before M14.3d4 DP4A/dispatch
   ownership. M14.3 is complete; M14.4 begins with standalone RoPE tail and
   FP8 KV quantization before raw storage/indexer-QAT, composed storage and
-  compressor row stores, pooling/shift, or attention execution.
-- Last validated source before the active item: M14.4c1 Composed FP8 Raw Storage And Compressor Row Stores.
+  compressor row stores, pooling/shift, update/prefill orchestration, or
+  attention execution.
+- Last validated source before the active item: M14.4c2 Compressor Pooling And Ratio-4 Shift Kernels.
+- Earlier M14.4c1 Composed FP8 Raw Storage And Compressor Row Stores.
 - Earlier M14.4b Raw KV Storage And Indexer QAT Kernels.
 - Earlier M14.4a Standalone RoPE Tail And FP8 KV Quantization Kernels.
 - Earlier M14.3d4 Q8 DP4A Acceleration And Dispatch Policy.
@@ -192,6 +194,21 @@
 
 ## Last Evidence
 
+- M14.4c2 Compressor Pooling And Ratio-4 Shift Kernels adds executable-local
+  Rust cuda-oxide `compressor_prefill_pool_kernel`,
+  `compressor_update_pool_kernel`, and `compressor_shift_ratio4_kernel`
+  execution with F16 APE input coverage. On B300 pod `ds4-rust-port-b300`,
+  feature-enabled `ds4-cuda` tests passed with 54 tests; live cargo-oxide
+  execution emitted portable `sm_80` PTX with libdevice linkage and matched
+  general-ratio, ratio-4/replay, update-pool, and state-shift outputs on
+  `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.4c2/compressor-pool-shift-kernel-smoke.json`
+  and `ds4-parity/check_compressor_pool_shift_kernel_smoke.py --negative-test`.
+  Update/prefill wrapper orchestration, normalization/RoPE/FP8 composition,
+  attention, runtime route activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, library tests, the 68-check comparator, retained
+  M14 checks, and unified parity passed with 138 passed, 50 skipped, and
+  0 failed.
 - M14.4c1 Composed FP8 Raw Storage And Compressor Row Stores adds
   executable-local Rust cuda-oxide composed FP8 quantization plus raw-store
   execution and ratio-4 `compressor_store_kernel`/`compressor_set_rows_kernel`

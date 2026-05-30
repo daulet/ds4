@@ -8164,7 +8164,7 @@ Stage split:
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4c1 and split next into M14.4c2.
+- Status: active; done through M14.4c2 and split next into M14.4c3.
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8231,7 +8231,7 @@ Stage split:
 
 ##### M14.4c: Composed KV Storage And Compressor Kernels
 
-- Status: active; done through M14.4c1 and split next into M14.4c2.
+- Status: active; done through M14.4c2 and split next into M14.4c3.
 - Goal: port composed KV storage and bounded compressor kernels before
   claiming attention execution.
 
@@ -8266,10 +8266,39 @@ Stage split:
 
 ###### M14.4c2: Compressor Pooling And Ratio-4 Shift Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port `compressor_prefill_pool_kernel`,
   `compressor_update_pool_kernel`, and `compressor_shift_ratio4_kernel`
   before claiming update/prefill wrapper orchestration.
+- Oracle: current-C `compressor_prefill_pool_kernel`,
+  `compressor_update_pool_kernel`, and `compressor_shift_ratio4_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4c2/compressor-pool-shift-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_compressor_pool_shift_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in compressor pooling and ratio-4 shift device
+  kernels across general-ratio, ratio-4, and replay cases. Update/prefill
+  wrapper orchestration, normalization/RoPE/FP8 composition, attention,
+  runtime graph integration, default route activation, and C CUDA removal
+  remain pending.
+- Evidence:
+  - Added executable-local Rust compressor prefill-pool, update-pool, and
+    ratio-4 shift execution with F16 APE input coverage.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 54 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    with libdevice linkage and matched general-ratio, ratio-4/replay,
+    update-pool, and state-shift outputs on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 68-check comparator, retained
+    M14 checks, and unified parity passed with 138 passed, 50 skipped, and
+    0 failed.
+
+###### M14.4c3: Compressor Update And Prefill Orchestration
+
+- Status: active.
+- Goal: compose owned compressor storage/pooling/shift kernels with owned
+  normalization, RoPE, and optional FP8 operations into the current-C update
+  and prefill surfaces before claiming attention execution.
 
 ## Removal Criteria for C Host Code
 

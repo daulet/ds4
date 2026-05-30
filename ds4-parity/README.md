@@ -2562,6 +2562,18 @@ on B300. It proves ratio-4 state-row selection and both F32 and F16 APE reads.
 It leaves compressor pooling/shift, wrapper orchestration, attention, runtime
 route, and C CUDA removal unclaimed.
 
+Validate the M14.4c2 Rust CUDA compressor pool and ratio-4 shift smoke:
+
+```sh
+python3 ds4-parity/check_compressor_pool_shift_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `compressor_prefill_pool_kernel`,
+`compressor_update_pool_kernel`, and `compressor_shift_ratio4_kernel`
+execution on B300. It proves general-ratio, ratio-4, ratio-4 replay, and F16
+APE pool behavior while leaving update/prefill wrapper orchestration,
+attention, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
