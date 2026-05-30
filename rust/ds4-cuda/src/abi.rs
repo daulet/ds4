@@ -4263,10 +4263,14 @@ pub unsafe extern "C" fn ds4_gpu_attention_decode_heads_tensor(
                                     sink_elements,
                                     raw_elements,
                                     comp_elements,
+                                    1,
+                                    0,
                                     n_raw,
                                     raw_cap,
                                     raw_start,
                                     n_comp,
+                                    0,
+                                    0,
                                     n_head,
                                     head_dim,
                                 )
@@ -4288,10 +4292,14 @@ pub unsafe extern "C" fn ds4_gpu_attention_decode_heads_tensor(
                                 raw_elements,
                                 comp_elements,
                                 mask_elements,
+                                1,
+                                0,
                                 n_raw,
                                 raw_cap,
                                 raw_start,
                                 n_comp,
+                                0,
+                                0,
                                 use_mask,
                                 n_head,
                                 head_dim,
@@ -4303,6 +4311,308 @@ pub unsafe extern "C" fn ds4_gpu_attention_decode_heads_tensor(
         })
         .unwrap_or(false)
     })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_decode_raw_batch_heads_tensor(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    n_tokens: u32,
+    pos0: u32,
+    n_raw: u32,
+    raw_cap: u32,
+    raw_start: u32,
+    window: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| unsafe {
+        attention_decode_batch_impl(
+            heads,
+            model_map,
+            model_size,
+            sinks_offset,
+            q,
+            raw_kv,
+            ptr::null(),
+            ptr::null(),
+            0,
+            n_tokens,
+            pos0,
+            n_raw,
+            raw_cap,
+            raw_start,
+            0,
+            window,
+            1,
+            n_head,
+            head_dim,
+        )
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_decode_mixed_batch_heads_tensor(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    comp_kv: *const Ds4GpuTensor,
+    comp_mask: *const Ds4GpuTensor,
+    use_comp_mask: u32,
+    n_tokens: u32,
+    pos0: u32,
+    n_raw: u32,
+    raw_cap: u32,
+    raw_start: u32,
+    n_comp: u32,
+    window: u32,
+    ratio: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| unsafe {
+        attention_decode_batch_impl(
+            heads,
+            model_map,
+            model_size,
+            sinks_offset,
+            q,
+            raw_kv,
+            comp_kv,
+            comp_mask,
+            use_comp_mask,
+            n_tokens,
+            pos0,
+            n_raw,
+            raw_cap,
+            raw_start,
+            n_comp,
+            window,
+            ratio,
+            n_head,
+            head_dim,
+        )
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn attention_decode_batch_impl(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    comp_kv: *const Ds4GpuTensor,
+    comp_mask: *const Ds4GpuTensor,
+    use_comp_mask: u32,
+    n_tokens: u32,
+    pos0: u32,
+    n_raw: u32,
+    raw_cap: u32,
+    raw_start: u32,
+    n_comp: u32,
+    window: u32,
+    ratio: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> bool {
+    let Some(heads) = (unsafe { tensor_ref(heads.cast_const()) }) else {
+        return false;
+    };
+    let Some(q) = (unsafe { tensor_ref(q) }) else {
+        return false;
+    };
+    let Some(raw_kv) = (unsafe { tensor_ref(raw_kv) }) else {
+        return false;
+    };
+    let comp_kv = if n_comp != 0 {
+        let Some(comp_kv) = (unsafe { tensor_ref(comp_kv) }) else {
+            return false;
+        };
+        comp_kv
+    } else {
+        raw_kv
+    };
+    let comp_mask = if use_comp_mask != 0 {
+        let Some(comp_mask) = (unsafe { tensor_ref(comp_mask) }) else {
+            return false;
+        };
+        comp_mask
+    } else {
+        raw_kv
+    };
+    let Some(output_elements) = u64::from(n_tokens)
+        .checked_mul(u64::from(n_head))
+        .and_then(|value| value.checked_mul(u64::from(head_dim)))
+    else {
+        return false;
+    };
+    let Some(raw_elements) = u64::from(raw_cap).checked_mul(u64::from(head_dim)) else {
+        return false;
+    };
+    let Some(comp_elements) = u64::from(n_comp).checked_mul(u64::from(head_dim)) else {
+        return false;
+    };
+    let Some(mask_elements) = u64::from(n_tokens).checked_mul(u64::from(n_comp)) else {
+        return false;
+    };
+    let sink_elements = u64::from(n_head);
+    let Some(output_bytes) = output_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(raw_bytes) = raw_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(comp_bytes) = comp_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(mask_bytes) = mask_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(sink_bytes) = sink_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    if model_map.is_null()
+        || n_tokens == 0
+        || n_raw == 0
+        || raw_cap < n_raw
+        || raw_start >= raw_cap
+        || (n_comp != 0 && ratio == 0)
+        || n_head == 0
+        || head_dim == 0
+        || sinks_offset > model_size
+        || sink_bytes > model_size - sinks_offset
+        || heads.bytes < output_bytes
+        || q.bytes < output_bytes
+        || raw_kv.bytes < raw_bytes
+        || (n_comp != 0 && comp_kv.bytes < comp_bytes)
+        || (use_comp_mask != 0 && comp_mask.bytes < mask_bytes)
+    {
+        return false;
+    }
+    with_backend(|backend| {
+        with_cached_abi_model_range(
+            backend,
+            model_map,
+            model_size,
+            sinks_offset,
+            sink_bytes,
+            |sinks_ptr| {
+                with_abi_kernels(backend, |kernels| {
+                    let no_window_attention =
+                        std::env::var_os("DS4_CUDA_NO_WINDOW_ATTENTION").is_some();
+                    if n_comp > DS4_CUDA_ATTENTION_SCORE_CAP - DS4_CUDA_ATTENTION_RAW_SCORE_CAP {
+                        if use_comp_mask != 0 || head_dim != 512 || no_window_attention {
+                            return Some(false);
+                        }
+                        // SAFETY: every public span and the current-C
+                        // overflow-online dispatch preconditions are checked.
+                        return Some(unsafe {
+                            kernels.attention_decode_mixed_heads8_online_tensor(
+                                backend.stream(),
+                                heads.device_ptr(),
+                                sinks_ptr,
+                                q.device_ptr(),
+                                raw_kv.device_ptr(),
+                                comp_kv.device_ptr(),
+                                output_elements,
+                                sink_elements,
+                                raw_elements,
+                                comp_elements,
+                                n_tokens,
+                                pos0,
+                                n_raw,
+                                raw_cap,
+                                raw_start,
+                                n_comp,
+                                window,
+                                ratio,
+                                n_head,
+                                head_dim,
+                            )
+                        });
+                    }
+                    if use_comp_mask == 0
+                        && n_tokens > 1
+                        && head_dim == 512
+                        && !no_window_attention
+                        && (std::env::var_os("DS4_CUDA_WINDOW_ATTENTION").is_some()
+                            || (!ABI_QUALITY_MODE.load(Ordering::Relaxed) && n_tokens >= 128))
+                    {
+                        // SAFETY: this is the current-C online window branch
+                        // after validating every public tensor/model span.
+                        return Some(unsafe {
+                            kernels.attention_decode_mixed_heads8_online_tensor(
+                                backend.stream(),
+                                heads.device_ptr(),
+                                sinks_ptr,
+                                q.device_ptr(),
+                                raw_kv.device_ptr(),
+                                comp_kv.device_ptr(),
+                                output_elements,
+                                sink_elements,
+                                raw_elements,
+                                comp_elements,
+                                n_tokens,
+                                pos0,
+                                n_raw,
+                                raw_cap,
+                                raw_start,
+                                n_comp,
+                                window,
+                                ratio,
+                                n_head,
+                                head_dim,
+                            )
+                        });
+                    }
+                    // SAFETY: generic decode is score-cap bounded and every
+                    // public tensor/model span has been validated.
+                    Some(unsafe {
+                        kernels.attention_decode_mixed_tensor(
+                            backend.stream(),
+                            heads.device_ptr(),
+                            sinks_ptr,
+                            q.device_ptr(),
+                            raw_kv.device_ptr(),
+                            comp_kv.device_ptr(),
+                            comp_mask.device_ptr(),
+                            output_elements,
+                            sink_elements,
+                            raw_elements,
+                            comp_elements,
+                            mask_elements,
+                            n_tokens,
+                            pos0,
+                            n_raw,
+                            raw_cap,
+                            raw_start,
+                            n_comp,
+                            window,
+                            ratio,
+                            use_comp_mask,
+                            n_head,
+                            head_dim,
+                        )
+                    })
+                })
+            },
+        )
+    })
+    .unwrap_or(false)
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]

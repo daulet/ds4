@@ -3,7 +3,28 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Batched Attention Decode ABI
+  is validated on B300. Rust exports
+  `ds4_gpu_attention_decode_raw_batch_heads_tensor` and
+  `ds4_gpu_attention_decode_mixed_batch_heads_tensor` by generalizing the
+  already-embedded generic and online decode kernels for batched position,
+  window, and compressed-visibility inputs. A C-linked B300 witness proves
+  masked mixed and raw-only batch output, causal window/ring behavior,
+  compressed visibility, sink softmax, score-cap overflow-online dispatch,
+  explicit online-window execution, environment and mask rejection, invalid
+  model-range output preservation, invalid-shape and ratio-zero rejection,
+  and null rejection. The prior single-token linked witness still passes.
+  Local tests pass with 148 tests; B300 feature tests pass with 155 tests; the
+  static library exposes 65 symbols and embeds 41 kernels. All 58 preceding
+  linked ABI consumers pass against the rebuilt archive with the known
+  executable-stack warning. All 62 CUDA ABI comparators pass, and the unified
+  report passes with 234 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Prefill,
+  indexed and output-Q8 attention, routed MoE, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the executable-stack
+  warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Single-Token Attention Decode Heads ABI
   is validated on B300. Rust exports `ds4_gpu_attention_decode_heads_tensor`
   through embedded generic and score-cap overflow-online attention kernels.

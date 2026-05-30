@@ -11952,6 +11952,51 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the paired public batch-decode wrappers reuse the published decode
+  kernel family and are independently comparable before prefill, indexed,
+  output-Q8, routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Batched Attention Decode ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_attention_decode_raw_batch_heads_tensor` and
+  `ds4_gpu_attention_decode_mixed_batch_heads_tensor` through generic and
+  online batched decode dispatch without claiming prefill, indexed,
+  output-Q8, routed MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-attention-decode-batch-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_attention_decode_batch_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports both wrappers through one checked batch
+    helper preserving score-cap, online-window, environment, and quality-mode
+    dispatch gates.
+  - `rust/ds4-cuda/src/abi_kernels.rs` generalizes the published generic and
+    online decode kernels for token positions, causal windows, and compressed
+    visibility without adding embedded kernels.
+  - A C-linked B300 consumer proves masked mixed and raw-only batch output,
+    causal ring/window and compressed visibility behavior, sink softmax,
+    forced overflow-online dispatch, explicit online-window execution,
+    rejection controls, and preservation of the prior single-token witness.
+  - Local library tests pass with 148 tests; B300 release-feature tests pass
+    with 155 tests; the static library exposes 65 Rust ABI symbols and embeds
+    41 kernels.
+  - All 58 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 62 CUDA ABI comparators
+    pass.
+  - The unified report passes with 234 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Prefill, indexed and output-Q8 attention, routed MoE, production route
+    promotion, and C CUDA removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

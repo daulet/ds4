@@ -3827,6 +3827,22 @@ and validation rejection. Remaining attention, routed MoE, remaining graph
 compute, whole-archive retention policy, route promotion, C CUDA removal, and
 the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public batched attention decode ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_attention_decode_batch_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public raw and mixed batched attention
+wrappers through the generalized embedded decode kernel family. It proves
+masked mixed and raw-only causal ring/window output, compressed visibility,
+sink softmax, forced overflow-online dispatch, explicit online-window
+execution, and rejection controls while preserving the preceding
+single-token witness. Prefill, indexed and output-Q8 attention, routed MoE,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

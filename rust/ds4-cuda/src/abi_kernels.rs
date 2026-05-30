@@ -1174,10 +1174,14 @@ mod kernels {
     #[allow(clippy::too_many_arguments)]
     #[kernel]
     pub fn abi_attention_decode_mixed_kernel(
+        n_tokens: u32,
+        pos0: u32,
         n_raw: u32,
         raw_cap: u32,
         raw_start: u32,
         n_comp: u32,
+        window: u32,
+        ratio: u32,
         use_comp_mask: u32,
         n_head: u32,
         head_dim: u32,
@@ -1188,17 +1192,59 @@ mod kernels {
         comp_mask: &[f32],
         mut heads: DisjointSlice<f32>,
     ) {
+        let token = thread::blockIdx_x();
         let head = thread::blockIdx_y();
-        if head >= n_head || thread::threadIdx_x() != 0 {
+        if token >= n_tokens || head >= n_head || thread::threadIdx_x() != 0 {
             return;
         }
-        let query_base = (head * head_dim) as usize;
+        let single_all = n_tokens == 1 && ratio == 0;
+        let qpos = pos0.wrapping_add(token);
+        let first_raw_pos = pos0.wrapping_add(n_tokens).wrapping_sub(n_raw);
+        let mut visible_comp = if single_all {
+            n_comp
+        } else if n_comp != 0 {
+            qpos.wrapping_add(1) / ratio
+        } else {
+            0
+        };
+        if visible_comp > n_comp {
+            visible_comp = n_comp;
+        }
+        let mut raw_first = 0_u32;
+        let mut raw_count = 0_u32;
+        if single_all {
+            raw_count = if n_raw < 256 { n_raw } else { 256 };
+        } else {
+            let raw_last_pos = first_raw_pos.wrapping_add(n_raw).wrapping_sub(1);
+            if qpos >= first_raw_pos {
+                let mut lo = first_raw_pos;
+                if window != 0 && qpos.wrapping_add(1) > window {
+                    let window_lo = qpos.wrapping_add(1).wrapping_sub(window);
+                    if window_lo > lo {
+                        lo = window_lo;
+                    }
+                }
+                let hi = if qpos < raw_last_pos {
+                    qpos
+                } else {
+                    raw_last_pos
+                };
+                if hi >= lo {
+                    raw_first = lo.wrapping_sub(first_raw_pos);
+                    raw_count = hi.wrapping_sub(lo).wrapping_add(1);
+                    if raw_count > 256 {
+                        raw_count = 256;
+                    }
+                }
+            }
+        }
+        let query_base =
+            ((token as usize * n_head as usize + head as usize) * head_dim as usize) as usize;
         let scale = 1.0_f32 / (head_dim as f32).sqrt();
-        let raw_count = if n_raw < 256 { n_raw } else { 256 };
         let mut max_score = sinks[head as usize];
         let mut raw_row = 0_u32;
         while raw_row < raw_count {
-            let row = raw_start.wrapping_add(raw_row) % raw_cap;
+            let row = raw_start.wrapping_add(raw_first).wrapping_add(raw_row) % raw_cap;
             max_score = abi_attention_maximum(
                 max_score,
                 abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale,
@@ -1206,9 +1252,9 @@ mod kernels {
             raw_row += 1;
         }
         let mut compressed = 0_u32;
-        while compressed < n_comp {
+        while compressed < visible_comp {
             let add = if use_comp_mask != 0 {
-                comp_mask[compressed as usize]
+                comp_mask[token as usize * n_comp as usize + compressed as usize]
             } else {
                 0.0
             };
@@ -1223,15 +1269,15 @@ mod kernels {
         let mut denominator = (sinks[head as usize] - max_score).exp();
         raw_row = 0;
         while raw_row < raw_count {
-            let row = raw_start.wrapping_add(raw_row) % raw_cap;
+            let row = raw_start.wrapping_add(raw_first).wrapping_add(raw_row) % raw_cap;
             denominator +=
                 (abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale - max_score).exp();
             raw_row += 1;
         }
         compressed = 0;
-        while compressed < n_comp {
+        while compressed < visible_comp {
             let add = if use_comp_mask != 0 {
-                comp_mask[compressed as usize]
+                comp_mask[token as usize * n_comp as usize + compressed as usize]
             } else {
                 0.0
             };
@@ -1248,7 +1294,7 @@ mod kernels {
             let mut accumulator = 0.0_f32;
             raw_row = 0;
             while raw_row < raw_count {
-                let row = raw_start.wrapping_add(raw_row) % raw_cap;
+                let row = raw_start.wrapping_add(raw_first).wrapping_add(raw_row) % raw_cap;
                 let weight = (abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale
                     - max_score)
                     .exp();
@@ -1256,9 +1302,9 @@ mod kernels {
                 raw_row += 1;
             }
             compressed = 0;
-            while compressed < n_comp {
+            while compressed < visible_comp {
                 let add = if use_comp_mask != 0 {
-                    comp_mask[compressed as usize]
+                    comp_mask[token as usize * n_comp as usize + compressed as usize]
                 } else {
                     0.0
                 };
@@ -1273,7 +1319,7 @@ mod kernels {
                 compressed += 1;
             }
             unsafe {
-                *heads.get_unchecked_mut((head * head_dim + dimension) as usize) =
+                *heads.get_unchecked_mut(query_base + dimension as usize) =
                     accumulator / denominator;
             }
             dimension += 1;
@@ -1283,10 +1329,14 @@ mod kernels {
     #[allow(clippy::too_many_arguments)]
     #[kernel]
     pub fn abi_attention_decode_mixed_heads8_online_kernel(
+        n_tokens: u32,
+        pos0: u32,
         n_raw: u32,
         raw_cap: u32,
         raw_start: u32,
         n_comp: u32,
+        window: u32,
+        ratio: u32,
         n_head: u32,
         head_dim: u32,
         sinks: &[f32],
@@ -1298,35 +1348,51 @@ mod kernels {
         static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
         static mut SOFTMAX: SharedArray<f32, 4> = SharedArray::UNINIT;
 
+        let token = thread::blockIdx_x();
         let head = thread::blockIdx_y();
         let tid = thread::threadIdx_x() as usize;
-        if head >= n_head || head_dim != 512 {
+        if token >= n_tokens || head >= n_head || head_dim != 512 {
             return;
         }
-        // This is the public single-token call site of the current-C online
-        // kernel: n_tokens=1, pos0=0, window=0, and ratio=0.
-        let first_raw_pos = 1_u32.wrapping_sub(n_raw);
-        let raw_count = if 0_u32 >= first_raw_pos {
+        let qpos = pos0.wrapping_add(token);
+        let first_raw_pos = pos0.wrapping_add(n_tokens).wrapping_sub(n_raw);
+        let mut raw_first = 0_u32;
+        let mut raw_count = 0_u32;
+        if qpos >= first_raw_pos {
             let raw_last_pos = first_raw_pos.wrapping_add(n_raw).wrapping_sub(1);
-            let hi = if 0_u32 < raw_last_pos {
-                0
+            let mut lo = first_raw_pos;
+            if window != 0 && qpos.wrapping_add(1) > window {
+                let window_lo = qpos.wrapping_add(1).wrapping_sub(window);
+                if window_lo > lo {
+                    lo = window_lo;
+                }
+            }
+            let hi = if qpos < raw_last_pos {
+                qpos
             } else {
                 raw_last_pos
             };
-            if hi >= first_raw_pos {
-                let count = hi.wrapping_sub(first_raw_pos).wrapping_add(1);
-                if count < 256 {
-                    count
-                } else {
-                    256
+            if hi >= lo {
+                raw_first = lo.wrapping_sub(first_raw_pos);
+                raw_count = hi.wrapping_sub(lo).wrapping_add(1);
+                if raw_count > 256 {
+                    raw_count = 256;
                 }
-            } else {
-                0
             }
-        } else {
-            0
-        };
-        let query_base = (head * head_dim) as usize;
+        }
+        let mut comp_count = 0_u32;
+        if n_comp != 0 {
+            if n_tokens == 1 && ratio == 0 {
+                comp_count = n_comp;
+            } else if ratio != 0 {
+                comp_count = qpos.wrapping_add(1) / ratio;
+                if comp_count > n_comp {
+                    comp_count = n_comp;
+                }
+            }
+        }
+        let query_base =
+            ((token as usize * n_head as usize + head as usize) * head_dim as usize) as usize;
         let scale = 1.0_f32 / (head_dim as f32).sqrt();
         let dimension0 = tid;
         let dimension1 = tid + 256;
@@ -1340,9 +1406,12 @@ mod kernels {
         }
         thread::sync_threads();
         let mut score_row = 0_u32;
-        while score_row < raw_count + n_comp {
+        while score_row < raw_count + comp_count {
             let (kv, row) = if score_row < raw_count {
-                (raw_kv, raw_start.wrapping_add(score_row) % raw_cap)
+                (
+                    raw_kv,
+                    raw_start.wrapping_add(raw_first).wrapping_add(score_row) % raw_cap,
+                )
             } else {
                 (comp_kv, score_row - raw_count)
             };
@@ -3958,23 +4027,31 @@ impl AbiKernelModule {
         raw_elements: u64,
         comp_elements: u64,
         mask_elements: u64,
+        n_tokens: u32,
+        pos0: u32,
         n_raw: u32,
         raw_cap: u32,
         raw_start: u32,
         n_comp: u32,
+        window: u32,
+        ratio: u32,
         use_comp_mask: u32,
         n_head: u32,
         head_dim: u32,
     ) -> bool {
         let config = LaunchConfig {
-            grid_dim: (1, n_head, 1),
+            grid_dim: (n_tokens, n_head, 1),
             block_dim: (THREADS_PER_BLOCK, 1, 1),
             shared_mem_bytes: 0,
         };
+        let mut n_tokens = n_tokens;
+        let mut pos0 = pos0;
         let mut n_raw = n_raw;
         let mut raw_cap = raw_cap;
         let mut raw_start = raw_start;
         let mut n_comp = n_comp;
+        let mut window = window;
+        let mut ratio = ratio;
         let mut use_comp_mask = use_comp_mask;
         let mut n_head = n_head;
         let mut head_dim = head_dim;
@@ -3991,10 +4068,14 @@ impl AbiKernelModule {
         let mut heads_ptr = heads_ptr;
         let mut heads_len = output_elements;
         let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut pos0 as *mut u32).cast::<c_void>(),
             (&mut n_raw as *mut u32).cast::<c_void>(),
             (&mut raw_cap as *mut u32).cast::<c_void>(),
             (&mut raw_start as *mut u32).cast::<c_void>(),
             (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut window as *mut u32).cast::<c_void>(),
+            (&mut ratio as *mut u32).cast::<c_void>(),
             (&mut use_comp_mask as *mut u32).cast::<c_void>(),
             (&mut n_head as *mut u32).cast::<c_void>(),
             (&mut head_dim as *mut u32).cast::<c_void>(),
@@ -4039,22 +4120,30 @@ impl AbiKernelModule {
         sink_elements: u64,
         raw_elements: u64,
         comp_elements: u64,
+        n_tokens: u32,
+        pos0: u32,
         n_raw: u32,
         raw_cap: u32,
         raw_start: u32,
         n_comp: u32,
+        window: u32,
+        ratio: u32,
         n_head: u32,
         head_dim: u32,
     ) -> bool {
         let config = LaunchConfig {
-            grid_dim: (1, n_head, 1),
+            grid_dim: (n_tokens, n_head, 1),
             block_dim: (THREADS_PER_BLOCK, 1, 1),
             shared_mem_bytes: 0,
         };
+        let mut n_tokens = n_tokens;
+        let mut pos0 = pos0;
         let mut n_raw = n_raw;
         let mut raw_cap = raw_cap;
         let mut raw_start = raw_start;
         let mut n_comp = n_comp;
+        let mut window = window;
+        let mut ratio = ratio;
         let mut n_head = n_head;
         let mut head_dim = head_dim;
         let mut sinks_ptr = sinks_ptr;
@@ -4068,10 +4157,14 @@ impl AbiKernelModule {
         let mut heads_ptr = heads_ptr;
         let mut heads_len = output_elements;
         let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut pos0 as *mut u32).cast::<c_void>(),
             (&mut n_raw as *mut u32).cast::<c_void>(),
             (&mut raw_cap as *mut u32).cast::<c_void>(),
             (&mut raw_start as *mut u32).cast::<c_void>(),
             (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut window as *mut u32).cast::<c_void>(),
+            (&mut ratio as *mut u32).cast::<c_void>(),
             (&mut n_head as *mut u32).cast::<c_void>(),
             (&mut head_dim as *mut u32).cast::<c_void>(),
             (&mut sinks_ptr as *mut u64).cast::<c_void>(),
