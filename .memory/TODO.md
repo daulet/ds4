@@ -9931,6 +9931,43 @@
 
 ################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2b because fd arena allocation failure,
+  strict continuation, and persistent cache-full behavior are independently
+  observable from remaining staging/read/copy failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.
+
+#################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a: Public Fd Arena Failure Selection ABI
+
+- Status: done
+- Goal: preserve current-C fd arena allocation-failure routing, including
+  non-strict uncached host fallback, strict continuation into cached fallback
+  handling, and persistent no-retry state after allocation failure.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-fd-arena-failure-selection-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_arena_failure_selection_smoke.py --negative-test`.
+- Evidence: Rust now separates raw fd-budget fallback from arena failure,
+  stores the model-lifetime cache-full state, routes arena failure through
+  `DS4_CUDA_STRICT_WEIGHT_CACHE`, and allocates uninitialized fd-arena bytes
+  before staged writes. A C-linked B300 consumer interposes the 256 MiB
+  arena allocation with out-of-memory, proves uncached host-weight output in
+  non-strict mode, proves cached device-copy output in strict mode, and
+  proves no allocation retry for a second range. Local tests pass with 112
+  tests, B300 release-feature tests pass with 119 tests, and the static
+  library retains 29 exports. Successful fd-arena suballocation, fd-budget
+  cache-result, default-fd, and registration-disable linked consumers pass
+  against the rebuilt archive. The focused comparator passes with 107 checks
+  and the default unified parity report passes with 198 passed, 45 skipped,
+  and 0 failed. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  Aligned-budget strict routing is source-backed but not separately forced
+  live; staging allocation/read/copy failure selection, route promotion, and
+  the `.note.GNU-stack` warning remain pending.
+
+#################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
+
 - Status: active
 - Goal: connect remaining model-control failure selection without claiming
   graph compute closure or route promotion.

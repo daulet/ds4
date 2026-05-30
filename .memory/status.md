@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,24 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a Public Fd Arena Failure Selection ABI
+  separates raw fd-budget fallback from arena failure, tracks the
+  model-lifetime cache-full latch, routes arena failure through
+  `DS4_CUDA_STRICT_WEIGHT_CACHE`, and allocates uninitialized fd-arena bytes
+  before staged writes. A C-linked B300 consumer interposes the 256 MiB arena
+  allocation with out-of-memory, proves uncached host-weight output in
+  non-strict mode, proves cached device-copy output in strict mode, and
+  proves no allocation retry for a second range. Local library tests pass
+  with 112 tests; B300 release-feature tests pass with 119 tests, the static
+  library retains 29 exports, and successful fd-arena suballocation,
+  fd-budget cache-result, default-fd, and registration-disable linked
+  consumers pass against it. The focused comparator passes with 107 checks;
+  the default unified parity report passes with 198 passed, 45 skipped, and
+  0 failed. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  Aligned-budget strict routing is source-backed but not separately forced
+  live; staging allocation/read/copy failure selection, route promotion, and
+  remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b1 Public Fd Budget Fallback Cache-Result ABI
   makes the public cache-range return value reflect retained storage after fd
   budget resolution and releases the retained-range mutex before callbacks.

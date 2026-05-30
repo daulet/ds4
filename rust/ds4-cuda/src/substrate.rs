@@ -82,6 +82,11 @@ impl CudaOxideSubstrate {
         DeviceBuffer::zeroed(&self.stream, len)
     }
 
+    pub fn allocate_u8(&self, len: usize) -> Result<DeviceBuffer<u8>, DriverError> {
+        let ptr = unsafe { cuda_core::memory::malloc_async(self.stream.cu_stream(), len)? };
+        Ok(unsafe { DeviceBuffer::from_raw_parts(ptr, len, self.context.clone()) })
+    }
+
     pub fn download<T: DeviceCopy>(&self, buffer: &DeviceBuffer<T>) -> Result<Vec<T>, DriverError> {
         buffer.to_host_vec(&self.stream)
     }

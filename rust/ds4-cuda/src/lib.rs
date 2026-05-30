@@ -2620,6 +2620,36 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE: CudaAbiFdBudgetCacheResultScope
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiFdArenaFailureSelectionScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_non_strict_arena_failure_host_fallback: bool,
+    pub owns_strict_arena_failure_continuation: bool,
+    pub owns_persistent_arena_cache_full_state: bool,
+    pub owns_live_interposed_arena_failure_observation: bool,
+    pub owns_aligned_arena_budget_failure_routing: bool,
+    pub owns_remaining_failure_selection: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE: CudaAbiFdArenaFailureSelectionScope =
+    CudaAbiFdArenaFailureSelectionScope {
+        exported_abi_symbol_count: 29,
+        exported_compute_symbol_count: 9,
+        owns_non_strict_arena_failure_host_fallback: true,
+        owns_strict_arena_failure_continuation: true,
+        owns_persistent_arena_cache_full_state: true,
+        owns_live_interposed_arena_failure_observation: true,
+        owns_aligned_arena_budget_failure_routing: true,
+        owns_remaining_failure_selection: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2671,7 +2701,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
-        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
     };
 
     #[test]
@@ -4067,6 +4097,29 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_fd_arena_failure_selection_scope_leaves_remaining_failure_selection_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.exported_abi_symbol_count,
+            29
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.exported_compute_symbol_count,
+            9
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_non_strict_arena_failure_host_fallback);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_strict_arena_failure_continuation);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_persistent_arena_cache_full_state);
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_live_interposed_arena_failure_observation
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_aligned_arena_budget_failure_routing);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_remaining_failure_selection);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.changes_default_route);
     }
 
     #[test]

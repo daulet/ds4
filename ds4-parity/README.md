@@ -3297,6 +3297,21 @@ RMS consumes the returned host bytes. Arena allocation failure, persistent
 cache-full state, `DS4_CUDA_STRICT_WEIGHT_CACHE` continuation, whole-archive
 retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a Rust CUDA public fd-arena
+failure-selection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_arena_failure_selection_smoke.py --negative-test
+```
+
+The fixture interposes the 256 MiB fd-arena device allocation from a
+C-linked B300 consumer. It proves non-strict allocation failure returns an
+uncached host pointer, strict failure continues into cached device-copy
+fallback, and the model-lifetime cache-full state suppresses a second arena
+allocation attempt. Aligned-budget strict routing is source-backed but not
+separately forced live; staging allocation/read/copy failure selection,
+whole-archive retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

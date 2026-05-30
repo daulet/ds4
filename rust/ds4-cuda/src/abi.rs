@@ -22,6 +22,7 @@ static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
 static ABI_MODEL_ARENAS: Mutex<AbiModelArenaState> = Mutex::new(AbiModelArenaState {
     arenas: Vec::new(),
     range_bytes: 0,
+    cache_full: false,
     progress: AbiModelLoadProgress {
         next_bytes: 0,
         last: None,
@@ -63,6 +64,7 @@ struct AbiModelArena {
 struct AbiModelArenaState {
     arenas: Vec<AbiModelArena>,
     range_bytes: u64,
+    cache_full: bool,
     progress: AbiModelLoadProgress,
 }
 
@@ -430,6 +432,10 @@ fn direct_io_fd_weight_cache_selected() -> bool {
     fd_weight_cache_selected() && std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_none()
 }
 
+fn strict_fd_weight_cache_selected() -> bool {
+    std::env::var_os("DS4_CUDA_STRICT_WEIGHT_CACHE").is_some()
+}
+
 fn abi_model_copy_chunk_bytes_from_value(value: Option<&std::ffi::CStr>) -> Option<usize> {
     let mut mb = 64_u64;
     if let Some(value) = value {
@@ -714,6 +720,15 @@ fn try_upload_abi_buffered_fd_range(
         AbiFdArenaUpload::BudgetFallback => Some(AbiFdRangeResolution::BudgetFallback {
             requested_device_ptr: abi_model_ptr(model_map, offset)?,
         }),
+        AbiFdArenaUpload::ArenaFallback => {
+            if strict_fd_weight_cache_selected() {
+                None
+            } else {
+                Some(AbiFdRangeResolution::BudgetFallback {
+                    requested_device_ptr: abi_model_ptr(model_map, offset)?,
+                })
+            }
+        }
     }
 }
 
@@ -740,6 +755,7 @@ enum AbiFdArenaUpload {
         used_direct_io: bool,
     },
     BudgetFallback,
+    ArenaFallback,
 }
 
 #[cfg(target_os = "linux")]
@@ -888,8 +904,8 @@ fn upload_abi_async_fd_arena_range(
     if state.range_bytes > limit || bytes > limit - state.range_bytes {
         return Some(AbiFdArenaUpload::BudgetFallback);
     }
-    if aligned_bytes > limit - state.range_bytes {
-        return Some(AbiFdArenaUpload::BudgetFallback);
+    if state.cache_full {
+        return Some(AbiFdArenaUpload::ArenaFallback);
     }
     let reservation = state.arenas.iter().enumerate().find_map(|(index, arena)| {
         let used = align_abi_model_arena_bytes(arena.used)?;
@@ -901,8 +917,17 @@ fn upload_abi_async_fd_arena_range(
             (index, used)
         }
         None => {
+            if aligned_bytes > limit - state.range_bytes {
+                return Some(AbiFdArenaUpload::ArenaFallback);
+            }
             let chunk_bytes = abi_model_arena_chunk_bytes(usize::try_from(bytes).ok()?)?;
-            let device = backend.zeroed::<u8>(chunk_bytes).ok()?;
+            let device = match backend.allocate_u8(chunk_bytes) {
+                Ok(device) => device,
+                Err(_) => {
+                    state.cache_full = true;
+                    return Some(AbiFdArenaUpload::ArenaFallback);
+                }
+            };
             state.arenas.push(AbiModelArena {
                 device,
                 bytes: u64::try_from(chunk_bytes).ok()?,
@@ -974,6 +999,15 @@ fn try_upload_abi_direct_fd_range(
         AbiFdArenaUpload::BudgetFallback => Some(AbiFdRangeResolution::BudgetFallback {
             requested_device_ptr: abi_model_ptr(model_map, offset)?,
         }),
+        AbiFdArenaUpload::ArenaFallback => {
+            if strict_fd_weight_cache_selected() {
+                None
+            } else {
+                Some(AbiFdRangeResolution::BudgetFallback {
+                    requested_device_ptr: abi_model_ptr(model_map, offset)?,
+                })
+            }
+        }
     }
 }
 
@@ -1385,6 +1419,7 @@ pub extern "C" fn ds4_gpu_cleanup() {
             if let Ok(mut model_arenas) = ABI_MODEL_ARENAS.lock() {
                 model_arenas.arenas.clear();
                 model_arenas.range_bytes = 0;
+                model_arenas.cache_full = false;
                 model_arenas.progress.reset();
             }
             if let Ok(mut pageable_range) = ABI_PAGEABLE_MODEL_RANGE.lock() {
@@ -2031,6 +2066,7 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
                 let mut model_arenas = ABI_MODEL_ARENAS.lock().ok()?;
                 model_arenas.arenas.clear();
                 model_arenas.range_bytes = 0;
+                model_arenas.cache_full = false;
                 model_arenas.progress.reset();
             }
             *ABI_PAGEABLE_MODEL_RANGE.lock().ok()? = None;
