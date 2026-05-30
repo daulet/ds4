@@ -8164,15 +8164,45 @@ Stage split:
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; split before implementation beginning with M14.4a.
+- Status: active; done through M14.4a and split next into M14.4b.
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
 ##### M14.4a: Standalone RoPE Tail And FP8 KV Quantization Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port standalone `rope_tail_kernel` and `fp8_kv_quantize_kernel`
   behavior before claiming KV storage, compressor, or attention execution.
+- Oracle: current-C `rope_tail_kernel`, `fp8_kv_quantize_kernel`,
+  `ds4_gpu_rope_tail_tensor`, and `ds4_gpu_dsv4_fp8_kv_quantize_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4a/rope-kv-quantization-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_rope_kv_quantization_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in standalone RoPE tail and FP8 KV quantization;
+  KV storage, compressor, attention, runtime graph integration, default route
+  activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `rope_tail_kernel` with position stride,
+    YARN interpolation, attention scaling, and inverse tail rotation.
+  - Added executable-local Rust `fp8_kv_quantize_kernel` with E4M3FN
+    dequantized round trip for only the non-RoPE prefix, including a partial
+    trailing 64-wide chunk.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 51 tests and live cargo-oxide execution emitted portable `sm_80` PTX
+    with libdevice linkage. The smoke proved matching tail rotation and KV
+    prefix quantization while preserving the RoPE tail on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 66-check comparator, retained
+    M14 checks, and unified parity passed with 135 passed, 50 skipped, and
+    0 failed.
+
+##### M14.4b: Raw KV Storage And Indexer QAT Kernels
+
+- Status: active.
+- Goal: port `store_raw_kv_batch_kernel` and `indexer_hadamard_fp4_kernel`
+  behavior before claiming compressor or attention execution.
 
 ## Removal Criteria for C Host Code
 

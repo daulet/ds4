@@ -2524,6 +2524,19 @@ Q8 dispatch policy on B300. It proves emitted `dp4a.s32.s32` PTX plus the
 scalar partial-block fallback while leaving runtime route activation and C
 CUDA removal unclaimed.
 
+Validate the M14.4a Rust CUDA standalone RoPE and FP8 KV quantization smoke:
+
+```sh
+python3 ds4-parity/check_rope_kv_quantization_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `rope_tail_kernel` and
+`fp8_kv_quantize_kernel` execution on B300 through the libdevice-linked
+cuda-oxide path. It proves position-stride and YARN inverse tail rotation,
+E4M3FN round-trip quantization across a partial 64-wide prefix chunk, and
+unchanged RoPE-tail values while leaving KV storage, compressor, attention,
+runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

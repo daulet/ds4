@@ -202,3 +202,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-q8-dp4a-dispatch-smoke"
 path = "src/bin/q8_dp4a_dispatch_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-rope-kv-quantization-smoke"
+path = "src/bin/rope_kv_quantization_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

@@ -990,6 +990,29 @@ pub const M14_3D4_SCOPE: Q8Dp4aDispatchScope = Q8Dp4aDispatchScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RopeKvQuantizationKernelScope {
+    pub opt_in_only: bool,
+    pub owns_standalone_rope_tail_kernel: bool,
+    pub owns_fp8_kv_quantize_kernel: bool,
+    pub owns_yarn_rotary_math_path: bool,
+    pub owns_kv_storage_or_compressor_kernels: bool,
+    pub owns_attention_kernels: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4A_SCOPE: RopeKvQuantizationKernelScope = RopeKvQuantizationKernelScope {
+    opt_in_only: true,
+    owns_standalone_rope_tail_kernel: true,
+    owns_fp8_kv_quantize_kernel: true,
+    owns_yarn_rotary_math_path: true,
+    owns_kv_storage_or_compressor_kernels: false,
+    owns_attention_kernels: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1015,7 +1038,7 @@ mod tests {
         M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
         M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
-        M14_3D4_SCOPE,
+        M14_3D4_SCOPE, M14_4A_SCOPE,
     };
 
     #[test]
@@ -1419,6 +1442,18 @@ mod tests {
         assert!(M14_3D4_SCOPE.owns_q8_matmul_dispatch_policy);
         assert!(!M14_3D4_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_3D4_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn rope_kv_quantization_scope_leaves_storage_attention_and_route_pending() {
+        assert!(M14_4A_SCOPE.opt_in_only);
+        assert!(M14_4A_SCOPE.owns_standalone_rope_tail_kernel);
+        assert!(M14_4A_SCOPE.owns_fp8_kv_quantize_kernel);
+        assert!(M14_4A_SCOPE.owns_yarn_rotary_math_path);
+        assert!(!M14_4A_SCOPE.owns_kv_storage_or_compressor_kernels);
+        assert!(!M14_4A_SCOPE.owns_attention_kernels);
+        assert!(!M14_4A_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4A_SCOPE.changes_default_route);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.3d4 Rust CUDA Q8 DP4A and dispatch-policy smoke."""
+"""Validate the M14.4a Rust CUDA standalone RoPE and FP8 KV quantization smoke."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.3d4/q8-dp4a-dispatch-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.4a/rope-kv-quantization-kernel-smoke.json"
 CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/q8_dp4a_dispatch_smoke.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/rope_kv_quantization_smoke.rs"
 CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -27,13 +27,14 @@ REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
 EXPECTED_OWNED = [
-    "cuda-oxide signed DP4A device/lowering support",
-    "executable-local accelerated packed-Q8 matmul launch proof",
-    "current-C-compatible Q8 matmul dispatch and DP4A enable policy",
+    "executable-local cuda-oxide standalone rope_tail_kernel launch proof",
+    "executable-local cuda-oxide fp8_kv_quantize_kernel launch proof",
+    "position-stride YARN inverse and partial-prefix E4M3FN numeric validation",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "runtime graph integration or default CUDA route",
-    "C CUDA removal",
+    "raw KV storage or compressor kernels",
+    "attention kernels",
+    "runtime graph integration, default CUDA route, or C CUDA removal",
 ]
 
 
@@ -72,7 +73,7 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.3d4 Q8 DP4A dispatch smoke: {status} ({report.checks} checks)")
+    print(f"M14.4a RoPE/KV quantization kernel smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
@@ -85,14 +86,17 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.q8_dp4a_dispatch_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.3d4", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.rope_kv_quantization_kernel_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.4a", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "revision drift")
     report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "dependency pin missing")
     report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lock pin missing")
-    report.check('name = "ds4-cuda-q8-dp4a-dispatch-smoke"' in texts["cargo"], "binary missing")
+    report.check(
+        'name = "ds4-cuda-rope-kv-quantization-smoke"' in texts["cargo"],
+        "binary missing",
+    )
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
@@ -103,12 +107,13 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
     for marker in [
-        "dot_i8x32_dp4a",
-        "__dp4a",
-        "dot_i8_block",
-        "cuda_q8_use_dp4a",
-        "DS4_CUDA_NO_Q8_BATCH_WARP",
-        "matmul_q8_0_preq_batch_warp8_kernel",
+        "__global__ static void rope_tail_kernel",
+        "uint32_t pos_stride",
+        "rope_yarn_ramp_dev(corr0, corr1, (int)i)",
+        "__global__ static void fp8_kv_quantize_kernel",
+        "dsv4_e4m3fn_dequant_dev",
+        "fp8_kv_quantize_kernel<<<n_tok, 64>>>",
+        "rope_tail_kernel<<<(pairs + 255) / 256, 256>>>",
     ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
 
@@ -122,21 +127,23 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     )
     for key, expected in [
         ("opt_in_only", True),
-        ("owns_cuda_oxide_dp4a_i8_intrinsic", True),
-        ("owns_dp4a_acceleration", True),
-        ("owns_q8_matmul_dispatch_policy", True),
+        ("owns_standalone_rope_tail_kernel", True),
+        ("owns_fp8_kv_quantize_kernel", True),
+        ("owns_yarn_rotary_math_path", True),
+        ("owns_kv_storage_or_compressor_kernels", False),
+        ("owns_attention_kernels", False),
         ("owns_runtime_graph_integration", False),
         ("changes_default_route", False),
         ("retains_current_c_cuda_oracle", True),
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_3D4_SCOPE",
-        "pub const fn select_q8_matmul_path",
-        "pub const fn q8_dp4a_enabled",
-        "owns_cuda_oxide_dp4a_i8_intrinsic: true",
-        "owns_dp4a_acceleration: true",
-        "owns_q8_matmul_dispatch_policy: true",
+        "pub const M14_4A_SCOPE",
+        "owns_standalone_rope_tail_kernel: true",
+        "owns_fp8_kv_quantize_kernel: true",
+        "owns_yarn_rotary_math_path: true",
+        "owns_kv_storage_or_compressor_kernels: false",
+        "owns_attention_kernels: false",
         "owns_runtime_graph_integration: false",
         "changes_default_route: false",
     ]:
@@ -148,64 +155,77 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("kube_context") == "hou2-prod1", "B300 context drift")
     report.check(execution.get("pod") == "ds4-rust-port-b300", "B300 pod drift")
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
-    report.check(execution.get("llvm_llc_version") == "18.1.3", "LLVM version drift")
-    report.check(execution.get("test_count") == 50, "feature test count drift")
+    report.check(execution.get("test_count") == 51, "feature test count drift")
     report.check(execution.get("backend_selected_target") == "sm_80", "target drift")
-    report.check(execution.get("ptx_instruction") == "dp4a.s32.s32", "PTX instruction drift")
-    report.check(execution.get("ptxas_validation") is True, "PTX assembler proof missing")
+    report.check(execution.get("uses_libdevice_link_path") is True, "libdevice proof missing")
     command = execution.get("command", "")
     report.check("--features cuda-oxide-kernels" in command, "kernel command missing")
-    report.check("--bin ds4-cuda-q8-dp4a-dispatch-smoke" in command, "smoke command missing")
+    report.check("--bin ds4-cuda-rope-kv-quantization-smoke" in command, "smoke command missing")
     expected = {
-        "milestone": "M14.3d4",
+        "milestone": "M14.4a",
         "device_name": "NVIDIA B300 SXM6 AC",
         "rust_kernel_toolchain": True,
-        "dp4a_full_block_output_matches": True,
-        "scalar_tail_fallback_output_matches": True,
-        "single_token_warp8_dispatch_matches": True,
-        "batched_warp8_dispatch_matches": True,
-        "generic_dispatch_matches": True,
-        "dp4a_disable_policy_matches": True,
-        "uses_cuda_oxide_dp4a_i8": True,
-        "owns_dp4a_acceleration": True,
-        "owns_q8_matmul_dispatch_policy": True,
+        "pos_stride_rope_output_matches": True,
+        "yarn_inverse_output_matches": True,
+        "fp8_prefix_output_matches": True,
+        "fp8_partial_chunk_matches": True,
+        "fp8_rope_tail_preserved": True,
+        "invalid_shape_rejected": True,
+        "uses_libdevice_link_path": True,
+        "owns_standalone_rope_tail_kernel": True,
+        "owns_fp8_kv_quantize_kernel": True,
+        "owns_kv_storage_or_compressor_kernels": False,
+        "owns_attention_kernels": False,
         "owns_runtime_graph_integration": False,
         "changes_default_route": False,
     }
     report.check(require_dict(report, execution.get("stdout"), "stdout") == expected, "stdout drift")
     for marker in [
-        "integer::dp4a_i8",
-        "pub fn matmul_q8_0_preq_dp4a_kernel",
-        "select_q8_matmul_path",
-        "q8_dp4a_enabled",
-        "scalar_tail_fallback_output_matches",
+        "pub fn rope_tail_kernel",
+        "pub fn fp8_kv_quantize_kernel",
+        "POS_STRIDE",
+        "e4m3fn_dequant",
+        "chunks_mut(64)",
+        "fp8_rope_tail_preserved",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture = "ds4-parity/baselines/backend/m14.3d4/q8-dp4a-dispatch-smoke.json"
-    checker = "check_q8_dp4a_dispatch_smoke.py"
-    item = "M14.3d4: Q8 DP4A Acceleration And Dispatch Policy"
+    fixture = "ds4-parity/baselines/backend/m14.4a/rope-kv-quantization-kernel-smoke.json"
+    checker = "check_rope_kv_quantization_kernel_smoke.py"
+    item = "M14.4a: Standalone RoPE Tail And FP8 KV Quantization Kernels"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
+    report.check("Active item: M14.4b" in texts["status"], "next active stage missing")
     report.check(
         "M14.4a Standalone RoPE Tail And FP8 KV Quantization Kernels" in texts["status"],
-        "successor M14.4 stage evidence missing",
+        "status evidence missing",
     )
-    report.check("M14.3d4 Q8 DP4A Acceleration And Dispatch Policy" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report wiring missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("DP4A output absent", lambda value: value["b300_execution"]["stdout"].update({"dp4a_full_block_output_matches": False})),
-        ("PTX instruction absent", lambda value: value["b300_execution"].update({"ptx_instruction": ""})),
-        ("dispatch absent", lambda value: value["ownership"].update({"owns_q8_matmul_dispatch_policy": False})),
-        ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
+        (
+            "strided RoPE output absent",
+            lambda value: value["b300_execution"]["stdout"].update({"pos_stride_rope_output_matches": False}),
+        ),
+        (
+            "FP8 output absent",
+            lambda value: value["b300_execution"]["stdout"].update({"fp8_prefix_output_matches": False}),
+        ),
+        (
+            "attention overclaim",
+            lambda value: value["ownership"].update({"owns_attention_kernels": True}),
+        ),
+        (
+            "route overclaim",
+            lambda value: value["ownership"].update({"changes_default_route": True}),
+        ),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)

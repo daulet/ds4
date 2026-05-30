@@ -1128,6 +1128,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.4a cuda-oxide RoPE tail and FP8 KV quantization smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_rope_kv_quantization_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
