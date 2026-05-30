@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a and M14.5b.
+- Status: active; split beginning with M14.5a through M14.5c.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8686,9 +8686,38 @@ Stage split:
 
 ##### M14.5b: Parallel And Warp Router Dispatch
 
-- Status: active.
+- Status: done.
 - Goal: port optimized parallel/warp router-selection kernels and current-C
   dispatch priority before routed MoE execution.
+- Oracle: current-C `router_select_parallel_kernel`,
+  `router_select_warp_topk_kernel`, and the optimized launch selection in
+  `ds4_gpu_router_select_tensor` and `ds4_gpu_router_select_batch_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5b/router-optimized-smoke.json`.
+- Comparator: `ds4-parity/check_router_optimized_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in optimized router probability storage,
+  parallel shared-memory selection, warp-shuffle top-k ordering including
+  equal-score index ordering, partial four-row warp blocks, hash fallback,
+  and current-C warp/parallel/scalar dispatch priority. Routed MoE,
+  hyperconnection, runtime graph integration, default route activation, and C
+  CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust parallel and warp router kernels and public
+    optimized path selection matching the current-C disable-flag ordering.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 72 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and matched shared-memory and warp-shuffle router
+    outputs on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 70-check M14.5b comparator,
+    retained M14 checks, and unified parity passed with 151 passed, 50
+    skipped, and 0 failed.
+
+##### M14.5c: Routed MoE Base Surfaces
+
+- Status: active.
+- Goal: port routed expert projection and activation surfaces after router
+  selection closure, before hyperconnection and route integration work.
 
 ## Removal Criteria for C Host Code
 

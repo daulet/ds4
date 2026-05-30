@@ -2725,6 +2725,18 @@ fallback, normalized selected weights, and both single-token and batched
 layouts. It leaves parallel/warp routing, routed MoE, hyperconnection,
 runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5b Rust CUDA optimized router smoke:
+
+```sh
+python3 ds4-parity/check_router_optimized_smoke.py --negative-test
+```
+
+The fixture records current-C optimized router behavior on B300: parallel
+shared-memory probability storage, default warp-shuffle top-k selection,
+equal-score index ordering, partial four-row blocks, hash fallback, and the
+warp/parallel/scalar disable-flag priority. It leaves routed MoE,
+hyperconnection, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

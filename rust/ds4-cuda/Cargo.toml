@@ -282,3 +282,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-router-scalar-smoke"
 path = "src/bin/router_scalar_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-router-optimized-smoke"
+path = "src/bin/router_optimized_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

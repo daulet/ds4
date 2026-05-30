@@ -1511,6 +1511,54 @@ pub const M14_5A_SCOPE: RouterScalarScope = RouterScalarScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RouterSelectPath {
+    WarpTopK,
+    Parallel,
+    Scalar,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RouterSelectDispatchOptions {
+    pub no_warp_router_select: bool,
+    pub no_parallel_router_select: bool,
+}
+
+pub const fn select_router_select_path(options: RouterSelectDispatchOptions) -> RouterSelectPath {
+    if !options.no_warp_router_select && !options.no_parallel_router_select {
+        RouterSelectPath::WarpTopK
+    } else if !options.no_parallel_router_select {
+        RouterSelectPath::Parallel
+    } else {
+        RouterSelectPath::Scalar
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RouterOptimizedScope {
+    pub opt_in_only: bool,
+    pub consumes_scalar_router_surface: bool,
+    pub owns_router_select_parallel_kernel: bool,
+    pub owns_router_select_warp_topk_kernel: bool,
+    pub owns_parallel_and_warp_router_dispatch: bool,
+    pub owns_current_c_dispatch_priority: bool,
+    pub owns_routed_moe_or_hyperconnection: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5B_SCOPE: RouterOptimizedScope = RouterOptimizedScope {
+    opt_in_only: true,
+    consumes_scalar_router_surface: true,
+    owns_router_select_parallel_kernel: true,
+    owns_router_select_warp_topk_kernel: true,
+    owns_parallel_and_warp_router_dispatch: true,
+    owns_current_c_dispatch_priority: true,
+    owns_routed_moe_or_hyperconnection: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1527,22 +1575,24 @@ mod tests {
         select_attention_output_a_path, select_attention_prefill_path,
         select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
         select_indexer_score_kernel, select_indexer_topk_kernel, select_q8_matmul_path,
-        should_sort_indexed_topk, AttentionDecodeDispatchOptions, AttentionDecodePath,
-        AttentionIndexedDispatchOptions, AttentionIndexedPath, AttentionOutputADispatchOptions,
-        AttentionOutputAPath, AttentionPrefillDispatchOptions, AttentionPrefillPath,
-        F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath,
-        F32ProjectionPath, IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
-        IndexerTopkDispatchOptions, IndexerTopkKernel, Q8MatmulDispatchOptions, Q8MatmulPath,
-        CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
-        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
-        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
-        M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
-        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
-        M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
-        M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
-        M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
-        M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE, M14_4D5_SCOPE,
-        M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
+        select_router_select_path, should_sort_indexed_topk, AttentionDecodeDispatchOptions,
+        AttentionDecodePath, AttentionIndexedDispatchOptions, AttentionIndexedPath,
+        AttentionOutputADispatchOptions, AttentionOutputAPath, AttentionPrefillDispatchOptions,
+        AttentionPrefillPath, F16PairProjectionDispatch, F16PairProjectionPath,
+        F16ProjectionDispatch, F16ProjectionPath, F32ProjectionPath, IndexedTopkSortOptions,
+        IndexerScoreDispatchOptions, IndexerScoreKernel, IndexerTopkDispatchOptions,
+        IndexerTopkKernel, Q8MatmulDispatchOptions, Q8MatmulPath, RouterSelectDispatchOptions,
+        RouterSelectPath, CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE,
+        M14_1B2B1_SCOPE, M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE,
+        M14_1B2C_SCOPE, M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE,
+        M14_2B2_SCOPE, M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE,
+        M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE,
+        M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE,
+        M14_3B2_SCOPE, M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE,
+        M14_3D3_SCOPE, M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE,
+        M14_4C3A_SCOPE, M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
+        M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
+        M14_5B_SCOPE,
     };
 
     #[test]
@@ -2295,6 +2345,52 @@ mod tests {
         assert!(!M14_5A_SCOPE.owns_routed_moe_or_hyperconnection);
         assert!(!M14_5A_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_5A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn router_optimized_scope_leaves_moe_and_route_pending() {
+        assert!(M14_5B_SCOPE.opt_in_only);
+        assert!(M14_5B_SCOPE.consumes_scalar_router_surface);
+        assert!(M14_5B_SCOPE.owns_router_select_parallel_kernel);
+        assert!(M14_5B_SCOPE.owns_router_select_warp_topk_kernel);
+        assert!(M14_5B_SCOPE.owns_parallel_and_warp_router_dispatch);
+        assert!(M14_5B_SCOPE.owns_current_c_dispatch_priority);
+        assert!(!M14_5B_SCOPE.owns_routed_moe_or_hyperconnection);
+        assert!(!M14_5B_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_5B_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn router_optimized_dispatch_paths_match_current_c_priority() {
+        let default = RouterSelectDispatchOptions {
+            no_warp_router_select: false,
+            no_parallel_router_select: false,
+        };
+        assert_eq!(
+            select_router_select_path(default),
+            RouterSelectPath::WarpTopK
+        );
+        assert_eq!(
+            select_router_select_path(RouterSelectDispatchOptions {
+                no_warp_router_select: true,
+                ..default
+            }),
+            RouterSelectPath::Parallel
+        );
+        assert_eq!(
+            select_router_select_path(RouterSelectDispatchOptions {
+                no_parallel_router_select: true,
+                ..default
+            }),
+            RouterSelectPath::Scalar
+        );
+        assert_eq!(
+            select_router_select_path(RouterSelectDispatchOptions {
+                no_warp_router_select: true,
+                no_parallel_router_select: true,
+            }),
+            RouterSelectPath::Scalar
+        );
     }
 
     #[test]
