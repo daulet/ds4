@@ -3,7 +3,24 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbba: Public Fused Q8 Hyperconnection Consumers ABI
+  is validated. Rust exports `ds4_gpu_matmul_q8_0_hc_expand_tensor` and
+  `ds4_gpu_shared_down_hc_expand_q8_0_tensor` through an embedded fused Q8
+  HC kernel with retained DP4A/scalar selection and explicit aliased-add
+  semantics, while retaining current-C disabled-fusion delegation through
+  the prior Q8 and HC exports. A C-linked B300 witness proves fused
+  DP4A/scalar output, both fallback routes, shared-down add including alias
+  behavior, and invalid-shape rejection. Local tests pass with 128 tests;
+  B300 feature tests pass with 135 tests; the static library exposes 41
+  symbols; all 38 preceding linked ABI consumers pass against the rebuilt
+  archive with the known executable-stack warning. All 42 CUDA ABI
+  comparators pass, and the unified report passes with 214 passed, 45
+  skipped, and 0 failed. The pre-implementation non-interactive Claude
+  review attempt returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`; final pass-end
+  Claude review returned `NO BLOCKERS`. The internal Q8 pair consumer,
+  remaining graph compute, whole-archive/route promotion, C CUDA removal,
+  and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba: Public Hyperconnection Expansion ABI
   is validated. Rust exports `ds4_gpu_hc_expand_tensor`,
   `ds4_gpu_hc_expand_split_tensor`, and

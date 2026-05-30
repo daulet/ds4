@@ -10543,7 +10543,44 @@
 
 ################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbb because the public
+  fused Q8 HC consumers share a bounded kernel and fallback contract
+  independently from internal pair consumers and route work.
 - Goal: connect fused public Q8 HC consumers, remaining graph compute,
+  whole-archive retention policy, and production route-promotion work
+  without claiming C CUDA removal before those gates pass.
+
+#################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbba: Public Fused Q8 Hyperconnection Consumers ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_matmul_q8_0_hc_expand_tensor` and
+  `ds4_gpu_shared_down_hc_expand_q8_0_tensor` through the fused Q8 HC
+  expansion kernel and existing disabled-fusion fallback without claiming
+  internal pair consumers or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbba/abi-fused-q8-hc-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_fused_q8_hc_smoke.py --negative-test`.
+- Evidence: Rust exports both public fused consumers, embeds a fused
+  prequantized Q8 HC kernel with DP4A/scalar selection and explicit aliased
+  add handling, and retains current-C disabled-fusion delegation through the
+  existing public Q8 and HC exports. A C-linked B300 witness proves fused
+  DP4A/scalar output, both fallback routes, aliased shared-down add, and
+  invalid-shape rejection. Local tests pass with 128 tests; B300 feature
+  tests pass with 135 tests; the static library exposes 41 symbols; all 38
+  preceding linked ABI consumers pass against the rebuilt archive with the
+  known embedded-object executable-stack warning. All 42 CUDA ABI
+  comparators pass, and the unified parity report passes with 214 passed, 45
+  skipped, and 0 failed. The pre-implementation non-interactive Claude
+  review attempt returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`; final pass-end
+  Claude review returned `NO BLOCKERS`. The internal Q8 pair consumer,
+  remaining graph compute, whole-archive/route promotion, C CUDA removal,
+  and the warning remain pending.
+
+#################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active
+- Goal: connect internal pair and remaining graph compute,
   whole-archive retention policy, and production route-promotion work
   without claiming C CUDA removal before those gates pass.

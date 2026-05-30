@@ -3247,6 +3247,290 @@ pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn matmul_q8_hc_expand_fused_impl(
+    out_hc: &Ds4GpuTensor,
+    block_out: &Ds4GpuTensor,
+    block_add: Option<&Ds4GpuTensor>,
+    has_add: bool,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: &Ds4GpuTensor,
+    residual_hc: &Ds4GpuTensor,
+    split: &Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> bool {
+    let Some((_weight_elements, _weight_elements_usize, weight_bytes)) =
+        abi_q8_shape(in_dim, out_dim)
+    else {
+        return false;
+    };
+    let Some(hc_elements) = u64::from(n_embd).checked_mul(u64::from(n_hc)) else {
+        return false;
+    };
+    let Some(hc_bytes) = hc_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(mix_hc) = n_hc.checked_mul(n_hc).and_then(|comb| {
+        n_hc.checked_mul(2)
+            .and_then(|prefix| prefix.checked_add(comb))
+    }) else {
+        return false;
+    };
+    let Some(split_bytes) = u64::from(mix_hc).checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(x_bytes) = in_dim.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(block_bytes) = out_dim.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let block_add = block_add.unwrap_or(block_out);
+    if model_map.is_null()
+        || in_dim == 0
+        || out_dim == 0
+        || n_embd == 0
+        || n_hc == 0
+        || out_dim != u64::from(n_embd)
+        || weight_offset > model_size
+        || weight_bytes > model_size - weight_offset
+        || x.bytes < x_bytes
+        || block_out.bytes < block_bytes
+        || block_add.bytes < block_bytes
+        || residual_hc.bytes < hc_bytes
+        || split.bytes < split_bytes
+        || out_hc.bytes < hc_bytes
+    {
+        return false;
+    }
+    with_backend(|backend| {
+        with_cached_abi_model_range(
+            backend,
+            model_map,
+            model_size,
+            weight_offset,
+            weight_bytes,
+            |packed_weight_ptr| {
+                let blocks = in_dim.div_ceil(32);
+                let Some(quantized_elements) = blocks.checked_mul(32) else {
+                    return Some(false);
+                };
+                let Some(quantized_elements) = usize::try_from(quantized_elements).ok() else {
+                    return Some(false);
+                };
+                let Some(scale_elements) = usize::try_from(blocks).ok() else {
+                    return Some(false);
+                };
+                with_abi_q8_activations(
+                    backend,
+                    quantized_elements,
+                    scale_elements,
+                    |activations| {
+                        with_abi_kernels(backend, |kernels| {
+                            if !unsafe {
+                                kernels.quantize_q8_f32_tensor(
+                                    backend.stream(),
+                                    x.device_ptr(),
+                                    activations.quantized.cu_deviceptr(),
+                                    activations.scales.cu_deviceptr(),
+                                    in_dim,
+                                    blocks,
+                                    1,
+                                )
+                            } {
+                                return Some(false);
+                            }
+                            Some(unsafe {
+                                kernels.matmul_q8_hc_expand_tensor(
+                                    backend.stream(),
+                                    out_hc.device_ptr(),
+                                    block_out.device_ptr(),
+                                    block_add.device_ptr(),
+                                    residual_hc.device_ptr(),
+                                    split.device_ptr(),
+                                    packed_weight_ptr,
+                                    activations.quantized.cu_deviceptr(),
+                                    activations.scales.cu_deviceptr(),
+                                    in_dim,
+                                    out_dim,
+                                    n_embd,
+                                    n_hc,
+                                    has_add,
+                                    q8_dp4a_enabled(
+                                        std::env::var_os("DS4_CUDA_NO_Q8_DP4A").is_some(),
+                                    ),
+                                )
+                            })
+                        })
+                    },
+                )
+            },
+        )
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_hc_expand_tensor(
+    out_hc: *mut Ds4GpuTensor,
+    block_out: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: *const Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    split: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    if std::env::var_os("DS4_CUDA_DISABLE_Q8_HC_EXPAND_FUSED").is_some() {
+        return status(|| unsafe {
+            ds4_gpu_matmul_q8_0_tensor(
+                block_out,
+                model_map,
+                model_size,
+                weight_offset,
+                in_dim,
+                out_dim,
+                x,
+                1,
+            ) != 0
+                && ds4_gpu_hc_expand_split_tensor(
+                    out_hc,
+                    block_out,
+                    residual_hc,
+                    split,
+                    n_embd,
+                    n_hc,
+                ) != 0
+        });
+    }
+    status(|| {
+        let Some(out_hc) = (unsafe { tensor_ref(out_hc.cast_const()) }) else {
+            return false;
+        };
+        let Some(block_out) = (unsafe { tensor_ref(block_out.cast_const()) }) else {
+            return false;
+        };
+        let Some(x) = (unsafe { tensor_ref(x) }) else {
+            return false;
+        };
+        let Some(residual_hc) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(split) = (unsafe { tensor_ref(split) }) else {
+            return false;
+        };
+        unsafe {
+            matmul_q8_hc_expand_fused_impl(
+                out_hc,
+                block_out,
+                None,
+                false,
+                model_map,
+                model_size,
+                weight_offset,
+                in_dim,
+                out_dim,
+                x,
+                residual_hc,
+                split,
+                n_embd,
+                n_hc,
+            )
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_shared_down_hc_expand_q8_0_tensor(
+    out_hc: *mut Ds4GpuTensor,
+    shared_out: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    shared_mid: *const Ds4GpuTensor,
+    routed_out: *const Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    split: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    if std::env::var_os("DS4_CUDA_DISABLE_Q8_HC_EXPAND_FUSED").is_some() {
+        return status(|| unsafe {
+            ds4_gpu_matmul_q8_0_tensor(
+                shared_out,
+                model_map,
+                model_size,
+                weight_offset,
+                in_dim,
+                out_dim,
+                shared_mid,
+                1,
+            ) != 0
+                && ds4_gpu_hc_expand_add_split_tensor(
+                    out_hc,
+                    shared_out,
+                    routed_out,
+                    residual_hc,
+                    split,
+                    n_embd,
+                    n_hc,
+                ) != 0
+        });
+    }
+    status(|| {
+        let Some(out_hc) = (unsafe { tensor_ref(out_hc.cast_const()) }) else {
+            return false;
+        };
+        let Some(shared_out) = (unsafe { tensor_ref(shared_out.cast_const()) }) else {
+            return false;
+        };
+        let Some(shared_mid) = (unsafe { tensor_ref(shared_mid) }) else {
+            return false;
+        };
+        let Some(routed_out) = (unsafe { tensor_ref(routed_out) }) else {
+            return false;
+        };
+        let Some(residual_hc) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(split) = (unsafe { tensor_ref(split) }) else {
+            return false;
+        };
+        unsafe {
+            matmul_q8_hc_expand_fused_impl(
+                out_hc,
+                shared_out,
+                Some(routed_out),
+                true,
+                model_map,
+                model_size,
+                weight_offset,
+                in_dim,
+                out_dim,
+                shared_mid,
+                residual_hc,
+                split,
+                n_embd,
+                n_hc,
+            )
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn rms_norm_plain_rows_impl(
     out: *mut Ds4GpuTensor,
     x: *const Ds4GpuTensor,

@@ -3536,6 +3536,19 @@ behavior through the embedded Rust kernel. Fused public Q8 HC consumers,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbba Rust CUDA
+public fused Q8 hyperconnection consumers ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_fused_q8_hc_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public fused matmul and shared-down
+consumers through DP4A and scalar Q8 paths, the disabled-fusion delegation
+path, and aliased routed-output addition. The internal Q8 pair consumer,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

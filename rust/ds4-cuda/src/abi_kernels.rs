@@ -536,6 +536,80 @@ mod kernels {
         }
     }
 
+    #[kernel]
+    pub fn abi_matmul_q8_0_hc_expand_preq_warp8_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        n_embd: u32,
+        n_hc: u32,
+        blocks: u64,
+        has_add: u32,
+        use_dp4a: u32,
+        weights: &[u8],
+        xq: &[i8],
+        xscale: &[f32],
+        block_add: &[f32],
+        residual_hc: &[f32],
+        split: &[f32],
+        mut block_out: DisjointSlice<f32>,
+        mut out_hc: DisjointSlice<f32>,
+    ) {
+        let row = thread::blockIdx_x() as u64 * 8 + (thread::threadIdx_x() >> 5) as u64;
+        let lane = (thread::threadIdx_x() & 31) as u64;
+        if row >= out_dim {
+            return;
+        }
+        let mut acc = 0.0_f32;
+        let mut block = lane;
+        while block < blocks {
+            let remaining = in_dim - block * 32;
+            let count = if remaining < 32 { remaining } else { 32 };
+            let weight_base = ((row * blocks + block) * 34) as usize;
+            let scale_bits = weights[weight_base] as u16 | ((weights[weight_base + 1] as u16) << 8);
+            let weight_scale = f16::from_bits(scale_bits) as f32;
+            let xq_base = (block * 32) as usize;
+            let dot = q8_dot(weights, weight_base, xq, xq_base, count, use_dp4a != 0);
+            acc += weight_scale * xscale[block as usize] * dot as f32;
+            block += 32;
+        }
+        let mut offset = 16_u32;
+        while offset > 0 {
+            acc += warp::shuffle_down_f32(acc, offset);
+            offset >>= 1;
+        }
+        if lane == 0 {
+            let row = row as usize;
+            unsafe {
+                *block_out.get_unchecked_mut(row) = acc;
+            }
+            let block_value = if has_add != 0 {
+                acc + block_add[row]
+            } else {
+                acc
+            };
+            let post_base = n_hc as usize;
+            let combination_base = (2 * n_hc) as usize;
+            let mut destination_hc = 0_u32;
+            while destination_hc < n_hc {
+                let mut hc_acc = block_value * split[post_base + destination_hc as usize];
+                let mut source_hc = 0_u32;
+                while source_hc < n_hc {
+                    let combination_index = combination_base
+                        + destination_hc as usize
+                        + source_hc as usize * n_hc as usize;
+                    let residual_index = source_hc as usize * n_embd as usize + row;
+                    hc_acc += split[combination_index] * residual_hc[residual_index];
+                    source_hc += 1;
+                }
+                unsafe {
+                    *out_hc.get_unchecked_mut(destination_hc as usize * n_embd as usize + row) =
+                        hc_acc;
+                }
+                destination_hc += 1;
+            }
+        }
+    }
+
     fn q8_dot(
         weights: &[u8],
         weight_base: usize,
@@ -849,6 +923,7 @@ pub(crate) struct AbiKernelModule {
     matmul_q8_0_preq_kernel: CudaFunction,
     matmul_q8_0_preq_warp8_kernel: CudaFunction,
     matmul_q8_0_preq_batch_warp8_kernel: CudaFunction,
+    matmul_q8_0_hc_expand_preq_warp8_kernel: CudaFunction,
     f32_to_f16_kernel: CudaFunction,
     matmul_f16_kernel: CudaFunction,
     matmul_f16_serial_kernel: CudaFunction,
@@ -899,6 +974,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             matmul_q8_0_preq_batch_warp8_kernel: module
                 .load_function("abi_matmul_q8_0_preq_batch_warp8_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_q8_0_hc_expand_preq_warp8_kernel: module
+                .load_function("abi_matmul_q8_0_hc_expand_preq_warp8_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             f32_to_f16_kernel: module
                 .load_function("abi_f32_to_f16_kernel")
@@ -1539,6 +1617,97 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 function,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn matmul_q8_hc_expand_tensor(
+        &self,
+        stream: &CudaStream,
+        out_hc_ptr: u64,
+        block_out_ptr: u64,
+        block_add_ptr: u64,
+        residual_hc_ptr: u64,
+        split_ptr: u64,
+        weight_ptr: u64,
+        xq_ptr: u64,
+        xscale_ptr: u64,
+        in_dim: u64,
+        out_dim: u64,
+        n_embd: u32,
+        n_hc: u32,
+        has_add: bool,
+        use_dp4a: bool,
+    ) -> bool {
+        let blocks = in_dim.div_ceil(32);
+        let Ok(grid_x) = u32::try_from(out_dim.div_ceil(8)) else {
+            return false;
+        };
+        let config = LaunchConfig {
+            grid_dim: (grid_x, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut in_dim = in_dim;
+        let mut out_dim = out_dim;
+        let mut n_embd = n_embd;
+        let mut n_hc = n_hc;
+        let mut blocks = blocks;
+        let mut has_add = u32::from(has_add);
+        let mut use_dp4a = u32::from(use_dp4a);
+        let mut weight_ptr = weight_ptr;
+        let mut weight_len = out_dim * blocks * 34;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = blocks * 32;
+        let mut xscale_ptr = xscale_ptr;
+        let mut xscale_len = blocks;
+        let mut block_add_ptr = block_add_ptr;
+        let mut block_add_len = out_dim;
+        let mut residual_hc_ptr = residual_hc_ptr;
+        let mut residual_hc_len = u64::from(n_hc) * u64::from(n_embd);
+        let mut split_ptr = split_ptr;
+        let mut split_len = u64::from(2 * n_hc + n_hc * n_hc);
+        let mut block_out_ptr = block_out_ptr;
+        let mut block_out_len = out_dim;
+        let mut out_hc_ptr = out_hc_ptr;
+        let mut out_hc_len = u64::from(n_hc) * u64::from(n_embd);
+        let mut params = [
+            (&mut in_dim as *mut u64).cast::<c_void>(),
+            (&mut out_dim as *mut u64).cast::<c_void>(),
+            (&mut n_embd as *mut u32).cast::<c_void>(),
+            (&mut n_hc as *mut u32).cast::<c_void>(),
+            (&mut blocks as *mut u64).cast::<c_void>(),
+            (&mut has_add as *mut u32).cast::<c_void>(),
+            (&mut use_dp4a as *mut u32).cast::<c_void>(),
+            (&mut weight_ptr as *mut u64).cast::<c_void>(),
+            (&mut weight_len as *mut u64).cast::<c_void>(),
+            (&mut xq_ptr as *mut u64).cast::<c_void>(),
+            (&mut xq_len as *mut u64).cast::<c_void>(),
+            (&mut xscale_ptr as *mut u64).cast::<c_void>(),
+            (&mut xscale_len as *mut u64).cast::<c_void>(),
+            (&mut block_add_ptr as *mut u64).cast::<c_void>(),
+            (&mut block_add_len as *mut u64).cast::<c_void>(),
+            (&mut residual_hc_ptr as *mut u64).cast::<c_void>(),
+            (&mut residual_hc_len as *mut u64).cast::<c_void>(),
+            (&mut split_ptr as *mut u64).cast::<c_void>(),
+            (&mut split_len as *mut u64).cast::<c_void>(),
+            (&mut block_out_ptr as *mut u64).cast::<c_void>(),
+            (&mut block_out_len as *mut u64).cast::<c_void>(),
+            (&mut out_hc_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_hc_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates the single-token packed-Q8 and HC spans
+        // and retains prequantized scratch through this fused consumer.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.matmul_q8_0_hc_expand_preq_warp8_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,
