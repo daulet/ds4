@@ -321,6 +321,67 @@ pub unsafe extern "C" fn ds4_gpu_repeat_hc_tensor(
     })
 }
 
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_directional_steering_project_tensor(
+    x: *mut Ds4GpuTensor,
+    directions: *const Ds4GpuTensor,
+    layer: u32,
+    width: u32,
+    rows: u32,
+    scale: f32,
+) -> c_int {
+    status(|| {
+        let Some(x) = (unsafe { tensor_ref(x.cast_const()) }) else {
+            return false;
+        };
+        let Some(directions) = (unsafe { tensor_ref(directions) }) else {
+            return false;
+        };
+        let Some(x_elements) = u64::from(width).checked_mul(u64::from(rows)) else {
+            return false;
+        };
+        let Some(direction_elements) = u64::from(layer)
+            .checked_add(1)
+            .and_then(|layers| layers.checked_mul(u64::from(width)))
+        else {
+            return false;
+        };
+        let Some(x_bytes) = x_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(direction_bytes) = direction_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if width == 0
+            || rows == 0
+            || scale == 0.0
+            || x.bytes < x_bytes
+            || directions.bytes < direction_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: bounds above cover each device pointer; raw launch
+                // preserves the current-C in-place tensor boundary.
+                Some(unsafe {
+                    kernels.directional_steering_project_tensor(
+                        backend.stream(),
+                        x.device_ptr(),
+                        directions.device_ptr(),
+                        layer,
+                        width,
+                        rows,
+                        scale,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ds4_gpu_tensor_write(
     tensor: *mut Ds4GpuTensor,

@@ -2966,6 +2966,19 @@ with `--whole-archive`, and the generated object emits an executable-stack
 linker warning; production linker selection and remaining graph exports remain
 pending.
 
+Validate the M14.6b2b2a Rust CUDA directional-steering ABI export:
+
+```sh
+python3 ds4-parity/check_cuda_abi_directional_steering_smoke.py --negative-test
+```
+
+The fixture records `ds4_gpu_directional_steering_project_tensor` running
+through the reusable Rust embedded-kernel archive in a C consumer on B300,
+including exact in-place projection results and invalid-input rejection. The
+static-library retention requirement and generated executable-stack warning
+remain open production-link integration work; other graph exports and route
+promotion remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

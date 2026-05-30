@@ -9160,6 +9160,36 @@
 
 ##### M14.6b2b2: Remaining Rust CUDA Kernel ABI Assembly
 
+- Status: active; split into M14.6b2b2a and M14.6b2b2b
+- Goal: export the remaining graph compute ABI symbols and resolve embedded
+  artifact production-link integration before selecting a Rust CUDA route.
+
+##### M14.6b2b2a: Directional Steering ABI Export
+
+- Status: done
+- Goal: export `ds4_gpu_directional_steering_project_tensor` through the
+  reusable embedded Rust CUDA ABI module with current-C in-place behavior.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2a/abi-directional-steering-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_directional_steering_smoke.py --negative-test`.
+- Evidence: `abi_directional_steering_project_kernel` is uniquely named in
+  `rust/ds4-cuda/src/abi_kernels.rs`, and the ABI wrapper validates shape
+  bounds before raw in-place launch. A C-linked static-library smoke on
+  `NVIDIA B300 SXM6 AC` passes exact projection output, zero-scale,
+  undersized-direction, and null-input checks; `nm` confirms 20 exports.
+  Validation includes 90 local library tests and 92 B300 kernel-feature tests.
+  Whole-archive retention and the generated embedded object's
+  `.note.GNU-stack` warning remain production integration work. Remaining
+  graph compute ABI and route promotion are not claimed. The directional ABI
+  checker passes with 77 checks, and unified parity passes with 176 passed,
+  45 skipped, and no failures. The required non-interactive Claude review
+  timed out after 60 seconds without a completed result; adversarial
+  self-review retained overflow-safe bounds and verified raw launch ordering
+  through the C-linked B300 execution.
+
+##### M14.6b2b2b: Remaining Rust CUDA Kernel ABI Assembly
+
 - Status: active
 - Goal: export the remaining graph compute ABI symbols and resolve embedded
   artifact production-link integration before selecting a Rust CUDA route.

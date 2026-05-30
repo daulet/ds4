@@ -50,6 +50,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_tensor_fill_f32",
     "ds4_gpu_add_tensor",
     "ds4_gpu_repeat_hc_tensor",
+    "ds4_gpu_directional_steering_project_tensor",
 ]
 
 
@@ -215,6 +216,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
             for marker in [
                 "Active item: M14.6b2 Rust CUDA Compute ABI Assembly",
                 "Active item: M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly",
+                "M14.6b2b2a Directional Steering ABI Export",
             ]
         ),
         "active item missing",

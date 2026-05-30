@@ -190,6 +190,7 @@ def validate_wiring(report: ReportState, texts: dict[str, str]) -> None:
             for marker in [
                 "Active item: M14.6b2 Rust CUDA Compute ABI Assembly",
                 "Active item: M14.6b2b2 Remaining Rust CUDA Kernel ABI Assembly",
+                "M14.6b2b2a Directional Steering ABI Export",
             ]
         ),
         "active stage missing",

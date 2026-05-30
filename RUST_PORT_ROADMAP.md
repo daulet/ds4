@@ -9321,10 +9321,51 @@ Stage split:
 
 ##### M14.6b2b2: Remaining Rust CUDA Kernel ABI Assembly
 
-- Status: active.
+- Status: active; split into M14.6b2b2a and M14.6b2b2b so the first
+  in-place reduction kernel export is proved independently from the remaining
+  graph compute ABI.
 - Goal: export the remaining validated graph compute symbols from reusable
   Rust-owned modules, and address embedded-artifact production-link
   integration before any route promotion.
+
+##### M14.6b2b2a: Directional Steering ABI Export
+
+- Status: done.
+- Goal: export `ds4_gpu_directional_steering_project_tensor` from the
+  reusable embedded Rust CUDA ABI module with current-C in-place behavior.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2a/abi-directional-steering-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_directional_steering_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` adds uniquely named
+    `abi_directional_steering_project_kernel` with the current-C block
+    reduction and in-place update; `abi.rs` validates dimensions and submits
+    the raw kernel parameter surface.
+  - A C consumer of `libds4_cuda.a` on `ds4-rust-port-b300`
+    (`NVIDIA B300 SXM6 AC`) passes exact two-row projection output plus
+    zero-scale, undersized-direction, and null-input rejection. `nm` confirms
+    20 `ds4_gpu_*` exports.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 90 tests and
+    B300 feature tests pass with 92 tests. Whole-archive retention and the
+    generated embedded object's `.note.GNU-stack` warning remain production
+    integration requirements.
+  - `check_cuda_abi_directional_steering_smoke.py --negative-test` passes
+    with 77 checks, and unified parity passes with 176 passed, 45 skipped,
+    and no failures.
+  - The required non-interactive Claude review was invoked with the source,
+    oracle, comparator, B300 proof, and known-linker-risk bundle, but timed
+    out after 60 seconds without a completed result. Adversarial self-review
+    retained the overflow-safe bounds checks and verified the raw parameter
+    boundary through the passing C-linked executable.
+  - Remaining graph compute exports, production linker selection, and
+    default-route promotion remain pending.
+
+##### M14.6b2b2b: Remaining Rust CUDA Kernel ABI Assembly
+
+- Status: active.
+- Goal: export the remaining graph compute ABI symbols and resolve embedded
+  artifact production-link integration before selecting a Rust CUDA route.
 
 ## Removal Criteria for C Host Code
 
