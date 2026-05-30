@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c6.
+- Status: active; split beginning with M14.5a through M14.5c2c7.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8976,9 +8976,37 @@ Stage split:
 
 ##### M14.5c2c6: Gate Tile8 Rowspan Projection
 
-- Status: active.
+- Status: done.
 - Goal: port the tile8 widened-row gate/up scheduling variants before
   widened-row atomic down and shared-cache specialization closure.
+- Oracle: current-C `moe_gate_up_mid_expert_tile8_rowspan_kernel<512>`,
+  `moe_gate_up_mid_expert_tile8_rowspan_kernel<1024>`, and
+  `moe_gate_up_mid_expert_tile8_row2048_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c6/routed-moe-gate-rowspan-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_gate_rowspan_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in functional tile8 gate projection for the
+  row512, row1024, and row2048 scheduling variants over retained tile
+  descriptors, including partial row spans. Widened down scheduling,
+  shared-cache specialization, Q4_K, hyperconnection, runtime graph
+  integration, default route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added an executable-local Rust parameterized tile8 gate-rowspan kernel
+    selected by the smoke harness for all three current-C scheduling spans.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 82 tests; live cargo-oxide execution found seven kernels, emitted
+    portable `sm_80` PTX through libdevice, and matched all three gate-span
+    outputs on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2c6 comparator, retained
+    routed-MoE checks, and unified parity passed with 161 passed, 50 skipped,
+    and 0 failed.
+
+##### M14.5c2c7: Down Tile16 Rowspan Projection
+
+- Status: active.
+- Goal: port the tile16 widened-row atomic down scheduling variants after
+  row32 atomic down and widened gate scheduling are established.
 
 ## Removal Criteria for C Host Code
 

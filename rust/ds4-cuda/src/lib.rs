@@ -1800,6 +1800,29 @@ pub const M14_5C2C5_SCOPE: RoutedMoeTile16Row32Scope = RoutedMoeTile16Row32Scope
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeGateRowspanScope {
+    pub opt_in_only: bool,
+    pub consumes_tile8_row32_projection_surface: bool,
+    pub owns_moe_gate_up_mid_expert_tile8_rowspan_kernel: bool,
+    pub owns_gate_row512_row1024_and_row2048_dispatch: bool,
+    pub owns_down_rowspan_dispatch: bool,
+    pub owns_shared_cache_specialization: bool,
+    pub owns_q4_k_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2C6_SCOPE: RoutedMoeGateRowspanScope = RoutedMoeGateRowspanScope {
+    opt_in_only: true,
+    consumes_tile8_row32_projection_surface: true,
+    owns_moe_gate_up_mid_expert_tile8_rowspan_kernel: true,
+    owns_gate_row512_row1024_and_row2048_dispatch: true,
+    owns_down_rowspan_dispatch: false,
+    owns_shared_cache_specialization: false,
+    owns_q4_k_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1835,6 +1858,7 @@ mod tests {
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
+        M14_5C2C6_SCOPE,
     };
 
     #[test]
@@ -2758,6 +2782,18 @@ mod tests {
         assert!(!M14_5C2C5_SCOPE.owns_shared_cache_specialization);
         assert!(!M14_5C2C5_SCOPE.owns_q4_k_or_runtime_graph);
         assert!(!M14_5C2C5_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_gate_rowspan_scope_leaves_down_rowspan_and_cache_pending() {
+        assert!(M14_5C2C6_SCOPE.opt_in_only);
+        assert!(M14_5C2C6_SCOPE.consumes_tile8_row32_projection_surface);
+        assert!(M14_5C2C6_SCOPE.owns_moe_gate_up_mid_expert_tile8_rowspan_kernel);
+        assert!(M14_5C2C6_SCOPE.owns_gate_row512_row1024_and_row2048_dispatch);
+        assert!(!M14_5C2C6_SCOPE.owns_down_rowspan_dispatch);
+        assert!(!M14_5C2C6_SCOPE.owns_shared_cache_specialization);
+        assert!(!M14_5C2C6_SCOPE.owns_q4_k_or_runtime_graph);
+        assert!(!M14_5C2C6_SCOPE.changes_default_route);
     }
 
     #[test]

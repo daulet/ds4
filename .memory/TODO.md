@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c6
+- Status: active; split beginning with M14.5a through M14.5c2c7
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8919,6 +8919,25 @@
 
 ##### M14.5c2c6: Gate Tile8 Rowspan Projection
 
-- Status: active
+- Status: done
 - Goal: port the tile8 widened-row gate/up scheduling variants before
   widened-row atomic down and shared-cache specialization closure.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c6/routed-moe-gate-rowspan-smoke.json`
+- Comparator: `ds4-parity/check_routed_moe_gate_rowspan_smoke.py --negative-test`
+- Evidence: executable-local Rust parameterized tile8 gate-rowspan projection
+  covers the row512, row1024, and row2048 current-C scheduling spans over
+  retained tile descriptors. B300 feature-enabled tests passed with 82 tests;
+  live cargo-oxide execution found seven kernels, emitted portable `sm_80`
+  PTX through libdevice, and matched all three gate outputs on
+  `NVIDIA B300 SXM6 AC`. Widened down scheduling, shared-cache
+  specialization, Q4_K, hyperconnection, runtime route activation, and C CUDA
+  removal remain unclaimed. Local formatting, diff, library tests, the
+  M14.5c2c6 comparator, retained routed-MoE checks, and unified parity passed
+  with 161 passed, 50 skipped, and 0 failed.
+
+##### M14.5c2c7: Down Tile16 Rowspan Projection
+
+- Status: active
+- Goal: port the tile16 widened-row atomic down scheduling variants after
+  row32 atomic down and widened gate scheduling are established.

@@ -2850,6 +2850,18 @@ tile16 token-indexed float atomic accumulation. It leaves gate/down
 row2048/rowspan scheduling, shared-cache specialization, Q4_K,
 hyperconnection, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2c6 Rust CUDA routed MoE gate-rowspan smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_gate_rowspan_smoke.py --negative-test
+```
+
+The fixture records current-C widened tile8 gate scheduling behavior on B300:
+functional row512, row1024, and row2048 output equivalence over retained
+expert-tile descriptors. It leaves widened down scheduling, shared-cache
+specialization, Q4_K, hyperconnection, runtime route, and C CUDA removal
+unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
