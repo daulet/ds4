@@ -3021,6 +3021,22 @@ invalid ranges, and current-C zero-width behavior. Public model-map controls,
 whole-archive retention, and the generated executable-stack warning remain
 open before route promotion.
 
+Validate the M14.6b2b2b2b2a Rust CUDA basic model-control device-copy ABI
+export:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_device_copy_smoke.py --negative-test
+```
+
+The fixture records the public model-map, fd, map-range, and cache-range
+symbols executing from a C consumer of the Rust static library on B300. It
+pre-caches a weighted RMS range, switches model pointers, mutates the former
+mapping to catch stale retained bytes, and checks zero-byte/invalid range
+behavior. This stage provides the caller-map device-copy baseline only;
+registered/HMM/prefetch, fd-backed direct-I/O, preload selection, q8/f16
+cache policy, whole-archive retention, and the executable-stack warning
+remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

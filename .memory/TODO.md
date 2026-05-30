@@ -9287,6 +9287,40 @@
 
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2a and M14.6b2b2b2b2b because
+  baseline public linkage through device-copy caching can be validated
+  separately from optimized residency-policy selection.
 - Goal: export model-map, file-descriptor, map-range, and cache-range
   controls without weakening the current-C residency-policy contract.
+
+##### M14.6b2b2b2b2a: Basic Model-Control Device-Copy ABI Export
+
+- Status: done
+- Goal: export `ds4_gpu_set_model_map`, `ds4_gpu_set_model_fd`,
+  `ds4_gpu_set_model_map_range`, and `ds4_gpu_cache_model_range` through
+  caller-map device-copy caching without claiming optimized residency policy.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2a/abi-model-control-device-copy-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_device_copy_smoke.py --negative-test`.
+- Evidence: the Rust ABI now resets retained copied model ranges on a new
+  model mapping and exposes the baseline cache hook; on B300 a C-linked
+  static-library consumer pre-caches weighted RMS data, switches mappings,
+  mutates and rereads the former mapping to prove stale cache release, and
+  passes zero-byte and invalid-range/map behavior with 29 exported symbols.
+  Local library tests pass with 94 tests and B300 release-feature tests pass
+  with 96 tests. The basic model-control checker passes with 104 checks, and
+  unified parity passes with 180 passed, 45 skipped, and no failures.
+  The required non-interactive Claude adversarial review timed out after 60
+  seconds without a completed result; self-review fixed a model-map
+  replacement/cache cleanup lock-order inversion. Fd-backed staging,
+  registered/HMM/prefetch, direct-I/O, preload/copy environment selection,
+  q8/f16 cache hooks, whole-archive retention, and the `.note.GNU-stack`
+  warning remain pending.
+
+##### M14.6b2b2b2b2b: Registered HMM And Fd-Backed Model-Control Policy
+
+- Status: active
+- Goal: connect the validated residency-policy branches to the public
+  model-control ABI without claiming remaining graph compute or route
+  promotion.

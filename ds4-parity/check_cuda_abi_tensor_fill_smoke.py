@@ -57,6 +57,10 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_rms_norm_plain_tensor",
     "ds4_gpu_rms_norm_weight_rows_tensor",
     "ds4_gpu_rms_norm_weight_tensor",
+    "ds4_gpu_cache_model_range",
+    "ds4_gpu_set_model_fd",
+    "ds4_gpu_set_model_map",
+    "ds4_gpu_set_model_map_range",
 ]
 
 

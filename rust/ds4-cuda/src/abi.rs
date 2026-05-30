@@ -1,4 +1,4 @@
-use std::ffi::{c_int, c_void};
+use std::ffi::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Mutex;
@@ -13,16 +13,25 @@ use crate::substrate::CudaOxideSubstrate;
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
-#[cfg(feature = "cuda-oxide-kernels")]
 static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
+static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
+    model_map: 0,
+    model_size: 0,
+    _model_fd: -1,
+});
 
-#[cfg(feature = "cuda-oxide-kernels")]
 struct AbiModelRange {
     model_map: usize,
     model_size: u64,
     offset: u64,
     bytes: u64,
     device: DeviceBuffer<u8>,
+}
+
+struct AbiModelControl {
+    model_map: usize,
+    model_size: u64,
+    _model_fd: c_int,
 }
 
 enum TensorStorage {
@@ -75,7 +84,6 @@ fn with_abi_kernels<T>(
     operation(kernels.as_ref()?)
 }
 
-#[cfg(feature = "cuda-oxide-kernels")]
 fn with_cached_abi_model_range<T>(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
@@ -171,9 +179,13 @@ pub extern "C" fn ds4_gpu_cleanup() {
             if let Ok(mut kernels) = ABI_KERNELS.lock() {
                 *kernels = None;
             }
-            #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut model_ranges) = ABI_MODEL_RANGES.lock() {
                 model_ranges.clear();
+            }
+            if let Ok(mut control) = ABI_MODEL_CONTROL.lock() {
+                control.model_map = 0;
+                control.model_size = 0;
+                control._model_fd = -1;
             }
             *backend = None;
         }
@@ -783,6 +795,72 @@ pub extern "C" fn ds4_gpu_end_commands() -> c_int {
 #[no_mangle]
 pub extern "C" fn ds4_gpu_synchronize() -> c_int {
     status(|| with_backend(|backend| Some(backend.synchronize_device().is_ok())).unwrap_or(false))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_size: u64) -> c_int {
+    status(|| {
+        if model_map.is_null() || model_size == 0 {
+            return false;
+        }
+        with_backend(|backend| {
+            let mut control = ABI_MODEL_CONTROL.lock().ok()?;
+            if control.model_map == model_map as usize && control.model_size == model_size {
+                return Some(true);
+            }
+            backend.synchronize().ok()?;
+            ABI_MODEL_RANGES.lock().ok()?.clear();
+            control.model_map = model_map as usize;
+            control.model_size = model_size;
+            Some(true)
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn ds4_gpu_set_model_fd(fd: c_int) -> c_int {
+    status(|| {
+        let Ok(mut control) = ABI_MODEL_CONTROL.lock() else {
+            return false;
+        };
+        control._model_fd = fd;
+        true
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_set_model_map_range(
+    model_map: *const c_void,
+    model_size: u64,
+    map_offset: u64,
+    map_size: u64,
+) -> c_int {
+    let _ = (map_offset, map_size);
+    // The baseline C path records the mapping here; prefetch and residency
+    // selection remain separate policy work.
+    unsafe { ds4_gpu_set_model_map(model_map, model_size) }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_cache_model_range(
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+    _label: *const c_char,
+) -> c_int {
+    status(|| {
+        if bytes == 0 {
+            return true;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(backend, model_map, model_size, offset, bytes, |_| {
+                Some(true)
+            })
+        })
+        .unwrap_or(false)
+    })
 }
 
 #[no_mangle]

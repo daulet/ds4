@@ -9503,10 +9503,60 @@ Stage split:
 
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2a and M14.6b2b2b2b2b because
+  public ABI linkage through the already validated device-copy cache is
+  separable from registered/HMM/fd-backed and environment-selected residency
+  policy.
 - Goal: export the model-map, file-descriptor, map-range, and cache-range
   control surfaces needed to substitute Rust beneath model-backed runtime
   callers without reducing the current-C residency policy contract.
+
+##### M14.6b2b2b2b2a: Basic Model-Control Device-Copy ABI Export
+
+- Status: done.
+- Goal: export `ds4_gpu_set_model_map`, `ds4_gpu_set_model_fd`,
+  `ds4_gpu_set_model_map_range`, and `ds4_gpu_cache_model_range` through the
+  caller-owned model-map device-copy cache while retaining the optimized
+  residency policy branches as explicit follow-on work.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2a/abi-model-control-device-copy-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_device_copy_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` promotes the retained model-range device-copy
+    cache to the public control surface. Replacing the active model mapping
+    synchronizes submitted work and clears retained cached ranges before
+    recording the new map; zero-byte cache requests retain current-C no-op
+    success and invalid nonzero ranges fail closed.
+  - A C consumer of `libds4_cuda.a` on `ds4-rust-port-b300` (`NVIDIA B300
+    SXM6 AC`) pre-caches a weight range through
+    `ds4_gpu_cache_model_range`, consumes it through weighted RMS, switches
+    model mappings, mutates the old mapping to prove stale cached bytes were
+    released, and passes invalid-map/range checks; `nm` confirms 29 exported
+    `ds4_gpu_*` symbols.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 94 tests and
+    B300 `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 96 tests.
+  - `check_cuda_abi_model_control_device_copy_smoke.py --negative-test`
+    passes with 104 checks, and unified parity passes with 180 passed, 45
+    skipped, and no failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the source, C oracle, comparator, B300 proof, and open policy boundary,
+    but timed out after 60 seconds without a completed result. Adversarial
+    self-review found and fixed a control-state/cache cleanup lock-order
+    inversion by making model-map replacement acquire the backend first.
+  - `ds4_gpu_set_model_fd` is present for ABI linkage but does not yet select
+    fd-backed staging. Registered map/HMM/prefetch, direct-I/O, environment
+    preload/copy selection, q8/f16 cache hooks, whole-archive retention, and
+    the generated `.note.GNU-stack` linker warning remain open.
+
+##### M14.6b2b2b2b2b: Registered HMM And Fd-Backed Model-Control Policy
+
+- Status: active.
+- Goal: connect the independently validated registered mapped-host, pageable
+  HMM/prefetch, fd-backed direct-I/O staging, preload/copy selection, and
+  cache-policy branches to the public control ABI without changing output
+  semantics or prematurely promoting the runtime route.
 
 ## Removal Criteria for C Host Code
 

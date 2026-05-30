@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2 Public Model-Map Control ABI Assembly
+- Active item: M14.6b2b2b2b2b Registered HMM And Fd-Backed Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,7 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.6b2b2b2b1 Weighted RMS Device-Copy ABI Export.
+- Last validated source before the active item: M14.6b2b2b2b2a Basic Model-Control Device-Copy ABI Export.
 - Earlier M14.6a Production Route Linkage Blocker.
 - Earlier M14.5d Hyperconnection Split And Expansion Kernels.
 - Earlier M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE.
@@ -225,6 +225,25 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2a Basic Model-Control Device-Copy ABI Export adds Rust-owned
+  `ds4_gpu_set_model_map`, `ds4_gpu_set_model_fd`,
+  `ds4_gpu_set_model_map_range`, and `ds4_gpu_cache_model_range` surfaces.
+  A changed model mapping synchronizes submitted work and clears retained
+  device-copy ranges before replacement; a B300 C-linked static-library
+  consumer pre-caches a weighted RMS range, switches mappings, mutates and
+  rereads the old mapping to prove stale range release, and passes zero-byte
+  cache and invalid-map rejection behavior. `nm` confirms 29 exported `ds4_gpu_*`
+  symbols; local library tests pass with 94 tests and B300 release-feature
+  tests pass with 96 tests. The basic model-control checker passes with 104
+  checks, and unified parity passes with 180 passed, 45 skipped, and no
+  failures. The required non-interactive Claude adversarial review timed out
+  after 60 seconds without a completed result; self-review fixed a model-map
+  replacement/cache cleanup lock-order inversion by taking the backend lock
+  before clearing ranges. The fd symbol currently provides ABI acceptance,
+  while fd-backed staging, registered/HMM/prefetch, environment-selected
+  residency policy, q8/f16 cache hooks, whole-archive retention, the
+  executable-stack warning, and remaining graph compute remain active before
+  route promotion.
 - M14.6b2b2b2b1 Weighted RMS Device-Copy ABI Export adds the Rust-owned
   `ds4_gpu_rms_norm_weight_tensor` and
   `ds4_gpu_rms_norm_weight_rows_tensor` surfaces through
