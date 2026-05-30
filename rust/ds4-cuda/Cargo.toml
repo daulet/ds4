@@ -152,3 +152,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-indexer-topk-dispatch-smoke"
 path = "src/bin/indexer_topk_dispatch_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-rms-norm-smoke"
+path = "src/bin/rms_norm_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

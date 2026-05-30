@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.3 Dense Projection Quantization And Norm Kernels
+- Active item: M14.3b Fused QKV And Head RMS Norm Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -36,7 +36,12 @@
   through M14.2d2c5 because 1024 bitonic selection, larger power-of-two
   selection, CUB-or-equivalent selection, chunk/tree merge, and indexed
   ascending sort have separate CUDA launch and storage contracts.
-- Last validated source before the active item: M14.2e M14.2 Kernel Closure Gate.
+- M14.3 Dense Projection Quantization And Norm Kernels is split beginning
+  with M14.3a and M14.3b because standalone plain/weighted RMS normalization
+  can be proved independently from fused QKV/head normalization, projection,
+  and Q8 kernel families.
+- Last validated source before the active item: M14.3a Plain And Weighted RMS Norm Kernels.
+- Earlier M14.2e M14.2 Kernel Closure Gate.
 - Earlier M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy.
 - Earlier M14.2d2c4 Chunked And Tree-Merge Top-K Kernels.
 - Earlier M14.2d2c3 CUB-Or-Equivalent Top-K Branch.
@@ -164,6 +169,22 @@
 
 ## Last Evidence
 
+- M14.3a Plain And Weighted RMS Norm Kernels adds executable-local Rust
+  cuda-oxide `rms_norm_plain_kernel` and `rms_norm_weight_kernel` using the
+  current-C 256-thread row reduction and a libdevice-linked reciprocal RMS
+  scale. On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+  passed with 39 tests and live cargo-oxide execution emitted portable
+  `sm_80` PTX and proved multi-row plain, multi-row weighted, single-row, and
+  invalid-shape behavior on `NVIDIA B300 SXM6 AC`. Its fixture and checker
+  are `ds4-parity/baselines/backend/m14.3a/rms-norm-kernel-smoke.json` and
+  `ds4-parity/check_rms_norm_kernel_smoke.py --negative-test`. Fused QKV/head
+  normalization, dense projection, Q8 kernels, route activation, and C CUDA
+  removal remain unclaimed.
+  Local formatting, diff, workspace tests, the 72-check comparator, and
+  unified parity passed with 130 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result; the
+  parity run exposed and corrected the completed M14.2e checker's active-stage
+  assertion before commit.
 - M14.2e M14.2 Kernel Closure Gate aggregates all fifteen M14.2 B300 proof
   artifacts and records that the Rust kernel family is available to later
   operation stages only on the existing opt-in path. Its inventory audit

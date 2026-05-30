@@ -8049,6 +8049,35 @@
 
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
-- Status: active
+- Status: split after M14.3a implementation; M14.3a is done and M14.3b is
+  active
 - Goal: port dense projection, Q8 conversion, and normalization kernels
   through bounded Rust CUDA slices with current C retained as the oracle.
+
+##### M14.3a: Plain And Weighted RMS Norm Kernels
+
+- Status: done
+- Goal: prove standalone plain and weighted RMS normalization reductions
+  through opt-in Rust CUDA kernels.
+- Oracle: current-C `rms_norm_plain_kernel`, `rms_norm_weight_kernel`, and
+  their tensor launch surfaces.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3a/rms-norm-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_rms_norm_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust kernels for plain and weighted
+  per-row normalization. B300 feature-enabled tests passed with 39 tests and
+  live cargo-oxide emitted portable `sm_80` PTX while proving multi-row
+  plain, multi-row weighted, single-row, and invalid-shape behavior on
+  `NVIDIA B300 SXM6 AC`. Fused QKV/head normalization, dense projection, Q8
+  kernels, route activation, and C CUDA removal remain unclaimed. Local
+  formatting, diff, workspace tests, the 72-check comparator, and unified
+  parity passed with 130 passed, 45 skipped, and 0 failed. Non-interactive
+  Claude review timed out without a completed result; the parity run caught
+  and corrected M14.2e active-stage wiring before commit.
+
+##### M14.3b: Fused QKV And Head RMS Norm Kernels
+
+- Status: active
+- Goal: port fused QKV and head RMS normalization without claiming the
+  remaining projection or Q8 operation family.

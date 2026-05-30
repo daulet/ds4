@@ -658,6 +658,27 @@ pub const M14_2D2C5_SCOPE: IndexerTopkDispatchScope = IndexerTopkDispatchScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RmsNormKernelScope {
+    pub opt_in_only: bool,
+    pub owns_rms_norm_plain_kernel: bool,
+    pub owns_rms_norm_weight_kernel: bool,
+    pub owns_plain_and_weighted_tensor_surface: bool,
+    pub owns_fused_qkv_and_head_norm_kernels: bool,
+    pub owns_dense_projection_or_q8_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_3A_SCOPE: RmsNormKernelScope = RmsNormKernelScope {
+    opt_in_only: true,
+    owns_rms_norm_plain_kernel: true,
+    owns_rms_norm_weight_kernel: true,
+    owns_plain_and_weighted_tensor_surface: true,
+    owns_fused_qkv_and_head_norm_kernels: false,
+    owns_dense_projection_or_q8_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -678,6 +699,7 @@ mod tests {
         M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE, M14_2C_SCOPE, M14_2D1_SCOPE,
         M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
         M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
+        M14_3A_SCOPE,
     };
 
     #[test]
@@ -969,6 +991,17 @@ mod tests {
         assert!(M14_2D2C5_SCOPE.uses_packed_key_equivalent_branch);
         assert!(!M14_2D2C5_SCOPE.owns_cub_library_implementation);
         assert!(!M14_2D2C5_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn rms_norm_scope_leaves_fused_norm_projection_q8_and_route_pending() {
+        assert!(M14_3A_SCOPE.opt_in_only);
+        assert!(M14_3A_SCOPE.owns_rms_norm_plain_kernel);
+        assert!(M14_3A_SCOPE.owns_rms_norm_weight_kernel);
+        assert!(M14_3A_SCOPE.owns_plain_and_weighted_tensor_surface);
+        assert!(!M14_3A_SCOPE.owns_fused_qkv_and_head_norm_kernels);
+        assert!(!M14_3A_SCOPE.owns_dense_projection_or_q8_kernels);
+        assert!(!M14_3A_SCOPE.changes_default_route);
     }
 
     #[test]

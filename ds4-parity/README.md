@@ -2407,6 +2407,19 @@ routed-MoE-only `zero_kernel` to M14.5, and records the packed-key top-k
 semantic equivalent without claiming CUB implementation. It rejects
 default-route promotion and C CUDA removal.
 
+Validate the M14.3a Rust CUDA plain and weighted RMS normalization smoke:
+
+```sh
+python3 ds4-parity/check_rms_norm_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `rms_norm_plain_kernel` and
+`rms_norm_weight_kernel` execution on B300 using the libdevice-linked
+reciprocal RMS scale path. It proves multi-row plain and weighted output,
+single-row behavior, and bounds rejection while leaving fused QKV/head norm,
+dense projection, Q8 conversion or matmul, runtime graph integration, and
+default-route ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
