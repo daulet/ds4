@@ -7587,7 +7587,7 @@
 
 #### M14.2: Embedding Indexer And Elementwise Kernels
 
-- Status: split before implementation into M14.2a through M14.2e; M14.2b is
+- Status: done through M14.2e; M14.2b is
   further split after B300 exposed a separate libdevice/NVVM SwiGLU blocker;
   M14.2d is split into scalar fallback proof and optimized dispatch ownership;
   M14.2d2 is split into direct-one, tensor-core score, and specialized top-k
@@ -8029,6 +8029,26 @@
 
 ##### M14.2e: M14.2 Kernel Closure Gate
 
-- Status: active
+- Status: done
 - Goal: close the M14.2 operation-family kernel ownership ledger while
   retaining runtime route activation and C CUDA removal as later work.
+- Oracle: M14.0 inventory, all M14.2 stage artifacts, and current-C
+  routed-MoE ownership of `zero_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2e/kernel-ownership-closure.json`.
+- Comparator: `ds4-parity/check_m14_2_kernel_closure.py --negative-test`
+  plus the retained M14.2d2c5 B300 rerun contract.
+- Evidence: aggregated all fifteen M14.2 B300 proof artifacts and corrected
+  the inventory so routed-MoE-only `zero_kernel` is M14.5 work. The closure
+  records the packed-key top-k implementation as a semantic equivalent
+  without claiming CUB ownership; default-route promotion and C CUDA removal
+  remain rejected. Local formatting, diff, workspace tests, the 156-check
+  closure comparator, and unified parity passed with 129 passed, 45 skipped,
+  and 0 failed. A non-interactive Claude review attempt timed out without a
+  completed result; self-review caught the `zero_kernel` correction.
+
+#### M14.3: Dense Projection Quantization And Norm Kernels
+
+- Status: active
+- Goal: port dense projection, Q8 conversion, and normalization kernels
+  through bounded Rust CUDA slices with current C retained as the oracle.

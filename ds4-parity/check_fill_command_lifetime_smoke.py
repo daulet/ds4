@@ -212,7 +212,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["todo"], "TODO fixture missing")
     report.check(
         "Active item: M14.1c Substrate Route Closure Gate" in texts["status"]
-        or "Active item: M14.2" in texts["status"],
+        or "Active item: M14." in texts["status"],
         "next active stage missing",
     )
     report.check("M14.1b4 Fill Kernel And Command Lifetime" in texts["status"], "status evidence missing")

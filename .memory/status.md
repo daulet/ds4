@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2e M14.2 Kernel Closure Gate
+- Active item: M14.3 Dense Projection Quantization And Norm Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -36,7 +36,8 @@
   through M14.2d2c5 because 1024 bitonic selection, larger power-of-two
   selection, CUB-or-equivalent selection, chunk/tree merge, and indexed
   ascending sort have separate CUDA launch and storage contracts.
-- Last validated source before the active item: M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy.
+- Last validated source before the active item: M14.2e M14.2 Kernel Closure Gate.
+- Earlier M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy.
 - Earlier M14.2d2c4 Chunked And Tree-Merge Top-K Kernels.
 - Earlier M14.2d2c3 CUB-Or-Equivalent Top-K Branch.
 - Earlier M14.2d2c2 Power-Of-Two Top-K Kernels.
@@ -163,6 +164,21 @@
 
 ## Last Evidence
 
+- M14.2e M14.2 Kernel Closure Gate aggregates all fifteen M14.2 B300 proof
+  artifacts and records that the Rust kernel family is available to later
+  operation stages only on the existing opt-in path. Its inventory audit
+  reassigns `zero_kernel` to M14.5 because current C launches it only in the
+  routed-MoE atomic-down branch, and retains the packed-key branch as an
+  equivalent implementation without claiming `cub::BlockRadixSort`. Its
+  fixture and checker are
+  `ds4-parity/baselines/backend/m14.2e/kernel-ownership-closure.json` and
+  `ds4-parity/check_m14_2_kernel_closure.py --negative-test`. Default-route
+  promotion and C CUDA removal remain rejected.
+  Local formatting, diff, workspace tests, the 156-check closure comparator,
+  and unified parity passed with 129 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result;
+  adversarial self-review caught and corrected the routed-MoE-only
+  `zero_kernel` assignment before closure.
 - M14.2d2c5 Indexed Ascending Top-K Sort And Dispatch Policy adds
   executable-local Rust cuda-oxide `indexed_topk_sort_512_asc_kernel` and
   validated-input Rust selectors for current-C's ascending-sort gate and

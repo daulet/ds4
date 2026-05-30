@@ -266,7 +266,6 @@
         "swiglu_kernel",
         "add_kernel",
         "directional_steering_project_kernel",
-        "zero_kernel",
         "indexer_scores_kernel",
         "indexer_score_one_direct_kernel",
         "indexer_scores_wmma_kernel",
@@ -342,6 +341,7 @@
     {
       "stage": "M14.5",
       "symbols": [
+        "zero_kernel",
         "hc_split_sinkhorn_kernel",
         "hc_weighted_sum_kernel",
         "hc_expand_kernel",

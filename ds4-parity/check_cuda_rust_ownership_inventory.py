@@ -218,8 +218,7 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check("M14.0: CUDA Rust Ownership Inventory And Adoption Contract" in texts["todo"], "TODO M14.0 item missing")
     report.check(fixture in texts["todo"], "TODO M14 fixture missing")
     report.check(
-        "Active item: M14.1" in texts["status"]
-        or "Active item: M14.2" in texts["status"],
+        "Active item: M14." in texts["status"],
         "status next active M14 stage missing",
     )
     report.check("M14.0 CUDA Rust Ownership Inventory And Adoption Contract" in texts["status"], "status M14.0 evidence missing")

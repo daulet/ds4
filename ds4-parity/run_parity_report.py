@@ -1040,6 +1040,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.2e cuda-oxide kernel-family closure",
+                [
+                    sys.executable,
+                    "ds4-parity/check_m14_2_kernel_closure.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

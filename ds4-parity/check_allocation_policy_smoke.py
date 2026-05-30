@@ -207,7 +207,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
         "Active item: M14.1b3b Q8 Cache And Quality Policy" in texts["status"]
         or "Active item: M14.1b4 Fill Kernel And Command Lifetime" in texts["status"]
         or "Active item: M14.1c Substrate Route Closure Gate" in texts["status"]
-        or "Active item: M14.2" in texts["status"],
+        or "Active item: M14." in texts["status"],
         "successor active stage missing",
     )
     report.check("M14.1b3a Managed KV And Memory Report Policy" in texts["status"], "status evidence missing")

@@ -2396,6 +2396,17 @@ launch order. It maps the capability-gated CUB positions to the validated
 packed-key equivalent without claiming CUB implementation, runtime route, or
 C CUDA removal.
 
+Validate the M14.2e Rust CUDA kernel-family closure gate:
+
+```sh
+python3 ds4-parity/check_m14_2_kernel_closure.py --negative-test
+```
+
+The closure fixture aggregates the M14.2 B300 kernel proofs, reassigns the
+routed-MoE-only `zero_kernel` to M14.5, and records the packed-key top-k
+semantic equivalent without claiming CUB implementation. It rejects
+default-route promotion and C CUDA removal.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

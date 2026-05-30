@@ -7229,7 +7229,7 @@ Stage split:
 
 #### M14.2: Embedding Indexer And Elementwise Kernels
 
-- Status: split before implementation into M14.2a through M14.2e; M14.2b
+- Status: done through M14.2e; M14.2b
   split into M14.2b1 and M14.2b2 after B300 exposed an independent
   libdevice/NVVM blocker for SwiGLU; M14.2d split into M14.2d1 and M14.2d2
   because scalar selection and optimized dispatch have distinct ownership
@@ -7828,9 +7828,37 @@ Stage split:
 
 ##### M14.2e: M14.2 Kernel Closure Gate
 
-- Status: active.
+- Status: done.
 - Goal: close the M14.2 kernel ownership ledger without claiming runtime
   route activation or C CUDA removal.
+- Oracle: M14.0 inventory, all M14.2 stage artifacts, and current-C
+  routed-MoE ownership of `zero_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2e/kernel-ownership-closure.json`.
+- Comparator: `ds4-parity/check_m14_2_kernel_closure.py --negative-test`
+  plus the retained M14.2d2c5 B300 rerun contract.
+- Acceptance: M14.3 may consume the Rust-owned opt-in kernel family;
+  default-route promotion and `ds4_cuda.cu` removal remain rejected.
+- Evidence:
+  - Aggregated all fifteen validated M14.2 B300 artifacts into one closure
+    ledger while preserving each stage's opt-in and retained-current-C
+    constraints.
+  - Corrected the ownership inventory by assigning `zero_kernel` to M14.5,
+    because current C invokes it only inside routed MoE atomic-down
+    execution.
+  - Recorded that Rust's packed-key-equivalent top-k branch preserves the
+    current-C selection semantics without claiming the CUB implementation.
+  - Passed local formatting, diff, workspace tests, the 156-check closure
+    comparator, and unified parity with 129 passed, 45 skipped, and 0 failed.
+    A non-interactive Claude review attempt timed out without a completed
+    result; adversarial self-review found the corrected `zero_kernel`
+    assignment before closure.
+
+#### M14.3: Dense Projection Quantization And Norm Kernels
+
+- Status: active.
+- Goal: port the M14.3 dense projection, Q8 conversion, and normalization
+  operation family through bounded Rust CUDA slices.
 
 ## Removal Criteria for C Host Code
 
