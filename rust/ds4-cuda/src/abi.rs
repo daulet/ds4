@@ -2136,6 +2136,285 @@ pub unsafe extern "C" fn ds4_gpu_repeat_hc_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn hc_expand_impl(
+    out_hc: &Ds4GpuTensor,
+    block_out: &Ds4GpuTensor,
+    block_add: Option<&Ds4GpuTensor>,
+    has_add: bool,
+    residual_hc: &Ds4GpuTensor,
+    post_ptr: u64,
+    post_bytes: u64,
+    post_stride: u32,
+    comb_ptr: u64,
+    comb_bytes: u64,
+    comb_stride: u32,
+    n_embd: u32,
+    n_hc: u32,
+) -> bool {
+    let Some(output_elements_per_token) = u64::from(n_embd).checked_mul(u64::from(n_hc)) else {
+        return false;
+    };
+    let Some(output_bytes_per_token) =
+        output_elements_per_token.checked_mul(size_of::<f32>() as u64)
+    else {
+        return false;
+    };
+    if output_bytes_per_token == 0 {
+        return false;
+    }
+    let n_tokens = out_hc.bytes / output_bytes_per_token;
+    let Ok(n_tokens_u32) = u32::try_from(n_tokens) else {
+        return false;
+    };
+    if n_tokens_u32 == 0 {
+        return false;
+    }
+    let Some(block_elements) = n_tokens.checked_mul(u64::from(n_embd)) else {
+        return false;
+    };
+    let Some(block_bytes) = block_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(residual_elements) = n_tokens.checked_mul(output_elements_per_token) else {
+        return false;
+    };
+    let Some(residual_bytes) = residual_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(post_elements) = (n_tokens - 1)
+        .checked_mul(u64::from(post_stride))
+        .and_then(|prefix| prefix.checked_add(u64::from(n_hc)))
+    else {
+        return false;
+    };
+    let Some(comb_width) = u64::from(n_hc).checked_mul(u64::from(n_hc)) else {
+        return false;
+    };
+    let Some(comb_elements) = (n_tokens - 1)
+        .checked_mul(u64::from(comb_stride))
+        .and_then(|prefix| prefix.checked_add(comb_width))
+    else {
+        return false;
+    };
+    let Some(required_post_bytes) = post_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(required_comb_bytes) = comb_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let block_add = block_add.unwrap_or(block_out);
+    if block_out.bytes < block_bytes
+        || block_add.bytes < block_bytes
+        || residual_hc.bytes < residual_bytes
+        || post_bytes < required_post_bytes
+        || comb_bytes < required_comb_bytes
+    {
+        return false;
+    }
+    with_backend(|backend| {
+        with_abi_kernels(backend, |kernels| {
+            // SAFETY: the validated spans include every token-strided post
+            // and combination access and preserve current-C aliasing rules.
+            Some(unsafe {
+                kernels.hc_expand_tensor(
+                    backend.stream(),
+                    out_hc.device_ptr(),
+                    block_out.device_ptr(),
+                    block_add.device_ptr(),
+                    residual_hc.device_ptr(),
+                    post_ptr,
+                    comb_ptr,
+                    n_embd,
+                    n_hc,
+                    n_tokens_u32,
+                    post_stride,
+                    comb_stride,
+                    has_add,
+                )
+            })
+        })
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_hc_expand_tensor(
+    out_hc: *mut Ds4GpuTensor,
+    block_out: *const Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    post: *const Ds4GpuTensor,
+    comb: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out_hc) = (unsafe { tensor_ref(out_hc.cast_const()) }) else {
+            return false;
+        };
+        let Some(block_out) = (unsafe { tensor_ref(block_out) }) else {
+            return false;
+        };
+        let Some(residual_hc) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(post) = (unsafe { tensor_ref(post) }) else {
+            return false;
+        };
+        let Some(comb) = (unsafe { tensor_ref(comb) }) else {
+            return false;
+        };
+        let Some(comb_stride) = n_hc.checked_mul(n_hc) else {
+            return false;
+        };
+        unsafe {
+            hc_expand_impl(
+                out_hc,
+                block_out,
+                None,
+                false,
+                residual_hc,
+                post.device_ptr(),
+                post.bytes,
+                n_hc,
+                comb.device_ptr(),
+                comb.bytes,
+                comb_stride,
+                n_embd,
+                n_hc,
+            )
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_hc_expand_split_tensor(
+    out_hc: *mut Ds4GpuTensor,
+    block_out: *const Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    split: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out_hc) = (unsafe { tensor_ref(out_hc.cast_const()) }) else {
+            return false;
+        };
+        let Some(block_out) = (unsafe { tensor_ref(block_out) }) else {
+            return false;
+        };
+        let Some(residual_hc) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(split) = (unsafe { tensor_ref(split) }) else {
+            return false;
+        };
+        let Some(mix_hc) = n_hc.checked_mul(n_hc).and_then(|comb| {
+            n_hc.checked_mul(2)
+                .and_then(|prefix| prefix.checked_add(comb))
+        }) else {
+            return false;
+        };
+        let post_offset = u64::from(n_hc) * size_of::<f32>() as u64;
+        let comb_offset = u64::from(n_hc) * 2 * size_of::<f32>() as u64;
+        let Some((post_ptr, post_bytes)) =
+            checked_range(split, post_offset, split.bytes.saturating_sub(post_offset))
+        else {
+            return false;
+        };
+        let Some((comb_ptr, comb_bytes)) =
+            checked_range(split, comb_offset, split.bytes.saturating_sub(comb_offset))
+        else {
+            return false;
+        };
+        unsafe {
+            hc_expand_impl(
+                out_hc,
+                block_out,
+                None,
+                false,
+                residual_hc,
+                post_ptr,
+                post_bytes as u64,
+                mix_hc,
+                comb_ptr,
+                comb_bytes as u64,
+                mix_hc,
+                n_embd,
+                n_hc,
+            )
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_hc_expand_add_split_tensor(
+    out_hc: *mut Ds4GpuTensor,
+    block_out: *const Ds4GpuTensor,
+    block_add: *const Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    split: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out_hc) = (unsafe { tensor_ref(out_hc.cast_const()) }) else {
+            return false;
+        };
+        let Some(block_out) = (unsafe { tensor_ref(block_out) }) else {
+            return false;
+        };
+        let Some(block_add) = (unsafe { tensor_ref(block_add) }) else {
+            return false;
+        };
+        let Some(residual_hc) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(split) = (unsafe { tensor_ref(split) }) else {
+            return false;
+        };
+        let Some(mix_hc) = n_hc.checked_mul(n_hc).and_then(|comb| {
+            n_hc.checked_mul(2)
+                .and_then(|prefix| prefix.checked_add(comb))
+        }) else {
+            return false;
+        };
+        let post_offset = u64::from(n_hc) * size_of::<f32>() as u64;
+        let comb_offset = u64::from(n_hc) * 2 * size_of::<f32>() as u64;
+        let Some((post_ptr, post_bytes)) =
+            checked_range(split, post_offset, split.bytes.saturating_sub(post_offset))
+        else {
+            return false;
+        };
+        let Some((comb_ptr, comb_bytes)) =
+            checked_range(split, comb_offset, split.bytes.saturating_sub(comb_offset))
+        else {
+            return false;
+        };
+        unsafe {
+            hc_expand_impl(
+                out_hc,
+                block_out,
+                Some(block_add),
+                true,
+                residual_hc,
+                post_ptr,
+                post_bytes as u64,
+                mix_hc,
+                comb_ptr,
+                comb_bytes as u64,
+                mix_hc,
+                n_embd,
+                n_hc,
+            )
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 #[no_mangle]
 pub unsafe extern "C" fn ds4_gpu_directional_steering_project_tensor(
     x: *mut Ds4GpuTensor,

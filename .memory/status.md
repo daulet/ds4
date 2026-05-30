@@ -3,7 +3,22 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba: Public Hyperconnection Expansion ABI
+  is validated. Rust exports `ds4_gpu_hc_expand_tensor`,
+  `ds4_gpu_hc_expand_split_tensor`, and
+  `ds4_gpu_hc_expand_add_split_tensor` through an embedded stride-aware
+  `abi_hc_expand_kernel`. A C-linked B300 witness proves direct, split,
+  normal add, and aliased add results plus invalid-input rejection. Local
+  tests pass with 127 tests; B300 feature tests pass with 134 tests; the
+  static library exposes 39 symbols; all 37 preceding linked ABI consumers
+  pass against the rebuilt archive with the known executable-stack warning.
+  All 41 CUDA ABI comparators pass, and the unified report passes with 213
+  passed, 45 skipped, and 0 failed. Pre-implementation and final pass-end
+  Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Fused public Q8 HC consumers, remaining graph
+  compute, whole-archive/route promotion, C CUDA removal, and the warning
+  remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba: Public Q8 Matmul ABI
   is validated. Rust exports `ds4_gpu_matmul_q8_0_tensor`, consumes the
   previously exported converted-cache and quality-control state for

@@ -3523,6 +3523,19 @@ pair/HC consumers, remaining graph compute, whole-archive retention policy,
 route promotion, C CUDA removal, and the embedded-object executable-stack
 warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba Rust CUDA
+public hyperconnection expansion ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_hc_expand_smoke.py --negative-test
+```
+
+The C-linked B300 fixture exercises direct post/comb expansion, split
+expansion, split-plus-add expansion, and aliased `block_add == block_out`
+behavior through the embedded Rust kernel. Fused public Q8 HC consumers,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

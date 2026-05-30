@@ -3046,6 +3046,36 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBA_SCOPE: CudaAbiQ8MatmulS
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiHcExpandScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub consumes_q8_matmul_abi: bool,
+    pub owns_hc_expand_tensor: bool,
+    pub owns_hc_expand_split_tensor: bool,
+    pub owns_hc_expand_add_split_tensor: bool,
+    pub owns_hc_expand_kernel: bool,
+    pub owns_fused_q8_hc_consumers: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE: CudaAbiHcExpandScope =
+    CudaAbiHcExpandScope {
+        exported_abi_symbol_count: 39,
+        exported_compute_symbol_count: 16,
+        consumes_q8_matmul_abi: true,
+        owns_hc_expand_tensor: true,
+        owns_hc_expand_split_tensor: true,
+        owns_hc_expand_add_split_tensor: true,
+        owns_hc_expand_kernel: true,
+        owns_fused_q8_hc_consumers: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -3109,6 +3139,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -4936,6 +4967,31 @@ mod tests {
         );
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBA_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_hc_expand_scope_keeps_fused_q8_consumers_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.exported_abi_symbol_count,
+            39
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.exported_compute_symbol_count,
+            16
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.consumes_q8_matmul_abi);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.owns_hc_expand_tensor);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.owns_hc_expand_split_tensor);
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.owns_hc_expand_add_split_tensor
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.owns_hc_expand_kernel);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.owns_fused_q8_hc_consumers);
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.owns_remaining_graph_compute_abi
+        );
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE.changes_default_route);
     }
 
     #[test]

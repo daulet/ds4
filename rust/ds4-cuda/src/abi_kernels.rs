@@ -40,6 +40,52 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_hc_expand_kernel(
+        n_embd: u32,
+        n_hc: u32,
+        n_tokens: u32,
+        post_stride: u32,
+        comb_stride: u32,
+        has_add: u32,
+        block_out: &[f32],
+        block_add: &[f32],
+        residual_hc: &[f32],
+        post: &[f32],
+        comb: &[f32],
+        mut out_hc: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d().get() as u64;
+        let n_elem = u64::from(n_tokens) * u64::from(n_hc) * u64::from(n_embd);
+        if index >= n_elem {
+            return;
+        }
+        let dimension = index % u64::from(n_embd);
+        let temporary = index / u64::from(n_embd);
+        let destination_hc = temporary % u64::from(n_hc);
+        let token = temporary / u64::from(n_hc);
+        let block_index = (token * u64::from(n_embd) + dimension) as usize;
+        let mut block_value = block_out[block_index];
+        if has_add != 0 {
+            block_value += block_add[block_index];
+        }
+        let mut accumulator =
+            block_value * post[(token * u64::from(post_stride) + destination_hc) as usize];
+        let mut source_hc = 0_u64;
+        while source_hc < u64::from(n_hc) {
+            accumulator += comb[(token * u64::from(comb_stride)
+                + destination_hc
+                + source_hc * u64::from(n_hc)) as usize]
+                * residual_hc[(token * u64::from(n_hc) * u64::from(n_embd)
+                    + source_hc * u64::from(n_embd)
+                    + dimension) as usize];
+            source_hc += 1;
+        }
+        unsafe {
+            *out_hc.get_unchecked_mut(index as usize) = accumulator;
+        }
+    }
+
+    #[kernel]
     pub fn abi_directional_steering_project_kernel(
         layer: u32,
         width: u32,
@@ -792,6 +838,7 @@ mod kernels {
 pub(crate) struct AbiKernelModule {
     add_kernel: CudaFunction,
     repeat_hc_kernel: CudaFunction,
+    hc_expand_kernel: CudaFunction,
     directional_steering_project_kernel: CudaFunction,
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
@@ -819,6 +866,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             repeat_hc_kernel: module
                 .load_function("abi_repeat_hc_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            hc_expand_kernel: module
+                .load_function("abi_hc_expand_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             directional_steering_project_kernel: module
                 .load_function("abi_directional_steering_project_kernel")
@@ -944,6 +994,85 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.repeat_hc_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn hc_expand_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        block_out_ptr: u64,
+        block_add_ptr: u64,
+        residual_hc_ptr: u64,
+        post_ptr: u64,
+        comb_ptr: u64,
+        n_embd: u32,
+        n_hc: u32,
+        n_tokens: u32,
+        post_stride: u32,
+        comb_stride: u32,
+        has_add: bool,
+    ) -> bool {
+        let count = u64::from(n_tokens) * u64::from(n_hc) * u64::from(n_embd);
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let block_len = u64::from(n_tokens) * u64::from(n_embd);
+        let residual_len = count;
+        let post_len = (u64::from(n_tokens) - 1) * u64::from(post_stride) + u64::from(n_hc);
+        let comb_width = u64::from(n_hc) * u64::from(n_hc);
+        let comb_len = (u64::from(n_tokens) - 1) * u64::from(comb_stride) + comb_width;
+        let mut n_embd = n_embd;
+        let mut n_hc = n_hc;
+        let mut n_tokens = n_tokens;
+        let mut post_stride = post_stride;
+        let mut comb_stride = comb_stride;
+        let mut has_add = u32::from(has_add);
+        let mut block_out_ptr = block_out_ptr;
+        let mut block_out_len = block_len;
+        let mut block_add_ptr = block_add_ptr;
+        let mut block_add_len = block_len;
+        let mut residual_hc_ptr = residual_hc_ptr;
+        let mut residual_hc_len = residual_len;
+        let mut post_ptr = post_ptr;
+        let mut post_len = post_len;
+        let mut comb_ptr = comb_ptr;
+        let mut comb_len = comb_len;
+        let mut out_ptr = out_ptr;
+        let mut out_len = count;
+        let mut params = [
+            (&mut n_embd as *mut u32).cast::<c_void>(),
+            (&mut n_hc as *mut u32).cast::<c_void>(),
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut post_stride as *mut u32).cast::<c_void>(),
+            (&mut comb_stride as *mut u32).cast::<c_void>(),
+            (&mut has_add as *mut u32).cast::<c_void>(),
+            (&mut block_out_ptr as *mut u64).cast::<c_void>(),
+            (&mut block_out_len as *mut u64).cast::<c_void>(),
+            (&mut block_add_ptr as *mut u64).cast::<c_void>(),
+            (&mut block_add_len as *mut u64).cast::<c_void>(),
+            (&mut residual_hc_ptr as *mut u64).cast::<c_void>(),
+            (&mut residual_hc_len as *mut u64).cast::<c_void>(),
+            (&mut post_ptr as *mut u64).cast::<c_void>(),
+            (&mut post_len as *mut u64).cast::<c_void>(),
+            (&mut comb_ptr as *mut u64).cast::<c_void>(),
+            (&mut comb_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates every strided source span and the full
+        // output tensor before submitting the current-C-equivalent launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.hc_expand_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

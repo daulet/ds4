@@ -1,0 +1,72 @@
+{
+  "schema": "ds4.cuda_abi_hc_expand_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-hc-expand-abi",
+  "goal": "Rust-own the public hyperconnection expansion kernel family without claiming the fused Q8 HC consumers or route promotion.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_hc_expand_tensor",
+      "ds4_gpu_hc_expand_split_tensor",
+      "ds4_gpu_hc_expand_add_split_tensor"
+    ],
+    "semantics": [
+      "current C drives direct post/comb expansion and split-stride expansion through one hc_expand_kernel",
+      "the add-split entry point includes block_add even when it aliases block_out",
+      "later Q8 HC public wrappers consume split and add-split only as disabled-fusion fallbacks"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba/abi_hc_expand_link_smoke.c",
+    "kernel_entry": "abi_hc_expand_kernel",
+    "remaining_compute_boundary": "fused Q8 HC matmul and shared-down consumers, remaining graph compute, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 39,
+    "exported_compute_symbol_count": 16,
+    "public_gpu_abi_function_count": 81,
+    "consumes_q8_matmul_abi": true,
+    "owns_hc_expand_tensor": true,
+    "owns_hc_expand_split_tensor": true,
+    "owns_hc_expand_add_split_tensor": true,
+    "owns_hc_expand_kernel": true,
+    "owns_fused_q8_hc_consumers": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 127,
+    "feature_release_test_count": 134,
+    "staticlib_export_count": 39,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "direct_expand_output_matches": true,
+      "split_expand_output_matches": true,
+      "split_add_output_matches": true,
+      "aliased_split_add_output_matches": true,
+      "invalid_zero_shape_rejected": true,
+      "null_output_rejected": true,
+      "embedded_hc_expand_kernel_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 37,
+      "predecessor_relink_executable_stack_warning_count": 37
+    }
+  },
+  "integration_risks": [
+    "fused Q8 HC and shared-down consumers and remaining graph compute still route through C until separately exported and compared",
+    "production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

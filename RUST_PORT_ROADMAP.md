@@ -11056,10 +11056,53 @@ Stage split:
 
 ################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
-- Goal: connect specialized public Q8 pair/HC consumers, remaining graph
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbb because the public
+  HC expansion kernel family is a bounded prerequisite for fused public Q8
+  HC consumers.
+- Goal: connect public HC expansion, fused public Q8 HC consumers, remaining graph
   compute, whole-archive retention policy, and production route-promotion
   work without claiming C CUDA removal before those gates pass.
+
+################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba: Public Hyperconnection Expansion ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_hc_expand_tensor`,
+  `ds4_gpu_hc_expand_split_tensor`, and
+  `ds4_gpu_hc_expand_add_split_tensor` through one current-C-compatible
+  embedded expansion kernel without claiming fused Q8 HC consumers or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbba/abi-hc-expand-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_hc_expand_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the three public HC expansion entry
+    points and validates direct and split-strided source spans before launch.
+  - `rust/ds4-cuda/src/abi_kernels.rs` promotes a stride-aware
+    `abi_hc_expand_kernel` covering direct, split, and split-plus-add calls.
+  - A C-linked B300 consumer proves direct and split output parity,
+    split-plus-add behavior, aliased `block_add == block_out` behavior, and
+    invalid-input rejection.
+  - Local library tests pass with 127 tests; B300 release-feature tests pass
+    with 134 tests; the static library exposes 39 Rust ABI symbols; 37
+    preceding linked ABI consumers pass against the rebuilt archive with the
+    known generated embedded-object executable-stack warning.
+  - All 41 CUDA ABI comparators pass, and the unified parity report passes
+    with 213 passed, 45 skipped, and 0 failed.
+  - Pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+    completed findings.
+  - Fused public Q8 HC consumers, remaining graph compute, whole-archive
+    retention policy, route promotion, C CUDA removal, and the generated
+    embedded-object executable-stack warning remain open.
+
+################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: connect fused public Q8 HC consumers, remaining graph compute,
+  whole-archive retention policy, and production route-promotion work
+  without claiming C CUDA removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 
