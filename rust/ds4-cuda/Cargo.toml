@@ -5,9 +5,9 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
-cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "d4791b7002152af3b7f6b15a48d7f5acd7a63011", optional = true }
-cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "d4791b7002152af3b7f6b15a48d7f5acd7a63011", optional = true }
-cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "d4791b7002152af3b7f6b15a48d7f5acd7a63011", optional = true }
+cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "e9c0d677104751179985098f02212ff044d3ec22", optional = true }
+cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "e9c0d677104751179985098f02212ff044d3ec22", optional = true }
+cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "e9c0d677104751179985098f02212ff044d3ec22", optional = true }
 libc = { version = "0.2", optional = true }
 
 [features]
@@ -136,4 +136,9 @@ required-features = ["cuda-oxide-kernels"]
 [[bin]]
 name = "ds4-cuda-indexer-topk-pow2-smoke"
 path = "src/bin/indexer_topk_pow2_smoke.rs"
+required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-indexer-topk-packed-smoke"
+path = "src/bin/indexer_topk_packed_smoke.rs"
 required-features = ["cuda-oxide-kernels"]

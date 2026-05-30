@@ -1,0 +1,91 @@
+{
+  "schema": "ds4.indexer_topk_packed_kernel_smoke.v1",
+  "milestone": "M14.2d2c3",
+  "status": "b300-pass",
+  "id": "m14.2d2c3-indexer-topk-packed-key-equivalent",
+  "goal": "Prove an opt-in Rust cuda-oxide packed-key equivalent for current-C's CUB top-k branch, including the dynamic-shared-memory launch prerequisite, without claiming CUB implementation or dispatch policy.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "e9c0d677104751179985098f02212ff044d3ec22",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] 8192 packed-key dynamic-shared-memory bitonic equivalent"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "topk_float_ordered_key and topk_pack_key value and lower-index ordering",
+      "indexer_topk_8192_cub_kernel 512-thread, 16-items-per-thread packed-key selection shape",
+      "negative-infinity sentinel exclusion for partial component rows",
+      "dynamic-shared-memory opt-in required before the large packed-key launch"
+    ],
+    "excluded_behavior": [
+      "CUB BlockRadixSort library ownership",
+      "CUB-versus-power-of-two dispatch selection",
+      "chunked, merged, and tree top-k branches",
+      "indexed ascending top-k sort",
+      "runtime graph integration and default CUDA route",
+      "C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "executable-local cuda-oxide 8192 packed-key top-k equivalent launch proof",
+      "current-C-shaped ordered-float and lower-index packed-key semantics",
+      "host opt-in for 65536-byte dynamic shared-memory launch shape"
+    ],
+    "not_claimed_in_this_stage": [
+      "CUB BlockRadixSort implementation",
+      "specialized top-k dispatch policy",
+      "chunked top-k dispatch",
+      "indexed ascending top-k sort dispatch",
+      "runtime graph integration or default CUDA route",
+      "C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "owns_indexer_topk_8192_packed_key_equivalent_kernel": true,
+    "owns_dynamic_shared_launch_shape": true,
+    "owns_cub_library_implementation": false,
+    "owns_topk_dispatch_policy": false,
+    "owns_chunked_topk_dispatch": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "dynamic_shared_repair": {
+    "cuda_oxide_revision": "e9c0d677104751179985098f02212ff044d3ec22",
+    "method": "CudaFunction::set_max_dynamic_shared_memory_size",
+    "requested_bytes": 65536,
+    "failure_before_repair": "Driver(DriverError(1, \"invalid argument\"))",
+    "resolved_boundary": "The generated Rust kernel requested 65536 dynamic shared bytes; current-C calls cudaFuncSetAttribute before the CUB launch, so cuda-oxide needed the corresponding function attribute control before equivalent Rust execution could launch."
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 35,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-indexer-topk-packed-smoke",
+    "backend_selected_target": "sm_80",
+    "stdout": {
+      "milestone": "M14.2d2c3",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "packed_key_4096_output_matches": true,
+      "packed_key_8192_range_output_matches": true,
+      "ordered_float_and_index_key_matches": true,
+      "dynamic_shared_launch_matches": true,
+      "sentinel_output_excluded": true,
+      "invalid_shape_rejected": true,
+      "owns_indexer_topk_8192_packed_key_equivalent_kernel": true,
+      "owns_dynamic_shared_launch_shape": true,
+      "owns_cub_library_implementation": false,
+      "owns_topk_dispatch_policy": false,
+      "owns_chunked_topk_dispatch": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.2d2c4 Chunked And Tree-Merge Top-K Kernels"
+}

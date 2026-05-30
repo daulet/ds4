@@ -87,7 +87,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 [[package]]
 name = "cublas-sys"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "libloading",
  "thiserror",
@@ -96,7 +96,7 @@ dependencies = [
 [[package]]
 name = "cuda-bindings"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "bindgen",
 ]
@@ -104,7 +104,7 @@ dependencies = [
 [[package]]
 name = "cuda-core"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "anyhow",
  "cublas-sys",
@@ -117,7 +117,7 @@ dependencies = [
 [[package]]
 name = "cuda-device"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "cuda-lowp",
  "cuda-macros",
@@ -126,7 +126,7 @@ dependencies = [
 [[package]]
 name = "cuda-host"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "cuda-core",
  "cuda-macros",
@@ -139,12 +139,12 @@ dependencies = [
 [[package]]
 name = "cuda-lowp"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 
 [[package]]
 name = "cuda-macros"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -273,7 +273,7 @@ dependencies = [
 [[package]]
 name = "libnvvm-sys"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "libloading",
  "thiserror",
@@ -310,7 +310,7 @@ dependencies = [
 [[package]]
 name = "nvjitlink-sys"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "libloading",
  "thiserror",
@@ -331,7 +331,7 @@ dependencies = [
 [[package]]
 name = "oxide-artifacts"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 dependencies = [
  "object",
 ]
@@ -396,7 +396,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 [[package]]
 name = "reserved-oxide-symbols"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=d4791b7002152af3b7f6b15a48d7f5acd7a63011#d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+source = "git+https://github.com/daulet/cuda-oxide?rev=e9c0d677104751179985098f02212ff044d3ec22#e9c0d677104751179985098f02212ff044d3ec22"
 
 [[package]]
 name = "rustc-hash"

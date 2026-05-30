@@ -25,7 +25,8 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+RECORDED_DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+CURRENT_DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide 2048 and 4096 u32-index bitonic kernel launch proof",
     "executable-local cuda-oxide 8192 u16-index fallback kernel launch proof",
@@ -89,10 +90,10 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     report.check(fixture.get("milestone") == "M14.2d2c2", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
+    report.check(oxide.get("dependency_revision") == RECORDED_DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
-    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
-    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
+    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
+    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
     report.check('name = "ds4-cuda-indexer-topk-pow2-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
@@ -199,7 +200,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.2d2c3 CUB-Or-Equivalent Top-K Branch" in texts["status"], "next active stage missing")
+    report.check("Active item: M14.2d2c" in texts["status"], "top-k active stage missing")
     report.check("M14.2d2c2 Power-Of-Two Top-K Kernels" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

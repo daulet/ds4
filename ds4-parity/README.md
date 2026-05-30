@@ -2359,6 +2359,19 @@ lower-index tie order. It proves the larger shared-memory kernel behavior
 while leaving CUB selection, chunked merging, indexed ascending sort,
 runtime route, and C CUDA removal pending.
 
+Validate the M14.2d2c3 Rust CUDA packed-key top-k equivalent smoke:
+
+```sh
+python3 ds4-parity/check_indexer_topk_packed_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local packed-key dynamic-shared-memory top-k
+execution on B300 after the pinned cuda-oxide host API repair needed to opt
+into a 65,536-byte launch. It proves current-C ordered-float and lower-index
+key semantics while leaving CUB library ownership, branch selection,
+chunk/tree merging, indexed ascending sort, runtime route, and C CUDA removal
+pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -1,4 +1,4 @@
-pub const CUDA_OXIDE_REVISION: &str = "d4791b7002152af3b7f6b15a48d7f5acd7a63011";
+pub const CUDA_OXIDE_REVISION: &str = "e9c0d677104751179985098f02212ff044d3ec22";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostSubstrateScope {
@@ -531,6 +531,27 @@ pub const M14_2D2C2_SCOPE: IndexerTopkPow2KernelScope = IndexerTopkPow2KernelSco
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerTopkPackedKeyKernelScope {
+    pub opt_in_only: bool,
+    pub owns_indexer_topk_8192_packed_key_equivalent_kernel: bool,
+    pub owns_dynamic_shared_launch_shape: bool,
+    pub owns_cub_library_implementation: bool,
+    pub owns_topk_dispatch_policy: bool,
+    pub owns_chunked_topk_dispatch: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2D2C3_SCOPE: IndexerTopkPackedKeyKernelScope = IndexerTopkPackedKeyKernelScope {
+    opt_in_only: true,
+    owns_indexer_topk_8192_packed_key_equivalent_kernel: true,
+    owns_dynamic_shared_launch_shape: true,
+    owns_cub_library_implementation: false,
+    owns_topk_dispatch_policy: false,
+    owns_chunked_topk_dispatch: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -548,14 +569,14 @@ mod tests {
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
         M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
         M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
-        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE,
+        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
     };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
         assert_eq!(
             CUDA_OXIDE_REVISION,
-            "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+            "e9c0d677104751179985098f02212ff044d3ec22"
         );
         assert!(M14_1A_SCOPE.opt_in_only);
         assert!(M14_1A_SCOPE.owns_context_and_stream);
@@ -806,6 +827,17 @@ mod tests {
         assert!(!M14_2D2C2_SCOPE.owns_chunked_topk_dispatch);
         assert!(!M14_2D2C2_SCOPE.owns_indexed_topk_sort_dispatch);
         assert!(!M14_2D2C2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn packed_topk_scope_leaves_cub_internals_dispatch_chunking_and_route_pending() {
+        assert!(M14_2D2C3_SCOPE.opt_in_only);
+        assert!(M14_2D2C3_SCOPE.owns_indexer_topk_8192_packed_key_equivalent_kernel);
+        assert!(M14_2D2C3_SCOPE.owns_dynamic_shared_launch_shape);
+        assert!(!M14_2D2C3_SCOPE.owns_cub_library_implementation);
+        assert!(!M14_2D2C3_SCOPE.owns_topk_dispatch_policy);
+        assert!(!M14_2D2C3_SCOPE.owns_chunked_topk_dispatch);
+        assert!(!M14_2D2C3_SCOPE.changes_default_route);
     }
 
     #[test]

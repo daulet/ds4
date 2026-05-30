@@ -25,7 +25,8 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+RECORDED_DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+CURRENT_DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide swiglu_kernel launch proof",
     "current-C-shaped clamp, SiLU exponential, weight, and bounds semantics",
@@ -87,10 +88,10 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     report.check(fixture.get("milestone") == "M14.2b2", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
+    report.check(oxide.get("dependency_revision") == RECORDED_DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
-    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
-    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
+    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
+    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
     report.check('name = "ds4-cuda-swiglu-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
@@ -182,7 +183,7 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
 
 def validate_repair(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     repair = require_dict(report, fixture.get("libdevice_repair"), "libdevice_repair")
-    report.check(repair.get("cuda_oxide_revision") == DEPENDENCY_REVISION, "repair revision drift")
+    report.check(repair.get("cuda_oxide_revision") == RECORDED_DEPENDENCY_REVISION, "repair revision drift")
     report.check("__nv_expf" in repair.get("resolved_boundary", ""), "resolved exp boundary missing")
     report.check("portable PTX" in repair.get("resolved_boundary", ""), "portable PTX boundary missing")
     report.check("sm_103" in repair.get("resolved_boundary", ""), "linked target boundary missing")

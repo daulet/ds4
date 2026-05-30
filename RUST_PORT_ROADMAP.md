@@ -7718,13 +7718,47 @@ Stage split:
 
 ##### M14.2d2c3: CUB-Or-Equivalent Top-K Branch
 
-- Status: active.
+- Status: done.
 - Goal: port or explicitly close current-C's dynamic-shared-memory CUB
   selection optimization with equivalent validated ordering.
+- Oracle: current-C `topk_float_ordered_key`, `topk_pack_key`, and
+  `indexer_topk_8192_cub_kernel` plus its dynamic-shared-memory opt-in
+  launch prerequisite.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c3/indexer-topk-packed-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_packed_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns an executable packed-key top-k equivalent and its
+  65,536-byte dynamic-shared-memory setup; CUB internals, branch selection,
+  chunk/tree merge, indexed ascending sort, route activation, and C CUDA
+  removal remain pending.
+- Evidence:
+  - Added executable-local Rust
+    `indexer_topk_8192_packed_key_equivalent_kernel`, preserving current-C's
+    ordered float-bit key, lower-index tie key, and negative-infinity
+    sentinel behavior through a dynamic-shared-memory bitonic equivalent.
+  - The initial B300 launch failed with `DriverError(1, "invalid argument")`
+    because current-C's `cudaFuncSetAttribute` prerequisite was missing from
+    the Rust host layer. Pinned cuda-oxide revision
+    `e9c0d677104751179985098f02212ff044d3ec22` adds
+    `CudaFunction::set_max_dynamic_shared_memory_size`.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 35 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved 4096- and 6000-component output, positive-NaN
+    ordering, tie order, sentinel exclusion, dynamic shared-memory setup,
+    and invalid-shape rejection on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 80-check comparator, and
+    unified parity passed with 126 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained the explicit CUB implementation and
+    dispatch-selection non-claims.
+  - This stage remains opt-in; it does not claim CUB library implementation
+    or specialized top-k dispatch selection.
 
 ##### M14.2d2c4: Chunked And Tree-Merge Top-K Kernels
 
-- Status: pending.
+- Status: active.
 - Goal: port the large-component chunk candidate, intermediate tree merge,
   and final merge kernels plus their scratch layout.
 

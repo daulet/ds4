@@ -7951,12 +7951,35 @@
 
 ##### M14.2d2c3: CUB-Or-Equivalent Top-K Branch
 
-- Status: active
+- Status: done
 - Goal: port or explicitly close current-C's CUB radix-sort optimization.
+- Oracle: current-C `topk_float_ordered_key`, `topk_pack_key`,
+  `indexer_topk_8192_cub_kernel`, and its dynamic-shared-memory opt-in.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c3/indexer-topk-packed-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_packed_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust
+  `indexer_topk_8192_packed_key_equivalent_kernel`, preserving current-C
+  ordered-float and lower-index packed-key semantics with sentinel exclusion
+  through a dynamic-shared-memory bitonic equivalent. Its initial B300 launch
+  failed with `DriverError(1, "invalid argument")` until pinned cuda-oxide
+  revision `e9c0d677104751179985098f02212ff044d3ec22` added
+  `CudaFunction::set_max_dynamic_shared_memory_size` for the required
+  65,536-byte launch. B300 feature-enabled tests passed with 35 tests and
+  live cargo-oxide execution proved 4096- and 6000-component output,
+  positive-NaN ordering, tie order, sentinel exclusion, and shape rejection
+  on `NVIDIA B300 SXM6 AC`. CUB library ownership, dispatch selection,
+  chunk/tree merge, indexed sort, runtime route, and C CUDA removal remain
+  unclaimed. Local formatting, diff, workspace tests, the 80-check
+  comparator, and unified parity passed with 126 passed, 45 skipped, and
+  0 failed. Non-interactive Claude review timed out without a completed
+  result; adversarial self-review retained the CUB and dispatch non-claims.
 
 ##### M14.2d2c4: Chunked And Tree-Merge Top-K Kernels
 
-- Status: pending
+- Status: active
 - Goal: port chunk candidate, intermediate tree merge, and final merge
   kernels together with their scratch layout.
 

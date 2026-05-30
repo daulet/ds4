@@ -27,7 +27,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 FIXTURE_REVISION = "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
-CURRENT_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
+CURRENT_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
 EXPECTED_RUST_OWNED = [
     "CUDA primary context RAII",
     "CUDA non-blocking stream RAII",
