@@ -61,6 +61,29 @@ pub const M14_1B2A_SCOPE: ModelRangeCopyScope = ModelRangeCopyScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ModelRangeStrategyScope {
+    pub opt_in_only: bool,
+    pub owns_explicit_mmap_device_copy_strategy: bool,
+    pub owns_explicit_file_staged_device_copy_strategy: bool,
+    pub owns_registered_range_strategy: bool,
+    pub owns_pageable_hmm_strategy: bool,
+    pub owns_o_direct_staging: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B2B1_SCOPE: ModelRangeStrategyScope = ModelRangeStrategyScope {
+    opt_in_only: true,
+    owns_explicit_mmap_device_copy_strategy: true,
+    owns_explicit_file_staged_device_copy_strategy: true,
+    owns_registered_range_strategy: false,
+    owns_pageable_hmm_strategy: false,
+    owns_o_direct_staging: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
 
@@ -69,7 +92,9 @@ pub mod substrate;
 
 #[cfg(test)]
 mod tests {
-    use super::{CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE};
+    use super::{
+        CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
+    };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
@@ -105,5 +130,17 @@ mod tests {
         assert!(!M14_1B2A_SCOPE.owns_range_strategy_selection);
         assert!(!M14_1B2A_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn file_staged_scope_does_not_overclaim_pending_strategy_or_route_ownership() {
+        assert!(M14_1B2B1_SCOPE.opt_in_only);
+        assert!(M14_1B2B1_SCOPE.owns_explicit_mmap_device_copy_strategy);
+        assert!(M14_1B2B1_SCOPE.owns_explicit_file_staged_device_copy_strategy);
+        assert!(!M14_1B2B1_SCOPE.owns_registered_range_strategy);
+        assert!(!M14_1B2B1_SCOPE.owns_pageable_hmm_strategy);
+        assert!(!M14_1B2B1_SCOPE.owns_o_direct_staging);
+        assert!(!M14_1B2B1_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B2B1_SCOPE.changes_default_route);
     }
 }

@@ -2,6 +2,7 @@ use std::ffi::c_void;
 use std::fmt;
 use std::fs::File;
 use std::os::raw::c_int;
+use std::os::unix::fs::FileExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::ptr::NonNull;
@@ -130,6 +131,14 @@ impl MappedModelFile {
         let bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
         Ok(unsafe { slice::from_raw_parts(self.ptr.as_ptr().add(offset), bytes) })
     }
+
+    pub fn read_file_range(&self, offset: u64, bytes: u64) -> Result<Vec<u8>, ModelRangeError> {
+        self.range(offset, bytes)?;
+        let bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        let mut staged = vec![0_u8; bytes];
+        self._file.read_exact_at(&mut staged, offset)?;
+        Ok(staged)
+    }
 }
 
 impl Drop for MappedModelFile {
@@ -146,7 +155,14 @@ pub enum CacheOutcome {
     Reused,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelRangeStrategy {
+    MmapDeviceCopy,
+    FileStagedDeviceCopy,
+}
+
 struct CachedModelRange {
+    strategy: ModelRangeStrategy,
     offset: u64,
     bytes: u64,
     device: DeviceBuffer<u8>,
@@ -165,13 +181,39 @@ impl ModelRangeCache {
         offset: u64,
         bytes: u64,
     ) -> Result<CacheOutcome, ModelRangeError> {
-        let source = model.range(offset, bytes)?;
-        if self.find(offset, bytes).is_some() {
+        self.cache_range_with_strategy(
+            substrate,
+            model,
+            offset,
+            bytes,
+            ModelRangeStrategy::MmapDeviceCopy,
+        )
+    }
+
+    pub fn cache_range_with_strategy(
+        &mut self,
+        substrate: &CudaOxideSubstrate,
+        model: &MappedModelFile,
+        offset: u64,
+        bytes: u64,
+        strategy: ModelRangeStrategy,
+    ) -> Result<CacheOutcome, ModelRangeError> {
+        model.range(offset, bytes)?;
+        if self.find(strategy, offset, bytes).is_some() {
             return Ok(CacheOutcome::Reused);
         }
+        let staged;
+        let source = match strategy {
+            ModelRangeStrategy::MmapDeviceCopy => model.range(offset, bytes)?,
+            ModelRangeStrategy::FileStagedDeviceCopy => {
+                staged = model.read_file_range(offset, bytes)?;
+                &staged
+            }
+        };
         let device = substrate.upload(source)?;
         substrate.synchronize()?;
         self.ranges.push(CachedModelRange {
+            strategy,
             offset,
             bytes,
             device,
@@ -185,8 +227,18 @@ impl ModelRangeCache {
         offset: u64,
         bytes: u64,
     ) -> Result<Vec<u8>, ModelRangeError> {
+        self.readback_with_strategy(substrate, offset, bytes, ModelRangeStrategy::MmapDeviceCopy)
+    }
+
+    pub fn readback_with_strategy(
+        &self,
+        substrate: &CudaOxideSubstrate,
+        offset: u64,
+        bytes: u64,
+        strategy: ModelRangeStrategy,
+    ) -> Result<Vec<u8>, ModelRangeError> {
         let range = self
-            .find(offset, bytes)
+            .find(strategy, offset, bytes)
             .ok_or(ModelRangeError::MissingCachedRange { offset, bytes })?;
         Ok(substrate.download(&range.device)?)
     }
@@ -195,9 +247,14 @@ impl ModelRangeCache {
         self.ranges.len()
     }
 
-    fn find(&self, offset: u64, bytes: u64) -> Option<&CachedModelRange> {
-        self.ranges
-            .iter()
-            .find(|range| range.offset == offset && range.bytes == bytes)
+    fn find(
+        &self,
+        strategy: ModelRangeStrategy,
+        offset: u64,
+        bytes: u64,
+    ) -> Option<&CachedModelRange> {
+        self.ranges.iter().find(|range| {
+            range.strategy == strategy && range.offset == offset && range.bytes == bytes
+        })
     }
 }

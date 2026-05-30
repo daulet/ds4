@@ -28,3 +28,8 @@ required-features = ["cuda-oxide-backend"]
 name = "ds4-cuda-model-range-copy-smoke"
 path = "src/bin/model_range_copy_smoke.rs"
 required-features = ["cuda-oxide-backend"]
+
+[[bin]]
+name = "ds4-cuda-model-range-strategy-smoke"
+path = "src/bin/model_range_strategy_smoke.rs"
+required-features = ["cuda-oxide-backend"]

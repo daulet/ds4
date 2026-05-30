@@ -7309,9 +7309,42 @@
 
 ####### M14.1b2b: Model Range Strategy Parity
 
+- Status: split before implementation into M14.1b2b1 through M14.1b2b3.
+- Goal: port the independently verifiable model-range strategy branches with
+  current-C retained as the comparison source.
+
+######## M14.1b2b1: File-Staged Range Strategy
+
+- Status: done
+- Goal: prove explicit mmap-copy versus file-staged-copy selection and
+  byte-exact selected-range reuse on B300.
+- Oracle: current-C device-copy and `cuda_model_range_ptr_from_fd` branches,
+  excluding O_DIRECT, registration, HMM, staging-ring, and cache-budget
+  policy.
+- Validation needed: Rust B300 readbacks from both selected strategies match
+  exactly and reuse their cache entries without kernel or route claims.
+- Fixture: `ds4-parity/baselines/backend/m14.1b2b1/model-range-strategy-smoke.json`.
+- Evidence: the B300 strategy smoke cached and reused a 4096-byte range
+  independently through mmap-source and file-staged-source uploads, and both
+  device readbacks exactly matched the pinned GGUF bytes. Registered mapped
+  ranges, pageable HMM, O_DIRECT/staging policy, kernels, and route activation
+  remain unclaimed. A live model SHA256 refresh matched the recorded GGUF;
+  workspace tests, the 73-check M14.1b2b1 gate, retained M14 gates, and
+  unified parity (99 passed, 50 skipped, 0 failed) passed. Non-interactive
+  Claude produced no review result before termination; self-review found no
+  material issue.
+
+######## M14.1b2b2: Registered Range Strategy
+
 - Status: active
-- Goal: implement registered/HMM/direct-I/O strategy selection and failure
-  behavior with current-C comparison.
+- Goal: add page-aligned mapped registration after resolving current-C
+  read-only flag parity in `cuda-oxide`.
+
+######## M14.1b2b3: Pageable HMM And Direct-I/O Policy
+
+- Status: planned
+- Goal: add pageable-HMM prefetch and O_DIRECT/fallback comparison or record
+  required upstream API work with executable evidence.
 
 ####### M14.1b2c: Model Map Cache Closure
 

@@ -2077,6 +2077,19 @@ lifetime, bounds-checked range selection, CUDA device-buffer copy/readback,
 and exact cache reuse. It does not claim registered/HMM/direct-I/O strategy
 selection, DS4 kernels, or runtime route activation.
 
+Validate the M14.1b2b1 file-staged model-range strategy B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_range_strategy_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-range-strategy-smoke` against the pinned GGUF: the Rust cache
+selects mmap-sourced and file-staged device-copy strategies independently,
+then requires exact readback equality and per-strategy cache reuse. It does
+not claim `O_DIRECT`, registered mapped-host ranges, pageable HMM, DS4
+kernels, or runtime route activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

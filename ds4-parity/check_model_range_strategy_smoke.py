@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.1b2a Rust-owned model mmap/device-range copy smoke."""
+"""Validate the M14.1b2b1 Rust-owned model range strategy smoke."""
 
 from __future__ import annotations
 
@@ -13,10 +13,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.1b2a/model-range-copy-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.1b2b1/model-range-strategy-smoke.json"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 MODEL_MAP = ROOT / "rust/ds4-cuda/src/model_map.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/model_range_copy_smoke.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/model_range_strategy_smoke.rs"
+CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
 STATUS = ROOT / ".memory/status.md"
@@ -28,15 +29,15 @@ MODEL_SHA256 = "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668
 MODEL_SIZE = 86720111488
 RANGE_BYTES = 4096
 EXPECTED_RUST_OWNED = [
-    "model file and mmap lifetime",
-    "bounds-checked model range selection",
-    "CUDA device-buffer copy cache for one selected model range",
-    "exact copied-range readback and cache-entry reuse",
+    "explicit mmap-sourced device-copy strategy dispatch",
+    "explicit file-staged device-copy strategy dispatch",
+    "strategy-keyed CUDA range cache entries and exact readback comparison",
+    "file-descriptor positional range read through Rust-owned model file",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "registered, HMM, or direct-I/O range-strategy selection",
-    "whole-model registration or whole-model device copy",
-    "Q8/F16 range-cache conversion policy",
+    "registered mapped-host range selection or failure fallback",
+    "pageable HMM advice or prefetch selection",
+    "O_DIRECT, asynchronous staging-ring, or cache-budget policy",
     "model-range consumption by DS4 compute kernels",
     "runtime graph or default CUDA route",
 ]
@@ -64,6 +65,7 @@ def main(argv: Iterable[str]) -> int:
         "lib": CRATE_LIB.read_text(encoding="utf-8"),
         "model_map": MODEL_MAP.read_text(encoding="utf-8"),
         "smoke": SMOKE.read_text(encoding="utf-8"),
+        "cuda": CUDA_SOURCE.read_text(encoding="utf-8"),
         "roadmap": ROADMAP.read_text(encoding="utf-8"),
         "todo": TODO.read_text(encoding="utf-8"),
         "status": STATUS.read_text(encoding="utf-8"),
@@ -85,16 +87,26 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.model_range_copy_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.1b2a", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.model_range_strategy_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.1b2b1", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("revision") == REVISION, "cuda-oxide revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-backend", "feature drift")
+    validate_oracle(report, fixture, texts)
     validate_model_range(report, fixture)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
     validate_wiring(report, texts)
+
+
+def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
+    oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
+    report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
+    for marker in ["cuda_model_range_ptr(", "cuda_model_range_ptr_from_fd(", "cudaMemcpyAsync("]:
+        report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
+    excluded = oracle.get("excluded_policy")
+    report.check(isinstance(excluded, list) and "O_DIRECT open and aligned reads" in excluded, "O_DIRECT exclusion missing")
 
 
 def validate_model_range(report: Report, fixture: dict[str, Any]) -> None:
@@ -114,31 +126,37 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     report.check(ownership.get("rust_owned_in_this_stage") == EXPECTED_RUST_OWNED, "owned scope drift")
     report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim scope drift")
-    report.check(ownership.get("opt_in_only") is True, "range-copy path is no longer opt-in")
-    report.check(ownership.get("owns_mapped_model_file_lifetime") is True, "mmap lifetime claim drift")
-    report.check(ownership.get("owns_device_range_copy_cache") is True, "range-copy claim drift")
-    report.check(ownership.get("owns_range_strategy_selection") is False, "strategy ownership overclaim")
-    report.check(ownership.get("owns_ds4_kernels") is False, "kernel ownership overclaim")
-    report.check(ownership.get("changes_default_route") is False, "route ownership overclaim")
-    report.check(ownership.get("retains_current_c_cuda_oracle") is True, "current-C oracle dropped")
+    for key, expected in [
+        ("opt_in_only", True),
+        ("owns_explicit_mmap_device_copy_strategy", True),
+        ("owns_explicit_file_staged_device_copy_strategy", True),
+        ("owns_registered_range_strategy", False),
+        ("owns_pageable_hmm_strategy", False),
+        ("owns_o_direct_staging", False),
+        ("owns_ds4_kernels", False),
+        ("changes_default_route", False),
+        ("retains_current_c_cuda_oracle", True),
+    ]:
+        report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_1B2A_SCOPE",
-        "owns_range_strategy_selection: false",
-        "owns_ds4_kernels: false",
+        "pub const M14_1B2B1_SCOPE",
+        "owns_explicit_file_staged_device_copy_strategy: true",
+        "owns_registered_range_strategy: false",
+        "owns_pageable_hmm_strategy: false",
+        "owns_o_direct_staging: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"Rust scope marker missing: {marker}")
     for marker in [
-        "pub struct MappedModelFile",
-        "fn mmap",
-        "fn munmap",
-        "pub struct ModelRangeCache",
-        "model.range(offset, bytes)",
-        "substrate.upload(source)",
-        "substrate.synchronize()",
-        "CacheOutcome::Reused",
+        "pub enum ModelRangeStrategy",
+        "MmapDeviceCopy",
+        "FileStagedDeviceCopy",
+        "pub fn read_file_range",
+        "read_exact_at",
+        "cache_range_with_strategy",
+        "readback_with_strategy",
     ]:
-        report.check(marker in texts["model_map"], f"range-cache marker missing: {marker}")
+        report.check(marker in texts["model_map"], f"strategy marker missing: {marker}")
 
 
 def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -148,52 +166,54 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
     report.check(execution.get("cuda_toolkit") == "13.2", "CUDA toolkit drift")
     report.check(execution.get("rust_toolchain") == "nightly-2026-04-03", "Rust toolchain drift")
-    report.check("--bin ds4-cuda-model-range-copy-smoke" in execution.get("command", ""), "smoke command missing")
+    report.check("--bin ds4-cuda-model-range-strategy-smoke" in execution.get("command", ""), "smoke command missing")
     stdout = require_dict(report, execution.get("stdout"), "b300_execution.stdout")
     expected = {
-        "milestone": "M14.1b2a",
+        "milestone": "M14.1b2b1",
         "device_name": "NVIDIA B300 SXM6 AC",
         "model_size": MODEL_SIZE,
         "range_offset": 0,
         "range_bytes": RANGE_BYTES,
-        "bounds_rejected": True,
-        "range_copy_readback": True,
-        "range_cache_reused": True,
-        "owns_mapped_model_file_lifetime": True,
-        "owns_device_range_copy_cache": True,
-        "owns_range_strategy_selection": False,
+        "mmap_device_copy": True,
+        "file_staged_device_copy": True,
+        "strategy_readbacks_equal": True,
+        "strategy_cache_reused": True,
+        "owns_explicit_file_staged_device_copy_strategy": True,
+        "owns_registered_range_strategy": False,
+        "owns_pageable_hmm_strategy": False,
+        "owns_o_direct_staging": False,
         "owns_ds4_kernels": False,
         "changes_default_route": False,
     }
-    report.check(stdout == expected, "B300 model-range result drift")
+    report.check(stdout == expected, "B300 strategy result drift")
     for marker in [
-        "MappedModelFile::open",
-        "model.range(model.size() + 1, 1).is_err()",
-        "CacheOutcome::Inserted",
-        "CacheOutcome::Reused",
-        "cache.readback",
+        "ModelRangeStrategy::MmapDeviceCopy",
+        "ModelRangeStrategy::FileStagedDeviceCopy",
+        "cache.cache_range_with_strategy",
+        "cache.readback_with_strategy",
+        "assert_eq!(cache.len(), 2)",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture_path = "ds4-parity/baselines/backend/m14.1b2a/model-range-copy-smoke.json"
-    checker = "check_model_range_copy_smoke.py"
-    report.check("M14.1b2a: Owned Mmap Device Range Copy" in texts["roadmap"], "roadmap item missing")
+    fixture_path = "ds4-parity/baselines/backend/m14.1b2b1/model-range-strategy-smoke.json"
+    checker = "check_model_range_strategy_smoke.py"
+    report.check("M14.1b2b1: File-Staged Range Strategy" in texts["roadmap"], "roadmap item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
-    report.check("M14.1b2a: Owned Mmap Device Range Copy" in texts["todo"], "TODO item missing")
+    report.check("M14.1b2b1: File-Staged Range Strategy" in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.1b2b" in texts["status"], "next active stage missing")
-    report.check("M14.1b2a Owned Mmap Device Range Copy" in texts["status"], "status evidence missing")
+    report.check("Active item: M14.1b2b2 Registered Range Strategy" in texts["status"], "next active stage missing")
+    report.check("M14.1b2b1 File-Staged Range Strategy" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("strategy overclaim", lambda value: value["ownership"].update({"owns_range_strategy_selection": True})),
-        ("readback failure", lambda value: value["b300_execution"]["stdout"].update({"range_copy_readback": False})),
-        ("cache reuse failure", lambda value: value["b300_execution"]["stdout"].update({"range_cache_reused": False})),
+        ("O_DIRECT overclaim", lambda value: value["ownership"].update({"owns_o_direct_staging": True})),
+        ("staged copy failure", lambda value: value["b300_execution"]["stdout"].update({"file_staged_device_copy": False})),
+        ("readback mismatch", lambda value: value["b300_execution"]["stdout"].update({"strategy_readbacks_equal": False})),
         ("model identity failure", lambda value: value["model_range"]["identity_verification"].update({"passed": False})),
     ]:
         candidate = copy.deepcopy(fixture)
@@ -210,7 +230,7 @@ def require_dict(report: Report, value: Any, name: str) -> dict[str, Any]:
 
 def print_report(report: Report) -> None:
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.1b2a model range copy smoke: {status} ({report.checks} checks)")
+    print(f"M14.1b2b1 model range strategy smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
 

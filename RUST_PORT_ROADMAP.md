@@ -6800,9 +6800,64 @@ Stage split:
 
 ####### M14.1b2b: Model Range Strategy Parity
 
+- Status: split before implementation into M14.1b2b1 through M14.1b2b3.
+- Goal: implement and compare the model-range strategy branches that are
+  separable from model-cache closure, retaining current-C as the oracle.
+
+######## M14.1b2b1: File-Staged Range Strategy
+
+- Status: complete.
+- Goal: implement explicit Rust strategy dispatch between mmap-sourced device
+  copy and file-descriptor staged device copy, and compare their selected-range
+  bytes on B300.
+- Oracle: the device-copy and file-descriptor staging branches of current-C
+  `cuda_model_range_ptr` and `cuda_model_range_ptr_from_fd`, excluding
+  asynchronous staging-ring, cache-budget, and direct-I/O policy.
+- Acceptance: the opt-in Rust path can cache and reuse the same bounded model
+  range from either mmap or `pread`-style file staging, and both device
+  readbacks are byte-exact; it does not claim O_DIRECT, registered-map, HMM,
+  DS4-kernel, or runtime-route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b1/model-range-strategy-smoke.json`.
+- Comparator: `ds4-parity/check_model_range_strategy_smoke.py --negative-test`
+  plus executable Rust B300 smoke using the pinned GGUF.
+- Evidence:
+  - Added explicit `ModelRangeStrategy::{MmapDeviceCopy,
+    FileStagedDeviceCopy}` selection and strategy-keyed range-cache entries;
+    file staging reads a bounds-checked selected range through the Rust-owned
+    file descriptor before uploading through `cuda-oxide`.
+  - On B300 pod `ds4-rust-port-b300`, the feature-enabled strategy smoke
+    independently cached and reused a 4096-byte prefix through both strategies
+    and produced byte-exact matching readbacks on `NVIDIA B300 SXM6 AC`.
+    A live SHA256 refresh confirmed the pinned GGUF identity
+    `efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668`.
+  - The stage explicitly leaves registered mapped-host ranges, pageable HMM
+    advice/prefetch, O_DIRECT and asynchronous staging policy, compute kernels,
+    and runtime route activation unclaimed.
+  - Validation passed: `cargo test --workspace`, `cargo fmt --all -- --check`,
+    `python3 ds4-parity/check_model_range_strategy_smoke.py --negative-test`
+    (73 checks), retained M14.1b2a/M14.1b1/M14.1a/M14.0 gates,
+    `git diff --check`, and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles` (99 passed,
+    50 skipped, 0 failed).
+  - Non-interactive Claude review produced no result and was terminated after
+    it failed to complete; adversarial self-review found no material
+    strategy-keying, source-lifetime, synchronization, bounded-claim, or
+    default-route issue.
+
+######## M14.1b2b2: Registered Range Strategy
+
 - Status: active.
-- Goal: implement and compare registered/HMM/direct-I/O range-strategy
-  selection and failure behavior against current-C.
+- Goal: port page-aligned mapped host registration and its failure fallback
+  after reconciling current-C read-only registration flags with the available
+  `cuda-oxide` host API.
+
+######## M14.1b2b3: Pageable HMM And Direct-I/O Policy
+
+- Status: planned.
+- Goal: close pageable-HMM prefetch and O_DIRECT/fallback behavior, including
+  explicit evidence for any `cuda-oxide` API additions required by current-C
+  parity.
 
 ####### M14.1b2c: Model Map Cache Closure
 
