@@ -3,7 +3,19 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba: Public Single-Token Paired F16 Projection ABI
+  is validated. Rust exports `ds4_gpu_matmul_f16_pair_tensor` for one-token
+  paired ordered-chunks and independent fallback paths; local tests pass
+  with 121 tests, B300 feature tests pass with 128 tests, the static library
+  exposes 31 symbols, and fifteen predecessor C-linked consumers pass against
+  the rebuilt archive, retaining the known executable-stack warning. The
+  focused comparator and default unified report pass with 207 passed, 45
+  skipped, and 0 failed; required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Multi-token
+  BLAS, Q8/F16 cache hooks, remaining graph compute,
+  whole-archive/route promotion, and the embedded-object executable-stack
+  warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbba: Public Single-Token F16 Projection ABI
   is validated. Rust exports `ds4_gpu_matmul_f16_tensor` for
   single-token base, ordered-chunks, and serial paths through cached F16

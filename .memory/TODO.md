@@ -10272,8 +10272,47 @@
 
 ############################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbb because public
+  single-token paired F16 projection can be proved independently from
+  multi-token BLAS, Q8/F16 cache hooks, and route promotion.
 - Goal: connect multi-token/paired F16 projection, q8/f16 cache hooks,
+  remaining graph compute, whole-archive retention policy, and production
+  route-promotion work without claiming C CUDA removal before those gates
+  pass.
+
+############################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba: Public Single-Token Paired F16 Projection ABI
+
+- Status: done
+- Goal: Rust-own public single-token paired F16 projection through the
+  current-C paired ordered-chunks dispatch and its independent fallback
+  selections without claiming multi-token BLAS, Q8/F16 cache, or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba/abi-matmul-f16-pair-single-token-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_matmul_f16_pair_single_token_smoke.py --negative-test`.
+- Evidence: Rust exports `ds4_gpu_matmul_f16_pair_tensor` for `n_tok == 1`
+  through a new embedded paired ordered-chunks kernel and reuses the owned
+  single-token F16 ABI for forced independent fallbacks. A C-linked B300
+  consumer verifies default paired, no-pair, no-ordered, and serial fallback
+  output; cached dual weights survive host mutation, while multi-token and
+  invalid ranges reject. Local tests pass with 121 tests, B300
+  release-feature tests pass with 128 tests, the static library exposes 31
+  Rust ABI symbols, and fifteen predecessor C-linked consumers pass against
+  the rebuilt archive; each predecessor relink retains the known
+  embedded-object executable-stack warning. The focused comparator and
+  default unified report pass with 207 passed, 45 skipped, and 0 failed.
+  The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Multi-token
+  BLAS, Q8/F16 cache hooks, remaining graph compute,
+  whole-archive retention policy, route promotion, C CUDA removal, and the
+  embedded-object executable-stack warning remain pending.
+
+############################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active
+- Goal: connect multi-token F16 BLAS projection, q8/f16 cache hooks,
   remaining graph compute, whole-archive retention policy, and production
   route-promotion work without claiming C CUDA removal before those gates
   pass.

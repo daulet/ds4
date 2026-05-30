@@ -1,0 +1,72 @@
+{
+  "schema": "ds4.cuda_abi_matmul_f16_pair_single_token_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba",
+  "status": "b300-pass-staticlib-single-token-f16-pair-projection-abi",
+  "goal": "Rust-own the public single-token paired F16 dense-projection ABI through current-C paired ordered-chunks dispatch and its independent single-projection fallback modes without claiming multi-token BLAS or Q8/F16 cache ownership.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_matmul_f16_pair_tensor"
+    ],
+    "semantics": [
+      "current C dispatches one-token paired F16 projection to matmul_f16_pair_ordered_chunks_kernel by default",
+      "current C delegates paired projection to two ds4_gpu_matmul_f16_tensor calls when pair execution is disabled or serial/base switches are active",
+      "current C can reach multi-token projection through the delegated path, which remains outside this Rust ABI leaf"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba/abi_matmul_f16_pair_single_token_link_smoke.c",
+    "weight_range_path": "with_cached_abi_model_range resolves both F16 weight ranges before the paired Rust embedded launch",
+    "owned_dispatch_boundary": "single-token paired ordered-chunks plus independent fallback through the already-owned single-token ABI",
+    "remaining_compute_boundary": "multi-token BLAS projection and Q8/F16 converted cache behavior remain unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exported and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 31,
+    "exported_compute_symbol_count": 11,
+    "public_gpu_abi_function_count": 81,
+    "owns_matmul_f16_pair_single_token_tensor": true,
+    "owns_paired_ordered_and_independent_fallback_paths": true,
+    "owns_live_pair_model_range_projection_observation": true,
+    "owns_multi_token_blas_projection": false,
+    "owns_q8_f16_cache_hook": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 121,
+    "feature_release_test_count": 128,
+    "staticlib_export_count": 31,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "single_token_default_paired_output_matches": true,
+      "single_token_no_pair_independent_output_matches": true,
+      "single_token_no_ordered_independent_output_matches": true,
+      "single_token_serial_independent_output_matches": true,
+      "cached_pair_weights_survive_host_mutation": true,
+      "multi_token_pair_blas_rejected_until_owned": true,
+      "invalid_second_model_range_rejected": true,
+      "null_model_rejected": true,
+      "embedded_rust_kernel_module_loaded": true,
+      "single_token_projection_predecessor_regression_passed": true,
+      "predecessor_c_linked_regression_consumers_passed": 15,
+      "predecessor_relink_executable_stack_warning_count": 15
+    }
+  },
+  "integration_risks": [
+    "multi-token F16 execution can reach the current-C BLAS path and remains separate work",
+    "the public q8/f16 cache hook is still implemented only by the current C CUDA backend",
+    "production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

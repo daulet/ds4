@@ -14,7 +14,10 @@ use crate::abi_kernels::AbiKernelModule;
 use crate::allocation_policy::managed_kv_decision;
 use crate::substrate::CudaOxideSubstrate;
 #[cfg(feature = "cuda-oxide-kernels")]
-use crate::{select_f16_projection_path, F16ProjectionDispatch};
+use crate::{
+    select_f16_pair_projection_path, select_f16_projection_path, F16PairProjectionDispatch,
+    F16PairProjectionPath, F16ProjectionDispatch,
+};
 
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -1862,6 +1865,127 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f16_tensor(
                             )
                         })
                     })
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_matmul_f16_pair_tensor(
+    out0: *mut Ds4GpuTensor,
+    out1: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight0_offset: u64,
+    weight1_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: *const Ds4GpuTensor,
+    n_tok: u64,
+) -> c_int {
+    status(|| {
+        let Some(out0_tensor) = (unsafe { tensor_ref(out0.cast_const()) }) else {
+            return false;
+        };
+        let Some(out1_tensor) = (unsafe { tensor_ref(out1.cast_const()) }) else {
+            return false;
+        };
+        let Some(x_tensor) = (unsafe { tensor_ref(x) }) else {
+            return false;
+        };
+        let Some(weight_elements) = in_dim.checked_mul(out_dim) else {
+            return false;
+        };
+        let Some(weight_bytes) = weight_elements.checked_mul(size_of::<u16>() as u64) else {
+            return false;
+        };
+        let Some(x_bytes) = in_dim.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(out_bytes) = out_dim.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || in_dim == 0
+            || out_dim == 0
+            || n_tok != 1
+            || weight0_offset > model_size
+            || weight1_offset > model_size
+            || weight_bytes > model_size - weight0_offset
+            || weight_bytes > model_size - weight1_offset
+            || x_tensor.bytes < x_bytes
+            || out0_tensor.bytes < out_bytes
+            || out1_tensor.bytes < out_bytes
+        {
+            return false;
+        }
+        let path = select_f16_pair_projection_path(F16PairProjectionDispatch {
+            n_tokens: n_tok,
+            no_f16_pair_matmul: std::env::var_os("DS4_CUDA_NO_F16_PAIR_MATMUL").is_some(),
+            serial_f16: std::env::var_os("DS4_CUDA_SERIAL_F16_MATMUL").is_some(),
+            serial_router: std::env::var_os("DS4_CUDA_SERIAL_ROUTER").is_some(),
+            no_ordered_f16_matmul: std::env::var_os("DS4_CUDA_NO_ORDERED_F16_MATMUL").is_some(),
+        });
+        if path == F16PairProjectionPath::TwoIndependent {
+            return unsafe {
+                ds4_gpu_matmul_f16_tensor(
+                    out0,
+                    model_map,
+                    model_size,
+                    weight0_offset,
+                    in_dim,
+                    out_dim,
+                    x,
+                    n_tok,
+                ) != 0
+                    && ds4_gpu_matmul_f16_tensor(
+                        out1,
+                        model_map,
+                        model_size,
+                        weight1_offset,
+                        in_dim,
+                        out_dim,
+                        x,
+                        n_tok,
+                    ) != 0
+            };
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                weight0_offset,
+                weight_bytes,
+                |weight0_ptr| {
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        weight1_offset,
+                        weight_bytes,
+                        |weight1_ptr| {
+                            with_abi_kernels(backend, |kernels| {
+                                // SAFETY: bounds above cover two single-token
+                                // outputs and both live cached F16 weight ranges.
+                                Some(unsafe {
+                                    kernels.matmul_f16_pair_ordered_chunks_tensor(
+                                        backend.stream(),
+                                        out0_tensor.device_ptr(),
+                                        out1_tensor.device_ptr(),
+                                        weight0_ptr,
+                                        weight1_ptr,
+                                        x_tensor.device_ptr(),
+                                        in_dim,
+                                        out_dim,
+                                    )
+                                })
+                            })
+                        },
+                    )
                 },
             )
         })

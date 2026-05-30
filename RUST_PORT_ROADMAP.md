@@ -10780,8 +10780,53 @@ Stage split:
 
 ############################ M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbb because public
+  single-token paired F16 projection can be proved independently from
+  multi-token BLAS, Q8/F16 cache hooks, and route promotion.
 - Goal: connect multi-token/paired F16 projection, q8/f16 cache hooks,
+  remaining graph compute, whole-archive retention policy, and production
+  route-promotion work without claiming C CUDA removal before those gates
+  pass.
+
+############################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba: Public Single-Token Paired F16 Projection ABI
+
+- Status: done.
+- Goal: Rust-own public single-token paired F16 projection through the
+  current-C paired ordered-chunks dispatch and its independent fallback
+  selections without claiming multi-token BLAS, Q8/F16 cache, or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba/abi-matmul-f16-pair-single-token-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_matmul_f16_pair_single_token_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports `ds4_gpu_matmul_f16_pair_tensor` for
+    `n_tok == 1`, selecting a new embedded paired ordered-chunks kernel by
+    default and delegating forced fallbacks through the owned single-token
+    F16 projection ABI.
+  - A C-linked B300 consumer verifies default paired output, no-pair,
+    no-ordered, and serial independent fallback output; both cached F16
+    weights survive host-map mutation, while multi-token paired projection
+    and invalid ranges are rejected.
+  - Local library tests pass with 121 tests; B300 release-feature tests pass
+    with 128 tests; the static library now exposes 31 Rust ABI symbols, and
+    fifteen predecessor C-linked consumers, including the single-token
+    projection leaf, pass against the rebuilt archive. Each predecessor
+    relink retains the known embedded-object executable-stack warning.
+  - `python3 ds4-parity/check_cuda_abi_matmul_f16_pair_single_token_smoke.py
+    --negative-test` passes, and the default unified parity report passes with
+    207 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Multi-token F16 BLAS projection, Q8/F16 cache hooks, remaining graph
+    compute, whole-archive retention policy, route promotion, C CUDA removal,
+    and the generated embedded-object executable-stack warning remain open.
+
+############################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: connect multi-token F16 BLAS projection, q8/f16 cache hooks,
   remaining graph compute, whole-archive retention policy, and production
   route-promotion work without claiming C CUDA removal before those gates
   pass.

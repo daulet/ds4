@@ -3436,6 +3436,21 @@ boundary is owned. Paired F16, Q8/F16 cache hooks, remaining graph compute,
 whole-archive retention policy, route promotion, C CUDA removal, and the
 generated embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbba Rust CUDA public
+single-token paired F16 projection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_matmul_f16_pair_single_token_smoke.py --negative-test
+```
+
+The C-linked B300 fixture dispatches `ds4_gpu_matmul_f16_pair_tensor` through
+its default paired ordered-chunks path and its no-pair, no-ordered, and
+serial independent fallback selections, then mutates host model bytes to
+verify both cached F16 weight ranges remain authoritative. It rejects
+multi-token projection until the BLAS boundary is owned. Q8/F16 cache hooks,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
