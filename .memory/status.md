@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2 Pageable HMM And Fd-Backed Model-Control Policy
+- Active item: M14.6b2b2b2b2b2b Chunked Copy And Fd-Backed Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,23 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2a Pageable HMM Fallback ABI adds the deterministic public
+  pageable-HMM fallback subset: when chunked model copy is selected but
+  explicitly suppressed and prefetch exclusions are absent, Rust retains a
+  page-bounded prefetched host window and uses it for matching cached model
+  reads. The B300 pageable-HMM probe reports supported access, successful
+  advice/prefetch, and exact direct readback; a C-linked public consumer
+  selects the fallback environment and matches weighted RMS output with 29
+  unchanged exports. Local default library tests pass with 96 tests and B300
+  release-feature tests pass with 98 tests. The pageable-HMM checker passes
+  with 103 checks, and unified parity passes with 182 passed, 45 skipped, and
+  no failures. The required non-interactive Claude adversarial review timed
+  out after 60 seconds without completed findings; self-review fixed
+  consumption-time weight-cache/preload exclusion checks to match current C.
+  Chunked-copy success/allocation-failure routing,
+  global HMM reads outside the advised window, fd staging, registration
+  disable, q8/f16 cache hooks, whole-archive retention, the executable-stack
+  warning, and remaining graph compute remain active before route promotion.
 - M14.6b2b2b2b2b1 Registered Attempt And Device-Copy Fallback ABI adds a
   page-bounded read-only registered-host attempt to the public cached-range
   helper and retains the existing synchronized device-copy fallback when the

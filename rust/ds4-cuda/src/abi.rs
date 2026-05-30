@@ -3,7 +3,10 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Mutex;
 
-use cuda_core::{DeviceBuffer, IntoResult, ManagedBuffer, ReadOnlyRegisteredHostMemory};
+use cuda_core::{
+    DeviceBuffer, IntoResult, ManagedBuffer, ReadOnlyPageableHostMemory,
+    ReadOnlyRegisteredHostMemory,
+};
 
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::abi_kernels::AbiKernelModule;
@@ -14,6 +17,7 @@ static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
+static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::new(None);
 static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_map: 0,
     model_size: 0,
@@ -45,6 +49,36 @@ impl AbiModelRange {
                 ..
             } => *requested_device_ptr,
         }
+    }
+}
+
+struct AbiPageableModelRange {
+    model_map: usize,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+    pageable: ReadOnlyPageableHostMemory<'static, u8>,
+}
+
+impl AbiPageableModelRange {
+    fn device_ptr(
+        &self,
+        model_map: *const c_void,
+        model_size: u64,
+        offset: u64,
+        bytes: u64,
+    ) -> Option<u64> {
+        let end = offset.checked_add(bytes)?;
+        if self.model_map != model_map as usize
+            || self.model_size != model_size
+            || offset < self.offset
+            || end > self.offset.checked_add(self.bytes)?
+        {
+            return None;
+        }
+        self.pageable
+            .cu_deviceptr()
+            .checked_add(offset - self.offset)
     }
 }
 
@@ -104,12 +138,12 @@ fn with_abi_kernels<T>(
     operation(kernels.as_ref()?)
 }
 
-fn abi_registered_source(
+fn abi_page_bounded_source(
     model_map: *const c_void,
     model_size: u64,
     offset: u64,
     bytes: u64,
-) -> Option<(&'static [u8], u64)> {
+) -> Option<(&'static [u8], u64, u64)> {
     let page_size = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok()?;
     if page_size == 0 || !page_size.is_power_of_two() {
         return None;
@@ -125,15 +159,81 @@ fn abi_registered_source(
     }
     // SAFETY: the public C ABI requires the active model mapping to remain
     // readable and immutable until replacement or cleanup. The registered
-    // slice is fully contained in that declared mapping and its guard is
-    // retained in ABI_MODEL_RANGES until that completion boundary.
+    // slice is fully contained in that declared mapping and any CUDA guard
+    // built from it is retained in ABI state until that completion boundary.
     let source = unsafe {
         std::slice::from_raw_parts(
             registered_start as *const u8,
             registered_end.checked_sub(registered_start)?,
         )
     };
-    Some((source, u64::try_from(start - registered_start).ok()?))
+    Some((
+        source,
+        u64::try_from(registered_start - model_start).ok()?,
+        u64::try_from(start - registered_start).ok()?,
+    ))
+}
+
+fn abi_registered_source(
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+) -> Option<(&'static [u8], u64)> {
+    let (source, _, device_offset) = abi_page_bounded_source(model_map, model_size, offset, bytes)?;
+    Some((source, device_offset))
+}
+
+fn pageable_hmm_fallback_selected() -> bool {
+    std::env::var_os("DS4_CUDA_COPY_MODEL_CHUNKED").is_some()
+        && std::env::var_os("DS4_CUDA_NO_MODEL_PREFETCH").is_none()
+        && std::env::var_os("DS4_CUDA_COPY_MODEL").is_none()
+        && std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_none()
+        && std::env::var_os("DS4_CUDA_WEIGHT_PRELOAD").is_none()
+        && (std::env::var_os("DS4_CUDA_NO_MODEL_COPY").is_some()
+            || std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_some())
+}
+
+fn pageable_hmm_direct_read_selected() -> bool {
+    std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_none()
+        && std::env::var_os("DS4_CUDA_WEIGHT_PRELOAD").is_none()
+}
+
+fn try_prefetch_abi_pageable_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+) -> bool {
+    let Some((source, range_offset, _)) =
+        abi_page_bounded_source(model_map, model_size, offset, bytes)
+    else {
+        return false;
+    };
+    if !backend.pageable_memory_access().unwrap_or(false) {
+        return false;
+    }
+    let Ok(pageable) = backend.pageable_read_only_range(source) else {
+        return false;
+    };
+    if backend
+        .prefetch_pageable_read_mostly_to_device(&pageable)
+        .is_err()
+    {
+        return false;
+    }
+    let Ok(mut active) = ABI_PAGEABLE_MODEL_RANGE.lock() else {
+        return false;
+    };
+    *active = Some(AbiPageableModelRange {
+        model_map: model_map as usize,
+        model_size,
+        offset: range_offset,
+        bytes: source.len() as u64,
+        pageable,
+    });
+    true
 }
 
 fn with_cached_abi_model_range<T>(
@@ -150,6 +250,18 @@ fn with_cached_abi_model_range<T>(
     if bytes == 0 {
         let ptr = (model_map as usize).checked_add(usize::try_from(offset).ok()?)?;
         return operation(ptr as u64);
+    }
+    let pageable_ptr = if pageable_hmm_direct_read_selected() {
+        ABI_PAGEABLE_MODEL_RANGE
+            .lock()
+            .ok()?
+            .as_ref()
+            .and_then(|range| range.device_ptr(model_map, model_size, offset, bytes))
+    } else {
+        None
+    };
+    if let Some(ptr) = pageable_ptr {
+        return operation(ptr);
     }
     let end = offset.checked_add(bytes)?;
     let mut ranges = ABI_MODEL_RANGES.lock().ok()?;
@@ -251,6 +363,9 @@ pub extern "C" fn ds4_gpu_cleanup() {
             }
             if let Ok(mut model_ranges) = ABI_MODEL_RANGES.lock() {
                 model_ranges.clear();
+            }
+            if let Ok(mut pageable_range) = ABI_PAGEABLE_MODEL_RANGE.lock() {
+                *pageable_range = None;
             }
             if let Ok(mut control) = ABI_MODEL_CONTROL.lock() {
                 control.model_map = 0;
@@ -880,6 +995,7 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             }
             backend.synchronize().ok()?;
             ABI_MODEL_RANGES.lock().ok()?.clear();
+            *ABI_PAGEABLE_MODEL_RANGE.lock().ok()? = None;
             control.model_map = model_map as usize;
             control.model_size = model_size;
             Some(true)
@@ -906,10 +1022,18 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map_range(
     map_offset: u64,
     map_size: u64,
 ) -> c_int {
-    let _ = (map_offset, map_size);
-    // The baseline C path records the mapping here; prefetch and residency
-    // selection remain separate policy work.
-    unsafe { ds4_gpu_set_model_map(model_map, model_size) }
+    if unsafe { ds4_gpu_set_model_map(model_map, model_size) } == 0 {
+        return 0;
+    }
+    if pageable_hmm_fallback_selected() {
+        let _ = with_backend(|backend| {
+            let _ = try_prefetch_abi_pageable_range(
+                backend, model_map, model_size, map_offset, map_size,
+            );
+            Some(())
+        });
+    }
+    1
 }
 
 #[no_mangle]

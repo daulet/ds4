@@ -9503,10 +9503,10 @@ Stage split:
 
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
-- Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1, and
-  M14.6b2b2b2b2b2 because baseline public linkage and bounded registered-range
-  fallback can be validated separately from pageable HMM/fd-backed and
-  environment-selected residency policy.
+- Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1,
+  M14.6b2b2b2b2b2a, and M14.6b2b2b2b2b2b because baseline public linkage,
+  bounded registered-range fallback, and deterministic pageable HMM fallback
+  can be validated separately from chunked-copy and fd-backed policy.
 - Goal: export the model-map, file-descriptor, map-range, and cache-range
   control surfaces needed to substitute Rust beneath model-backed runtime
   callers without reducing the current-C residency policy contract.
@@ -9593,11 +9593,60 @@ Stage split:
 
 ##### M14.6b2b2b2b2b2: Pageable HMM And Fd-Backed Model-Control Policy
 
+- Status: active; split into M14.6b2b2b2b2b2a and M14.6b2b2b2b2b2b
+  because deterministic pageable HMM fallback can be validated without
+  claiming chunked full-model copy or fd-backed staging.
+- Goal: connect the independently validated pageable HMM/prefetch, chunked
+  full-model copy, fd-backed direct-I/O staging, registration-disable,
+  preload/copy selection, and cache-policy branches to the public control ABI
+  without prematurely promoting the runtime route.
+
+###### M14.6b2b2b2b2b2a: Pageable HMM Fallback ABI
+
+- Status: done.
+- Goal: connect the deterministic current-C pageable HMM fallback subset to
+  the public map-range and cached model-range ABI while retaining chunked
+  full-model copy and fd-backed policy as follow-on work.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2a/abi-model-control-pageable-hmm-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_pageable_hmm_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` retains a page-bounded
+    `ReadOnlyPageableHostMemory` guard after the exact deterministic
+    current-C fallback selection: chunked copy selected and explicitly
+    suppressed by `DS4_CUDA_NO_MODEL_COPY` or `DS4_CUDA_DIRECT_MODEL`, with
+    HMM exclusion variables absent. Model-range consumption consults that
+    prefetched window before registered or device-copy caching.
+  - The independent B300 pageable-HMM probe observes pageable access,
+    read-mostly/preferred-device advice, successful prefetch, and exact
+    direct-pointer readback. A C-linked public consumer selects the fallback
+    environment, consumes the prefetched window through weighted RMS with
+    matching output, and preserves the 29-symbol Rust ABI export set.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 96 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features cuda-oxide-kernels
+    --lib` passes with 98 tests and the release static library rebuilds.
+  - `check_cuda_abi_model_control_pageable_hmm_smoke.py --negative-test`
+    passes with 103 checks, and unified parity passes with 182 passed, 45
+    skipped, and no failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the HMM subset boundary, C oracle, comparator, and B300 evidence, but
+    timed out after 60 seconds without completed findings. Self-review fixed
+    a consumption-time policy mismatch by rechecking
+    `DS4_CUDA_WEIGHT_CACHE` and `DS4_CUDA_WEIGHT_PRELOAD` before reusing an
+    existing prefetched direct window, matching current C.
+  - Chunked full-model copy success/allocation-failure handling, global HMM
+    direct reads outside the advised window, fd-backed staging,
+    registration-disable policy, q8/f16 cache hooks, whole-archive
+    retention, and the generated `.note.GNU-stack` warning remain open.
+
+###### M14.6b2b2b2b2b2b: Chunked Copy And Fd-Backed Model-Control Policy
+
 - Status: active.
-- Goal: connect the independently validated pageable HMM/prefetch, fd-backed
-  direct-I/O staging, registration-disable, preload/copy selection, and
-  cache-policy branches to the public control ABI without changing output
-  semantics or prematurely promoting the runtime route.
+- Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
+  staging, registration-disable, preload/copy selection, and remaining
+  cache-policy branches to the public model-control ABI without claiming
+  remaining graph compute or route promotion.
 
 ## Removal Criteria for C Host Code
 

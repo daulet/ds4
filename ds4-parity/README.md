@@ -3053,6 +3053,20 @@ HMM/prefetch, fd-backed staging, cross-range registration-disable policy,
 preload selection, q8/f16 cache hooks, whole-archive retention, and the
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2a Rust CUDA pageable HMM fallback ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_pageable_hmm_smoke.py --negative-test
+```
+
+The fixture combines the live B300 pageable-HMM probe with a C-linked public
+ABI consumer that selects the deterministic current-C fallback environment:
+chunked model copy selected and explicitly suppressed while HMM exclusions
+remain absent. Rust retains and consumes only the advised page-rounded
+window. Chunked-copy success/allocation-failure routing, global HMM reads
+outside that window, fd staging, q8/f16 cache hooks, whole-archive retention,
+and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

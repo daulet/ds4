@@ -2169,6 +2169,32 @@ pub const M14_6B2B2B2B2B1_SCOPE: CudaAbiRegisteredModelControlScope =
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiPageableHmmModelControlScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_environment_selected_pageable_hmm_fallback: bool,
+    pub owns_prefetched_window_direct_pointer: bool,
+    pub owns_chunked_full_model_copy: bool,
+    pub owns_fd_backed_staging_policy: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2A_SCOPE: CudaAbiPageableHmmModelControlScope =
+    CudaAbiPageableHmmModelControlScope {
+        exported_abi_symbol_count: 29,
+        exported_compute_symbol_count: 9,
+        owns_environment_selected_pageable_hmm_fallback: true,
+        owns_prefetched_window_direct_pointer: true,
+        owns_chunked_full_model_copy: false,
+        owns_fd_backed_staging_policy: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2213,7 +2239,7 @@ mod tests {
         M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE, M14_5C2F_SCOPE,
         M14_5D_SCOPE, M14_6A_GATE, M14_6B1_SCOPE, M14_6B2A_SCOPE, M14_6B2B1_SCOPE,
         M14_6B2B2A_SCOPE, M14_6B2B2B1_SCOPE, M14_6B2B2B2A_SCOPE, M14_6B2B2B2B1_SCOPE,
-        M14_6B2B2B2B2A_SCOPE, M14_6B2B2B2B2B1_SCOPE,
+        M14_6B2B2B2B2A_SCOPE, M14_6B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2A_SCOPE,
     };
 
     #[test]
@@ -3329,6 +3355,19 @@ mod tests {
         assert!(!M14_6B2B2B2B2B1_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B1_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_pageable_hmm_scope_leaves_chunk_copy_fd_and_route_pending() {
+        assert_eq!(M14_6B2B2B2B2B2A_SCOPE.exported_abi_symbol_count, 29);
+        assert_eq!(M14_6B2B2B2B2B2A_SCOPE.exported_compute_symbol_count, 9);
+        assert!(M14_6B2B2B2B2B2A_SCOPE.owns_environment_selected_pageable_hmm_fallback);
+        assert!(M14_6B2B2B2B2B2A_SCOPE.owns_prefetched_window_direct_pointer);
+        assert!(!M14_6B2B2B2B2B2A_SCOPE.owns_chunked_full_model_copy);
+        assert!(!M14_6B2B2B2B2B2A_SCOPE.owns_fd_backed_staging_policy);
+        assert!(!M14_6B2B2B2B2B2A_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2A_SCOPE.changes_default_route);
     }
 
     #[test]

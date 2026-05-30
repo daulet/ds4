@@ -9287,10 +9287,10 @@
 
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
-- Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1, and
-  M14.6b2b2b2b2b2 because baseline public linkage and bounded registered-range
-  fallback can be validated separately from remaining optimized
-  residency-policy selection.
+- Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1,
+  M14.6b2b2b2b2b2a, and M14.6b2b2b2b2b2b because baseline public linkage,
+  bounded registered-range fallback, and deterministic pageable HMM fallback
+  can be validated separately from remaining optimized residency policy.
 - Goal: export model-map, file-descriptor, map-range, and cache-range
   controls without weakening the current-C residency-policy contract.
 
@@ -9348,8 +9348,45 @@
 
 ##### M14.6b2b2b2b2b2: Pageable HMM And Fd-Backed Model-Control Policy
 
+- Status: active; split into M14.6b2b2b2b2b2a and M14.6b2b2b2b2b2b
+  because the deterministic pageable HMM fallback subset can be tested
+  without claiming chunked full-model copy or fd staging.
+- Goal: connect pageable HMM/prefetch, chunked full-model copy, fd-backed
+  direct-I/O staging, registration-disable, preload/copy selection, and
+  remaining cache-policy branches to the public model-control ABI without
+  claiming remaining graph compute or route promotion.
+
+###### M14.6b2b2b2b2b2a: Pageable HMM Fallback ABI
+
+- Status: done
+- Goal: connect the deterministic current-C pageable HMM fallback subset to
+  public map-range/cache-range calls while leaving chunk-copy and fd policy
+  pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2a/abi-model-control-pageable-hmm-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_pageable_hmm_smoke.py --negative-test`.
+- Evidence: the Rust ABI retains a page-bounded pageable host guard only for
+  deterministic current-C fallback selection (`DS4_CUDA_COPY_MODEL_CHUNKED`
+  plus `DS4_CUDA_NO_MODEL_COPY` or `DS4_CUDA_DIRECT_MODEL`) and routes
+  matching cached reads through that prefetched window. On B300 the existing
+  HMM probe confirms pageable advice/prefetch and exact direct readback; a
+  C-linked public consumer selects the fallback environment and matches
+  weighted RMS output with 29 unchanged exports. Local default library tests
+  pass with 96 tests and B300 release-feature tests pass with 98 tests. The
+  pageable-HMM checker passes with 103 checks, and unified parity passes with
+  182 passed, 45 skipped, and no failures. The required non-interactive Claude
+  review timed out after 60 seconds without completed findings; self-review
+  fixed the consumption-time
+  `DS4_CUDA_WEIGHT_CACHE`/`DS4_CUDA_WEIGHT_PRELOAD` exclusion guard.
+  Chunked-copy success/allocation-failure policy, global HMM reads outside the
+  advised window, fd staging, registration-disable, q8/f16 cache hooks,
+  whole-archive retention, and the `.note.GNU-stack` warning remain pending.
+
+###### M14.6b2b2b2b2b2b: Chunked Copy And Fd-Backed Model-Control Policy
+
 - Status: active
-- Goal: connect pageable HMM/prefetch, fd-backed direct-I/O staging,
-  registration-disable, preload/copy selection, and remaining cache-policy
-  branches to the public model-control ABI without claiming remaining graph
-  compute or route promotion.
+- Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
+  staging, registration-disable, preload/copy selection, and remaining
+  cache-policy branches without claiming graph-compute closure or route
+  promotion.
