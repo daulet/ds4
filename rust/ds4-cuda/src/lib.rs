@@ -374,6 +374,23 @@ pub const M14_2D2A_SCOPE: IndexerDirectKernelScope = IndexerDirectKernelScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerWmmaKernelScope {
+    pub opt_in_only: bool,
+    pub owns_indexer_scores_wmma_kernel: bool,
+    pub owns_widened_wmma_dispatch: bool,
+    pub owns_specialized_topk_dispatch: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2D2B1_SCOPE: IndexerWmmaKernelScope = IndexerWmmaKernelScope {
+    opt_in_only: true,
+    owns_indexer_scores_wmma_kernel: true,
+    owns_widened_wmma_dispatch: false,
+    owns_specialized_topk_dispatch: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -389,7 +406,7 @@ mod tests {
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
         M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
-        M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE,
+        M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE,
     };
 
     #[test]
@@ -590,5 +607,14 @@ mod tests {
         assert!(!M14_2D2A_SCOPE.owns_wmma_indexer_dispatch);
         assert!(!M14_2D2A_SCOPE.owns_specialized_topk_dispatch);
         assert!(!M14_2D2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn base_wmma_scope_leaves_widened_dispatch_topk_and_route_pending() {
+        assert!(M14_2D2B1_SCOPE.opt_in_only);
+        assert!(M14_2D2B1_SCOPE.owns_indexer_scores_wmma_kernel);
+        assert!(!M14_2D2B1_SCOPE.owns_widened_wmma_dispatch);
+        assert!(!M14_2D2B1_SCOPE.owns_specialized_topk_dispatch);
+        assert!(!M14_2D2B1_SCOPE.changes_default_route);
     }
 }

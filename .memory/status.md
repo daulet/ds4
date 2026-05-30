@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2d2b Tensor-Core Indexer Score Kernels
+- Active item: M14.2d2b2 Widened Tensor-Core Indexer Score Dispatch
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -27,8 +27,11 @@
   selection and optimized dispatch have distinct ownership boundaries.
   M14.2d2 is further split into M14.2d2a through M14.2d2c because direct-one
   warp reduction, tensor-core score kernels, and specialized top-k kernels
-  depend on distinct cuda-oxide primitives.
-- Last validated source before the active item: M14.2d2a Direct-One Indexer Score Kernel.
+  depend on distinct cuda-oxide primitives. M14.2d2b is further split into
+  M14.2d2b1 and M14.2d2b2 because a base `16 x 16` score tile maps to two
+  cuda-oxide MMA operations independently from widened multi-warp dispatch.
+- Last validated source before the active item: M14.2d2b1 Base Tensor-Core Indexer Score Kernel.
+- Earlier M14.2d2a Direct-One Indexer Score Kernel.
 - Earlier M14.2d1 Scalar Indexer Selection Kernels.
 - Earlier M14.2c Embedding Kernel Pair.
 - Earlier M14.2b2 SwiGLU Libdevice Path.
@@ -146,6 +149,26 @@
 
 ## Last Evidence
 
+- M14.2d2b1 Base Tensor-Core Indexer Score Kernel adds executable-local Rust
+  cuda-oxide `indexer_scores_wmma_kernel` with native `f16` shared staging
+  and two `mma_m16n8k16_f32_f16` calls covering current-C's `16 x 16`
+  score tile. On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda`
+  tests passed with 28 tests and live cargo-oxide execution emitted portable
+  `sm_80` PTX and proved base WMMA output, both eight-column MMA halves,
+  per-token weighting, NaN/negative suppression, causal masking, and
+  invalid-shape rejection on `NVIDIA B300 SXM6 AC`.
+  Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.2d2b1/indexer-wmma-kernel-smoke.json`
+  and `ds4-parity/check_indexer_wmma_kernel_smoke.py --negative-test`.
+  A first device compile exposed unsupported generic `u32::min` drop glue;
+  explicit scalar comparisons preserved behavior and enabled the successful
+  PTX build. Widened WMMA dispatch, specialized top-k dispatch, runtime
+  route activation, and C CUDA removal remain unclaimed. Local workspace
+  tests, formatter/diff checks, the 72-check base WMMA comparator, and
+  unified parity passed with 120 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review produced no completed result before its
+  timeout; adversarial self-review expanded the live fixture to prove
+  weighted output and NaN/negative suppression before final B300 execution.
 - M14.2d2a Direct-One Indexer Score Kernel adds executable-local Rust
   cuda-oxide `indexer_score_one_direct_kernel` with current-C-shaped
   128-thread geometry, four-warp `warp::shuffle_down_f32` reduction,

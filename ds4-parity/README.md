@@ -2286,6 +2286,19 @@ current C. It proves direct scoring, causal masking, and NaN/negative clamp
 behavior while leaving tensor-core scoring, specialized top-k dispatch,
 runtime route, and C CUDA removal pending.
 
+Validate the M14.2d2b1 Rust CUDA base tensor-core indexer score kernel smoke:
+
+```sh
+python3 ds4-parity/check_indexer_wmma_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `indexer_scores_wmma_kernel` execution
+on B300 through two cuda-oxide `m16n8k16` operations covering the current-C
+`16 x 16` output tile. It proves base WMMA scoring, weighted output,
+NaN/negative suppression, and causal masking while leaving widened WMMA
+dispatch, specialized top-k dispatch, runtime route, and C CUDA removal
+pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

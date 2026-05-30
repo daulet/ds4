@@ -7591,13 +7591,14 @@
   further split after B300 exposed a separate libdevice/NVVM SwiGLU blocker;
   M14.2d is split into scalar fallback proof and optimized dispatch ownership;
   M14.2d2 is split into direct-one, tensor-core score, and specialized top-k
-  slices.
+  slices; M14.2d2b is split into base-tile and widened multi-warp score
+  ownership because those paths have separate launch and validation evidence.
 - Stage split: M14.2a Add And Repeat Elementwise Kernels; M14.2b1
   Directional Steering Projection Kernel; M14.2b2 SwiGLU Libdevice Path;
   M14.2c Embedding Kernel Pair; M14.2d1 Scalar Indexer Selection Kernels;
-  M14.2d2a Direct-One Indexer Score Kernel; M14.2d2b Tensor-Core Indexer
-  Score Kernels; M14.2d2c Specialized Top-K Kernels; M14.2e Kernel Closure
-  Gate.
+  M14.2d2a Direct-One Indexer Score Kernel; M14.2d2b1 Base Tensor-Core
+  Indexer Score Kernel; M14.2d2b2 Widened Tensor-Core Indexer Score Dispatch;
+  M14.2d2c Specialized Top-K Kernels; M14.2e Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
 
@@ -7763,9 +7764,45 @@
 
 ##### M14.2d2b: Tensor-Core Indexer Score Kernels
 
-- Status: active
+- Status: split before implementation into M14.2d2b1 and M14.2d2b2
 - Goal: port the 16/32/64/128-component WMMA score branches through
   cuda-oxide warp-scoped MMA.
+
+##### M14.2d2b1: Base Tensor-Core Indexer Score Kernel
+
+- Status: done
+- Goal: port current-C's 16-component WMMA score tile through cuda-oxide's
+  warp-scoped `m16n8k16` intrinsic surface.
+- Oracle: `indexer_scores_wmma_kernel` and its 32-thread launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2b1/indexer-wmma-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_wmma_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Evidence: added executable-local Rust `indexer_scores_wmma_kernel` using
+  native `f16` shared staging, two `mma_m16n8k16_f32_f16` calls per
+  `16 x 16` current-C tile, positive-score weighting, scaling, causal
+  masking, and host bounds rejection. B300 feature-enabled `ds4-cuda` tests
+  passed with 28 tests and live cargo-oxide execution emitted portable
+  `sm_80` PTX and proved base output, both eight-column MMA halves,
+  per-token weighting, NaN/negative suppression, causal masking, and
+  invalid-shape rejection on `NVIDIA B300 SXM6 AC`. A first
+  device compile identified cuda-oxide's unsupported generic `u32::min` drop
+  glue path; explicit scalar comparisons retained semantics and produced the
+  successful live run. Widened WMMA dispatch, specialized top-k dispatch,
+  route activation, and C CUDA removal remain unclaimed. Local workspace
+  tests, formatter/diff checks, the 72-check base WMMA comparator, and
+  unified parity passed with 120 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review produced no completed result before its
+  timeout; adversarial self-review expanded the fixture to prove weighted
+  output and NaN/negative suppression before the final B300 execution.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
+
+##### M14.2d2b2: Widened Tensor-Core Indexer Score Dispatch
+
+- Status: active
+- Goal: port current-C's 32/64/128-component WMMA score branches and
+  dispatch priority after the base tile proof.
 
 ##### M14.2d2c: Specialized Top-K Kernels
 

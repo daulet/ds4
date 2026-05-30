@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.2d2a Rust CUDA direct-one indexer score kernel smoke."""
+"""Validate the M14.2d2b1 Rust CUDA base WMMA indexer score kernel smoke."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.2d2a/indexer-direct-kernel-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.2d2b1/indexer-wmma-kernel-smoke.json"
 CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/indexer_direct_smoke.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/indexer_wmma_smoke.rs"
 CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -27,11 +27,11 @@ REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
 EXPECTED_RUST_OWNED = [
-    "executable-local cuda-oxide indexer_score_one_direct_kernel launch proof",
-    "current-C-shaped four-warp shuffle reduction and direct-one masking semantics",
+    "executable-local cuda-oxide indexer_scores_wmma_kernel launch proof",
+    "current-C-shaped base 16-component tensor-core tile and causal masking semantics",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "WMMA indexer score dispatch",
+    "widened WMMA indexer score dispatch",
     "specialized top-k dispatch",
     "runtime graph integration or default CUDA route",
 ]
@@ -82,15 +82,15 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.indexer_direct_kernel_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.2d2a", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.indexer_wmma_kernel_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.2d2b1", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
     report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
     report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
-    report.check('name = "ds4-cuda-indexer-direct-smoke"' in texts["cargo"], "smoke binary wiring missing")
+    report.check('name = "ds4-cuda-indexer-wmma-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
@@ -101,14 +101,14 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
     for marker in [
-        "__device__ static float warp_sum_f32(float v)",
-        "__shfl_down_sync(0xffffffffu, v, offset)",
-        "__global__ static void indexer_score_one_direct_kernel",
-        "const uint32_t lane = tid & 31u;",
-        "dot = warp_sum_f32(dot);",
-        "fmaxf(dot, 0.0f) * weights[h] * scale",
-        "n_tokens == 1u && head_dim == 128u && n_head == 64u",
-        "indexer_score_one_direct_kernel<<<n_comp, 128>>>",
+        "__global__ static void indexer_scores_wmma_kernel",
+        "__shared__ __half a_sh[16 * 128];",
+        "__shared__ __half b_sh[16 * 128];",
+        "wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major>",
+        "wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major>",
+        "wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);",
+        "fmaxf(c_sh[i], 0.0f) * w",
+        "indexer_scores_wmma_kernel<<<grid, 32>>>",
     ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
 
@@ -119,17 +119,17 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim scope drift")
     for key, expected in [
         ("opt_in_only", True),
-        ("owns_indexer_score_one_direct_kernel", True),
-        ("owns_wmma_indexer_dispatch", False),
+        ("owns_indexer_scores_wmma_kernel", True),
+        ("owns_widened_wmma_dispatch", False),
         ("owns_specialized_topk_dispatch", False),
         ("changes_default_route", False),
         ("retains_current_c_cuda_oracle", True),
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_2D2A_SCOPE",
-        "owns_indexer_score_one_direct_kernel: true",
-        "owns_wmma_indexer_dispatch: false",
+        "pub const M14_2D2B1_SCOPE",
+        "owns_indexer_scores_wmma_kernel: true",
+        "owns_widened_wmma_dispatch: false",
         "owns_specialized_topk_dispatch: false",
         "changes_default_route: false",
     ]:
@@ -144,56 +144,64 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check("--features cuda-oxide-backend" in execution.get("test_command", ""), "feature test command missing")
     command = execution.get("command", "")
     report.check("--features cuda-oxide-kernels" in command, "kernel feature command missing")
-    report.check("--bin ds4-cuda-indexer-direct-smoke" in command, "smoke command missing")
+    report.check("--bin ds4-cuda-indexer-wmma-smoke" in command, "smoke command missing")
     report.check("CUDA_OXIDE_TARGET" not in command, "smoke command forces a device target")
     report.check("CUDA_OXIDE_LINK_TARGET" not in command, "smoke command forces a link target")
     report.check(execution.get("backend_selected_target") == "sm_80", "portable backend target drift")
     expected = {
-        "milestone": "M14.2d2a",
+        "milestone": "M14.2d2b1",
         "device_name": "NVIDIA B300 SXM6 AC",
         "rust_kernel_toolchain": True,
-        "direct_score_output_matches": True,
+        "base_wmma_output_matches": True,
         "causal_mask_output_matches": True,
+        "two_mma_column_halves_match": True,
+        "weighted_epilogue_matches": True,
         "nan_negative_clamp_matches": True,
         "invalid_shape_rejected": True,
-        "owns_indexer_score_one_direct_kernel": True,
-        "owns_wmma_indexer_dispatch": False,
+        "owns_indexer_scores_wmma_kernel": True,
+        "owns_widened_wmma_dispatch": False,
         "owns_specialized_topk_dispatch": False,
         "changes_default_route": False,
     }
     stdout = require_dict(report, execution.get("stdout"), "b300_execution.stdout")
-    report.check(stdout == expected, "B300 direct indexer result drift")
+    report.check(stdout == expected, "B300 base WMMA result drift")
     for marker in [
-        "#[cuda_module]",
-        "pub fn indexer_score_one_direct_kernel",
-        "SharedArray<f32, HEAD_DIM>",
-        "SharedArray<f32, 4>",
-        "warp::shuffle_down_f32(dot, offset)",
-        "(dot.to_bits() & 0x7fff_ffff) > 0x7f80_0000",
-        "Err(IndexerDirectError::InvalidShape)",
+        "#![feature(f16)]",
+        "pub fn indexer_scores_wmma_kernel",
+        "SharedArray<f16, { TILE_TOKENS * MMA_K }, 16>",
+        "load_a_m16n8k16",
+        "load_b_m16n8k16",
+        "mma_m16n8k16_f32_f16",
+        "(value.to_bits() & 0x7fff_ffff) > 0x7f80_0000",
+        "weighted_epilogue_matches",
+        "nan_negative_clamp_matches",
+        "two_mma_column_halves_match",
+        "Err(IndexerWmmaError::InvalidShape)",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture = "ds4-parity/baselines/backend/m14.2d2a/indexer-direct-kernel-smoke.json"
-    checker = "check_indexer_direct_kernel_smoke.py"
-    report.check("M14.2d2a: Direct-One Indexer Score Kernel" in texts["roadmap"], "roadmap item missing")
+    fixture = "ds4-parity/baselines/backend/m14.2d2b1/indexer-wmma-kernel-smoke.json"
+    checker = "check_indexer_wmma_kernel_smoke.py"
+    report.check("M14.2d2b1: Base Tensor-Core Indexer Score Kernel" in texts["roadmap"], "roadmap item missing")
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
-    report.check("M14.2d2a: Direct-One Indexer Score Kernel" in texts["todo"], "TODO item missing")
+    report.check("M14.2d2b1: Base Tensor-Core Indexer Score Kernel" in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.2d2b" in texts["status"], "next active stage missing")
-    report.check("M14.2d2a Direct-One Indexer Score Kernel" in texts["status"], "status evidence missing")
+    report.check("Active item: M14.2d2b2 Widened Tensor-Core Indexer Score Dispatch" in texts["status"], "next active stage missing")
+    report.check("M14.2d2b1 Base Tensor-Core Indexer Score Kernel" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("direct result absent", lambda value: value["b300_execution"]["stdout"].update({"direct_score_output_matches": False})),
+        ("WMMA result absent", lambda value: value["b300_execution"]["stdout"].update({"base_wmma_output_matches": False})),
         ("causal result absent", lambda value: value["b300_execution"]["stdout"].update({"causal_mask_output_matches": False})),
+        ("two-half result absent", lambda value: value["b300_execution"]["stdout"].update({"two_mma_column_halves_match": False})),
+        ("weighted result absent", lambda value: value["b300_execution"]["stdout"].update({"weighted_epilogue_matches": False})),
         ("clamp result absent", lambda value: value["b300_execution"]["stdout"].update({"nan_negative_clamp_matches": False})),
-        ("WMMA overclaim", lambda value: value["ownership"].update({"owns_wmma_indexer_dispatch": True})),
+        ("widened overclaim", lambda value: value["ownership"].update({"owns_widened_wmma_dispatch": True})),
         ("top-k overclaim", lambda value: value["ownership"].update({"owns_specialized_topk_dispatch": True})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
@@ -211,7 +219,7 @@ def require_dict(report: Report, value: Any, name: str) -> dict[str, Any]:
 
 def print_report(report: Report) -> None:
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.2d2a direct indexer kernel smoke: {status} ({report.checks} checks)")
+    print(f"M14.2d2b1 base WMMA indexer kernel smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
 
