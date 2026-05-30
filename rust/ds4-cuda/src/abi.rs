@@ -22,6 +22,7 @@ use crate::{
     q8_dp4a_enabled, select_f16_pair_projection_path, select_f16_projection_path,
     select_f32_projection_path, select_q8_matmul_path, F16PairProjectionDispatch,
     F16PairProjectionPath, F16ProjectionDispatch, Q8MatmulDispatchOptions, Q8MatmulPath,
+    DS4_CUDA_ATTENTION_RAW_SCORE_CAP, DS4_CUDA_ATTENTION_SCORE_CAP,
 };
 
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
@@ -4136,6 +4137,167 @@ pub unsafe extern "C" fn ds4_gpu_compressor_prefill_ratio4_replay_tensor(
                             })
                         },
                     )
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_decode_heads_tensor(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    n_raw: u32,
+    raw_cap: u32,
+    raw_start: u32,
+    comp_kv: *const Ds4GpuTensor,
+    n_comp: u32,
+    comp_mask: *const Ds4GpuTensor,
+    use_mask: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| {
+        let Some(heads) = (unsafe { tensor_ref(heads.cast_const()) }) else {
+            return false;
+        };
+        let Some(q) = (unsafe { tensor_ref(q) }) else {
+            return false;
+        };
+        let Some(raw_kv) = (unsafe { tensor_ref(raw_kv) }) else {
+            return false;
+        };
+        let comp_kv = if n_comp != 0 {
+            let Some(comp_kv) = (unsafe { tensor_ref(comp_kv) }) else {
+                return false;
+            };
+            comp_kv
+        } else {
+            raw_kv
+        };
+        let comp_mask = if use_mask != 0 {
+            let Some(comp_mask) = (unsafe { tensor_ref(comp_mask) }) else {
+                return false;
+            };
+            comp_mask
+        } else {
+            raw_kv
+        };
+        let Some(output_elements) = u64::from(n_head).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(raw_elements) = u64::from(raw_cap).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(comp_elements) = u64::from(n_comp).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let sink_elements = u64::from(n_head);
+        let mask_elements = u64::from(n_comp);
+        let Some(output_bytes) = output_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(raw_bytes) = raw_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(comp_bytes) = comp_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(sink_bytes) = sink_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(mask_bytes) = mask_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_raw == 0
+            || raw_cap < n_raw
+            || raw_start >= raw_cap
+            || n_head == 0
+            || head_dim == 0
+            || sinks_offset > model_size
+            || sink_bytes > model_size - sinks_offset
+            || heads.bytes < output_bytes
+            || q.bytes < output_bytes
+            || raw_kv.bytes < raw_bytes
+            || (n_comp != 0 && comp_kv.bytes < comp_bytes)
+            || (use_mask != 0 && comp_mask.bytes < mask_bytes)
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                sinks_offset,
+                sink_bytes,
+                |sinks_ptr| {
+                    with_abi_kernels(backend, |kernels| {
+                        if n_comp > DS4_CUDA_ATTENTION_SCORE_CAP - DS4_CUDA_ATTENTION_RAW_SCORE_CAP
+                        {
+                            if use_mask != 0
+                                || head_dim != 512
+                                || std::env::var_os("DS4_CUDA_NO_WINDOW_ATTENTION").is_some()
+                            {
+                                return Some(false);
+                            }
+                            // SAFETY: this preserves current-C overflow
+                            // dispatch after validating all public spans.
+                            return Some(unsafe {
+                                kernels.attention_decode_mixed_heads8_online_tensor(
+                                    backend.stream(),
+                                    heads.device_ptr(),
+                                    sinks_ptr,
+                                    q.device_ptr(),
+                                    raw_kv.device_ptr(),
+                                    comp_kv.device_ptr(),
+                                    output_elements,
+                                    sink_elements,
+                                    raw_elements,
+                                    comp_elements,
+                                    n_raw,
+                                    raw_cap,
+                                    raw_start,
+                                    n_comp,
+                                    n_head,
+                                    head_dim,
+                                )
+                            });
+                        }
+                        // SAFETY: score-cap-bounded generic decode and each
+                        // model/tensor span have been validated above.
+                        Some(unsafe {
+                            kernels.attention_decode_mixed_tensor(
+                                backend.stream(),
+                                heads.device_ptr(),
+                                sinks_ptr,
+                                q.device_ptr(),
+                                raw_kv.device_ptr(),
+                                comp_kv.device_ptr(),
+                                comp_mask.device_ptr(),
+                                output_elements,
+                                sink_elements,
+                                raw_elements,
+                                comp_elements,
+                                mask_elements,
+                                n_raw,
+                                raw_cap,
+                                raw_start,
+                                n_comp,
+                                use_mask,
+                                n_head,
+                                head_dim,
+                            )
+                        })
+                    })
                 },
             )
         })

@@ -3812,6 +3812,21 @@ validation rejection. Attention, routed MoE, remaining graph compute,
 whole-archive retention policy, route promotion, C CUDA removal, and the
 embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public single-token attention decode heads ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_attention_decode_heads_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public single-token mixed attention
+wrapper through embedded generic and score-cap overflow-online kernels. It
+proves masked and raw-only wrapped-ring output, sink softmax, overflow
+dispatch and current-C overflow raw visibility, environment/mask rejection,
+and validation rejection. Remaining attention, routed MoE, remaining graph
+compute, whole-archive retention policy, route promotion, C CUDA removal, and
+the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

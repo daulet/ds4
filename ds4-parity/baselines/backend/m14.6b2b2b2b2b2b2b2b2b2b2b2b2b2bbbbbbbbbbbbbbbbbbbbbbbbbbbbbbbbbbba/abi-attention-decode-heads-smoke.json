@@ -1,0 +1,87 @@
+{
+  "schema": "ds4.cuda_abi_attention_decode_heads_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-attention-decode-heads-abi",
+  "goal": "Rust-own the public single-token mixed attention decode wrapper, including its score-cap overflow online fallback, without claiming the remaining attention, routed MoE, or route-promotion surface.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_attention_decode_heads_tensor"
+    ],
+    "semantics": [
+      "resolve learned sink weights before any output launch and reject invalid tensor or model spans",
+      "for in-cap compressed rows, decode all visible single-token raw-ring and compressed rows with optional compressed mask and learned sink softmax",
+      "when compressed rows exceed the generic score cap, dispatch only unmasked 512-wide decode through the online kernel unless DS4_CUDA_NO_WINDOW_ATTENTION is set",
+      "preserve the current overflow online single-token raw visibility rule in which n_raw greater than one contributes no raw row at pos0 zero"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_attention_decode_heads_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_attention_decode_mixed_kernel",
+      "abi_attention_decode_mixed_heads8_online_kernel"
+    ],
+    "dispatch_boundary": "n_comp <= 7936 uses generic mixed decode; overflow requires unmasked head_dim 512 with DS4_CUDA_NO_WINDOW_ATTENTION unset",
+    "online_algorithm": "block-per-head streaming softmax preserves overflow semantics without allocating a compressed-score buffer",
+    "remaining_compute_boundary": "remaining attention wrappers, routed MoE, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 63,
+    "exported_compute_symbol_count": 41,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "owns_attention_decode_heads_tensor": true,
+    "owns_attention_decode_mixed_kernel": true,
+    "owns_attention_decode_mixed_heads8_online_kernel": true,
+    "preserves_overflow_online_dispatch": true,
+    "owns_remaining_attention_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 147,
+    "feature_release_test_count": 154,
+    "staticlib_export_count": 63,
+    "embedded_kernel_count": 41,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "generic_masked_output_matches": true,
+      "raw_only_ring_wrapped_output_matches": true,
+      "sink_softmax_matches": true,
+      "overflow_online_output_matches": true,
+      "overflow_raw_visibility_matches": true,
+      "overflow_env_disable_rejected": true,
+      "overflow_mask_rejected": true,
+      "invalid_model_range_preserves_output": true,
+      "invalid_shape_rejected": true,
+      "null_rejected": true,
+      "embedded_attention_decode_kernels_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 57,
+      "predecessor_relink_executable_stack_warning_count": 57
+    }
+  },
+  "integration_risks": [
+    "the generic public launch remains score-cap bounded exactly as current C; the overflow witness exercises the online dispatch rather than treating the cap as an unsupported boundary",
+    "the overflow online witness fixes current-C raw visibility for n_raw greater than one at the public single-token pos0 zero call site",
+    "the public Rust wrapper deliberately rejects zero launch geometry and arithmetic overflow instead of issuing unsafe or invalid launches",
+    "remaining attention wrappers, routed MoE, remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

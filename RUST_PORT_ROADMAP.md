@@ -11909,6 +11909,49 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public single-token attention decode wrapper and its score-cap
+  overflow fallback are independently comparable before remaining attention,
+  routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Single-Token Attention Decode Heads ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_attention_decode_heads_tensor` through generic
+  mixed decode and score-cap overflow-online fallback without claiming
+  remaining attention, routed MoE, remaining graph compute, or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-attention-decode-heads-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_attention_decode_heads_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the wrapper with checked tensor/model
+    spans and preserves current-C score-cap dispatch and environment gating.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds generic mixed attention and a
+    streaming overflow-online kernel for the public single-token call site.
+  - A C-linked B300 consumer proves masked mixed output, raw-only wrapped-ring
+    output, learned sink softmax, overflow-online dispatch and raw visibility,
+    environment/mask rejection, invalid-range preservation, invalid-shape
+    rejection, and null rejection.
+  - Local library tests pass with 147 tests; B300 release-feature tests pass
+    with 154 tests; the static library exposes 63 Rust ABI symbols and embeds
+    41 kernels.
+  - All 57 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 61 CUDA ABI comparators
+    pass.
+  - The unified report passes with 233 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Remaining attention, routed MoE, production route promotion, and C CUDA
+    removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

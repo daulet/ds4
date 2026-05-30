@@ -1171,6 +1171,254 @@ mod kernels {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_attention_decode_mixed_kernel(
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        use_comp_mask: u32,
+        n_head: u32,
+        head_dim: u32,
+        sinks: &[f32],
+        q: &[f32],
+        raw_kv: &[f32],
+        comp_kv: &[f32],
+        comp_mask: &[f32],
+        mut heads: DisjointSlice<f32>,
+    ) {
+        let head = thread::blockIdx_y();
+        if head >= n_head || thread::threadIdx_x() != 0 {
+            return;
+        }
+        let query_base = (head * head_dim) as usize;
+        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        let raw_count = if n_raw < 256 { n_raw } else { 256 };
+        let mut max_score = sinks[head as usize];
+        let mut raw_row = 0_u32;
+        while raw_row < raw_count {
+            let row = raw_start.wrapping_add(raw_row) % raw_cap;
+            max_score = abi_attention_maximum(
+                max_score,
+                abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale,
+            );
+            raw_row += 1;
+        }
+        let mut compressed = 0_u32;
+        while compressed < n_comp {
+            let add = if use_comp_mask != 0 {
+                comp_mask[compressed as usize]
+            } else {
+                0.0
+            };
+            if add > -1.0e20 {
+                max_score = abi_attention_maximum(
+                    max_score,
+                    abi_attention_dot(q, query_base, comp_kv, compressed, head_dim) * scale + add,
+                );
+            }
+            compressed += 1;
+        }
+        let mut denominator = (sinks[head as usize] - max_score).exp();
+        raw_row = 0;
+        while raw_row < raw_count {
+            let row = raw_start.wrapping_add(raw_row) % raw_cap;
+            denominator +=
+                (abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale - max_score).exp();
+            raw_row += 1;
+        }
+        compressed = 0;
+        while compressed < n_comp {
+            let add = if use_comp_mask != 0 {
+                comp_mask[compressed as usize]
+            } else {
+                0.0
+            };
+            if add > -1.0e20 {
+                denominator +=
+                    (abi_attention_dot(q, query_base, comp_kv, compressed, head_dim) * scale + add
+                        - max_score)
+                        .exp();
+            }
+            compressed += 1;
+        }
+        let mut dimension = 0_u32;
+        while dimension < head_dim {
+            let mut accumulator = 0.0_f32;
+            raw_row = 0;
+            while raw_row < raw_count {
+                let row = raw_start.wrapping_add(raw_row) % raw_cap;
+                let weight = (abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale
+                    - max_score)
+                    .exp();
+                accumulator += raw_kv[(row * head_dim + dimension) as usize] * weight;
+                raw_row += 1;
+            }
+            compressed = 0;
+            while compressed < n_comp {
+                let add = if use_comp_mask != 0 {
+                    comp_mask[compressed as usize]
+                } else {
+                    0.0
+                };
+                if add > -1.0e20 {
+                    let weight = (abi_attention_dot(q, query_base, comp_kv, compressed, head_dim)
+                        * scale
+                        + add
+                        - max_score)
+                        .exp();
+                    accumulator += comp_kv[(compressed * head_dim + dimension) as usize] * weight;
+                }
+                compressed += 1;
+            }
+            unsafe {
+                *heads.get_unchecked_mut((head * head_dim + dimension) as usize) =
+                    accumulator / denominator;
+            }
+            dimension += 1;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_attention_decode_mixed_heads8_online_kernel(
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        n_head: u32,
+        head_dim: u32,
+        sinks: &[f32],
+        q: &[f32],
+        raw_kv: &[f32],
+        comp_kv: &[f32],
+        mut heads: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+        static mut SOFTMAX: SharedArray<f32, 4> = SharedArray::UNINIT;
+
+        let head = thread::blockIdx_y();
+        let tid = thread::threadIdx_x() as usize;
+        if head >= n_head || head_dim != 512 {
+            return;
+        }
+        // This is the public single-token call site of the current-C online
+        // kernel: n_tokens=1, pos0=0, window=0, and ratio=0.
+        let first_raw_pos = 1_u32.wrapping_sub(n_raw);
+        let raw_count = if 0_u32 >= first_raw_pos {
+            let raw_last_pos = first_raw_pos.wrapping_add(n_raw).wrapping_sub(1);
+            let hi = if 0_u32 < raw_last_pos {
+                0
+            } else {
+                raw_last_pos
+            };
+            if hi >= first_raw_pos {
+                let count = hi.wrapping_sub(first_raw_pos).wrapping_add(1);
+                if count < 256 {
+                    count
+                } else {
+                    256
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        let query_base = (head * head_dim) as usize;
+        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        let dimension0 = tid;
+        let dimension1 = tid + 256;
+        let mut accumulator0 = 0.0_f32;
+        let mut accumulator1 = 0.0_f32;
+        if tid == 0 {
+            unsafe {
+                SOFTMAX[0] = f32::NEG_INFINITY;
+                SOFTMAX[1] = 0.0;
+            }
+        }
+        thread::sync_threads();
+        let mut score_row = 0_u32;
+        while score_row < raw_count + n_comp {
+            let (kv, row) = if score_row < raw_count {
+                (raw_kv, raw_start.wrapping_add(score_row) % raw_cap)
+            } else {
+                (comp_kv, score_row - raw_count)
+            };
+            let row_base = (row * head_dim) as usize;
+            unsafe {
+                PARTIAL[tid] = q[query_base + dimension0] * kv[row_base + dimension0]
+                    + q[query_base + dimension1] * kv[row_base + dimension1];
+            }
+            thread::sync_threads();
+            let mut stride = 128_usize;
+            while stride > 0 {
+                if tid < stride {
+                    unsafe {
+                        PARTIAL[tid] += PARTIAL[tid + stride];
+                    }
+                }
+                thread::sync_threads();
+                stride >>= 1;
+            }
+            if tid == 0 {
+                let score = unsafe { PARTIAL[0] } * scale;
+                let old_max = unsafe { SOFTMAX[0] };
+                let next_max = abi_attention_maximum(old_max, score);
+                unsafe {
+                    SOFTMAX[2] = (old_max - next_max).exp();
+                    SOFTMAX[3] = (score - next_max).exp();
+                    SOFTMAX[1] = SOFTMAX[1] * SOFTMAX[2] + SOFTMAX[3];
+                    SOFTMAX[0] = next_max;
+                }
+            }
+            thread::sync_threads();
+            let old_scale = unsafe { SOFTMAX[2] };
+            let row_scale = unsafe { SOFTMAX[3] };
+            accumulator0 = accumulator0 * old_scale + kv[row_base + dimension0] * row_scale;
+            accumulator1 = accumulator1 * old_scale + kv[row_base + dimension1] * row_scale;
+            thread::sync_threads();
+            score_row += 1;
+        }
+        if tid == 0 {
+            let sink = sinks[head as usize];
+            let old_max = unsafe { SOFTMAX[0] };
+            let next_max = abi_attention_maximum(old_max, sink);
+            unsafe {
+                SOFTMAX[2] = (old_max - next_max).exp();
+                SOFTMAX[1] = SOFTMAX[1] * SOFTMAX[2] + (sink - next_max).exp();
+                SOFTMAX[0] = next_max;
+            }
+        }
+        thread::sync_threads();
+        accumulator0 *= unsafe { SOFTMAX[2] };
+        accumulator1 *= unsafe { SOFTMAX[2] };
+        let denominator = unsafe { SOFTMAX[1] };
+        unsafe {
+            *heads.get_unchecked_mut(query_base + dimension0) = accumulator0 / denominator;
+            *heads.get_unchecked_mut(query_base + dimension1) = accumulator1 / denominator;
+        }
+    }
+
+    fn abi_attention_dot(q: &[f32], query_base: usize, kv: &[f32], row: u32, head_dim: u32) -> f32 {
+        let mut value = 0.0_f32;
+        let mut dimension = 0_u32;
+        while dimension < head_dim {
+            value += q[query_base + dimension as usize] * kv[(row * head_dim + dimension) as usize];
+            dimension += 1;
+        }
+        value
+    }
+
+    fn abi_attention_maximum(left: f32, right: f32) -> f32 {
+        if right > left {
+            right
+        } else {
+            left
+        }
+    }
+
     #[kernel]
     pub fn abi_fp8_kv_quantize_kernel(
         n_tok: u32,
@@ -2196,6 +2444,8 @@ pub(crate) struct AbiKernelModule {
     compressor_prefill_pool_kernel: CudaFunction,
     compressor_update_pool_kernel: CudaFunction,
     compressor_shift_ratio4_kernel: CudaFunction,
+    attention_decode_mixed_kernel: CudaFunction,
+    attention_decode_mixed_heads8_online_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
@@ -2284,6 +2534,12 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             compressor_shift_ratio4_kernel: module
                 .load_function("abi_compressor_shift_ratio4_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_decode_mixed_kernel: module
+                .load_function("abi_attention_decode_mixed_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_decode_mixed_heads8_online_kernel: module
+                .load_function("abi_attention_decode_mixed_heads8_online_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             fp8_kv_quantize_kernel: module
                 .load_function("abi_fp8_kv_quantize_kernel")
@@ -3677,6 +3933,163 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.compressor_shift_ratio4_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn attention_decode_mixed_tensor(
+        &self,
+        stream: &CudaStream,
+        heads_ptr: u64,
+        sinks_ptr: u64,
+        q_ptr: u64,
+        raw_ptr: u64,
+        comp_ptr: u64,
+        mask_ptr: u64,
+        output_elements: u64,
+        sink_elements: u64,
+        raw_elements: u64,
+        comp_elements: u64,
+        mask_elements: u64,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        use_comp_mask: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (1, n_head, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut n_raw = n_raw;
+        let mut raw_cap = raw_cap;
+        let mut raw_start = raw_start;
+        let mut n_comp = n_comp;
+        let mut use_comp_mask = use_comp_mask;
+        let mut n_head = n_head;
+        let mut head_dim = head_dim;
+        let mut sinks_ptr = sinks_ptr;
+        let mut sinks_len = sink_elements;
+        let mut q_ptr = q_ptr;
+        let mut q_len = output_elements;
+        let mut raw_ptr = raw_ptr;
+        let mut raw_len = raw_elements;
+        let mut comp_ptr = comp_ptr;
+        let mut comp_len = comp_elements;
+        let mut mask_ptr = mask_ptr;
+        let mut mask_len = mask_elements;
+        let mut heads_ptr = heads_ptr;
+        let mut heads_len = output_elements;
+        let mut params = [
+            (&mut n_raw as *mut u32).cast::<c_void>(),
+            (&mut raw_cap as *mut u32).cast::<c_void>(),
+            (&mut raw_start as *mut u32).cast::<c_void>(),
+            (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut use_comp_mask as *mut u32).cast::<c_void>(),
+            (&mut n_head as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut sinks_ptr as *mut u64).cast::<c_void>(),
+            (&mut sinks_len as *mut u64).cast::<c_void>(),
+            (&mut q_ptr as *mut u64).cast::<c_void>(),
+            (&mut q_len as *mut u64).cast::<c_void>(),
+            (&mut raw_ptr as *mut u64).cast::<c_void>(),
+            (&mut raw_len as *mut u64).cast::<c_void>(),
+            (&mut comp_ptr as *mut u64).cast::<c_void>(),
+            (&mut comp_len as *mut u64).cast::<c_void>(),
+            (&mut mask_ptr as *mut u64).cast::<c_void>(),
+            (&mut mask_len as *mut u64).cast::<c_void>(),
+            (&mut heads_ptr as *mut u64).cast::<c_void>(),
+            (&mut heads_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the public wrapper validates every model/tensor span and
+        // score-cap-bounded generic launch before submission.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.attention_decode_mixed_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn attention_decode_mixed_heads8_online_tensor(
+        &self,
+        stream: &CudaStream,
+        heads_ptr: u64,
+        sinks_ptr: u64,
+        q_ptr: u64,
+        raw_ptr: u64,
+        comp_ptr: u64,
+        output_elements: u64,
+        sink_elements: u64,
+        raw_elements: u64,
+        comp_elements: u64,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (1, n_head, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut n_raw = n_raw;
+        let mut raw_cap = raw_cap;
+        let mut raw_start = raw_start;
+        let mut n_comp = n_comp;
+        let mut n_head = n_head;
+        let mut head_dim = head_dim;
+        let mut sinks_ptr = sinks_ptr;
+        let mut sinks_len = sink_elements;
+        let mut q_ptr = q_ptr;
+        let mut q_len = output_elements;
+        let mut raw_ptr = raw_ptr;
+        let mut raw_len = raw_elements;
+        let mut comp_ptr = comp_ptr;
+        let mut comp_len = comp_elements;
+        let mut heads_ptr = heads_ptr;
+        let mut heads_len = output_elements;
+        let mut params = [
+            (&mut n_raw as *mut u32).cast::<c_void>(),
+            (&mut raw_cap as *mut u32).cast::<c_void>(),
+            (&mut raw_start as *mut u32).cast::<c_void>(),
+            (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut n_head as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut sinks_ptr as *mut u64).cast::<c_void>(),
+            (&mut sinks_len as *mut u64).cast::<c_void>(),
+            (&mut q_ptr as *mut u64).cast::<c_void>(),
+            (&mut q_len as *mut u64).cast::<c_void>(),
+            (&mut raw_ptr as *mut u64).cast::<c_void>(),
+            (&mut raw_len as *mut u64).cast::<c_void>(),
+            (&mut comp_ptr as *mut u64).cast::<c_void>(),
+            (&mut comp_len as *mut u64).cast::<c_void>(),
+            (&mut heads_ptr as *mut u64).cast::<c_void>(),
+            (&mut heads_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: overflow dispatch requires the current-C unmasked 512-wide
+        // branch and all input/output/model spans were validated by the ABI.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.attention_decode_mixed_heads8_online_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

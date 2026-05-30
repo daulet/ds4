@@ -1872,6 +1872,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust CUDA public single-token attention decode heads ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_attention_decode_heads_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

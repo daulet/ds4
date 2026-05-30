@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Single-Token Attention Decode Heads ABI
+  is validated on B300. Rust exports `ds4_gpu_attention_decode_heads_tensor`
+  through embedded generic and score-cap overflow-online attention kernels.
+  A C-linked B300 witness proves masked mixed output, raw-only wrapped-ring
+  output, learned sink softmax, score-cap overflow online dispatch, its
+  current-C overflow raw-visibility edge, environment and mask rejection,
+  invalid-range output preservation, invalid-shape rejection, and null
+  rejection. Local tests pass with 147 tests; B300 feature tests pass with
+  154 tests; the static library exposes 63 symbols and embeds 41 kernels.
+  All 57 preceding linked ABI consumers pass against the rebuilt archive with
+  the known executable-stack warning. All 61 CUDA ABI comparators pass, and
+  the unified report passes with 233 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Remaining
+  attention, routed MoE, remaining graph compute, whole-archive/route
+  promotion, C CUDA removal, and the executable-stack warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public General Compressor Prefill ABI
   is validated on B300. Rust exports `ds4_gpu_compressor_prefill_tensor`
   through one embedded non-replay pool kernel composed with the already-owned
