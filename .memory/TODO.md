@@ -8004,6 +8004,31 @@
 
 ##### M14.2d2c5: Indexed Ascending Top-K Sort And Dispatch Policy
 
-- Status: active
+- Status: done
 - Goal: port indexed attention's ascending 512-element sort and close
   specialized top-k dispatch ordering.
+- Oracle: current-C `indexed_topk_sort_512_asc_kernel`, the indexed-attention
+  multi-token gate, and `ds4_gpu_indexer_topk_tensor` branch order.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c5/indexer-topk-dispatch-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_dispatch_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Evidence: added executable-local Rust ascending 512-index sort and
+  validated-input top-k branch selectors, using the proven packed-key
+  equivalent for capability-gated CUB positions without claiming CUB
+  implementation. B300 feature-enabled tests passed with 38 tests and live
+  cargo-oxide execution emitted portable `sm_80` PTX and proved two sorted
+  rows, sort-gate behavior, packed-key-equivalent selection, fallback branch
+  order, and invalid-shape rejection on `NVIDIA B300 SXM6 AC`. Runtime route
+  activation and C CUDA removal remain unclaimed. Local formatting, diff,
+  workspace tests, the 81-check comparator, and unified parity passed with
+  128 passed, 45 skipped, and 0 failed. Non-interactive Claude review timed
+  out without a completed result; adversarial self-review added a direct
+  `DS4_CUDA_NO_TOPK8192` fall-through assertion before the final B300 rerun.
+
+##### M14.2e: M14.2 Kernel Closure Gate
+
+- Status: active
+- Goal: close the M14.2 operation-family kernel ownership ledger while
+  retaining runtime route activation and C CUDA removal as later work.

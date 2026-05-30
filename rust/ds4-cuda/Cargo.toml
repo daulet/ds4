@@ -147,3 +147,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-indexer-topk-tree-smoke"
 path = "src/bin/indexer_topk_tree_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-indexer-topk-dispatch-smoke"
+path = "src/bin/indexer_topk_dispatch_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

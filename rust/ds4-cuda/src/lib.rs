@@ -575,6 +575,89 @@ pub const M14_2D2C4_SCOPE: IndexerTopkTreeKernelScope = IndexerTopkTreeKernelSco
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IndexerTopkKernel {
+    Scalar,
+    Topk1024,
+    Pow2U32x2048,
+    Pow2U32x4096,
+    PackedKeyEquivalent,
+    Pow2U16x8192,
+    ChunkedTree,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerTopkDispatchOptions {
+    pub n_comp: u32,
+    pub top_k: u32,
+    pub no_topk1024: bool,
+    pub no_topk2048: bool,
+    pub no_topk8192: bool,
+    pub no_topk_chunked: bool,
+    pub packed_dynamic_shared_available: bool,
+}
+
+pub const fn select_indexer_topk_kernel(options: IndexerTopkDispatchOptions) -> IndexerTopkKernel {
+    if options.top_k == 512 && options.n_comp <= 1024 && !options.no_topk1024 {
+        return IndexerTopkKernel::Topk1024;
+    }
+    if options.top_k == 512 && options.n_comp <= 2048 && !options.no_topk2048 {
+        return IndexerTopkKernel::Pow2U32x2048;
+    }
+    if options.top_k == 512 && options.n_comp <= 4096 && !options.no_topk2048 {
+        if options.n_comp == 4096 && options.packed_dynamic_shared_available {
+            return IndexerTopkKernel::PackedKeyEquivalent;
+        }
+        return IndexerTopkKernel::Pow2U32x4096;
+    }
+    if options.top_k == 512
+        && options.n_comp <= 8192
+        && !options.no_topk2048
+        && !options.no_topk8192
+    {
+        if options.n_comp > 4096 && options.packed_dynamic_shared_available {
+            return IndexerTopkKernel::PackedKeyEquivalent;
+        }
+        return IndexerTopkKernel::Pow2U16x8192;
+    }
+    if options.top_k == 512 && !options.no_topk2048 && !options.no_topk_chunked {
+        return IndexerTopkKernel::ChunkedTree;
+    }
+    IndexerTopkKernel::Scalar
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexedTopkSortOptions {
+    pub n_tokens: u32,
+    pub top_k: u32,
+    pub no_indexed_topk_sort: bool,
+}
+
+pub const fn should_sort_indexed_topk(options: IndexedTopkSortOptions) -> bool {
+    options.n_tokens > 1 && options.top_k == 512 && !options.no_indexed_topk_sort
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerTopkDispatchScope {
+    pub opt_in_only: bool,
+    pub owns_indexed_topk_sort_512_asc_kernel: bool,
+    pub owns_indexed_topk_sort_dispatch: bool,
+    pub owns_topk_dispatch_policy: bool,
+    pub uses_packed_key_equivalent_branch: bool,
+    pub owns_cub_library_implementation: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2D2C5_SCOPE: IndexerTopkDispatchScope = IndexerTopkDispatchScope {
+    opt_in_only: true,
+    owns_indexed_topk_sort_512_asc_kernel: true,
+    owns_indexed_topk_sort_dispatch: true,
+    owns_topk_dispatch_policy: true,
+    uses_packed_key_equivalent_branch: true,
+    owns_cub_library_implementation: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -587,13 +670,14 @@ pub mod substrate;
 #[cfg(test)]
 mod tests {
     use super::{
-        select_indexer_score_kernel, IndexerScoreDispatchOptions, IndexerScoreKernel,
-        CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
-        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
-        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
-        M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
-        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
-        M14_2D2C4_SCOPE,
+        select_indexer_score_kernel, select_indexer_topk_kernel, should_sort_indexed_topk,
+        IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
+        IndexerTopkDispatchOptions, IndexerTopkKernel, CUDA_OXIDE_REVISION, M14_1A_SCOPE,
+        M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE, M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE,
+        M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE, M14_1B3A_SCOPE, M14_1B3B_SCOPE,
+        M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE, M14_2C_SCOPE, M14_2D1_SCOPE,
+        M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
+        M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
     };
 
     #[test]
@@ -874,6 +958,104 @@ mod tests {
         assert!(!M14_2D2C4_SCOPE.owns_topk_dispatch_policy);
         assert!(!M14_2D2C4_SCOPE.owns_indexed_topk_sort_dispatch);
         assert!(!M14_2D2C4_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn specialized_topk_dispatch_scope_closes_opt_in_policy_not_cub_or_route() {
+        assert!(M14_2D2C5_SCOPE.opt_in_only);
+        assert!(M14_2D2C5_SCOPE.owns_indexed_topk_sort_512_asc_kernel);
+        assert!(M14_2D2C5_SCOPE.owns_indexed_topk_sort_dispatch);
+        assert!(M14_2D2C5_SCOPE.owns_topk_dispatch_policy);
+        assert!(M14_2D2C5_SCOPE.uses_packed_key_equivalent_branch);
+        assert!(!M14_2D2C5_SCOPE.owns_cub_library_implementation);
+        assert!(!M14_2D2C5_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn specialized_topk_dispatch_priority_matches_current_c_launch_order() {
+        let base = IndexerTopkDispatchOptions {
+            n_comp: 1000,
+            top_k: 512,
+            no_topk1024: false,
+            no_topk2048: false,
+            no_topk8192: false,
+            no_topk_chunked: false,
+            packed_dynamic_shared_available: true,
+        };
+        assert_eq!(
+            select_indexer_topk_kernel(base),
+            IndexerTopkKernel::Topk1024
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                no_topk1024: true,
+                ..base
+            }),
+            IndexerTopkKernel::Pow2U32x2048
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                n_comp: 4096,
+                ..base
+            }),
+            IndexerTopkKernel::PackedKeyEquivalent
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                n_comp: 4096,
+                packed_dynamic_shared_available: false,
+                ..base
+            }),
+            IndexerTopkKernel::Pow2U32x4096
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                n_comp: 6000,
+                ..base
+            }),
+            IndexerTopkKernel::PackedKeyEquivalent
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                n_comp: 6000,
+                packed_dynamic_shared_available: false,
+                ..base
+            }),
+            IndexerTopkKernel::Pow2U16x8192
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                n_comp: 6000,
+                no_topk8192: true,
+                ..base
+            }),
+            IndexerTopkKernel::ChunkedTree
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                n_comp: 9000,
+                ..base
+            }),
+            IndexerTopkKernel::ChunkedTree
+        );
+        assert_eq!(
+            select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                n_comp: 9000,
+                no_topk_chunked: true,
+                ..base
+            }),
+            IndexerTopkKernel::Scalar
+        );
+        assert!(should_sort_indexed_topk(IndexedTopkSortOptions {
+            n_tokens: 2,
+            top_k: 512,
+            no_indexed_topk_sort: false,
+        }));
+        assert!(!should_sort_indexed_topk(IndexedTopkSortOptions {
+            n_tokens: 1,
+            top_k: 512,
+            no_indexed_topk_sort: false,
+        }));
     }
 
     #[test]

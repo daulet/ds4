@@ -1032,6 +1032,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.2d2c5 cuda-oxide indexed-sort and top-k dispatch smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_indexer_topk_dispatch_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

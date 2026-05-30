@@ -2384,6 +2384,18 @@ multi-token stride isolation and partial final-chunk behavior while leaving
 indexed ascending sort, specialized dispatch policy, runtime route, and
 C CUDA removal pending.
 
+Validate the M14.2d2c5 Rust CUDA indexed-sort and top-k dispatch smoke:
+
+```sh
+python3 ds4-parity/check_indexer_topk_dispatch_smoke.py --negative-test
+```
+
+The fixture records executable-local `indexed_topk_sort_512_asc_kernel`
+execution on B300 plus validated-input selectors for the specialized top-k
+launch order. It maps the capability-gated CUB positions to the validated
+packed-key equivalent without claiming CUB implementation, runtime route, or
+C CUDA removal.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

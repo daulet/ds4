@@ -7794,9 +7794,43 @@ Stage split:
 
 ##### M14.2d2c5: Indexed Ascending Top-K Sort And Dispatch Policy
 
-- Status: active.
+- Status: done.
 - Goal: port indexed attention's ascending 512-element sort and close the
   validated-input specialized top-k dispatch ordering.
+- Oracle: current-C `indexed_topk_sort_512_asc_kernel`, its indexed-attention
+  multi-token gate, and `ds4_gpu_indexer_topk_tensor` branch order.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c5/indexer-topk-dispatch-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_dispatch_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Acceptance: Rust owns the opt-in ascending index sort kernel and
+  validated-input specialized top-k branch policy, selecting its proven
+  packed-key equivalent rather than claiming CUB implementation; runtime route
+  activation and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexed_topk_sort_512_asc_kernel` mirroring
+    current-C's 512-thread ascending bitonic network and the multi-token sort
+    gate.
+  - Added `select_indexer_topk_kernel`, preserving current-C's
+    1024/2048/4096/8192/chunk/tree/scalar ordering and mapping the
+    capability-gated CUB path to the validated packed-key equivalent.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 38 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved two ascending rows, sort-gate behavior, packed
+    equivalent selection, fallback ordering, and invalid-shape rejection on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 81-check comparator, and
+    unified parity passed with 128 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review added a direct `DS4_CUDA_NO_TOPK8192`
+    fall-through assertion before the final B300 rerun.
+
+##### M14.2e: M14.2 Kernel Closure Gate
+
+- Status: active.
+- Goal: close the M14.2 kernel ownership ledger without claiming runtime
+  route activation or C CUDA removal.
 
 ## Removal Criteria for C Host Code
 
