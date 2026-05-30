@@ -25,7 +25,8 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
+RECORDED_DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
+CURRENT_DEPENDENCY_REVISION = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide head_rms_norm_rope_tail_kernel launch proof",
     "combined head RMS normalization and RoPE-tail tensor validation",
@@ -88,10 +89,10 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     report.check(fixture.get("milestone") == "M14.3b2", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
+    report.check(oxide.get("dependency_revision") == RECORDED_DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
-    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
-    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
+    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "current crate dependency revision pin missing")
+    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "current lockfile dependency revision pin missing")
     report.check('name = "ds4-cuda-head-rms-rope-tail-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
@@ -195,7 +196,10 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.3c" in texts["status"], "next active M14.3 stage missing")
+    report.check(
+        "M14.3c1 Base F16 And F32 Projection Kernels" in texts["status"],
+        "successor M14.3 stage evidence missing",
+    )
     report.check("M14.3b2 Head RMS Norm Rope Tail Kernel" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

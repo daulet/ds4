@@ -26,6 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
+CURRENT_DEPENDENCY_REVISION = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide 8192 packed-key top-k equivalent launch proof",
     "current-C-shaped ordered-float and lower-index packed-key semantics",
@@ -92,8 +93,8 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
-    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
-    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
+    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "current crate dependency revision pin missing")
+    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "current lockfile dependency revision pin missing")
     report.check('name = "ds4-cuda-indexer-topk-packed-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)

@@ -1,4 +1,4 @@
-pub const CUDA_OXIDE_REVISION: &str = "e9c0d677104751179985098f02212ff044d3ec22";
+pub const CUDA_OXIDE_REVISION: &str = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostSubstrateScope {
@@ -763,6 +763,110 @@ pub const M14_3C2_SCOPE: OrderedProjectionKernelScope = OrderedProjectionKernelS
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum F16ProjectionPath {
+    Blas,
+    Serial,
+    OrderedChunks,
+    Base,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct F16ProjectionDispatch {
+    pub blas_ready: bool,
+    pub serial_f16: bool,
+    pub serial_router: bool,
+    pub no_ordered_f16_matmul: bool,
+    pub in_dim: u64,
+    pub out_dim: u64,
+    pub n_tokens: u64,
+}
+
+pub fn select_f16_projection_path(options: F16ProjectionDispatch) -> F16ProjectionPath {
+    let router_shape = options.in_dim == 4096 && options.out_dim == 256 && options.n_tokens == 1;
+    let serial_router = !options.serial_f16 && router_shape && options.serial_router;
+    let ordered = !options.serial_f16
+        && !serial_router
+        && options.n_tokens == 1
+        && !options.no_ordered_f16_matmul;
+    if !options.serial_f16 && options.blas_ready && options.n_tokens > 1 {
+        F16ProjectionPath::Blas
+    } else if options.serial_f16 || serial_router {
+        F16ProjectionPath::Serial
+    } else if ordered {
+        F16ProjectionPath::OrderedChunks
+    } else {
+        F16ProjectionPath::Base
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum F16PairProjectionPath {
+    PairedOrderedChunks,
+    TwoIndependent,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct F16PairProjectionDispatch {
+    pub n_tokens: u64,
+    pub no_f16_pair_matmul: bool,
+    pub serial_f16: bool,
+    pub serial_router: bool,
+    pub no_ordered_f16_matmul: bool,
+}
+
+pub fn select_f16_pair_projection_path(
+    options: F16PairProjectionDispatch,
+) -> F16PairProjectionPath {
+    if options.n_tokens != 1
+        || options.no_f16_pair_matmul
+        || options.serial_f16
+        || options.serial_router
+        || options.no_ordered_f16_matmul
+    {
+        F16PairProjectionPath::TwoIndependent
+    } else {
+        F16PairProjectionPath::PairedOrderedChunks
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum F32ProjectionPath {
+    Blas,
+    Base,
+}
+
+pub fn select_f32_projection_path(blas_ready: bool, n_tokens: u64) -> F32ProjectionPath {
+    if blas_ready && n_tokens > 1 {
+        F32ProjectionPath::Blas
+    } else {
+        F32ProjectionPath::Base
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BlasProjectionKernelScope {
+    pub opt_in_only: bool,
+    pub owns_f32_to_f16_kernel: bool,
+    pub owns_f16_projection_dispatch_policy: bool,
+    pub owns_f16_pair_projection_dispatch_policy: bool,
+    pub owns_f32_projection_dispatch_policy: bool,
+    pub owns_live_f16_and_f32_blas_paths: bool,
+    pub owns_q8_conversion_or_matmul_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_3C3_SCOPE: BlasProjectionKernelScope = BlasProjectionKernelScope {
+    opt_in_only: true,
+    owns_f32_to_f16_kernel: true,
+    owns_f16_projection_dispatch_policy: true,
+    owns_f16_pair_projection_dispatch_policy: true,
+    owns_f32_projection_dispatch_policy: true,
+    owns_live_f16_and_f32_blas_paths: true,
+    owns_q8_conversion_or_matmul_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -775,22 +879,24 @@ pub mod substrate;
 #[cfg(test)]
 mod tests {
     use super::{
+        select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
         select_indexer_score_kernel, select_indexer_topk_kernel, should_sort_indexed_topk,
-        IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
+        F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath,
+        F32ProjectionPath, IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
         IndexerTopkDispatchOptions, IndexerTopkKernel, CUDA_OXIDE_REVISION, M14_1A_SCOPE,
         M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE, M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE,
         M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE, M14_1B3A_SCOPE, M14_1B3B_SCOPE,
         M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE, M14_2C_SCOPE, M14_2D1_SCOPE,
         M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
         M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
-        M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE, M14_3C1_SCOPE, M14_3C2_SCOPE,
+        M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE, M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE,
     };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
         assert_eq!(
             CUDA_OXIDE_REVISION,
-            "e9c0d677104751179985098f02212ff044d3ec22"
+            "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7"
         );
         assert!(M14_1A_SCOPE.opt_in_only);
         assert!(M14_1A_SCOPE.owns_context_and_stream);
@@ -1130,6 +1236,89 @@ mod tests {
         assert!(!M14_3C2_SCOPE.owns_f16_or_cublas_dispatch_policy);
         assert!(!M14_3C2_SCOPE.owns_q8_conversion_or_matmul_kernels);
         assert!(!M14_3C2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn blas_projection_scope_owns_dense_dispatch_without_q8_or_route_claims() {
+        assert!(M14_3C3_SCOPE.opt_in_only);
+        assert!(M14_3C3_SCOPE.owns_f32_to_f16_kernel);
+        assert!(M14_3C3_SCOPE.owns_f16_projection_dispatch_policy);
+        assert!(M14_3C3_SCOPE.owns_f16_pair_projection_dispatch_policy);
+        assert!(M14_3C3_SCOPE.owns_f32_projection_dispatch_policy);
+        assert!(M14_3C3_SCOPE.owns_live_f16_and_f32_blas_paths);
+        assert!(!M14_3C3_SCOPE.owns_q8_conversion_or_matmul_kernels);
+        assert!(!M14_3C3_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn dense_projection_dispatch_paths_match_current_c_priority() {
+        let base = F16ProjectionDispatch {
+            blas_ready: true,
+            serial_f16: false,
+            serial_router: false,
+            no_ordered_f16_matmul: false,
+            in_dim: 1024,
+            out_dim: 512,
+            n_tokens: 2,
+        };
+        assert_eq!(select_f16_projection_path(base), F16ProjectionPath::Blas);
+        assert_eq!(
+            select_f16_projection_path(F16ProjectionDispatch {
+                serial_f16: true,
+                ..base
+            }),
+            F16ProjectionPath::Serial
+        );
+        assert_eq!(
+            select_f16_projection_path(F16ProjectionDispatch {
+                blas_ready: false,
+                serial_router: true,
+                in_dim: 4096,
+                out_dim: 256,
+                n_tokens: 1,
+                ..base
+            }),
+            F16ProjectionPath::Serial
+        );
+        assert_eq!(
+            select_f16_projection_path(F16ProjectionDispatch {
+                blas_ready: false,
+                n_tokens: 1,
+                ..base
+            }),
+            F16ProjectionPath::OrderedChunks
+        );
+        assert_eq!(
+            select_f16_projection_path(F16ProjectionDispatch {
+                blas_ready: false,
+                no_ordered_f16_matmul: true,
+                n_tokens: 1,
+                ..base
+            }),
+            F16ProjectionPath::Base
+        );
+        assert_eq!(
+            select_f16_pair_projection_path(F16PairProjectionDispatch {
+                n_tokens: 1,
+                no_f16_pair_matmul: false,
+                serial_f16: false,
+                serial_router: false,
+                no_ordered_f16_matmul: false,
+            }),
+            F16PairProjectionPath::PairedOrderedChunks
+        );
+        assert_eq!(
+            select_f16_pair_projection_path(F16PairProjectionDispatch {
+                n_tokens: 2,
+                no_f16_pair_matmul: false,
+                serial_f16: false,
+                serial_router: false,
+                no_ordered_f16_matmul: false,
+            }),
+            F16PairProjectionPath::TwoIndependent
+        );
+        assert_eq!(select_f32_projection_path(true, 2), F32ProjectionPath::Blas);
+        assert_eq!(select_f32_projection_path(true, 1), F32ProjectionPath::Base);
     }
 
     #[test]

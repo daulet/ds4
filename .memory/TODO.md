@@ -8050,7 +8050,7 @@
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
 - Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2,
-  M14.3c1, and M14.3c2 are done, and M14.3c3 is active
+  M14.3c1, M14.3c2, and M14.3c3 are done, and M14.3d1 is active
 - Goal: port dense projection, Q8 conversion, and normalization kernels
   through bounded Rust CUDA slices with current C retained as the oracle.
 
@@ -8193,6 +8193,32 @@
 
 ##### M14.3c3: F16 And F32 BLAS Dispatch And Activation Conversion
 
-- Status: active
+- Status: done
 - Goal: port the remaining dense F16/F32 dispatch and activation-conversion
   behavior without claiming Q8 execution or default-route integration.
+- Oracle: current-C `f32_to_f16_kernel`, `ds4_gpu_matmul_f16_tensor`,
+  `ds4_gpu_matmul_f16_pair_tensor`, and `ds4_gpu_matmul_f32_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3c3/blas-projection-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_blas_projection_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: advanced `cuda-oxide` to provide mixed-precision cuBLAS and
+  DS4-layout projection wrappers, added an executable-local Rust
+  `f32_to_f16_kernel`, and encoded current-C F16/F32 and pair dispatch
+  priorities. B300 feature-enabled tests passed with 45 tests and live
+  cargo-oxide emitted portable `sm_80` PTX while proving activation
+  conversion, mixed F16/F32 BLAS, F32 BLAS, dispatch priority, pair
+  dispatch, and invalid-shape behavior on `NVIDIA B300 SXM6 AC`. Q8
+  kernels, route activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, workspace tests, the 79-check comparator, and
+  unified parity passed with 135 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result;
+  adversarial self-review corrected stale predecessor current-pin and
+  successor-stage assertions before closure.
+
+##### M14.3d1: Q8 Dequantization And Activation Quantization Kernels
+
+- Status: active
+- Goal: port `dequant_q8_0_to_f16_kernel`,
+  `dequant_q8_0_to_f32_kernel`, and `quantize_q8_0_f32_kernel` without
+  claiming Q8 matmul dispatch or route integration.

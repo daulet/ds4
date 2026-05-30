@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.3c3 F16 And F32 BLAS Dispatch And Activation Conversion
+- Active item: M14.3d1 Q8 Dequantization And Activation Quantization Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -45,8 +45,10 @@
   F16/F32 projection separately from remaining Q8 conversion/matmul kernels,
   and is split into M14.3c1 base reductions, M14.3c2 ordered/paired/serial
   F16 execution, and M14.3c3 BLAS dispatch/activation conversion before Q8
-  ownership is claimed.
-- Last validated source before the active item: M14.3c2 Ordered Paired And Serial F16 Projection Kernels.
+  ownership is claimed. M14.3d begins Q8 execution with M14.3d1
+  dequantization/activation quantization before quantized matmul ownership.
+- Last validated source before the active item: M14.3c3 F16 And F32 BLAS Dispatch And Activation Conversion.
+- Earlier M14.3c2 Ordered Paired And Serial F16 Projection Kernels.
 - Earlier M14.3c1 Base F16 And F32 Projection Kernels.
 - Earlier M14.3b2 Head RMS Norm Rope Tail Kernel.
 - Earlier M14.3b1 Fused QKV And Basic Head RMS Norm Kernels.
@@ -179,6 +181,25 @@
 
 ## Last Evidence
 
+- M14.3c3 F16 And F32 BLAS Dispatch And Activation Conversion advances the
+  `cuda-oxide` dependency to `d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7`
+  after adding mixed-precision `cublasGemmEx` and DS4-layout projection
+  wrappers upstream. It adds executable-local Rust cuda-oxide
+  `f32_to_f16_kernel`, current-C-compatible F16/F32 projection dispatch
+  selection, and live `cuda-core` BLAS execution. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 45
+  tests and live cargo-oxide execution emitted portable `sm_80` PTX and
+  proved activation conversion, mixed F16/F32 BLAS projection, F32 BLAS
+  projection, dispatch priority, pair dispatch, and invalid-shape rejection
+  on `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.3c3/blas-projection-kernel-smoke.json`
+  and `ds4-parity/check_blas_projection_kernel_smoke.py --negative-test`.
+  Q8 kernels, route activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, workspace tests, the 79-check comparator, and
+  unified parity passed with 135 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review timed out without a completed result;
+  adversarial self-review corrected stale predecessor current-pin and
+  successor-stage assertions before closure.
 - M14.3c2 Ordered Paired And Serial F16 Projection Kernels adds
   executable-local Rust cuda-oxide `matmul_f16_serial_kernel`,
   `matmul_f16_ordered_chunks_kernel`, and

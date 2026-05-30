@@ -1088,6 +1088,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.3c3 cuda-oxide BLAS projection and conversion smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_blas_projection_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

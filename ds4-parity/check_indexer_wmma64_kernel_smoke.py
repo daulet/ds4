@@ -26,7 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 RECORDED_DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
-CURRENT_DEPENDENCY_REVISION = "e9c0d677104751179985098f02212ff044d3ec22"
+CURRENT_DEPENDENCY_REVISION = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide indexer_scores_wmma64_kernel launch proof",
     "current-C-shaped 64-component four-warp tensor-core tile and causal masking semantics",

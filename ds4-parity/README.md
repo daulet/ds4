@@ -2470,6 +2470,17 @@ multi-token serial output, ordered chunk reduction, and unequal-width paired
 output while leaving cuBLAS dispatch, activation conversion, Q8, route, and
 removal ownership unclaimed.
 
+Validate the M14.3c3 Rust CUDA BLAS projection and activation conversion smoke:
+
+```sh
+python3 ds4-parity/check_blas_projection_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `f32_to_f16_kernel` execution and
+`cuda-core` F16/F32 BLAS projection on B300. It proves current-C-compatible
+dense projection dispatch while leaving Q8, route, and removal ownership
+unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

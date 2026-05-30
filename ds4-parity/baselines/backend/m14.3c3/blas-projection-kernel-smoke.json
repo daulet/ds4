@@ -1,0 +1,78 @@
+{
+  "schema": "ds4.blas_projection_kernel_smoke.v1",
+  "milestone": "M14.3c3",
+  "status": "b300-pass",
+  "id": "m14.3c3-f16-and-f32-blas-dispatch-and-activation-conversion",
+  "goal": "Prove opt-in Rust cuda-oxide activation conversion and F16/F32 BLAS projection dispatch without claiming Q8 or route behavior.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] f32_to_f16 conversion plus cuda-core DS4-layout projection wrappers"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "f32_to_f16_kernel activation conversion for mixed-precision projection",
+      "ds4_gpu_matmul_f16_tensor BLAS/serial/ordered/base dispatch priority",
+      "ds4_gpu_matmul_f16_pair_tensor paired-kernel eligibility policy",
+      "ds4_gpu_matmul_f32_tensor multi-token BLAS versus base-kernel selection"
+    ],
+    "excluded_behavior": [
+      "Q8 dequantization, activation quantization, or quantized matmul kernels",
+      "runtime graph integration, default CUDA route, and C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "executable-local cuda-oxide f32_to_f16_kernel launch proof",
+      "cuda-core DS4-layout F16/F32 BLAS projection execution proof",
+      "current-C dense F16/F32 and paired F16 dispatch policy selection"
+    ],
+    "not_claimed_in_this_stage": [
+      "Q8 conversion or quantized matmul kernels",
+      "runtime graph integration, default CUDA route, or C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "owns_f32_to_f16_kernel": true,
+    "owns_f16_projection_dispatch_policy": true,
+    "owns_f16_pair_projection_dispatch_policy": true,
+    "owns_f32_projection_dispatch_policy": true,
+    "owns_live_f16_and_f32_blas_paths": true,
+    "owns_q8_conversion_or_matmul_kernels": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 45,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-blas-projection-smoke",
+    "backend_selected_target": "sm_80",
+    "stdout": {
+      "milestone": "M14.3c3",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "activation_conversion_matches": true,
+      "mixed_precision_blas_output_matches": true,
+      "f32_blas_output_matches": true,
+      "dispatch_priority_matches": true,
+      "pair_dispatch_matches": true,
+      "invalid_shape_rejected": true,
+      "owns_f32_to_f16_kernel": true,
+      "owns_f16_projection_dispatch_policy": true,
+      "owns_f16_pair_projection_dispatch_policy": true,
+      "owns_f32_projection_dispatch_policy": true,
+      "owns_live_f16_and_f32_blas_paths": true,
+      "owns_q8_conversion_or_matmul_kernels": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.3d1 Q8 Dequantization And Activation Quantization Kernels"
+}
