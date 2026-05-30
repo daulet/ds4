@@ -1,0 +1,75 @@
+{
+  "schema": "ds4.cuda_abi_model_control_direct_io_async_staging_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2a",
+  "status": "b300-pass-staticlib-direct-io-async-staging-abi",
+  "goal": "Rust-own the direct-enabled public fd-cache four-slot asynchronous staging subset while leaving buffered-only asynchronous staging, arenas, budgets, source-page policy, residual selection, and route promotion pending.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "cuda_model_copy_chunk_bytes",
+      "cuda_model_stage_pool_alloc",
+      "cuda_model_range_ptr_from_fd"
+    ],
+    "semantics": [
+      "current C clamps DS4_CUDA_MODEL_COPY_CHUNK_MB to 16 through 4096 MiB and uses it for fd-cache staging chunks",
+      "current C allocates four pinned staging slots with events, waits before reusing a slot after four queued chunks, records an event after each asynchronous device copy, and synchronizes the upload stream before returning",
+      "current C handles arena allocation, cache budgets, source-page advice, and progress reporting separately from the staged upload loop"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2a/abi_model_control_direct_io_async_staging_link_smoke.c",
+    "selection_path": "the existing direct-enabled public fd-cache branch now stages its range through four pinned slots and per-slot completion events; DS4_CUDA_MODEL_COPY_CHUNK_MB=16 makes the linked request span five chunks",
+    "observable_public_harness_boundary": "the linked public consumer observes a multi-chunk request, fd-sourced weighted output, and retained cached device reuse; its output does not expose event counts or O_DIRECT selection",
+    "event_ring_evidence": "Rust public ABI source wires four staging slots, event waits and event records; the independent M14.1b2b3b2 B300 lower-level probe already observes four slots, seven queued chunks, two reuse waits, and seven recorded events for the same substrate operations",
+    "remaining_policy_boundary": "buffered-only public fd async staging, arena/cache budget, source-page advice/progress, chunk-copy failure selection, q8/f16 hooks, remaining compute exports, and route promotion stay pending"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_direct_enabled_fd_async_staging": true,
+    "owns_four_slot_event_ring": true,
+    "owns_model_copy_chunk_override_clamp": true,
+    "owns_buffered_only_fd_async_staging": false,
+    "owns_fd_cache_budget_policy": false,
+    "owns_source_page_and_progress_policy": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 102,
+    "feature_release_test_count": 106,
+    "public_request": {
+      "copy_chunk_bytes": 16777216,
+      "requested_chunks": 5,
+      "requested_cache_bytes": 83886080
+    },
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "page_aligned_host_map": true,
+      "fd_before_map_binds_host_base": true,
+      "direct_io_permitted_by_environment": true,
+      "multi_chunk_fd_cache_request": true,
+      "fd_bytes_precede_mutated_host_map": true,
+      "repeated_cache_reuses_device_copy": true,
+      "weighted_output_matches": true,
+      "embedded_libdevice_module_loaded": true,
+      "temporary_link_artifacts_cleaned": true
+    },
+    "lower_level_event_ring_baseline": "ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json"
+  },
+  "integration_risks": [
+    "the public linked output proves multi-chunk fd-cache computation and reuse but does not independently expose event counts or whether each successful chunk used O_DIRECT instead of buffered fallback",
+    "buffered-only public asynchronous staging, range-arena cache budgets, source-page discard/progress, residual model-copy failure selection, q8/f16 hooks, production linker selection, and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b Residual Fd Cache And Model-Control Policy"
+}

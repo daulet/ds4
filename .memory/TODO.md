@@ -9566,7 +9566,43 @@
 
 ######### M14.6b2b2b2b2b2b2b2b2: Public Async Staging And Residual Cache Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b because direct-enabled public asynchronous
+  staging is independently testable from buffered-only staging, arena/cache
+  budget, source-page/progress, and residual selection policy.
 - Goal: connect public asynchronous/budget staging, chunk-copy failure
   routing, and residual model-control selection/cache policy without claiming
   graph compute closure or route promotion.
+
+########## M14.6b2b2b2b2b2b2b2b2a: Public Direct-I/O Async Staging ABI
+
+- Status: done
+- Goal: connect direct-enabled public fd-cache requests to four-slot
+  asynchronous staging and the current-C model-copy chunk-size clamp while
+  leaving buffered-only async, budgets, and residual policy pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2a/abi-model-control-direct-io-async-staging-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_direct_io_async_staging_smoke.py --negative-test`.
+- Evidence: Rust uses four pinned direct-enabled fd staging slots with event
+  waits before reuse and final synchronization. The C-linked B300 consumer
+  sets a 16 MiB chunk override, requests five chunks, observes fd-backed
+  weighted output, and reuses retained device bytes after file mutation; it
+  does not claim public event-count observation. The existing lower-level
+  async B300 baseline records four slots, seven events, and two reuse waits.
+  Local tests pass with 102 tests, B300 release-feature tests pass with 106
+  tests, and the static library retains 29 exports. The checker passes with
+  103 checks and unified parity passes with 188 passed, 45 skipped, and no
+  failures. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  Buffered-only async, arena/cache-budget and source-page/progress policy,
+  residual selection, whole-archive retention, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+########## M14.6b2b2b2b2b2b2b2b2b: Residual Fd Cache And Model-Control Policy
+
+- Status: active
+- Goal: connect buffered-only asynchronous staging, arena/cache-budget and
+  source-page/progress policy, chunk-copy failure routing, and residual
+  model-control selection/cache policy without claiming graph compute closure
+  or route promotion.

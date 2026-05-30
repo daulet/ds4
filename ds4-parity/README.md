@@ -3143,6 +3143,21 @@ Asynchronous staging, cache-budget and source-page policy, residual
 model-control handling, whole-archive retention, and the executable-stack
 warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2a Rust CUDA direct-I/O async staging ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_direct_io_async_staging_smoke.py --negative-test
+```
+
+The fixture selects direct-enabled public fd caching with a 16 MiB staging
+chunk and requests five chunks through a C-linked B300 consumer. Public
+output proves fd-backed computation and retained cache reuse; source wiring
+and the earlier lower-level asynchronous staging baseline establish the
+four-slot event-ring contract without claiming that the C-linked output
+exposes event counts. Buffered-only asynchronous staging, arena/cache-budget
+and source-page/progress policy, residual model-control selection,
+whole-archive retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

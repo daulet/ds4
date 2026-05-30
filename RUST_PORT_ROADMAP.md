@@ -9878,10 +9878,62 @@ Stage split:
 
 ######### M14.6b2b2b2b2b2b2b2b2: Public Async Staging And Residual Cache Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b because direct-enabled public asynchronous
+  staging is independently testable from buffered-only staging, arena/cache
+  budget, source-page/progress, and residual selection policy.
 - Goal: connect public asynchronous/budget staging, chunk-copy failure
   routing, and residual model-control selection/cache policy without claiming
   remaining graph compute or route promotion.
+
+########## M14.6b2b2b2b2b2b2b2b2a: Public Direct-I/O Async Staging ABI
+
+- Status: done.
+- Goal: connect the direct-enabled public fd-cache route to the current-C
+  four-slot asynchronous staging loop and model-copy chunk-size clamp while
+  leaving buffered-only staging, arena/budget, source-page/progress, residual
+  selection, and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2a/abi-model-control-direct-io-async-staging-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_direct_io_async_staging_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now parses the current-C
+    `DS4_CUDA_MODEL_COPY_CHUNK_MB` clamp, allocates four CUDA-pinned staging
+    slots for the direct-enabled public fd-cache path, waits on a prior slot
+    event before reuse, records each queued transfer, and synchronizes queued
+    work before the retained device range can be consumed.
+  - A C-linked B300 consumer selects direct-enabled fd caching with a 16 MiB
+    chunk override, requests five chunks, then consumes a small weighted-RMS
+    subrange. It observes fd-backed output and retained cached-device reuse
+    after rewriting the file. This output intentionally does not claim to
+    observe event counts or `O_DIRECT` selection.
+  - The independent lower-level M14.1b2b3b2 B300 baseline retains the live
+    event-ring observation for the same substrate operations: four staging
+    slots, seven queued chunks/events, and two reuse waits.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 102 tests;
+    B300 `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 106 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - `check_cuda_abi_model_control_direct_io_async_staging_smoke.py
+    --negative-test` passes with 103 checks, and unified parity passes with
+    188 passed, 45 skipped, and no failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the public direct-I/O asynchronous-staging boundary, current-C oracle,
+    comparator, and B300 evidence, but returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Buffered-only public asynchronous staging, arena/cache-budget and
+    source-page/progress policy, chunk-copy failure selection, q8/f16 hooks,
+    remaining graph compute, whole-archive retention, route promotion, and
+    the generated `.note.GNU-stack` warning remain open.
+
+########## M14.6b2b2b2b2b2b2b2b2b: Residual Fd Cache And Model-Control Policy
+
+- Status: active.
+- Goal: connect buffered-only public asynchronous staging, arena/cache-budget
+  and source-page/progress policy, chunk-copy failure routing, and remaining
+  model-control selection/cache policy without claiming remaining graph
+  compute or route promotion.
 
 ## Removal Criteria for C Host Code
 

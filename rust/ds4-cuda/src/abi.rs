@@ -4,8 +4,8 @@ use std::ptr;
 use std::sync::Mutex;
 
 use cuda_core::{
-    DeviceBuffer, IntoResult, ManagedBuffer, ReadOnlyPageableHostMemory,
-    ReadOnlyRegisteredHostMemory,
+    CudaEvent, DeviceBuffer, IntoResult, ManagedBuffer, PinnedHostBuffer,
+    ReadOnlyPageableHostMemory, ReadOnlyRegisteredHostMemory,
 };
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -270,6 +270,7 @@ fn pageable_hmm_direct_read_selected() -> bool {
 }
 
 const ABI_MODEL_COPY_CHUNK_BYTES: usize = 64 * 1024 * 1024;
+const ABI_DIRECT_FD_STAGE_SLOTS: usize = 4;
 
 fn try_register_abi_model(
     backend: &CudaOxideSubstrate,
@@ -325,6 +326,26 @@ fn direct_io_fd_weight_cache_selected() -> bool {
     fd_weight_cache_selected() && std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_none()
 }
 
+fn abi_model_copy_chunk_bytes_from_value(value: Option<&std::ffi::CStr>) -> Option<usize> {
+    let mut mb = 64_u64;
+    if let Some(value) = value {
+        let mut end = ptr::null_mut();
+        let parsed = unsafe { libc::strtoull(value.as_ptr(), &mut end, 10) };
+        if end.cast_const() != value.as_ptr() && parsed > 0 {
+            mb = parsed;
+        }
+    }
+    let bytes = mb.clamp(16, 4096).checked_mul(1024 * 1024)?;
+    usize::try_from(bytes).ok()
+}
+
+fn abi_model_copy_chunk_bytes() -> Option<usize> {
+    let value = std::env::var("DS4_CUDA_MODEL_COPY_CHUNK_MB")
+        .ok()
+        .and_then(|value| std::ffi::CString::new(value).ok());
+    abi_model_copy_chunk_bytes_from_value(value.as_deref())
+}
+
 fn abi_model_fd(model_map: *const c_void) -> Option<c_int> {
     let control = ABI_MODEL_CONTROL.lock().ok()?;
     if control.model_fd < 0
@@ -335,23 +356,16 @@ fn abi_model_fd(model_map: *const c_void) -> Option<c_int> {
     Some(control.model_fd)
 }
 
-fn upload_abi_buffered_fd_range(
-    backend: &CudaOxideSubstrate,
-    fd: c_int,
-    offset: u64,
-    bytes: u64,
-) -> Option<DeviceBuffer<u8>> {
-    let bytes = usize::try_from(bytes).ok()?;
-    let mut staging = backend.pinned_zeroed::<u8>(bytes).ok()?;
+fn read_abi_buffered_fd_into(fd: c_int, offset: u64, destination: &mut [u8]) -> Option<()> {
     let mut done = 0usize;
-    while done < bytes {
+    while done < destination.len() {
         let file_offset = offset.checked_add(u64::try_from(done).ok()?)?;
         let file_offset = libc::off_t::try_from(file_offset).ok()?;
         let result = unsafe {
             libc::pread(
                 fd,
-                staging.as_mut_slice()[done..].as_mut_ptr().cast(),
-                bytes - done,
+                destination[done..].as_mut_ptr().cast(),
+                destination.len() - done,
                 file_offset,
             )
         };
@@ -366,6 +380,18 @@ fn upload_abi_buffered_fd_range(
         }
         done = done.checked_add(usize::try_from(result).ok()?)?;
     }
+    Some(())
+}
+
+fn upload_abi_buffered_fd_range(
+    backend: &CudaOxideSubstrate,
+    fd: c_int,
+    offset: u64,
+    bytes: u64,
+) -> Option<DeviceBuffer<u8>> {
+    let bytes = usize::try_from(bytes).ok()?;
+    let mut staging = backend.pinned_zeroed::<u8>(bytes).ok()?;
+    read_abi_buffered_fd_into(fd, offset, staging.as_mut_slice())?;
     backend.upload_pinned_u8_range(&staging, 0, bytes).ok()
 }
 
@@ -382,25 +408,21 @@ fn try_upload_abi_buffered_fd_range(
 }
 
 #[cfg(target_os = "linux")]
-fn try_upload_abi_direct_fd_range(
-    backend: &CudaOxideSubstrate,
-    model_map: *const c_void,
+fn read_abi_direct_or_buffered_fd_stage(
+    fd: c_int,
+    staging: &mut PinnedHostBuffer<u8>,
     offset: u64,
-    bytes: u64,
-) -> Option<(DeviceBuffer<u8>, bool)> {
+    bytes: usize,
+) -> Option<(usize, bool)> {
     use std::os::unix::fs::FileExt;
 
-    if !direct_io_fd_weight_cache_selected() || bytes == 0 {
-        return None;
-    }
-    let fd = abi_model_fd(model_map)?;
-    let direct_device = (|| -> Option<DeviceBuffer<u8>> {
+    let direct_payload = (|| -> Option<usize> {
         let mut control = ABI_MODEL_CONTROL.lock().ok()?;
         let direct_file = control.model_direct_file.as_ref()?;
         let alignment = control.model_direct_align.max(1);
         let read_offset = offset - (offset % alignment);
         let payload_delta = offset.checked_sub(read_offset)?;
-        let payload_end = payload_delta.checked_add(bytes)?;
+        let payload_end = payload_delta.checked_add(u64::try_from(bytes).ok()?)?;
         let read_bytes = payload_end.checked_add(alignment - 1)? / alignment * alignment;
         if control.model_file_size == 0
             || read_offset > control.model_file_size
@@ -408,12 +430,12 @@ fn try_upload_abi_direct_fd_range(
         {
             None
         } else {
-            let stage_bytes = read_bytes.checked_add(alignment)?;
-            let stage_bytes = usize::try_from(stage_bytes).ok()?;
-            let mut staging = backend.pinned_zeroed::<u8>(stage_bytes).ok()?;
             let alignment = usize::try_from(alignment).ok()?;
             let aligned_delta = (alignment - (staging.as_ptr() as usize % alignment)) % alignment;
             let read_bytes = usize::try_from(read_bytes).ok()?;
+            if read_bytes > staging.len().checked_sub(aligned_delta)? {
+                return None;
+            }
             let direct_window =
                 &mut staging.as_mut_slice()[aligned_delta..aligned_delta + read_bytes];
             if let Err(error) = direct_file.read_exact_at(direct_window, read_offset) {
@@ -421,15 +443,80 @@ fn try_upload_abi_direct_fd_range(
                 return None;
             }
             let payload_delta = usize::try_from(payload_delta).ok()?;
-            let bytes = usize::try_from(bytes).ok()?;
-            backend
-                .upload_pinned_u8_range(&staging, aligned_delta + payload_delta, bytes)
-                .ok()
+            Some(aligned_delta + payload_delta)
         }
     })();
-    direct_device.map(|device| (device, true)).or_else(|| {
-        upload_abi_buffered_fd_range(backend, fd, offset, bytes).map(|device| (device, false))
-    })
+    if let Some(payload) = direct_payload {
+        return Some((payload, true));
+    }
+    read_abi_buffered_fd_into(fd, offset, &mut staging.as_mut_slice()[..bytes])?;
+    Some((0, false))
+}
+
+#[cfg(target_os = "linux")]
+fn try_upload_abi_direct_fd_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    offset: u64,
+    bytes: u64,
+) -> Option<(DeviceBuffer<u8>, bool)> {
+    if !direct_io_fd_weight_cache_selected() || bytes == 0 {
+        return None;
+    }
+    let fd = abi_model_fd(model_map)?;
+    let bytes = usize::try_from(bytes).ok()?;
+    let chunk_bytes = abi_model_copy_chunk_bytes()?;
+    let alignment = ABI_MODEL_CONTROL.lock().ok()?.model_direct_align.max(1);
+    let alignment = usize::try_from(alignment).ok()?;
+    let stage_bytes = chunk_bytes.checked_add(alignment.checked_mul(2)?)?;
+    let device = backend.zeroed::<u8>(bytes).ok()?;
+    let mut staging = Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS);
+    let mut events: Vec<Option<CudaEvent>> = Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS);
+    for _ in 0..ABI_DIRECT_FD_STAGE_SLOTS {
+        staging.push(backend.pinned_zeroed::<u8>(stage_bytes).ok()?);
+        events.push(None);
+    }
+    let upload_result = (|| -> Option<bool> {
+        let mut copied = 0usize;
+        let mut chunk_index = 0usize;
+        let mut used_direct = false;
+        while copied < bytes {
+            let this_chunk = (bytes - copied).min(chunk_bytes);
+            let slot = chunk_index % ABI_DIRECT_FD_STAGE_SLOTS;
+            if let Some(event) = events[slot].take() {
+                event.synchronize().ok()?;
+            }
+            let file_offset = offset.checked_add(u64::try_from(copied).ok()?)?;
+            let (payload_offset, direct) = read_abi_direct_or_buffered_fd_stage(
+                fd,
+                &mut staging[slot],
+                file_offset,
+                this_chunk,
+            )?;
+            unsafe {
+                backend
+                    .enqueue_pinned_u8_range_async(
+                        &device,
+                        copied,
+                        &staging[slot],
+                        payload_offset,
+                        this_chunk,
+                    )
+                    .ok()?;
+            }
+            events[slot] = Some(backend.record_event().ok()?);
+            used_direct |= direct;
+            copied = copied.checked_add(this_chunk)?;
+            chunk_index = chunk_index.checked_add(1)?;
+        }
+        Some(used_direct)
+    })();
+    let synchronize_ok = backend.synchronize().is_ok();
+    let used_direct = upload_result?;
+    if !synchronize_ok {
+        return None;
+    }
+    Some((device, used_direct))
 }
 
 #[cfg(target_os = "linux")]
@@ -1497,7 +1584,12 @@ pub extern "C" fn ds4_gpu_should_use_managed_kv_cache(
 
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
-    use super::{abi_direct_io_error_disables, disable_abi_direct_io_after_error, AbiModelControl};
+    use std::ffi::CString;
+
+    use super::{
+        abi_direct_io_error_disables, abi_model_copy_chunk_bytes_from_value,
+        disable_abi_direct_io_after_error, AbiModelControl,
+    };
 
     #[test]
     fn public_direct_io_disable_error_classes_match_current_c_policy() {
@@ -1531,5 +1623,30 @@ mod tests {
             Some(libc::EIO)
         ));
         assert_eq!(non_qualifying.model_direct_align, 4096);
+    }
+
+    #[test]
+    fn public_direct_io_async_chunk_override_matches_current_c_clamp() {
+        let small = CString::new("8").expect("valid chunk string");
+        let trailing = CString::new("32rest").expect("valid chunk string");
+        let huge = CString::new("5000").expect("valid chunk string");
+        let zero = CString::new("0").expect("valid chunk string");
+
+        assert_eq!(
+            abi_model_copy_chunk_bytes_from_value(Some(&small)),
+            Some(16 * 1024 * 1024)
+        );
+        assert_eq!(
+            abi_model_copy_chunk_bytes_from_value(Some(&trailing)),
+            Some(32 * 1024 * 1024)
+        );
+        assert_eq!(
+            abi_model_copy_chunk_bytes_from_value(Some(&huge)),
+            Some(4096 * 1024 * 1024)
+        );
+        assert_eq!(
+            abi_model_copy_chunk_bytes_from_value(Some(&zero)),
+            Some(64 * 1024 * 1024)
+        );
     }
 }

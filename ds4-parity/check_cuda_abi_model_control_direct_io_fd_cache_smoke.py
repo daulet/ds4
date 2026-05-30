@@ -173,7 +173,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         'format!("/proc/self/fd/{fd}")',
         ".custom_flags(libc::O_DIRECT)",
         "read_exact_at(direct_window, read_offset)",
-        "upload_abi_buffered_fd_range(backend, fd, offset, bytes)",
+        "read_abi_buffered_fd_into(fd, offset",
         "configure_abi_model_fd(&mut control, fd)",
     ]:
         report.check(marker in texts["abi"], f"Rust direct-I/O marker missing: {marker}")
@@ -260,7 +260,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2 Public Async Staging And Residual Cache Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b Residual Fd Cache And Model-Control Policy" in texts["status"],
         "active item missing",
     )
     report.check("M14.6b2b2b2b2b2b2b2a Direct-I/O Fd Cache ABI" in texts["status"], "status evidence missing")

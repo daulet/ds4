@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2 Public Async Staging And Residual Cache Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b Residual Fd Cache And Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,23 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2a Public Direct-I/O Async Staging ABI connects the
+  direct-enabled public fd-cache branch to four pinned staging slots, waits
+  before slot reuse, records per-chunk CUDA events, and honors the current-C
+  `DS4_CUDA_MODEL_COPY_CHUNK_MB` clamp. A C-linked B300 consumer requests five
+  16 MiB chunks, observes fd-sourced weighted RMS output, and preserves the
+  cached device result after the backing file is changed. Its output does not
+  expose event counts or direct-read selection; the retained lower-level
+  M14.1b2b3b2 B300 probe records four slots, seven events, and two reuse
+  waits for the same substrate operations. Local library tests pass with 102
+  tests; B300 release-feature tests pass with 106 tests, and the static
+  library retains 29 exports. The async-staging checker passes with 103
+  checks and unified parity passes with 188 passed, 45 skipped, and no
+  failures. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Buffered-only
+  asynchronous staging, arena/cache budgets, source-page/progress policy,
+  residual model-control selection, whole-archive retention, and remaining
+  graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b1 Direct-I/O Error Disable ABI adds the public
   current-C state transition for a selected direct read that fails with
   `EINVAL`, `EFAULT`, `ENOTSUP`, or `EOPNOTSUPP`: Rust drops its retained
