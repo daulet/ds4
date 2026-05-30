@@ -10024,10 +10024,63 @@ Stage split:
 
 ############ M14.6b2b2b2b2b2b2b2b2b2b: Cache Budget And Residual Model-Control Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2b2 because public fd cache-budget fallback is
+  independently testable from source-page/progress and residual selection
+  policy.
 - Goal: connect public cache-budget fallback, source-page/progress policy,
   chunk-copy failure routing, and residual model-control selection/cache
   policy without claiming remaining graph compute or route promotion.
+
+############# M14.6b2b2b2b2b2b2b2b2b2b1: Public Fd Cache Budget Fallback ABI
+
+- Status: done.
+- Goal: connect public fd-cache limit admission and uncached budget fallback
+  pointer resolution while leaving source-page/progress, residual selection,
+  and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b1/abi-model-control-fd-cache-budget-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_cache_budget_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now retains admitted fd range byte accounting
+    with the arena owner, parses the current-C
+    `DS4_CUDA_WEIGHT_CACHE_LIMIT_GB` GiB/unlimited policy, rejects both raw
+    and aligned over-budget reservations before staging, and resolves a
+    rejected request to an uncached direct model pointer before constructing
+    a host source slice.
+  - A C-linked B300 consumer maps only the admitted page as readable, gives
+    its fd only that page, admits and consumes a small fd-backed range, then
+    successfully rejects repeated 1 GiB cache requests under a 1 GiB limit.
+    Success proves no transfer from inaccessible rejected pages; the fixture
+    intentionally does not claim compute execution through the returned host
+    fallback pointer.
+  - The existing M14.1b2b3b2 B300 lower-level baseline remains the
+    not-cached fallback proof under an exact small byte budget.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 105 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 111 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - The preceding public fd-arena, buffered asynchronous staging, and
+    direct-I/O asynchronous staging C-linked B300 consumers rerun successfully
+    against the budget-aware static library.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_fd_cache_budget_smoke.py
+    --negative-test` passes with 110 checks, and the default unified parity
+    report passes with 191 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Source-page/progress policy, public compute through the returned host
+    fallback pointer, residual model-control selection, q8/f16 hooks,
+    remaining graph compute, whole-archive retention, route promotion, and
+    the generated `.note.GNU-stack` warning remain open.
+
+############# M14.6b2b2b2b2b2b2b2b2b2b2: Source-Page Progress And Residual Model-Control Policy
+
+- Status: active.
+- Goal: connect source-page/progress policy, residual model-control
+  selection/cache behavior, and remaining failure routing without claiming
+  remaining graph compute or route promotion.
 
 ## Removal Criteria for C Host Code
 

@@ -3188,6 +3188,21 @@ that the public output exposes arena count or device offsets. Cache-budget
 fallback, source-page/progress policy, residual model-control selection,
 whole-archive retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b1 Rust CUDA public fd cache-budget
+fallback ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_cache_budget_smoke.py --negative-test
+```
+
+The fixture admits one small buffered fd-backed range under a one GiB cache
+limit, then requests a one GiB range whose source pages are inaccessible and
+whose file bytes do not exist. A successful C-linked B300 call proves
+pre-transfer budget fallback and retained reuse of the admitted range without
+claiming public compute through the uncached fallback pointer. Source-page
+progress policy, residual model-control selection, whole-archive retention,
+and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

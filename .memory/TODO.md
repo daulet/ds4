@@ -9672,7 +9672,45 @@
 
 ############ M14.6b2b2b2b2b2b2b2b2b2b: Cache Budget And Residual Model-Control Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2b2 because public fd cache-budget fallback is
+  independently testable from source-page/progress and residual selection
+  policy.
 - Goal: connect public cache-budget fallback, source-page/progress policy,
   chunk-copy failure routing, and residual model-control selection/cache
   policy without claiming graph compute closure or route promotion.
+
+############# M14.6b2b2b2b2b2b2b2b2b2b1: Public Fd Cache Budget Fallback ABI
+
+- Status: done
+- Goal: connect public fd-cache limit admission and uncached budget fallback
+  pointer resolution while leaving source-page/progress, residual selection,
+  and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b1/abi-model-control-fd-cache-budget-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_cache_budget_smoke.py --negative-test`.
+- Evidence: Rust parses the current-C GiB cache-limit policy, retains admitted
+  fd byte accounting with arena state, rejects over-budget requests before
+  staging/source construction, and returns an uncached direct model pointer
+  for that operation. A C-linked B300 consumer admits and computes one small
+  fd range, then returns successfully from repeated rejected 1 GiB requests
+  whose source pages are inaccessible and whose file bytes are absent. It
+  deliberately does not consume the returned host fallback pointer in a
+  kernel. Local tests pass with 105 tests, B300 release-feature tests pass
+  with 111 tests, and the static library retains 29 exports. The prior public
+  fd-arena, buffered asynchronous staging, and direct-I/O asynchronous staging
+  C-linked consumers also pass against that budget-aware static library.
+  The public budget checker passes 110 checks, and the default unified report
+  passes with 191 passed, 45 skipped, and 0 failed. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Source-page discard/progress, residual
+  selection, whole-archive retention, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+############# M14.6b2b2b2b2b2b2b2b2b2b2: Source-Page Progress And Residual Model-Control Policy
+
+- Status: active
+- Goal: connect source-page/progress policy, residual model-control
+  selection/cache behavior, and remaining failure routing without claiming
+  graph compute closure or route promotion.

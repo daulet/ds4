@@ -2423,6 +2423,35 @@ pub const M14_6B2B2B2B2B2B2B2B2B2A_SCOPE: CudaAbiFdArenaSuballocationScope =
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiFdCacheBudgetScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_fd_cache_budget_policy: bool,
+    pub owns_cache_limit_gib_override: bool,
+    pub owns_uncached_budget_fallback_pointer: bool,
+    pub owns_live_rejected_transfer_observation: bool,
+    pub owns_source_page_and_progress_policy: bool,
+    pub owns_remaining_model_control_selection: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE: CudaAbiFdCacheBudgetScope = CudaAbiFdCacheBudgetScope {
+    exported_abi_symbol_count: 29,
+    exported_compute_symbol_count: 9,
+    owns_fd_cache_budget_policy: true,
+    owns_cache_limit_gib_override: true,
+    owns_uncached_budget_fallback_pointer: true,
+    owns_live_rejected_transfer_observation: true,
+    owns_source_page_and_progress_policy: false,
+    owns_remaining_model_control_selection: false,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2471,6 +2500,7 @@ mod tests {
         M14_6B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2A_SCOPE, M14_6B2B2B2B2B2B2B1_SCOPE,
         M14_6B2B2B2B2B2B2B2A_SCOPE, M14_6B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2A_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE,
     };
 
     #[test]
@@ -3723,6 +3753,27 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2B2B2B2A_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_fd_budget_scope_leaves_source_selection_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.exported_abi_symbol_count,
+            29
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.exported_compute_symbol_count,
+            9
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_fd_cache_budget_policy);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_cache_limit_gib_override);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_uncached_budget_fallback_pointer);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_live_rejected_transfer_observation);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_source_page_and_progress_policy);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_remaining_model_control_selection);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE.changes_default_route);
     }
 
     #[test]
