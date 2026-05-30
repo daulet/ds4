@@ -3734,6 +3734,21 @@ after retaining the FP8 mutation in `kv`. Compressor, attention, routed MoE,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public compressor batch-store ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_compressor_store_batch_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public compressor batch-store wrapper
+through one embedded Rust kernel, proves ratio-4 state placement, FP32 and
+FP16 APE reads, non-power-of-two `uint32_t` position wrap, and untouched
+rows, then checks invalid-range, invalid-shape, overflow, and null rejection.
+Compressor update/prefill, attention, routed MoE, remaining graph compute,
+whole-archive retention policy, route promotion, C CUDA removal, and the
+embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

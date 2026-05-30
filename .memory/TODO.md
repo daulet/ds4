@@ -11037,6 +11037,41 @@
 
 ################################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb because
+  public compressor batch-state storage is independently comparable before
+  compressor update/prefill, attention, routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Compressor Store Batch ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_compressor_store_batch_tensor` through one public
+  model-backed kernel without claiming compressor update/prefill, attention,
+  routed MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-compressor-store-batch-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_compressor_store_batch_smoke.py --negative-test`.
+- Evidence: Rust exports the public compressor batch-store wrapper through
+  one embedded kernel using cached FP32 or FP16 APE ranges. A C-linked B300
+  witness proves ratio-4 upper-bank state placement, both APE formats,
+  non-power-of-two `uint32_t` position wrap, untouched rows,
+  invalid-range/shape rejection, checked-overflow rejection, and null
+  rejection. Local tests pass with 142 tests; B300 feature tests pass with
+  149 tests; the static library exposes 58 symbols and embeds 34 kernels; all
+  52 preceding linked ABI consumers pass against the rebuilt archive with the
+  known executable-stack warning. All 56 CUDA ABI comparators pass, and the
+  unified parity report passes with 228 passed, 45 skipped, and 0 failed.
+  The pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Compressor
+  update/prefill, attention, routed MoE, remaining graph compute, route
+  promotion, and C CUDA removal remain unclaimed.
+
+################################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

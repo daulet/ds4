@@ -721,6 +721,48 @@ mod kernels {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_compressor_store_kernel(
+        head_dim: u32,
+        ratio: u32,
+        pos0: u32,
+        n_tokens: u32,
+        ape_type: u32,
+        kv: &[f32],
+        sc: &[f32],
+        ape_f32: &[f32],
+        ape_f16: &[f16],
+        mut state_kv: DisjointSlice<f32>,
+        mut state_score: DisjointSlice<f32>,
+    ) {
+        let coff = if ratio == 4 { 2 } else { 1 };
+        let width = coff * head_dim;
+        let gid = u64::from(thread::blockIdx_x()) * u64::from(thread::blockDim_x())
+            + u64::from(thread::threadIdx_x());
+        let count = u64::from(n_tokens) * u64::from(width);
+        if gid >= count {
+            return;
+        }
+        let token = gid / u64::from(width);
+        let dimension = gid % u64::from(width);
+        let phase = pos0.wrapping_add(token as u32) % ratio;
+        let row = if ratio == 4 { ratio + phase } else { phase };
+        let ape_index = (u64::from(phase) * u64::from(width) + dimension) as usize;
+        let ape = if ape_type == 1 {
+            ape_f16[ape_index] as f32
+        } else {
+            ape_f32[ape_index]
+        };
+        unsafe {
+            *state_kv.get_unchecked_mut((u64::from(row) * u64::from(width) + dimension) as usize) =
+                kv[gid as usize];
+            *state_score
+                .get_unchecked_mut((u64::from(row) * u64::from(width) + dimension) as usize) =
+                sc[gid as usize] + ape;
+        }
+    }
+
     #[kernel]
     pub fn abi_fp8_kv_quantize_kernel(
         n_tok: u32,
@@ -1740,6 +1782,7 @@ pub(crate) struct AbiKernelModule {
     head_rms_norm_kernel: CudaFunction,
     rope_tail_kernel: CudaFunction,
     store_raw_kv_batch_kernel: CudaFunction,
+    compressor_store_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
@@ -1810,6 +1853,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             store_raw_kv_batch_kernel: module
                 .load_function("abi_store_raw_kv_batch_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            compressor_store_kernel: module
+                .load_function("abi_compressor_store_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             fp8_kv_quantize_kernel: module
                 .load_function("abi_fp8_kv_quantize_kernel")
@@ -2811,6 +2857,81 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.store_raw_kv_batch_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn compressor_store_batch_tensor(
+        &self,
+        stream: &CudaStream,
+        kv_ptr: u64,
+        sc_ptr: u64,
+        state_kv_ptr: u64,
+        state_score_ptr: u64,
+        ape_ptr: u64,
+        input_elements: u64,
+        state_elements: u64,
+        ape_elements: u64,
+        ape_type: u32,
+        head_dim: u32,
+        ratio: u32,
+        pos0: u32,
+        n_tokens: u32,
+        grid_blocks: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (grid_blocks, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut head_dim = head_dim;
+        let mut ratio = ratio;
+        let mut pos0 = pos0;
+        let mut n_tokens = n_tokens;
+        let mut ape_type = ape_type;
+        let mut kv_ptr = kv_ptr;
+        let mut kv_len = input_elements;
+        let mut sc_ptr = sc_ptr;
+        let mut sc_len = input_elements;
+        let mut ape_f32_ptr = ape_ptr;
+        let mut ape_f32_len = if ape_type == 0 { ape_elements } else { 0 };
+        let mut ape_f16_ptr = ape_ptr;
+        let mut ape_f16_len = if ape_type == 1 { ape_elements } else { 0 };
+        let mut state_kv_ptr = state_kv_ptr;
+        let mut state_kv_len = state_elements;
+        let mut state_score_ptr = state_score_ptr;
+        let mut state_score_len = state_elements;
+        let mut params = [
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut ratio as *mut u32).cast::<c_void>(),
+            (&mut pos0 as *mut u32).cast::<c_void>(),
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut ape_type as *mut u32).cast::<c_void>(),
+            (&mut kv_ptr as *mut u64).cast::<c_void>(),
+            (&mut kv_len as *mut u64).cast::<c_void>(),
+            (&mut sc_ptr as *mut u64).cast::<c_void>(),
+            (&mut sc_len as *mut u64).cast::<c_void>(),
+            (&mut ape_f32_ptr as *mut u64).cast::<c_void>(),
+            (&mut ape_f32_len as *mut u64).cast::<c_void>(),
+            (&mut ape_f16_ptr as *mut u64).cast::<c_void>(),
+            (&mut ape_f16_len as *mut u64).cast::<c_void>(),
+            (&mut state_kv_ptr as *mut u64).cast::<c_void>(),
+            (&mut state_kv_len as *mut u64).cast::<c_void>(),
+            (&mut state_score_ptr as *mut u64).cast::<c_void>(),
+            (&mut state_score_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates source, state, and selected cached model
+        // spans plus the nonzero checked launch grid before submission.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.compressor_store_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

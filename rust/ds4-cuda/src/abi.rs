@@ -3082,6 +3082,123 @@ pub unsafe extern "C" fn ds4_gpu_kv_fp8_store_raw_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_compressor_store_batch_tensor(
+    kv: *const Ds4GpuTensor,
+    sc: *const Ds4GpuTensor,
+    state_kv: *mut Ds4GpuTensor,
+    state_score: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    ape_offset: u64,
+    ape_type: u32,
+    head_dim: u32,
+    ratio: u32,
+    pos0: u32,
+    n_tokens: u32,
+) -> c_int {
+    status(|| {
+        let Some(kv) = (unsafe { tensor_ref(kv) }) else {
+            return false;
+        };
+        let Some(sc) = (unsafe { tensor_ref(sc) }) else {
+            return false;
+        };
+        let Some(state_kv) = (unsafe { tensor_ref(state_kv.cast_const()) }) else {
+            return false;
+        };
+        let Some(state_score) = (unsafe { tensor_ref(state_score.cast_const()) }) else {
+            return false;
+        };
+        let coff = if ratio == 4 { 2_u32 } else { 1_u32 };
+        let Some(width) = coff.checked_mul(head_dim) else {
+            return false;
+        };
+        let Some(state_rows) = coff.checked_mul(ratio) else {
+            return false;
+        };
+        let Some(input_elements) = u64::from(n_tokens).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Some(state_elements) = u64::from(state_rows).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let Some(ape_elements) = u64::from(width).checked_mul(u64::from(ratio)) else {
+            return false;
+        };
+        let Some(input_bytes) = input_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(state_bytes) = state_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let ape_element_bytes = if ape_type == 1 {
+            size_of::<u16>() as u64
+        } else {
+            size_of::<f32>() as u64
+        };
+        let Some(ape_bytes) = ape_elements.checked_mul(ape_element_bytes) else {
+            return false;
+        };
+        let Ok(grid_blocks) = u32::try_from(input_elements.div_ceil(256_u64)) else {
+            return false;
+        };
+        if model_map.is_null()
+            || head_dim == 0
+            || ratio == 0
+            || n_tokens == 0
+            || ape_type > 1
+            || width == 0
+            || grid_blocks == 0
+            || ape_offset > model_size
+            || ape_bytes > model_size - ape_offset
+            || kv.bytes < input_bytes
+            || sc.bytes < input_bytes
+            || state_kv.bytes < state_bytes
+            || state_score.bytes < state_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                ape_offset,
+                ape_bytes,
+                |ape_ptr| {
+                    with_abi_kernels(backend, |kernels| {
+                        // SAFETY: source/state spans, the selected cached APE
+                        // range, geometry, and checked grid are validated above.
+                        Some(unsafe {
+                            kernels.compressor_store_batch_tensor(
+                                backend.stream(),
+                                kv.device_ptr(),
+                                sc.device_ptr(),
+                                state_kv.device_ptr(),
+                                state_score.device_ptr(),
+                                ape_ptr,
+                                input_elements,
+                                state_elements,
+                                ape_elements,
+                                ape_type,
+                                head_dim,
+                                ratio,
+                                pos0,
+                                n_tokens,
+                                grid_blocks,
+                            )
+                        })
+                    })
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

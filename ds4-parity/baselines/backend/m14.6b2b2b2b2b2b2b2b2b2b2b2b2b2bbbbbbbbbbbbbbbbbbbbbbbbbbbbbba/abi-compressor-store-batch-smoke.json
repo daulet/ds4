@@ -1,0 +1,79 @@
+{
+  "schema": "ds4.cuda_abi_compressor_store_batch_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-compressor-store-batch-abi",
+  "goal": "Rust-own the public compressor batch-store wrapper without claiming update, prefill, attention, routed MoE, or route promotion.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_compressor_store_batch_tensor"
+    ],
+    "semantics": [
+      "write input KV and score rows into compressor state using ratio-specific row placement",
+      "read additive APE values from either FP32 or FP16 model ranges selected by ape_type",
+      "preserve current-C uint32 position wrap before ratio modulo",
+      "reject arithmetic overflow and nonrepresentable launches instead of retaining unsafe wrapped C geometry"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_compressor_store_batch_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_compressor_store_kernel"
+    ],
+    "remaining_compute_boundary": "compressor update/prefill, attention, routed MoE, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 58,
+    "exported_compute_symbol_count": 34,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "owns_compressor_store_batch_tensor": true,
+    "owns_compressor_store_kernel": true,
+    "owns_f32_and_f16_ape_reads": true,
+    "owns_compressor_update_or_prefill": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 142,
+    "feature_release_test_count": 149,
+    "staticlib_export_count": 58,
+    "embedded_kernel_count": 34,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "ratio4_f32_ape_output_matches": true,
+      "ratio4_f16_ape_output_matches": true,
+      "uint32_position_wrap_matches": true,
+      "untouched_rows_preserved": true,
+      "invalid_model_range_rejected": true,
+      "invalid_shape_rejected": true,
+      "checked_overflow_rejected": true,
+      "null_rejected": true,
+      "embedded_compressor_store_kernel_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 52,
+      "predecessor_relink_executable_stack_warning_count": 52
+    }
+  },
+  "integration_risks": [
+    "the public wrapper deliberately rejects width and launch overflow where current C would wrap into unsafe geometry",
+    "compressor update/prefill, attention, routed MoE, remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
