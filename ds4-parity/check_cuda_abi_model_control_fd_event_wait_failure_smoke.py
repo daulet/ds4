@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a fd-arena failure ABI smoke."""
+"""Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba fd event-wait failure ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,12 +14,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-fd-arena-failure-selection-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba/abi-model-control-fd-event-wait-failure-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
-SUBSTRATE = ROOT / "rust/ds4-cuda/src/substrate.rs"
-HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a/abi_model_control_fd_arena_failure_selection_link_smoke.c"
+HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba/abi_model_control_fd_event_wait_failure_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -53,7 +52,6 @@ def main(argv: Iterable[str]) -> int:
         "cuda_c": CUDA_C.read_text(encoding="utf-8"),
         "lib": CUDA_LIB.read_text(encoding="utf-8"),
         "abi": CUDA_ABI.read_text(encoding="utf-8"),
-        "substrate": SUBSTRATE.read_text(encoding="utf-8"),
         "harness": HARNESS.read_text(encoding="utf-8"),
         "gpu_build": GPU_BUILD.read_text(encoding="utf-8"),
         "gpu_sys": GPU_SYS.read_text(encoding="utf-8"),
@@ -69,8 +67,8 @@ def main(argv: Iterable[str]) -> int:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
     print(
-        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a Rust CUDA public fd-arena "
-        f"failure-selection ABI smoke: {state} ({report.checks} checks)"
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba Rust CUDA public fd event-wait "
+        f"failure ABI smoke: {state} ({report.checks} checks)"
     )
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
@@ -79,15 +77,15 @@ def main(argv: Iterable[str]) -> int:
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     report.check(
-        fixture.get("schema") == "ds4.cuda_abi_model_control_fd_arena_failure_selection_smoke.v1",
+        fixture.get("schema") == "ds4.cuda_abi_model_control_fd_event_wait_failure_smoke.v1",
         "schema drift",
     )
     report.check(
-        fixture.get("milestone") == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a",
+        fixture.get("milestone") == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba",
         "milestone drift",
     )
     report.check(
-        fixture.get("status") == "b300-pass-staticlib-fd-arena-failure-selection-abi",
+        fixture.get("status") == "b300-pass-staticlib-fd-event-wait-failure-abi",
         "status drift",
     )
     validate_oracle(report, fixture, texts)
@@ -100,18 +98,19 @@ def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[st
     oracle = require_dict(report, fixture.get("oracle"), "oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
     report.check(
-        oracle.get("symbols")
-        == ["cuda_model_arena_alloc", "cuda_model_range_ptr_from_fd", "ds4_gpu_cache_model_range"],
+        oracle.get("symbols") == ["cuda_model_range_ptr_from_fd", "cuda_model_range_ptr"],
         "oracle symbols drift",
     )
     for marker in [
-        "if (g_model_cache_full) return NULL;",
-        "g_model_cache_full = 1;",
-        'if (getenv("DS4_CUDA_STRICT_WEIGHT_CACHE") != NULL) return NULL;',
-        "return cuda_model_ptr(model_map, offset);",
-        "return cuda_model_range_is_cached(model_map, offset, bytes);",
+        "if (chunk_idx >= 4u) {",
+        "err = cudaEventSynchronize(g_model_stage_event[bi]);",
+        "ds4: CUDA model staging wait failed for %s",
+        "return NULL;",
+        "const char *fd_ptr = cuda_model_range_ptr_from_fd(model_map, offset, bytes, what);",
+        "if (fd_ptr) return fd_ptr;",
+        "if (g_model_range_mapping_supported) {",
     ]:
-        report.check(marker in texts["cuda_c"], f"current-C arena failure marker missing: {marker}")
+        report.check(marker in texts["cuda_c"], f"current-C event-wait marker missing: {marker}")
 
 
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -120,12 +119,10 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         ("exported_abi_symbol_count", 29),
         ("exported_compute_symbol_count", 9),
         ("public_gpu_abi_function_count", 81),
-        ("owns_non_strict_arena_failure_host_fallback", True),
-        ("owns_strict_arena_failure_continuation", True),
-        ("owns_persistent_arena_cache_full_state", True),
-        ("owns_live_interposed_arena_failure_observation", True),
-        ("owns_aligned_arena_budget_failure_routing", True),
-        ("owns_remaining_failure_selection", False),
+        ("owns_fd_event_wait_failure_continuation", True),
+        ("owns_strict_independent_event_wait_failure_continuation", True),
+        ("owns_live_retried_event_wait_failure_observation", True),
+        ("owns_remaining_final_sync_failure_selection", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
         ("changes_default_route", False),
@@ -137,41 +134,34 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     report.check(len(symbols) == 29, "Rust ABI export implementation count drift")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
+    upload_fn = texts["abi"].split("fn upload_abi_async_fd_range_into", maxsplit=1)[1].split(
+        "fn upload_abi_async_fd_arena_range", maxsplit=1
+    )[0]
+    range_fn = texts["abi"].split("fn with_cached_abi_model_range", maxsplit=1)[1].split(
+        "fn abi_model_range_is_cached", maxsplit=1
+    )[0]
     for marker in [
-        "cache_full: bool,",
-        "fn strict_fd_weight_cache_selected() -> bool",
-        'std::env::var_os("DS4_CUDA_STRICT_WEIGHT_CACHE").is_some()',
-        "AbiFdArenaUpload::ArenaFallback",
-        "if state.cache_full {",
-        "state.cache_full = true;",
-        "if aligned_bytes > limit - state.range_bytes",
-        "backend.allocate_u8(chunk_bytes)",
-        "model_arenas.cache_full = false;",
+        "if let Some(event) = stage_slot.event.take() {",
+        "event.synchronize().ok()?;",
+        "let upload_result = (|| -> Option<bool> {",
+        "let used_direct = upload_result?;",
     ]:
-        report.check(marker in texts["abi"], f"Rust arena failure marker missing: {marker}")
-    upload_fn = texts["abi"].split("fn upload_abi_async_fd_arena_range", maxsplit=1)[1]
-    report.check(
-        upload_fn.index("bytes > limit - state.range_bytes")
-        < upload_fn.index("if state.cache_full")
-        < upload_fn.index("let reservation")
-        < upload_fn.index("if aligned_bytes > limit - state.range_bytes"),
-        "raw budget, cache-full, reusable-arena, and aligned-budget selection order drift",
-    )
+        report.check(marker in upload_fn, f"Rust event-wait propagation marker missing: {marker}")
     for marker in [
-        "pub fn allocate_u8(&self, len: usize)",
-        "cuda_core::memory::malloc_async",
-        "DeviceBuffer::from_raw_parts",
+        "let fd_resolution = if direct_io_fd_weight_cache_selected() {",
+        "let storage = match fd_resolution {",
+        "None => {",
+        "match try_register_abi_model_range(",
+        "AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?)",
     ]:
-        report.check(marker in texts["substrate"], f"substrate allocation marker missing: {marker}")
+        report.check(marker in range_fn, f"Rust post-event-wait continuation marker missing: {marker}")
     for marker in [
-        "pub struct CudaAbiFdArenaFailureSelectionScope",
-        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE",
-        "owns_non_strict_arena_failure_host_fallback: true",
-        "owns_strict_arena_failure_continuation: true",
-        "owns_persistent_arena_cache_full_state: true",
-        "owns_live_interposed_arena_failure_observation: true",
-        "owns_aligned_arena_budget_failure_routing: true",
-        "owns_remaining_failure_selection: false",
+        "pub struct CudaAbiFdEventWaitFailureScope",
+        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBA_SCOPE",
+        "owns_fd_event_wait_failure_continuation: true",
+        "owns_strict_independent_event_wait_failure_continuation: true",
+        "owns_live_retried_event_wait_failure_observation: true",
+        "owns_remaining_final_sync_failure_selection: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -185,15 +175,14 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 112),
-        ("feature_release_test_count", 119),
+        ("local_library_test_count", 118),
+        ("feature_release_test_count", 125),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
     failure = require_dict(report, execution.get("forced_failure"), "forced_failure")
     for key, expected in [
-        ("interposed_symbol", "cuMemAllocAsync"),
-        ("arena_chunk_bytes", 268435456),
-        ("arena_failure_error", 2),
+        ("interposed_symbol", "cuEventSynchronize"),
+        ("event_wait_failure_error", 1),
         ("registration_failure_error", 801),
     ]:
         report.check(failure.get(key) == expected, f"forced failure drift: {key}")
@@ -201,48 +190,59 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
     for key in [
         "c_linked_rust_staticlib",
         "buffered_fd_selection_active",
-        "interposed_arena_allocation_failure",
-        "non_strict_failure_returns_uncached_host_fallback",
-        "non_strict_host_bytes_precede_file_bytes",
-        "strict_failure_continues_to_cached_device_copy",
-        "strict_cached_copy_retains_original_host_bytes",
-        "persistent_cache_full_skips_second_arena_attempt",
-        "registration_fallback_boundary_preserved",
+        "multi_chunk_event_wait_selected",
+        "interposed_fd_event_wait_failure",
+        "event_wait_failure_retries_without_cache_full_latch",
+        "non_strict_event_wait_failure_continues_to_cached_device_copy",
+        "strict_event_wait_failure_continues_to_cached_device_copy",
+        "first_event_wait_failure_enters_registration_fallback",
+        "subsequent_event_wait_failure_respects_registration_disable",
+        "cached_fallback_retains_original_host_bytes",
+        "host_bytes_precede_file_bytes_after_event_wait_failure",
         "weighted_outputs_match",
         "embedded_libdevice_module_loaded",
         "staticlib_export_count_unchanged",
-        "fd_arena_suballocation_regression_passed",
+        "fd_event_record_failure_regression_passed",
+        "fd_read_failure_regression_passed",
+        "fd_stage_allocation_failure_regression_passed",
+        "fd_stage_pool_reuse_regression_passed",
+        "fd_upload_failure_continuation_regression_passed",
+        "fd_arena_failure_regression_passed",
         "fd_budget_cache_result_regression_passed",
         "default_fd_regression_passed",
+        "direct_io_async_staging_regression_passed",
         "registration_disable_regression_passed",
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
     for marker in [
-        "CUresult cuMemAllocAsync(",
-        'dlsym(RTLD_NEXT, "cuMemAllocAsync")',
-        "CU_ERROR_OUT_OF_MEMORY",
-        "arena_alloc_failures != 1",
-        "arena_alloc_failures != 2",
+        "CUresult cuEventSynchronize(",
+        'dlsym(RTLD_NEXT, "cuEventSynchronize")',
+        "fail_event_waits = 1;",
+        "event_wait_failures != 1",
+        "event_wait_failures != 2",
+        'setenv("DS4_CUDA_MODEL_COPY_CHUNK_MB", "16", 1)',
+        "const uint64_t range_bytes = chunk_bytes * 4 + weight_bytes;",
+        "host_register_calls != register_calls_after_map + 1",
         'setenv("DS4_CUDA_STRICT_WEIGHT_CACHE", "1", 1)',
-        "non_strict_failure_returns_uncached_host_fallback",
-        "strict_failure_continues_to_cached_device_copy",
-        "persistent_cache_full_skips_second_arena_attempt",
+        "event_wait_failure_retries_without_cache_full_latch",
+        "subsequent_event_wait_failure_respects_registration_disable",
+        "cached_fallback_retains_original_host_bytes",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
     risks = fixture.get("integration_risks", [])
-    report.check(any("cuMemAllocAsync" in value for value in risks), "driver allocation boundary missing")
-    report.check(any("not separately forced" in value for value in risks), "aligned-budget boundary missing")
-    report.check(any("staging allocation/read/copy" in value for value in risks), "remaining failure risk missing")
+    report.check(any("four-slot staging ring" in value for value in risks), "event wait boundary missing")
+    report.check(any("range-registration disable" in value for value in risks), "registration-disable boundary missing")
+    report.check(any("final stream-synchronization" in value for value in risks), "remaining sync boundary missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     fixture_path = (
-        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a/"
-        "abi-model-control-fd-arena-failure-selection-smoke.json"
+        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba/"
+        "abi-model-control-fd-event-wait-failure-smoke.json"
     )
-    checker = "check_cuda_abi_model_control_fd_arena_failure_selection_smoke.py"
-    item = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a: Public Fd Arena Failure Selection ABI"
+    checker = "check_cuda_abi_model_control_fd_event_wait_failure_smoke.py"
+    item = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba: Public Fd Event Wait Failure Continuation ABI"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
@@ -253,7 +253,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
         "active item missing",
     )
     report.check(
-        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2a Public Fd Arena Failure Selection ABI"
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba Public Fd Event Wait Failure"
         in texts["status"],
         "status evidence missing",
     )
@@ -261,17 +261,17 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(
         fixture.get("next_required_stage")
-        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy",
+        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbb Remaining Residual Failure Selection Policy",
         "next stage drift",
     )
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("non-strict ownership missing", lambda value: value["ownership"].update({"owns_non_strict_arena_failure_host_fallback": False})),
-        ("strict ownership missing", lambda value: value["ownership"].update({"owns_strict_arena_failure_continuation": False})),
-        ("cache-full ownership missing", lambda value: value["ownership"].update({"owns_persistent_arena_cache_full_state": False})),
-        ("strict output missing", lambda value: value["b300_execution"]["observed"].update({"strict_failure_continues_to_cached_device_copy": False})),
+        ("event-wait ownership missing", lambda value: value["ownership"].update({"owns_fd_event_wait_failure_continuation": False})),
+        ("strict-independent ownership missing", lambda value: value["ownership"].update({"owns_strict_independent_event_wait_failure_continuation": False})),
+        ("event retry observation missing", lambda value: value["b300_execution"]["observed"].update({"event_wait_failure_retries_without_cache_full_latch": False})),
+        ("cached host result missing", lambda value: value["b300_execution"]["observed"].update({"cached_fallback_retains_original_host_bytes": False})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)

@@ -81,5 +81,5 @@
     "q8/f16 hooks, production linker selection, remaining graph compute exports, and C CUDA removal remain pending",
     "the generated embed object still produces an executable-stack linker warning before route promotion"
   ],
-  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbb Remaining Residual Failure Selection Policy"
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbb Remaining Residual Failure Selection Policy"
 }

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbb Remaining Residual Failure Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbb Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,25 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba Public Fd Event Wait Failure
+  Continuation ABI observes the existing Rust continuation from failed
+  `event.synchronize()` into registration/device-copy fallback without
+  consulting strict fd-cache mode. A C-linked B300 consumer selects buffered
+  fd caching, requests two ranges exceeding the four-slot event ring, injects
+  `cuEventSynchronize` failure on fifth-chunk slot reuse across a strict-mode
+  transition, rejects the first range-registration attempt, and proves both
+  ranges retain host-backed cached output rather than divergent fd bytes.
+  Local library tests pass with 118 tests; B300 release-feature tests pass
+  with 125 tests, the static library retains 29 exports, and event-record
+  failure, fd-read failure, stage-allocation failure, stage-pool reuse,
+  fd-upload failure continuation, fd-arena failure, fd-budget cache-result,
+  default-fd, direct-I/O asynchronous-staging, and registration-disable
+  linked consumers pass against it. The focused comparator and default
+  unified parity report pass with 204 passed, 45 skipped, and 0 failed. The
+  required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Final
+  stream-synchronization observation, route promotion, and remaining graph
+  compute remain active.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbba Public Fd Event Record Failure
   Continuation ABI observes the existing Rust continuation from failed
   `backend.record_event()` into registration/device-copy fallback without

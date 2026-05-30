@@ -1640,6 +1640,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbba Rust CUDA public fd event-wait failure-continuation ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_model_control_fd_event_wait_failure_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
