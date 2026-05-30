@@ -2323,6 +2323,18 @@ output tile. It proves WMMA64 scoring, weighted output, NaN/negative
 suppression, and causal masking while leaving WMMA128 dispatch priority,
 specialized top-k dispatch, runtime route, and C CUDA removal pending.
 
+Validate the M14.2d2b2c Rust CUDA WMMA128 and score-dispatch smoke:
+
+```sh
+python3 ds4-parity/check_indexer_wmma128_dispatch_smoke.py --negative-test
+```
+
+The fixture records executable-local `indexer_scores_wmma128_kernel`
+execution on B300 through eight warps covering the current-C `16 x 128`
+output tile, plus the Rust selector for current-C's validated-input score
+kernel priority order. It leaves specialized top-k dispatch, runtime route,
+and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

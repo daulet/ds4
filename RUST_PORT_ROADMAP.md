@@ -7484,7 +7484,7 @@ Stage split:
 
 ##### M14.2d2b: Tensor-Core Indexer Score Kernels
 
-- Status: split before implementation into M14.2d2b1 and M14.2d2b2.
+- Status: done through M14.2d2b1 and M14.2d2b2a through M14.2d2b2c.
 - Goal: port the 16/32/64/128-component WMMA score branches through
   cuda-oxide's warp-scoped MMA surface.
 
@@ -7527,7 +7527,7 @@ Stage split:
 
 ##### M14.2d2b2: Widened Tensor-Core Indexer Score Dispatch
 
-- Status: split before implementation into M14.2d2b2a through M14.2d2b2c.
+- Status: done through M14.2d2b2a through M14.2d2b2c.
 - Goal: port current-C's 32/64/128-component multi-warp WMMA branches and
   their dispatch priority after the base tile is proven.
 
@@ -7602,13 +7602,46 @@ Stage split:
 
 ##### M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority
 
-- Status: active.
+- Status: done.
 - Goal: port current-C's 128-component eight-warp WMMA score branch and close
   the 128/64/32/base priority selection contract.
+- Oracle: current-C `indexer_scores_wmma128_kernel`, its
+  `indexer_scores_wmma128_kernel<<<grid, 256>>>` launch branch, and the
+  `indexer_scores_launch` direct-one/WMMA/scalar priority chain.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2b2c/indexer-wmma128-dispatch-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_wmma128_dispatch_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Acceptance: Rust owns the 128-component eight-warp score tile and the
+  validated-input score-kernel selection policy; specialized top-k, runtime
+  route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexer_scores_wmma128_kernel` using eight
+    warps, native `f16` shared staging, and two cuda-oxide
+    `mma_m16n8k16_f32_f16` accumulators per warp to cover current-C's
+    `16 x 128` output tile.
+  - Added `select_indexer_score_kernel`, an opt-in policy projection of the
+    current-C validated-input launch chain: direct-one first, then
+    WMMA128/64/32/base under quality and disable gates, otherwise scalar.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 32 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved WMMA128 output across two 128-component blocks,
+    eight-warp tile mapping, per-token weighting, NaN/negative suppression,
+    causal masking, invalid-shape rejection, and score dispatch ordering on
+    `NVIDIA B300 SXM6 AC`.
+  - Local workspace tests, formatter/diff checks, the 84-check
+    WMMA128/dispatch comparator, and unified parity passed with 123 passed,
+    45 skipped, and 0 failed. Non-interactive Claude review produced no
+    completed result before its timeout; adversarial self-review added
+    direct-one-disabled and global-WMMA-disabled selector checks before the
+    final B300 rerun.
+  - This stage remains opt-in; it does not claim specialized top-k dispatch,
+    runtime route activation, or C CUDA removal ownership.
 
 ##### M14.2d2c: Specialized Top-K Kernels
 
-- Status: pending.
+- Status: active.
 - Goal: port the shared-memory, CUB-equivalent, chunked, merge, tree-merge,
   and indexed ascending-sort top-k kernels.
 

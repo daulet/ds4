@@ -122,3 +122,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-indexer-wmma64-smoke"
 path = "src/bin/indexer_wmma64_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-indexer-wmma128-smoke"
+path = "src/bin/indexer_wmma128_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

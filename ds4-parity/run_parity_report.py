@@ -992,6 +992,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.2d2b2c cuda-oxide WMMA128 indexer score and dispatch smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_indexer_wmma128_dispatch_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

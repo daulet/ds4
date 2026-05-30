@@ -7767,7 +7767,7 @@
 
 ##### M14.2d2b: Tensor-Core Indexer Score Kernels
 
-- Status: split before implementation into M14.2d2b1 and M14.2d2b2
+- Status: done through M14.2d2b1 and M14.2d2b2a through M14.2d2b2c
 - Goal: port the 16/32/64/128-component WMMA score branches through
   cuda-oxide warp-scoped MMA.
 
@@ -7803,7 +7803,7 @@
 
 ##### M14.2d2b2: Widened Tensor-Core Indexer Score Dispatch
 
-- Status: split before implementation into M14.2d2b2a through M14.2d2b2c
+- Status: done through M14.2d2b2a through M14.2d2b2c
 - Goal: port current-C's 32/64/128-component WMMA score branches and
   dispatch priority after the base tile proof.
 
@@ -7862,12 +7862,35 @@
 
 ##### M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority
 
-- Status: active
+- Status: done
 - Goal: port current-C's eight-warp, 128-component score branch and final
   widened-WMMA priority contract.
+- Oracle: `indexer_scores_wmma128_kernel`, its 256-thread launch branch, and
+  validated-input `indexer_scores_launch` score-kernel priority.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2b2c/indexer-wmma128-dispatch-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_wmma128_dispatch_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust `indexer_scores_wmma128_kernel`
+  using eight warps, native `f16` staging, and cuda-oxide `m16n8k16` MMA
+  calls; added pure Rust `select_indexer_score_kernel` for the validated
+  direct-one, WMMA128/64/32/base, and scalar ordering contract. B300
+  feature-enabled `ds4-cuda` tests passed with 32 tests and live cargo-oxide
+  execution emitted portable `sm_80` PTX and proved WMMA128 output over two
+  128-component blocks, eight-warp tile mapping, per-token weighting,
+  NaN/negative suppression, causal masking, invalid-shape rejection, and
+  score-dispatch ordering on `NVIDIA B300 SXM6 AC`. Specialized top-k,
+  route activation, and C CUDA removal remain unclaimed. Local formatter/diff
+  checks, workspace tests, the 84-check WMMA128/dispatch comparator, and
+  unified parity passed with 123 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review produced no completed result before its
+  timeout; adversarial self-review added direct-one-disabled and
+  global-WMMA-disabled selector checks before the final B300 rerun.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
 
 ##### M14.2d2c: Specialized Top-K Kernels
 
-- Status: pending
+- Status: active
 - Goal: port specialized top-k sort, chunk, merge, tree, and indexed-sort
   kernels.

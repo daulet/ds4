@@ -425,6 +425,72 @@ pub const M14_2D2B2B_SCOPE: IndexerWmma64KernelScope = IndexerWmma64KernelScope 
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IndexerScoreKernel {
+    Scalar,
+    DirectOne,
+    Wmma,
+    Wmma32,
+    Wmma64,
+    Wmma128,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerScoreDispatchOptions {
+    pub n_tokens: u32,
+    pub n_head: u32,
+    pub head_dim: u32,
+    pub quality_mode: bool,
+    pub no_direct_one: bool,
+    pub no_wmma: bool,
+    pub no_wmma128: bool,
+    pub no_wmma64: bool,
+    pub no_wmma32: bool,
+}
+
+pub const fn select_indexer_score_kernel(
+    options: IndexerScoreDispatchOptions,
+) -> IndexerScoreKernel {
+    if options.n_tokens == 1
+        && options.head_dim == 128
+        && options.n_head == 64
+        && !options.no_direct_one
+    {
+        return IndexerScoreKernel::DirectOne;
+    }
+    if !options.quality_mode && options.head_dim == 128 && options.n_head == 64 && !options.no_wmma
+    {
+        if !options.no_wmma128 {
+            IndexerScoreKernel::Wmma128
+        } else if !options.no_wmma64 {
+            IndexerScoreKernel::Wmma64
+        } else if !options.no_wmma32 {
+            IndexerScoreKernel::Wmma32
+        } else {
+            IndexerScoreKernel::Wmma
+        }
+    } else {
+        IndexerScoreKernel::Scalar
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerWmma128DispatchScope {
+    pub opt_in_only: bool,
+    pub owns_indexer_scores_wmma128_kernel: bool,
+    pub owns_indexer_score_dispatch_policy: bool,
+    pub owns_specialized_topk_dispatch: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2D2B2C_SCOPE: IndexerWmma128DispatchScope = IndexerWmma128DispatchScope {
+    opt_in_only: true,
+    owns_indexer_scores_wmma128_kernel: true,
+    owns_indexer_score_dispatch_policy: true,
+    owns_specialized_topk_dispatch: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -437,11 +503,12 @@ pub mod substrate;
 #[cfg(test)]
 mod tests {
     use super::{
+        select_indexer_score_kernel, IndexerScoreDispatchOptions, IndexerScoreKernel,
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
         M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
         M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
-        M14_2D2B2B_SCOPE,
+        M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
     };
 
     #[test]
@@ -669,5 +736,95 @@ mod tests {
         assert!(!M14_2D2B2B_SCOPE.owns_wmma128_and_dispatch_priority);
         assert!(!M14_2D2B2B_SCOPE.owns_specialized_topk_dispatch);
         assert!(!M14_2D2B2B_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn wmma128_scope_owns_score_dispatch_but_leaves_topk_and_route_pending() {
+        assert!(M14_2D2B2C_SCOPE.opt_in_only);
+        assert!(M14_2D2B2C_SCOPE.owns_indexer_scores_wmma128_kernel);
+        assert!(M14_2D2B2C_SCOPE.owns_indexer_score_dispatch_policy);
+        assert!(!M14_2D2B2C_SCOPE.owns_specialized_topk_dispatch);
+        assert!(!M14_2D2B2C_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn indexer_score_dispatch_priority_matches_current_c_launch_order() {
+        let base = IndexerScoreDispatchOptions {
+            n_tokens: 2,
+            n_head: 64,
+            head_dim: 128,
+            quality_mode: false,
+            no_direct_one: false,
+            no_wmma: false,
+            no_wmma128: false,
+            no_wmma64: false,
+            no_wmma32: false,
+        };
+        assert_eq!(
+            select_indexer_score_kernel(base),
+            IndexerScoreKernel::Wmma128
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                n_tokens: 1,
+                quality_mode: true,
+                no_wmma: true,
+                ..base
+            }),
+            IndexerScoreKernel::DirectOne
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                n_tokens: 1,
+                no_direct_one: true,
+                ..base
+            }),
+            IndexerScoreKernel::Wmma128
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                no_wmma128: true,
+                ..base
+            }),
+            IndexerScoreKernel::Wmma64
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                no_wmma128: true,
+                no_wmma64: true,
+                ..base
+            }),
+            IndexerScoreKernel::Wmma32
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                no_wmma128: true,
+                no_wmma64: true,
+                no_wmma32: true,
+                ..base
+            }),
+            IndexerScoreKernel::Wmma
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                no_wmma: true,
+                ..base
+            }),
+            IndexerScoreKernel::Scalar
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                quality_mode: true,
+                ..base
+            }),
+            IndexerScoreKernel::Scalar
+        );
+        assert_eq!(
+            select_indexer_score_kernel(IndexerScoreDispatchOptions {
+                head_dim: 64,
+                ..base
+            }),
+            IndexerScoreKernel::Scalar
+        );
     }
 }
