@@ -1272,6 +1272,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.5c2a cuda-oxide quantized single-token routed MoE smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_routed_moe_quantized_single_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

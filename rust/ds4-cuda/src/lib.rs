@@ -1588,6 +1588,35 @@ pub const M14_5C1_SCOPE: RoutedMoeF32Scope = RoutedMoeF32Scope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeQuantizedSingleScope {
+    pub opt_in_only: bool,
+    pub consumes_f32_fallback_surface: bool,
+    pub owns_q8_k_activation_quantization: bool,
+    pub owns_iq2_xxs_q8_k_gate_up_decode_lut: bool,
+    pub owns_q2_k_q8_k_direct_sum6_down: bool,
+    pub owns_default_single_token_iq2_q2_dispatch: bool,
+    pub owns_optional_gate_up_aux_write: bool,
+    pub owns_batched_sorted_or_tiled_dispatch: bool,
+    pub owns_q4_k_dispatch: bool,
+    pub owns_hyperconnection_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2A_SCOPE: RoutedMoeQuantizedSingleScope = RoutedMoeQuantizedSingleScope {
+    opt_in_only: true,
+    consumes_f32_fallback_surface: true,
+    owns_q8_k_activation_quantization: true,
+    owns_iq2_xxs_q8_k_gate_up_decode_lut: true,
+    owns_q2_k_q8_k_direct_sum6_down: true,
+    owns_default_single_token_iq2_q2_dispatch: true,
+    owns_optional_gate_up_aux_write: true,
+    owns_batched_sorted_or_tiled_dispatch: false,
+    owns_q4_k_dispatch: false,
+    owns_hyperconnection_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1621,7 +1650,7 @@ mod tests {
         M14_3D3_SCOPE, M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE,
         M14_4C3A_SCOPE, M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
-        M14_5B_SCOPE, M14_5C1_SCOPE,
+        M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE,
     };
 
     #[test]
@@ -2435,6 +2464,21 @@ mod tests {
         assert!(!M14_5C1_SCOPE.owns_q8_activation_or_optimized_moe_dispatch);
         assert!(!M14_5C1_SCOPE.owns_hyperconnection_or_runtime_graph);
         assert!(!M14_5C1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_quantized_single_scope_leaves_batch_q4_and_route_pending() {
+        assert!(M14_5C2A_SCOPE.opt_in_only);
+        assert!(M14_5C2A_SCOPE.consumes_f32_fallback_surface);
+        assert!(M14_5C2A_SCOPE.owns_q8_k_activation_quantization);
+        assert!(M14_5C2A_SCOPE.owns_iq2_xxs_q8_k_gate_up_decode_lut);
+        assert!(M14_5C2A_SCOPE.owns_q2_k_q8_k_direct_sum6_down);
+        assert!(M14_5C2A_SCOPE.owns_default_single_token_iq2_q2_dispatch);
+        assert!(M14_5C2A_SCOPE.owns_optional_gate_up_aux_write);
+        assert!(!M14_5C2A_SCOPE.owns_batched_sorted_or_tiled_dispatch);
+        assert!(!M14_5C2A_SCOPE.owns_q4_k_dispatch);
+        assert!(!M14_5C2A_SCOPE.owns_hyperconnection_or_runtime_graph);
+        assert!(!M14_5C2A_SCOPE.changes_default_route);
     }
 
     #[test]

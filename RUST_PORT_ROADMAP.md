@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2.
+- Status: active; split beginning with M14.5a through M14.5c2b.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8742,13 +8742,46 @@ Stage split:
     M14 checks, and unified parity passed with 152 passed, 50 skipped, and 0
     failed.
 
-##### M14.5c2: Quantized Routed MoE Dispatch
+##### M14.5c2a: Default Single-Token Quantized Routed MoE Dispatch
+
+- Status: done.
+- Goal: port the current-C default single-token IQ2-XXS/Q2_K quantized
+  routed-MoE compute path after the exact packed fallback is closed.
+- Oracle: current-C `q8_K_quantize_kernel`,
+  `dev_dot_iq2_xxs_q8_K_block`, `dev_dot_q2_K_q8_K_block`,
+  `moe_gate_up_mid_decode_lut_qwarp32_kernel`, and
+  `moe_down_sum6_qwarp32_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2a/routed-moe-quantized-single-smoke.json`.
+- Comparator:
+  `ds4-parity/check_routed_moe_quantized_single_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in Q8_K activation quantization, LUT-equivalent
+  IQ2-XXS/Q8_K gate/up decode, Q2_K/Q8_K direct six-expert down output, the
+  default single-token IQ2/Q2 compute branch, optional gate/up auxiliary
+  writes, and negative-expert fallback. Batched sorted/tiled dispatch, Q4_K,
+  hyperconnection, runtime graph integration, default route activation, and C
+  CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust quantized routed-MoE kernels for Q8_K input
+    and intermediate activation fields, quarter-warp gate/up execution, and
+    direct sum-six down output.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 74 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and matched default single-token output, auxiliary
+    writes, negative-expert behavior, and zero-input quantization on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2a comparator, retained
+    M14 checks, and unified parity passed with 153 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2b: Batched Quantized Routed MoE Scheduling
 
 - Status: active.
-- Goal: port Q8 activation quantization and the optimized IQ2-XXS/Q2_K
-  routed-MoE dispatch branch after the exact packed fallback is closed;
-  further split optimized scheduling and Q4_K coverage if their live
-  validation boundaries diverge.
+- Goal: port sorted-pair and expert-tile batched IQ2-XXS/Q2_K quantized
+  routed-MoE scheduling after single-token quantized closure; keep Q4_K in a
+  subsequent evidence boundary unless the implementation proves both paths
+  together.
 
 ## Removal Criteria for C Host Code
 

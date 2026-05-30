@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2
+- Status: active; split beginning with M14.5a through M14.5c2b
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8764,9 +8764,29 @@
   retained M14 checks, and unified parity passed with 152 passed, 50 skipped,
   and 0 failed.
 
-##### M14.5c2: Quantized Routed MoE Dispatch
+##### M14.5c2a: Default Single-Token Quantized Routed MoE Dispatch
+
+- Status: done
+- Goal: port the current-C default single-token IQ2-XXS/Q2_K quantized
+  routed-MoE compute path after packed fallback closure.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2a/routed-moe-quantized-single-smoke.json`
+- Comparator: `ds4-parity/check_routed_moe_quantized_single_smoke.py --negative-test`
+- Evidence: executable-local Rust quantized routed-MoE kernels cover Q8_K
+  input/intermediate activation fields, LUT-equivalent IQ2-XXS/Q8_K gate/up
+  decode, Q2_K/Q8_K direct six-expert down output, optional auxiliary writes,
+  zero quantization, and negative-expert fallback. B300 feature-enabled tests
+  passed with 74 tests; live cargo-oxide execution emitted portable `sm_80`
+  PTX through libdevice and matched default single-token results on
+  `NVIDIA B300 SXM6 AC`. Batched sorted/tiled dispatch, Q4_K,
+  hyperconnection, runtime route activation, and C CUDA removal remain
+  unclaimed. Local formatting, diff, library tests, the M14.5c2a comparator,
+  retained M14 checks, and unified parity passed with 153 passed, 50 skipped,
+  and 0 failed.
+
+##### M14.5c2b: Batched Quantized Routed MoE Scheduling
 
 - Status: active
-- Goal: port Q8 activation quantization and optimized IQ2-XXS/Q2_K
-  routed-MoE dispatch after packed fallback closure, splitting scheduling or
-  Q4_K coverage further where required for honest live validation.
+- Goal: port sorted-pair and expert-tile batched IQ2-XXS/Q2_K quantized
+  routed-MoE scheduling after single-token quantized closure; keep Q4_K
+  separate unless both routes can be validated in the same bounded slice.

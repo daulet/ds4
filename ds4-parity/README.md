@@ -2749,6 +2749,20 @@ SwiGLU/clamp behavior, negative-expert fallback, expert summation, and both
 single-token and batched layouts. It leaves Q8 activation/optimized dispatch,
 Q4_K, hyperconnection, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2a Rust CUDA default single-token quantized routed MoE
+smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_quantized_single_smoke.py --negative-test
+```
+
+The fixture records current-C default single-token IQ2/Q2 quantized routed
+MoE behavior on B300: Q8_K input and intermediate activation fields,
+LUT-equivalent IQ2-XXS/Q8_K gate/up decode, direct six-expert Q2_K/Q8_K down
+output, auxiliary write mode, zero quantization, and negative-expert
+fallback. It leaves batched sorted/tiled dispatch, Q4_K, hyperconnection,
+runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
