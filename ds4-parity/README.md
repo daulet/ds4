@@ -3661,6 +3661,21 @@ zero-dimension, and null rejection. RoPE, remaining graph compute,
 whole-archive retention policy, route promotion, C CUDA removal, and the
 embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public FP8 KV quantization ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_fp8_kv_quantize_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes E4M3FN round-trip quantization only over
+the non-RoPE prefix through the embedded Rust kernel, proves partial-chunk
+handling and preserved empty-prefix/zero-width no-op behavior, then checks
+invalid-shape and null rejection. Standalone RoPE, raw KV storage,
+compressor, attention, remaining graph compute, whole-archive retention
+policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

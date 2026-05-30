@@ -2822,6 +2822,46 @@ pub unsafe extern "C" fn ds4_gpu_head_rms_norm_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_dsv4_fp8_kv_quantize_tensor(
+    x: *mut Ds4GpuTensor,
+    n_tok: u32,
+    head_dim: u32,
+    n_rot: u32,
+) -> c_int {
+    status(|| {
+        let Some(x) = (unsafe { tensor_ref(x.cast_const()) }) else {
+            return false;
+        };
+        let Some(elements) = u64::from(n_tok).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(bytes) = elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if n_tok == 0 || n_rot > head_dim || x.bytes < bytes {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: the mutable tensor span and prefix/tail boundary
+                // are validated above; the kernel modifies only the prefix.
+                Some(unsafe {
+                    kernels.dsv4_fp8_kv_quantize_tensor(
+                        backend.stream(),
+                        x.device_ptr(),
+                        n_tok,
+                        head_dim,
+                        n_rot,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

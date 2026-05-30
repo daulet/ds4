@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbba: Public FP8 KV Quantization ABI
+  is validated on B300. Rust exports `ds4_gpu_dsv4_fp8_kv_quantize_tensor`
+  through an embedded in-place E4M3FN prefix kernel. A C-linked B300 witness
+  proves prefix output, partial-chunk handling, untouched RoPE tail,
+  empty-prefix and zero-width no-op behavior, and invalid-input rejection.
+  Local tests pass with 137 tests; B300 feature tests pass with 144 tests; the
+  static library exposes 52 symbols; all 47 preceding linked ABI consumers
+  pass against the rebuilt archive with the known executable-stack warning.
+  All 51 CUDA ABI comparators pass, and the unified report passes with 223
+  passed, 45 skipped, and 0 failed.
+  The pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Rust rejects
+  zero-token launches before current-C's invalid zero-grid submission while
+  preserving no-op dimensions. Standalone RoPE, raw KV storage, compressor,
+  attention, remaining graph compute, whole-archive/route promotion, C CUDA
+  removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbba: Public Head RMS Norm ABI
   is validated on B300. Rust exports `ds4_gpu_head_rms_norm_tensor` through
   an embedded in-place reduction kernel. A C-linked B300 witness proves

@@ -608,6 +608,117 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_fp8_kv_quantize_kernel(
+        n_tok: u32,
+        head_dim: u32,
+        n_rot: u32,
+        mut x: DisjointSlice<f32>,
+    ) {
+        static mut SCRATCH: SharedArray<f32, 64> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x();
+        if row >= n_tok {
+            return;
+        }
+        let tid = thread::threadIdx_x() as usize;
+        let n_nope = (head_dim - n_rot) as usize;
+        let base = row as usize * head_dim as usize;
+        let mut off = 0_usize;
+        while off < n_nope {
+            let index = off + tid;
+            let valid = index < n_nope;
+            let value = if valid {
+                unsafe { *x.as_mut_ptr().add(base + index) }
+            } else {
+                0.0
+            };
+            unsafe {
+                SCRATCH[tid] = abi_absolute(value);
+            }
+            thread::sync_threads();
+            let mut stride = 32_usize;
+            while stride > 0 {
+                if tid < stride {
+                    let other = unsafe { SCRATCH[tid + stride] };
+                    if other > unsafe { SCRATCH[tid] } {
+                        unsafe {
+                            SCRATCH[tid] = other;
+                        }
+                    }
+                }
+                thread::sync_threads();
+                stride >>= 1;
+            }
+            let amax = if unsafe { SCRATCH[0] } > 1.0e-4 {
+                unsafe { SCRATCH[0] }
+            } else {
+                1.0e-4
+            };
+            let scale = 2.0_f32.powf((amax / 448.0).log2().ceil());
+            if valid {
+                let mut scaled = value / scale;
+                if scaled > 448.0 {
+                    scaled = 448.0;
+                } else if scaled < -448.0 {
+                    scaled = -448.0;
+                }
+                unsafe {
+                    *x.get_unchecked_mut(base + index) = abi_e4m3fn_dequant(scaled) * scale;
+                }
+            }
+            thread::sync_threads();
+            off += 64;
+        }
+    }
+
+    fn abi_absolute(value: f32) -> f32 {
+        if value < 0.0 {
+            -value
+        } else {
+            value
+        }
+    }
+
+    fn abi_e4m3fn_value(value: i32) -> f32 {
+        let exponent = (value >> 3) & 15;
+        let mantissa = value & 7;
+        if exponent == 0 {
+            mantissa as f32 * 0.001953125
+        } else {
+            (1.0 + mantissa as f32 * 0.125) * 2.0_f32.powf(exponent as f32 - 7.0)
+        }
+    }
+
+    fn abi_e4m3fn_dequant(value: f32) -> f32 {
+        let sign = if value < 0.0 { -1.0 } else { 1.0 };
+        let mut magnitude = abi_absolute(value);
+        if magnitude > 448.0 {
+            magnitude = 448.0;
+        }
+        let mut lo = 0_i32;
+        let mut hi = 126_i32;
+        while lo < hi {
+            let mid = (lo + hi + 1) >> 1;
+            if abi_e4m3fn_value(mid) <= magnitude {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        let mut best = lo;
+        if best < 126 {
+            let best_diff = abi_absolute(magnitude - abi_e4m3fn_value(best));
+            let next_diff = abi_absolute(magnitude - abi_e4m3fn_value(best + 1));
+            if next_diff < best_diff
+                || (next_diff == best_diff && (best + 1) & 1 == 0 && best & 1 != 0)
+            {
+                best += 1;
+            }
+        }
+        sign * abi_e4m3fn_value(best)
+    }
+
+    #[kernel]
     pub fn abi_rms_norm_weight_kernel(
         n: u32,
         rows: u32,
@@ -1411,6 +1522,7 @@ pub(crate) struct AbiKernelModule {
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
     head_rms_norm_kernel: CudaFunction,
+    fp8_kv_quantize_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
     dequant_q8_0_to_f16_kernel: CudaFunction,
     dequant_q8_0_to_f32_kernel: CudaFunction,
@@ -1473,6 +1585,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             head_rms_norm_kernel: module
                 .load_function("abi_head_rms_norm_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            fp8_kv_quantize_kernel: module
+                .load_function("abi_fp8_kv_quantize_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
@@ -2300,6 +2415,47 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.head_rms_norm_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn dsv4_fp8_kv_quantize_tensor(
+        &self,
+        stream: &CudaStream,
+        x_ptr: u64,
+        n_tok: u32,
+        head_dim: u32,
+        n_rot: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (n_tok, 1, 1),
+            block_dim: (64, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let count = u64::from(n_tok) * u64::from(head_dim);
+        let mut n_tok = n_tok;
+        let mut head_dim = head_dim;
+        let mut n_rot = n_rot;
+        let mut x_ptr = x_ptr;
+        let mut x_len = count;
+        let mut params = [
+            (&mut n_tok as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut n_rot as *mut u32).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates the complete mutable tensor span and
+        // excludes the invalid zero-grid launch before submission.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.fp8_kv_quantize_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

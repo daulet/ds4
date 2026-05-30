@@ -1792,6 +1792,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbba Rust CUDA public FP8 KV quantization ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_fp8_kv_quantize_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
