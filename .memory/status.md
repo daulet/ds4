@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2d Indexer And Top-K Kernels
+- Active item: M14.2d2 Optimized Indexer And Top-K Dispatch
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -22,8 +22,11 @@
   model-backed embedding, indexer/top-k, and closure work need separate live
   CUDA evidence boundaries. M14.2b is further split into M14.2b1 and
   M14.2b2 because B300 proved the directional projection PTX path while
-  exposing a separate libdevice/NVVM executable blocker for SwiGLU.
-- Last validated source before the active item: M14.2c Embedding Kernel Pair.
+  exposing a separate libdevice/NVVM executable blocker for SwiGLU. M14.2d
+  is further split into M14.2d1 and M14.2d2 because scalar fallback
+  selection and optimized dispatch have distinct ownership boundaries.
+- Last validated source before the active item: M14.2d1 Scalar Indexer Selection Kernels.
+- Earlier M14.2c Embedding Kernel Pair.
 - Earlier M14.2b2 SwiGLU Libdevice Path.
 - Earlier M14.2b1 Directional Steering Projection Kernel.
 - Earlier M14.2a Add And Repeat Elementwise Kernels.
@@ -139,6 +142,26 @@
 
 ## Last Evidence
 
+- M14.2d1 Scalar Indexer Selection Kernels adds executable-local Rust
+  cuda-oxide `indexer_scores_kernel`, `indexer_topk_kernel`, and
+  `topk_mask_kernel` paths matching current-C scalar fallback reduction,
+  positive-score weighting, causal negative-infinity masking, stable
+  earlier-index top-k ties, and selected-row mask values. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 26
+  tests and live cargo-oxide execution emitted portable `sm_80` PTX and
+  proved score output, causal masking, top-k output and tie ordering, mask
+  output, and invalid-shape rejection on `NVIDIA B300 SXM6 AC`. Its fixture
+  and checker are
+  `ds4-parity/baselines/backend/m14.2d1/indexer-scalar-kernel-smoke.json`
+  and `ds4-parity/check_indexer_scalar_kernel_smoke.py --negative-test`.
+  Direct-one/WMMA scoring, specialized top-k dispatch, runtime route
+  activation, and C CUDA removal remain unclaimed. Local formatter/diff
+  checks, workspace tests, the 73-check scalar indexer comparator, and
+  unified parity passed with 118 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review produced no completed result before its
+  timeout; adversarial self-review confirmed scalar `fmaxf` handling, stable
+  strict-greater top-k ties, and the explicit optimized-dispatch non-claim,
+  and aligned mask launch sizing with current C before the final B300 rerun.
 - M14.2c Embedding Kernel Pair adds executable-local Rust cuda-oxide
   `embed_token_hc_kernel` and `embed_tokens_hc_kernel` paths using primitive
   `f16` loads widened to `f32`. It proves repeated hidden-copy rows and the

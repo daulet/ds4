@@ -7231,7 +7231,9 @@ Stage split:
 
 - Status: split before implementation into M14.2a through M14.2e; M14.2b
   split into M14.2b1 and M14.2b2 after B300 exposed an independent
-  libdevice/NVVM blocker for SwiGLU.
+  libdevice/NVVM blocker for SwiGLU; M14.2d split into M14.2d1 and M14.2d2
+  because scalar selection and optimized dispatch have distinct ownership
+  claims.
 - Goal: port the M14.2 operation family through bounded Rust CUDA kernel
   slices while retaining current-C oracles and the opt-in-only route.
 - Stage split:
@@ -7239,7 +7241,8 @@ Stage split:
   - M14.2b1: Directional Steering Projection Kernel.
   - M14.2b2: SwiGLU Libdevice Path.
   - M14.2c: Embedding Kernel Pair.
-  - M14.2d: Indexer And Top-K Kernels.
+  - M14.2d1: Scalar Indexer Selection Kernels.
+  - M14.2d2: Optimized Indexer And Top-K Dispatch.
   - M14.2e: M14.2 Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
@@ -7388,6 +7391,50 @@ Stage split:
     invalid-input rejection is recorded rather than overclaimed as parity.
   - This stage remains opt-in; it does not claim model-range consumption,
     indexer/top-k, runtime route, or C CUDA removal ownership.
+
+##### M14.2d1: Scalar Indexer Selection Kernels
+
+- Status: done.
+- Goal: port the scalar fallback indexer scoring, top-k selection, and mask
+  operations before claiming direct/WMMA or specialized top-k dispatch.
+- Oracle: current-C `indexer_scores_kernel`, `indexer_topk_kernel`,
+  `topk_mask_kernel`, and their fallback launch sites.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d1/indexer-scalar-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_scalar_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Acceptance: Rust owns only bounded scalar indexer score, scalar fallback
+  top-k, and top-k mask kernels; direct-one/WMMA scoring, specialized
+  power-of-two/CUB/chunked top-k dispatch, route activation, and C CUDA
+  removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexer_scores_kernel`,
+    `indexer_topk_kernel`, and `topk_mask_kernel` with current-C-shaped
+    positive-score reduction, causal negative-infinity masking, stable
+    earlier-index top-k ties, and selected-row mask semantics.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 26 tests and live cargo-oxide execution emitted portable `sm_80`
+    PTX and proved noncausal scoring, causal masking, top-k output, tie
+    ordering, mask output, and invalid-shape rejection on
+    `NVIDIA B300 SXM6 AC`.
+  - Local workspace tests, formatter/diff checks, the 73-check scalar
+    indexer comparator, and unified parity passed with 118 passed, 45
+    skipped, and 0 failed. Non-interactive Claude review produced no
+    completed result before its timeout; adversarial self-review confirmed
+    `fmaxf` NaN/negative handling, stable scalar top-k ties, and the bounded
+    optimized-dispatch non-claim, and aligned mask launch sizing with the C
+    wrapper's maximum-work calculation before the final B300 rerun.
+  - This stage remains opt-in; it does not claim optimized indexer/top-k
+    dispatch, runtime route, or C CUDA removal ownership.
+
+##### M14.2d2: Optimized Indexer And Top-K Dispatch
+
+- Status: active.
+- Goal: port or explicitly close ownership of current-C direct/WMMA score
+  selection and specialized top-k dispatch after scalar fallback is proven.
+- Oracle: current-C direct-one and WMMA score kernels plus specialized
+  power-of-two, CUB, chunked, merged, and tree top-k launch branches.
 
 ## Removal Criteria for C Host Code
 

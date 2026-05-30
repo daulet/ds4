@@ -952,6 +952,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.2d1 cuda-oxide scalar indexer selection kernel smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_indexer_scalar_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

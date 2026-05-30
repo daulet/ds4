@@ -2262,6 +2262,18 @@ loads. It proves hidden-copy replication and batched invalid-token fallback
 while leaving model-range cache consumption, indexer/top-k, runtime route,
 and C CUDA removal ownership pending.
 
+Validate the M14.2d1 Rust CUDA scalar indexer selection kernel smoke:
+
+```sh
+python3 ds4-parity/check_indexer_scalar_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `indexer_scores_kernel`,
+`indexer_topk_kernel`, and `topk_mask_kernel` execution on B300. It proves
+scalar fallback scoring, causal masking, stable scalar top-k tie ordering,
+and top-k mask output while leaving direct/WMMA score dispatch, specialized
+top-k dispatch, runtime route, and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

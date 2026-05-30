@@ -7588,11 +7588,12 @@
 #### M14.2: Embedding Indexer And Elementwise Kernels
 
 - Status: split before implementation into M14.2a through M14.2e; M14.2b is
-  further split after B300 exposed a separate libdevice/NVVM SwiGLU blocker.
+  further split after B300 exposed a separate libdevice/NVVM SwiGLU blocker;
+  M14.2d is split into scalar fallback proof and optimized dispatch ownership.
 - Stage split: M14.2a Add And Repeat Elementwise Kernels; M14.2b1
   Directional Steering Projection Kernel; M14.2b2 SwiGLU Libdevice Path;
-  M14.2c Embedding Kernel Pair; M14.2d Indexer And Top-K Kernels; M14.2e
-  Kernel Closure Gate.
+  M14.2c Embedding Kernel Pair; M14.2d1 Scalar Indexer Selection Kernels;
+  M14.2d2 Optimized Indexer And Top-K Dispatch; M14.2e Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
 
@@ -7694,3 +7695,38 @@
   valid-call/batch-fallback match and documented single-token safety
   strengthening.
 - Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
+
+##### M14.2d1: Scalar Indexer Selection Kernels
+
+- Status: done
+- Goal: port scalar fallback scoring, selection, and mask kernels without
+  claiming optimized score or top-k launch branches.
+- Oracle: current-C `indexer_scores_kernel`, `indexer_topk_kernel`,
+  `topk_mask_kernel`, and fallback launch sites.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d1/indexer-scalar-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_scalar_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Evidence: added executable-local Rust `indexer_scores_kernel`,
+  `indexer_topk_kernel`, and `topk_mask_kernel`; B300 feature-enabled
+  `ds4-cuda` tests passed with 26 tests and live cargo-oxide execution selected
+  portable `sm_80` PTX and proved score output, causal masking, scalar top-k
+  output and tie ordering, top-k mask output, and invalid-shape rejection on
+  `NVIDIA B300 SXM6 AC`. Direct-one/WMMA scoring, specialized top-k
+  dispatch, route activation, and C CUDA removal remain unclaimed. Local
+  formatter/diff checks, workspace tests, the 73-check scalar indexer
+  comparator, and unified parity passed with 118 passed, 45 skipped, and 0
+  failed. Non-interactive Claude review produced no completed result before
+  its timeout; adversarial self-review confirmed the scalar `fmaxf` and
+  stable-tie semantics plus the optimized-dispatch non-claim, and aligned
+  mask launch sizing with current C before the final B300 rerun.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
+
+##### M14.2d2: Optimized Indexer And Top-K Dispatch
+
+- Status: active
+- Goal: port or explicitly close current-C direct/WMMA score and specialized
+  top-k dispatch ownership after scalar fallback proof.
+- Oracle: direct-one and WMMA score kernels plus power-of-two, CUB, chunked,
+  merged, and tree top-k launch branches.
