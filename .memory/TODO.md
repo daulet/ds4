@@ -7358,11 +7358,37 @@
   reported `Not logged in`; self-review corrected the fallback source from
   file staging to the current-C mmap copy branch before final validation.
 
-######## M14.1b2b3: Pageable HMM And Direct-I/O Policy
+######## M14.1b2b3a: Pageable HMM Range Strategy
+
+- Status: done
+- Goal: add page-aligned pageable-memory advice/prefetch and direct-pointer
+  readback for a bounded mmap-backed model range without combining it with
+  file-staging policy.
+- Oracle: current-C `cuda_model_prefetch_range` and `g_model_hmm_direct`
+  selection in `cuda_model_range_ptr`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b3a/model-pageable-hmm-smoke.json`.
+- Evidence: corrected cuda-oxide revision
+  `361300ea643688eea87eaa215d9a62a5e74a30e6` provides an immutable
+  pageable-HMM handle with asynchronous prefetch kept unsafe until stream
+  completion; the DS4 proof wrapper synchronizes before returning. On B300,
+  requested range `13..4109` expanded to `0..8192`, pageable-memory access
+  was available with host page tables disabled, both advice calls and
+  prefetch succeeded, and direct HMM readback matched the exact requested
+  4096 bytes. O_DIRECT/staging, asynchronous production policy, kernels, and
+  route activation remain unclaimed. Validation passed local workspace tests
+  and formatting, the 73-check M14.1b2b3a comparator, retained M14
+  comparators, `git diff --check`, B300 feature tests and predecessor smoke,
+  and unified parity (101 passed, 50 skipped, 0 failed). Non-interactive
+  Claude review was unavailable because the CLI reported `Not logged in`;
+  self-review caught and fixed the cuda-oxide asynchronous borrowed-prefetch
+  safety defect before this revision was pinned.
+
+######## M14.1b2b3b: Direct-I/O Staging Policy
 
 - Status: planned
-- Goal: add pageable-HMM prefetch and O_DIRECT/fallback comparison or record
-  required upstream API work with executable evidence.
+- Goal: add the O_DIRECT open/aligned-read fallback and pinned asynchronous
+  staging comparison as a separate current-C policy slice.
 
 ####### M14.1b2c: Model Map Cache Closure
 

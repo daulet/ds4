@@ -1,0 +1,94 @@
+{
+  "schema": "ds4.model_pageable_hmm_smoke.v1",
+  "milestone": "M14.1b2b3a",
+  "status": "b300-pass",
+  "id": "m14.1b2b3a-pageable-hmm-range",
+  "goal": "Prove opt-in Rust page-aligned pageable-memory advice, prefetch, and direct-pointer readback for the live B300 model mapping without bundling direct-I/O policy.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "revision": "361300ea643688eea87eaa215d9a62a5e74a30e6",
+    "dependency": "cuda-core",
+    "feature": "cuda-oxide-backend"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_branches": [
+      "cuda_model_prefetch_range pageable-memory capability, page alignment, advice, and prefetch",
+      "cuda_model_range_ptr g_model_hmm_direct host-map pointer selection"
+    ],
+    "excluded_policy": [
+      "asynchronous production prefetch lifetime policy",
+      "O_DIRECT open and aligned reads",
+      "pinned asynchronous staging ring and arena budget",
+      "model-range consumption by DS4 compute kernels"
+    ]
+  },
+  "model_range": {
+    "path": "/workspace/ds4/ds4flash.gguf",
+    "sha256": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668",
+    "model_size": 86720111488,
+    "range_offset": 13,
+    "range_bytes": 4096,
+    "identity_verification": {
+      "command": "sha256sum /workspace/ds4/ds4flash.gguf",
+      "stdout": "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668  /workspace/ds4/ds4flash.gguf",
+      "passed": true
+    }
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "page-aligned pageable HMM window selection for an unaligned requested range",
+      "cuda-oxide immutable pageable host guard with read-mostly and preferred-device advice",
+      "synchronized pageable prefetch lifetime for the opt-in proof path",
+      "exact requested-range readback through the live HMM direct pointer"
+    ],
+    "not_claimed_in_this_stage": [
+      "asynchronous production prefetch lifetime policy",
+      "O_DIRECT, asynchronous staging-ring, or cache-budget policy",
+      "successful read-only registered mapping on B300",
+      "model-range consumption by DS4 compute kernels",
+      "runtime graph or default CUDA route"
+    ],
+    "opt_in_only": true,
+    "owns_page_aligned_pageable_hmm_prefetch": true,
+    "owns_hmm_direct_read_pointer": true,
+    "owns_o_direct_staging": false,
+    "owns_ds4_kernels": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 cargo +nightly-2026-04-03 run --locked -p ds4-cuda --features cuda-oxide-backend --bin ds4-cuda-model-pageable-hmm-smoke -- /workspace/ds4/ds4flash.gguf",
+    "stdout": {
+      "milestone": "M14.1b2b3a",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "model_size": 86720111488,
+      "range_offset": 13,
+      "range_bytes": 4096,
+      "pageable_memory_access": true,
+      "pageable_memory_access_uses_host_page_tables": false,
+      "prefetch_page_size": 4096,
+      "prefetch_offset": 0,
+      "prefetch_bytes": 8192,
+      "prefetch_device_offset": 13,
+      "read_mostly_advice": true,
+      "preferred_device_advice": true,
+      "pageable_prefetch": true,
+      "prefetch_synchronized_for_smoke": true,
+      "hmm_direct_readback_matches": true,
+      "owns_page_aligned_pageable_hmm_prefetch": true,
+      "owns_hmm_direct_read_pointer": true,
+      "owns_o_direct_staging": false,
+      "owns_ds4_kernels": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.1b2b3b Direct-I/O Staging Policy"
+}

@@ -2104,6 +2104,20 @@ the strategy must use and reuse the exact mmap-sourced device-copy fallback.
 It does not claim successful zero-copy registration on B300, pageable HMM,
 `O_DIRECT`, DS4 kernels, or runtime route activation.
 
+Validate the M14.1b2b3a pageable HMM range strategy B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_pageable_hmm_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-pageable-hmm-smoke` against the pinned GGUF: an unaligned
+request is expanded to a page-aligned pageable-memory window, advised and
+prefetched through a borrowed guard, then read back through the direct HMM
+pointer. The proof path synchronizes prefetch lifetime and does not claim
+`O_DIRECT`, asynchronous production prefetch policy, DS4 kernels, or runtime
+route activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

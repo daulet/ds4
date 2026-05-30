@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use cuda_core::{
     CudaContext, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer,
-    MappedHostBuffer, MemoryAdvice, MemoryLocation, ReadOnlyRegisteredHostMemory,
-    RegisteredHostMemory, StreamAttachment,
+    MappedHostBuffer, MemoryAdvice, MemoryLocation, ReadOnlyPageableHostMemory,
+    ReadOnlyRegisteredHostMemory, RegisteredHostMemory, StreamAttachment,
 };
 
 /// Rust-owned CUDA host resources used before DS4 kernels move off `ds4_cuda.cu`.
@@ -100,6 +100,38 @@ impl CudaOxideSubstrate {
         data: &'a [T],
     ) -> Result<ReadOnlyRegisteredHostMemory<'a, T>, DriverError> {
         ReadOnlyRegisteredHostMemory::new(&self.context, data)
+    }
+
+    pub fn pageable_memory_access(&self) -> Result<bool, DriverError> {
+        self.context.pageable_memory_access()
+    }
+
+    pub fn pageable_memory_access_uses_host_page_tables(&self) -> Result<bool, DriverError> {
+        self.context.pageable_memory_access_uses_host_page_tables()
+    }
+
+    pub fn pageable_read_only_range<'a, T: DeviceCopy>(
+        &self,
+        data: &'a [T],
+    ) -> Result<ReadOnlyPageableHostMemory<'a, T>, DriverError> {
+        ReadOnlyPageableHostMemory::new(&self.context, data)
+    }
+
+    /// Applies the current-C pageable-HMM advice sequence and completes prefetch.
+    ///
+    /// Synchronizing here makes this opt-in proof API safe for a borrowed mmap
+    /// range. Runtime queueing policy remains outside this milestone.
+    pub fn prefetch_pageable_read_mostly_to_device<T: DeviceCopy>(
+        &self,
+        range: &ReadOnlyPageableHostMemory<'_, T>,
+    ) -> Result<(), DriverError> {
+        let device = MemoryLocation::Device(self.context.cu_device());
+        range.advise(MemoryAdvice::SetReadMostly)?;
+        range.advise(MemoryAdvice::SetPreferredLocation(device))?;
+        unsafe {
+            range.prefetch_to(&self.stream, device)?;
+        }
+        self.synchronize()
     }
 
     /// Copies bytes from a device-readable pointer owned by a live residency guard.

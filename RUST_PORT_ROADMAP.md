@@ -6888,12 +6888,53 @@ Stage split:
     source and retained cross-range registration suppression as an explicit
     later-stage non-claim.
 
-######## M14.1b2b3: Pageable HMM And Direct-I/O Policy
+######## M14.1b2b3a: Pageable HMM Range Strategy
+
+- Status: complete.
+- Goal: port page-aligned pageable-memory advice and prefetch for the mmap
+  model range and prove the direct HMM pointer remains byte-exact.
+- Oracle: current-C `cuda_model_prefetch_range` and the
+  `g_model_hmm_direct` branch of `cuda_model_range_ptr`, excluding file
+  staging and direct-I/O behavior.
+- Acceptance: an unaligned selected range expands to a page-aligned pageable
+  HMM window; Rust applies read-mostly and preferred-device advice, completes
+  prefetch through a borrowed guard, and reads the exact requested bytes
+  through its direct pointer without claiming production asynchronous policy,
+  O_DIRECT, kernels, or runtime route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b3a/model-pageable-hmm-smoke.json`.
+- Comparator:
+  `ds4-parity/check_model_pageable_hmm_smoke.py --negative-test` plus
+  executable Rust B300 smoke using the pinned GGUF.
+- Evidence:
+  - Pinned DS4 to corrected cuda-oxide revision
+    `361300ea643688eea87eaa215d9a62a5e74a30e6`, whose borrowed pageable
+    host handle requires unsafe asynchronous prefetch lifetime management;
+    DS4 exposes a synchronized safe proof wrapper for this stage.
+  - On B300 pod `ds4-rust-port-b300`, the feature-enabled smoke expanded
+    requested range `13..4109` to pageable range `0..8192`; the device
+    reported pageable-memory access with host page-table access disabled,
+    accepted both advice calls and prefetch, and read back the exact
+    requested bytes through the HMM direct pointer.
+  - The stage explicitly leaves asynchronous production prefetch policy,
+    O_DIRECT and pinned staging policy, compute kernels, and runtime route
+    activation unclaimed.
+  - Validation passed: `cargo test --workspace`, `cargo fmt --all -- --check`,
+    `python3 ds4-parity/check_model_pageable_hmm_smoke.py --negative-test`
+    (73 checks), retained M14 comparators, `git diff --check`, B300
+    feature-enabled tests and predecessor smoke, and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles`
+    (101 passed, 50 skipped, 0 failed).
+  - Non-interactive Claude review could not run because the local CLI reported
+    `Not logged in`; adversarial self-review found and corrected the
+    asynchronous borrowed-prefetch safety defect in cuda-oxide before DS4
+    pinned the HMM handle.
+
+######## M14.1b2b3b: Direct-I/O Staging Policy
 
 - Status: planned.
-- Goal: close pageable-HMM prefetch and O_DIRECT/fallback behavior, including
-  explicit evidence for any `cuda-oxide` API additions required by current-C
-  parity.
+- Goal: port the file-descriptor `O_DIRECT` open/aligned-read fallback and
+  pinned asynchronous staging behavior as a separately measurable branch.
 
 ####### M14.1b2c: Model Map Cache Closure
 

@@ -1,4 +1,4 @@
-pub const CUDA_OXIDE_REVISION: &str = "b938480882f208045bc36ecf29da1ec5531d55ba";
+pub const CUDA_OXIDE_REVISION: &str = "361300ea643688eea87eaa215d9a62a5e74a30e6";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostSubstrateScope {
@@ -105,6 +105,25 @@ pub const M14_1B2B2_SCOPE: RegisteredRangeStrategyScope = RegisteredRangeStrateg
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PageableHmmStrategyScope {
+    pub opt_in_only: bool,
+    pub owns_page_aligned_pageable_hmm_prefetch: bool,
+    pub owns_hmm_direct_read_pointer: bool,
+    pub owns_o_direct_staging: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B2B3A_SCOPE: PageableHmmStrategyScope = PageableHmmStrategyScope {
+    opt_in_only: true,
+    owns_page_aligned_pageable_hmm_prefetch: true,
+    owns_hmm_direct_read_pointer: true,
+    owns_o_direct_staging: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
 
@@ -115,14 +134,14 @@ pub mod substrate;
 mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
-        M14_1B2B2_SCOPE,
+        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE,
     };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
         assert_eq!(
             CUDA_OXIDE_REVISION,
-            "b938480882f208045bc36ecf29da1ec5531d55ba"
+            "361300ea643688eea87eaa215d9a62a5e74a30e6"
         );
         assert!(M14_1A_SCOPE.opt_in_only);
         assert!(M14_1A_SCOPE.owns_context_and_stream);
@@ -175,5 +194,15 @@ mod tests {
         assert!(!M14_1B2B2_SCOPE.owns_o_direct_staging);
         assert!(!M14_1B2B2_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B2B2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn pageable_hmm_scope_keeps_direct_io_kernels_and_route_pending() {
+        assert!(M14_1B2B3A_SCOPE.opt_in_only);
+        assert!(M14_1B2B3A_SCOPE.owns_page_aligned_pageable_hmm_prefetch);
+        assert!(M14_1B2B3A_SCOPE.owns_hmm_direct_read_pointer);
+        assert!(!M14_1B2B3A_SCOPE.owns_o_direct_staging);
+        assert!(!M14_1B2B3A_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B2B3A_SCOPE.changes_default_route);
     }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.1b2b1 Rust-owned model range strategy smoke."""
+"""Validate the M14.1b2b3a Rust-owned pageable HMM range smoke."""
 
 from __future__ import annotations
 
@@ -13,10 +13,12 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.1b2b1/model-range-strategy-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.1b2b3a/model-pageable-hmm-smoke.json"
+CRATE_CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 MODEL_MAP = ROOT / "rust/ds4-cuda/src/model_map.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/model_range_strategy_smoke.rs"
+SUBSTRATE = ROOT / "rust/ds4-cuda/src/substrate.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/model_pageable_hmm_smoke.rs"
 CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -24,20 +26,19 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-REVISION = "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
+REVISION = "361300ea643688eea87eaa215d9a62a5e74a30e6"
 MODEL_SHA256 = "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
 MODEL_SIZE = 86720111488
-RANGE_BYTES = 4096
 EXPECTED_RUST_OWNED = [
-    "explicit mmap-sourced device-copy strategy dispatch",
-    "explicit file-staged device-copy strategy dispatch",
-    "strategy-keyed CUDA range cache entries and exact readback comparison",
-    "file-descriptor positional range read through Rust-owned model file",
+    "page-aligned pageable HMM window selection for an unaligned requested range",
+    "cuda-oxide immutable pageable host guard with read-mostly and preferred-device advice",
+    "synchronized pageable prefetch lifetime for the opt-in proof path",
+    "exact requested-range readback through the live HMM direct pointer",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "registered mapped-host range selection or failure fallback",
-    "pageable HMM advice or prefetch selection",
+    "asynchronous production prefetch lifetime policy",
     "O_DIRECT, asynchronous staging-ring, or cache-budget policy",
+    "successful read-only registered mapping on B300",
     "model-range consumption by DS4 compute kernels",
     "runtime graph or default CUDA route",
 ]
@@ -62,8 +63,10 @@ def main(argv: Iterable[str]) -> int:
     args = parse_args(argv)
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     texts = {
+        "cargo": CRATE_CARGO.read_text(encoding="utf-8"),
         "lib": CRATE_LIB.read_text(encoding="utf-8"),
         "model_map": MODEL_MAP.read_text(encoding="utf-8"),
+        "substrate": SUBSTRATE.read_text(encoding="utf-8"),
         "smoke": SMOKE.read_text(encoding="utf-8"),
         "cuda": CUDA_SOURCE.read_text(encoding="utf-8"),
         "roadmap": ROADMAP.read_text(encoding="utf-8"),
@@ -87,11 +90,12 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.model_range_strategy_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.1b2b1", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.model_pageable_hmm_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.1b2b3a", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("revision") == REVISION, "cuda-oxide revision drift")
+    report.check(f'rev = "{REVISION}"' in texts["cargo"], "crate revision pin missing")
     report.check(oxide.get("feature") == "cuda-oxide-backend", "feature drift")
     validate_oracle(report, fixture, texts)
     validate_model_range(report, fixture)
@@ -103,10 +107,15 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
 def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
-    for marker in ["cuda_model_range_ptr(", "cuda_model_range_ptr_from_fd(", "cudaMemcpyAsync("]:
+    for marker in [
+        "cuda_model_prefetch_range",
+        "cudaDevAttrPageableMemoryAccess",
+        "cudaMemAdviseSetReadMostly",
+        "cudaMemAdviseSetPreferredLocation",
+        "cudaMemPrefetchAsync",
+        "g_model_hmm_direct",
+    ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
-    excluded = oracle.get("excluded_policy")
-    report.check(isinstance(excluded, list) and "O_DIRECT open and aligned reads" in excluded, "O_DIRECT exclusion missing")
 
 
 def validate_model_range(report: Report, fixture: dict[str, Any]) -> None:
@@ -114,12 +123,11 @@ def validate_model_range(report: Report, fixture: dict[str, Any]) -> None:
     report.check(model.get("path") == "/workspace/ds4/ds4flash.gguf", "model path drift")
     report.check(model.get("sha256") == MODEL_SHA256, "model hash drift")
     report.check(model.get("model_size") == MODEL_SIZE, "model size drift")
-    report.check(model.get("range_offset") == 0, "range offset drift")
-    report.check(model.get("range_bytes") == RANGE_BYTES, "range size drift")
-    identity = require_dict(report, model.get("identity_verification"), "model_range.identity_verification")
-    report.check(identity.get("command") == "sha256sum /workspace/ds4/ds4flash.gguf", "hash command drift")
-    report.check(identity.get("stdout", "").startswith(MODEL_SHA256), "hash output drift")
-    report.check(identity.get("passed") is True, "model identity was not verified")
+    report.check(model.get("range_offset") == 13, "range offset drift")
+    report.check(model.get("range_bytes") == 4096, "range bytes drift")
+    identity = require_dict(report, model.get("identity_verification"), "identity_verification")
+    report.check(identity.get("stdout", "").startswith(MODEL_SHA256), "model hash output drift")
+    report.check(identity.get("passed") is True, "model hash was not verified")
 
 
 def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -128,10 +136,8 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim scope drift")
     for key, expected in [
         ("opt_in_only", True),
-        ("owns_explicit_mmap_device_copy_strategy", True),
-        ("owns_explicit_file_staged_device_copy_strategy", True),
-        ("owns_registered_range_strategy", False),
-        ("owns_pageable_hmm_strategy", False),
+        ("owns_page_aligned_pageable_hmm_prefetch", True),
+        ("owns_hmm_direct_read_pointer", True),
         ("owns_o_direct_staging", False),
         ("owns_ds4_kernels", False),
         ("changes_default_route", False),
@@ -139,24 +145,28 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_1B2B1_SCOPE",
-        "owns_explicit_file_staged_device_copy_strategy: true",
-        "owns_registered_range_strategy: false",
-        "owns_pageable_hmm_strategy: false",
+        "pub const M14_1B2B3A_SCOPE",
+        "owns_page_aligned_pageable_hmm_prefetch: true",
+        "owns_hmm_direct_read_pointer: true",
         "owns_o_direct_staging: false",
         "changes_default_route: false",
     ]:
-        report.check(marker in texts["lib"], f"Rust scope marker missing: {marker}")
+        report.check(marker in texts["lib"], f"scope marker missing: {marker}")
     for marker in [
-        "pub enum ModelRangeStrategy",
-        "MmapDeviceCopy",
-        "FileStagedDeviceCopy",
-        "pub fn read_file_range",
-        "read_exact_at",
-        "cache_range_with_strategy",
-        "readback_with_strategy",
+        "pub struct PrefetchedPageableModelRange",
+        "prefetch_pageable_read_only_range",
+        "page_aligned_source",
+        "requested_device_ptr",
     ]:
-        report.check(marker in texts["model_map"], f"strategy marker missing: {marker}")
+        report.check(marker in texts["model_map"], f"model-map marker missing: {marker}")
+    for marker in [
+        "ReadOnlyPageableHostMemory",
+        "pageable_memory_access",
+        "prefetch_pageable_read_mostly_to_device",
+        "range.prefetch_to",
+        "self.synchronize()",
+    ]:
+        report.check(marker in texts["substrate"], f"substrate marker missing: {marker}")
 
 
 def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -165,61 +175,61 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("pod") == "ds4-rust-port-b300", "B300 pod drift")
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
     report.check(execution.get("cuda_toolkit") == "13.2", "CUDA toolkit drift")
-    report.check(execution.get("rust_toolchain") == "nightly-2026-04-03", "Rust toolchain drift")
-    report.check("--bin ds4-cuda-model-range-strategy-smoke" in execution.get("command", ""), "smoke command missing")
+    report.check("--bin ds4-cuda-model-pageable-hmm-smoke" in execution.get("command", ""), "smoke command missing")
     stdout = require_dict(report, execution.get("stdout"), "b300_execution.stdout")
     expected = {
-        "milestone": "M14.1b2b1",
+        "milestone": "M14.1b2b3a",
         "device_name": "NVIDIA B300 SXM6 AC",
         "model_size": MODEL_SIZE,
-        "range_offset": 0,
-        "range_bytes": RANGE_BYTES,
-        "mmap_device_copy": True,
-        "file_staged_device_copy": True,
-        "strategy_readbacks_equal": True,
-        "strategy_cache_reused": True,
-        "owns_explicit_file_staged_device_copy_strategy": True,
-        "owns_registered_range_strategy": False,
-        "owns_pageable_hmm_strategy": False,
+        "range_offset": 13,
+        "range_bytes": 4096,
+        "pageable_memory_access": True,
+        "pageable_memory_access_uses_host_page_tables": False,
+        "prefetch_page_size": 4096,
+        "prefetch_offset": 0,
+        "prefetch_bytes": 8192,
+        "prefetch_device_offset": 13,
+        "read_mostly_advice": True,
+        "preferred_device_advice": True,
+        "pageable_prefetch": True,
+        "prefetch_synchronized_for_smoke": True,
+        "hmm_direct_readback_matches": True,
+        "owns_page_aligned_pageable_hmm_prefetch": True,
+        "owns_hmm_direct_read_pointer": True,
         "owns_o_direct_staging": False,
         "owns_ds4_kernels": False,
         "changes_default_route": False,
     }
-    report.check(stdout == expected, "B300 strategy result drift")
+    report.check(stdout == expected, "B300 pageable HMM result drift")
     for marker in [
-        "ModelRangeStrategy::MmapDeviceCopy",
-        "ModelRangeStrategy::FileStagedDeviceCopy",
-        "cache.cache_range_with_strategy",
-        "cache.readback_with_strategy",
-        "assert_eq!(cache.len(), 2)",
+        "prefetch_pageable_read_only_range",
+        "pageable_memory_access",
+        "prefetch_synchronized_for_smoke",
+        "hmm_direct_readback_matches",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture_path = "ds4-parity/baselines/backend/m14.1b2b1/model-range-strategy-smoke.json"
-    checker = "check_model_range_strategy_smoke.py"
-    report.check("M14.1b2b1: File-Staged Range Strategy" in texts["roadmap"], "roadmap item missing")
-    report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
-    report.check("M14.1b2b1: File-Staged Range Strategy" in texts["todo"], "TODO item missing")
-    report.check(fixture_path in texts["todo"], "TODO fixture missing")
-    report.check(
-        "Active item: M14.1b2b2 Registered Range Strategy" in texts["status"]
-        or "Active item: M14.1b2b3 Pageable HMM And Direct-I/O Policy" in texts["status"]
-        or "Active item: M14.1b2b3b Direct-I/O Staging Policy" in texts["status"],
-        "next active stage missing",
-    )
-    report.check("M14.1b2b1 File-Staged Range Strategy" in texts["status"], "status evidence missing")
+    fixture = "ds4-parity/baselines/backend/m14.1b2b3a/model-pageable-hmm-smoke.json"
+    checker = "check_model_pageable_hmm_smoke.py"
+    report.check("M14.1b2b3a: Pageable HMM Range Strategy" in texts["roadmap"], "roadmap item missing")
+    report.check(fixture in texts["roadmap"], "roadmap fixture missing")
+    report.check("M14.1b2b3a: Pageable HMM Range Strategy" in texts["todo"], "TODO item missing")
+    report.check(fixture in texts["todo"], "TODO fixture missing")
+    report.check("Active item: M14.1b2b3b Direct-I/O Staging Policy" in texts["status"], "next active stage missing")
+    report.check("M14.1b2b3a Pageable HMM Range Strategy" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("O_DIRECT overclaim", lambda value: value["ownership"].update({"owns_o_direct_staging": True})),
-        ("staged copy failure", lambda value: value["b300_execution"]["stdout"].update({"file_staged_device_copy": False})),
-        ("readback mismatch", lambda value: value["b300_execution"]["stdout"].update({"strategy_readbacks_equal": False})),
-        ("model identity failure", lambda value: value["model_range"]["identity_verification"].update({"passed": False})),
+        ("pageable unavailable", lambda value: value["b300_execution"]["stdout"].update({"pageable_memory_access": False})),
+        ("host table drift", lambda value: value["b300_execution"]["stdout"].update({"pageable_memory_access_uses_host_page_tables": True})),
+        ("unsynchronized proof overclaim", lambda value: value["b300_execution"]["stdout"].update({"prefetch_synchronized_for_smoke": False})),
+        ("direct readback mismatch", lambda value: value["b300_execution"]["stdout"].update({"hmm_direct_readback_matches": False})),
+        ("direct-I/O overclaim", lambda value: value["ownership"].update({"owns_o_direct_staging": True})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)
@@ -235,7 +245,7 @@ def require_dict(report: Report, value: Any, name: str) -> dict[str, Any]:
 
 def print_report(report: Report) -> None:
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.1b2b1 model range strategy smoke: {status} ({report.checks} checks)")
+    print(f"M14.1b2b3a model pageable HMM smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
 

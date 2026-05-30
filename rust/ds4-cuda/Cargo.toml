@@ -5,7 +5,7 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
-cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "b938480882f208045bc36ecf29da1ec5531d55ba", optional = true }
+cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "361300ea643688eea87eaa215d9a62a5e74a30e6", optional = true }
 libc = { version = "0.2", optional = true }
 
 [features]
@@ -38,4 +38,9 @@ required-features = ["cuda-oxide-backend"]
 [[bin]]
 name = "ds4-cuda-model-registered-range-smoke"
 path = "src/bin/model_registered_range_smoke.rs"
+required-features = ["cuda-oxide-backend"]
+
+[[bin]]
+name = "ds4-cuda-model-pageable-hmm-smoke"
+path = "src/bin/model_pageable_hmm_smoke.rs"
 required-features = ["cuda-oxide-backend"]

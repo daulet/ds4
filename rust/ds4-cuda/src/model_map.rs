@@ -8,7 +8,9 @@ use std::path::Path;
 use std::ptr::NonNull;
 use std::slice;
 
-use cuda_core::{DeviceBuffer, DriverError, ReadOnlyRegisteredHostMemory};
+use cuda_core::{
+    DeviceBuffer, DriverError, ReadOnlyPageableHostMemory, ReadOnlyRegisteredHostMemory,
+};
 
 use crate::substrate::CudaOxideSubstrate;
 
@@ -163,7 +165,7 @@ impl MappedModelFile {
         })
     }
 
-    fn registered_source(
+    fn page_aligned_source(
         &self,
         offset: u64,
         bytes: u64,
@@ -195,6 +197,44 @@ pub struct RegisteredRangeLayout {
     pub registered_offset: u64,
     pub registered_bytes: u64,
     pub device_offset: u64,
+}
+
+pub struct PrefetchedPageableModelRange<'model> {
+    layout: RegisteredRangeLayout,
+    requested_bytes: u64,
+    pageable: ReadOnlyPageableHostMemory<'model, u8>,
+}
+
+impl PrefetchedPageableModelRange<'_> {
+    pub const fn layout(&self) -> RegisteredRangeLayout {
+        self.layout
+    }
+
+    pub fn requested_device_ptr(&self) -> cuda_core::sys::CUdeviceptr {
+        self.pageable.cu_deviceptr() + self.layout.device_offset
+    }
+
+    pub fn readback(&self, substrate: &CudaOxideSubstrate) -> Result<Vec<u8>, ModelRangeError> {
+        let bytes =
+            usize::try_from(self.requested_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        Ok(unsafe { substrate.download_u8_device_ptr(self.requested_device_ptr(), bytes)? })
+    }
+}
+
+pub fn prefetch_pageable_read_only_range<'model>(
+    substrate: &CudaOxideSubstrate,
+    model: &'model MappedModelFile,
+    offset: u64,
+    bytes: u64,
+) -> Result<PrefetchedPageableModelRange<'model>, ModelRangeError> {
+    let (layout, source) = model.page_aligned_source(offset, bytes)?;
+    let pageable = substrate.pageable_read_only_range(source)?;
+    substrate.prefetch_pageable_read_mostly_to_device(&pageable)?;
+    Ok(PrefetchedPageableModelRange {
+        layout,
+        requested_bytes: bytes,
+        pageable,
+    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -278,7 +318,7 @@ impl<'model> ModelRangeCache<'model> {
                 (CachedRangeStorage::Device(device), None)
             }
             ModelRangeStrategy::ReadOnlyRegisteredOrMmapDeviceCopy => {
-                let (layout, source) = model.registered_source(offset, bytes)?;
+                let (layout, source) = model.page_aligned_source(offset, bytes)?;
                 match substrate.register_read_only_host_range(source) {
                     Ok(registration) => (
                         CachedRangeStorage::ReadOnlyRegistered {

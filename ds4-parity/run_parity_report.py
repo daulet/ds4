@@ -856,6 +856,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.1b2b3a cuda-oxide model pageable HMM smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_model_pageable_hmm_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
