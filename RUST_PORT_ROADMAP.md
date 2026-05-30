@@ -10593,9 +10593,59 @@ Stage split:
 
 ######################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbb: Remaining Residual Failure Selection Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbba and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbb because event-record failure
+  continuation can be forced independently from event-wait and final
+  stream-synchronization failure paths.
 - Goal: connect remaining event and final synchronization failure selection
   without claiming remaining graph compute or route promotion.
+
+######################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbba: Public Fd Event Record Failure Continuation ABI
+
+- Status: done.
+- Goal: preserve current-C public fd event-record failure continuation so
+  failed staging records retry on later ranges and continue through cached
+  host fallback independently of strict fd-cache mode.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbba/abi-model-control-fd-event-record-failure-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_event_record_failure_smoke.py --negative-test`.
+- Evidence:
+  - Existing `rust/ds4-cuda/src/abi.rs` event-record propagation already maps
+    failed `backend.record_event()` through the selected fd upload into public
+    registration/device-copy fallback without consulting
+    `DS4_CUDA_STRICT_WEIGHT_CACHE`; cuda-oxide maps that call to
+    `cuEventRecord`, so this leaf records the boundary without changing routing
+    code.
+  - A C-linked B300 consumer selects buffered fd caching, forwards
+    `cuEventRecord` through setup, then injects record failure before two
+    disjoint ranges separated by a strict-mode transition, rejects the first
+    range-registration attempt, and proves both ranges retain host-backed
+    cached output rather than fd bytes. Two observed records prove failure is
+    retried without latching fd arena cache-full state; one registration
+    attempt preserves the previously owned registration-disable policy.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 117 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 124 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - Fd-read failure, stage-allocation failure, stage-pool reuse, fd-upload
+    failure continuation, fd-arena failure, fd-budget cache-result, default-fd,
+    direct-I/O asynchronous-staging, and registration-disable C-linked B300
+    consumers pass against the rebuilt archive.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_fd_event_record_failure_smoke.py
+    --negative-test` passes, and the default unified parity report passes with
+    203 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Event-wait and final synchronization failure observations remain separate;
+    route promotion and the generated `.note.GNU-stack` warning remain open.
+
+######################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbb: Remaining Residual Failure Selection Policy
+
+- Status: active.
+- Goal: connect remaining event-wait and final synchronization failure
+  selection without claiming remaining graph compute or route promotion.
 
 ## Removal Criteria for C Host Code
 
