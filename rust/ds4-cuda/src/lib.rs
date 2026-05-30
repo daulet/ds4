@@ -317,6 +317,25 @@ pub const M14_2B2_SCOPE: SwigluKernelScope = SwigluKernelScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EmbeddingKernelScope {
+    pub opt_in_only: bool,
+    pub owns_embed_token_hc_tensor: bool,
+    pub owns_embed_tokens_hc_tensor: bool,
+    pub owns_model_range_consumption: bool,
+    pub owns_indexer_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2C_SCOPE: EmbeddingKernelScope = EmbeddingKernelScope {
+    opt_in_only: true,
+    owns_embed_token_hc_tensor: true,
+    owns_embed_tokens_hc_tensor: true,
+    owns_model_range_consumption: false,
+    owns_indexer_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -332,6 +351,7 @@ mod tests {
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
         M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
+        M14_2C_SCOPE,
     };
 
     #[test]
@@ -502,5 +522,15 @@ mod tests {
         assert!(!M14_2B2_SCOPE.owns_embedding_kernels);
         assert!(!M14_2B2_SCOPE.owns_indexer_kernels);
         assert!(!M14_2B2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn embedding_scope_leaves_model_range_indexer_and_route_integration_pending() {
+        assert!(M14_2C_SCOPE.opt_in_only);
+        assert!(M14_2C_SCOPE.owns_embed_token_hc_tensor);
+        assert!(M14_2C_SCOPE.owns_embed_tokens_hc_tensor);
+        assert!(!M14_2C_SCOPE.owns_model_range_consumption);
+        assert!(!M14_2C_SCOPE.owns_indexer_kernels);
+        assert!(!M14_2C_SCOPE.changes_default_route);
     }
 }

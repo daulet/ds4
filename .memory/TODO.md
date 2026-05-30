@@ -7667,3 +7667,30 @@
   optimized-away float comparisons and fixed it with explicit IEEE-754 bit
   classification before final B300 validation.
 - Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
+
+##### M14.2c: Embedding Kernel Pair
+
+- Status: done
+- Goal: port primitive-FP16 single-token hidden-copy and batched embedding
+  loads through executable-local Rust cuda-oxide kernels without claiming
+  model-map routing.
+- Oracle: current-C `embed_token_hc_kernel`, `embed_tokens_hc_kernel`, and
+  their exported tensor wrappers.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2c/embedding-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_embedding_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added Rust `embed_token_hc_kernel` and
+  `embed_tokens_hc_kernel` using primitive `f16` widened to `f32`, with
+  repeated hidden-copy output and current-C batch invalid-token fallback to
+  row zero. The Rust single-token helper additionally rejects invalid token
+  rows before device launch. B300 feature-enabled `ds4-cuda` tests passed
+  with 25 tests and live execution selected portable `sm_80` PTX and proved
+  single-token output, batched fallback output, and host-side rejection on
+  `NVIDIA B300 SXM6 AC`. Local formatting, diff, and workspace tests passed;
+  the 69-check embedding comparator and unified parity passed with 117
+  passed, 45 skipped, and 0 failed. Non-interactive Claude review timed out
+  without a completed result; adversarial self-review confirmed the
+  valid-call/batch-fallback match and documented single-token safety
+  strengthening.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.

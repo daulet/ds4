@@ -7350,6 +7350,45 @@ Stage split:
   - This stage remains opt-in; it does not claim embedding/model-range,
     indexer/top-k, runtime route, or C CUDA removal ownership.
 
+##### M14.2c: Embedding Kernel Pair
+
+- Status: done.
+- Goal: port current-C's FP16 single-token and batched embedding loads through
+  executable-local Rust cuda-oxide kernels without coupling the proof to
+  model-range routing.
+- Oracle: current-C `embed_token_hc_kernel`, `embed_tokens_hc_kernel`,
+  `ds4_gpu_embed_token_hc_tensor`, and `ds4_gpu_embed_tokens_hc_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2c/embedding-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_embedding_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns the bounded FP16 embedding kernel pair and host-side
+  shape safety; model-range consumption, indexer/top-k, route activation, and
+  C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `embed_token_hc_kernel` and
+    `embed_tokens_hc_kernel` using primitive `f16` loads widened to `f32`,
+    256-thread launch geometry, repeated hidden-copy rows, and the current-C
+    batch rule mapping negative or out-of-vocabulary tokens to row zero.
+  - The single-token Rust helper rejects an out-of-vocabulary token instead
+    of admitting current-C's unchecked device row read; this strengthens
+    invalid-input safety without changing valid-call output.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 25 tests and live cargo-oxide execution emitted portable `sm_80`
+    PTX and proved single-token output, batched fallback output, and bounds
+    rejection on `NVIDIA B300 SXM6 AC`.
+  - Local workspace tests and formatter/diff checks passed; the 69-check
+    embedding comparator and unified parity passed with 117 passed, 45
+    skipped, and 0 failed. A first device build corrected the test fixture
+    from a `half`-crate constructor to primitive `f16::from_bits` values
+    before the recorded B300 pass.
+  - Non-interactive Claude review produced no completed result before its
+    timeout; adversarial self-review confirmed that valid-call outputs and
+    batch fallback match current C, and that the stricter single-token
+    invalid-input rejection is recorded rather than overclaimed as parity.
+  - This stage remains opt-in; it does not claim model-range consumption,
+    indexer/top-k, runtime route, or C CUDA removal ownership.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

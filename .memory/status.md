@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2c Embedding Kernel Pair
+- Active item: M14.2d Indexer And Top-K Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -23,7 +23,8 @@
   CUDA evidence boundaries. M14.2b is further split into M14.2b1 and
   M14.2b2 because B300 proved the directional projection PTX path while
   exposing a separate libdevice/NVVM executable blocker for SwiGLU.
-- Last validated source before the active item: M14.2b2 SwiGLU Libdevice Path.
+- Last validated source before the active item: M14.2c Embedding Kernel Pair.
+- Earlier M14.2b2 SwiGLU Libdevice Path.
 - Earlier M14.2b1 Directional Steering Projection Kernel.
 - Earlier M14.2a Add And Repeat Elementwise Kernels.
 - Earlier M14.1c Substrate Route Closure Gate.
@@ -138,6 +139,25 @@
 
 ## Last Evidence
 
+- M14.2c Embedding Kernel Pair adds executable-local Rust cuda-oxide
+  `embed_token_hc_kernel` and `embed_tokens_hc_kernel` paths using primitive
+  `f16` loads widened to `f32`. It proves repeated hidden-copy rows and the
+  current-C batch rule that maps negative or out-of-vocabulary tokens to row
+  zero. The Rust single-token helper rejects an invalid token before launch,
+  strengthening current-C's unchecked invalid-input edge. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 25
+  tests and live cargo-oxide execution emitted portable `sm_80` PTX and
+  proved single-token output, batch fallback output, shape rejection, and
+  invalid single-token rejection on `NVIDIA B300 SXM6 AC`. Its fixture and
+  checker are
+  `ds4-parity/baselines/backend/m14.2c/embedding-kernel-smoke.json` and
+  `ds4-parity/check_embedding_kernel_smoke.py --negative-test`. Model-range
+  consumption, indexer/top-k, route activation, and C CUDA removal remain
+  unclaimed. Local formatting, diff, and workspace tests passed; the
+  69-check embedding comparator and unified parity passed with 117 passed,
+  45 skipped, and 0 failed. Non-interactive Claude review timed out without
+  a completed result; adversarial self-review confirmed valid-call and
+  batch-fallback behavior and the explicit single-token safety strengthening.
 - M14.2b2 SwiGLU Libdevice Path adds the executable-local Rust cuda-oxide
   `swiglu_kernel` path with current-C-shaped finite and NaN clamps, unclamped
   behavior, SiLU exponential, output weighting, and host-side shape

@@ -2250,6 +2250,18 @@ context-targeted `sm_103` cubin. It proves finite and NaN clamp behavior,
 unclamped output, SiLU, weight, and shape rejection without claiming
 embedding, indexer/top-k, runtime route, or C CUDA removal ownership.
 
+Validate the M14.2c Rust CUDA FP16 embedding kernel-pair smoke:
+
+```sh
+python3 ds4-parity/check_embedding_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `embed_token_hc_kernel` and
+`embed_tokens_hc_kernel` execution on B300 through primitive Rust `f16`
+loads. It proves hidden-copy replication and batched invalid-token fallback
+while leaving model-range cache consumption, indexer/top-k, runtime route,
+and C CUDA removal ownership pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
