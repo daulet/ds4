@@ -2838,6 +2838,18 @@ for both tile8 and tile4 row32 down schedules. It leaves tile16/rowspan
 scheduling, shared-cache specialization, Q4_K, hyperconnection, runtime
 route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2c5 Rust CUDA routed MoE tile16 row32 smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_tile16_row32_smoke.py --negative-test
+```
+
+The fixture records current-C tile16 atomic-down scheduling behavior on B300:
+separate tile16 down descriptors, retained tile8 gate metadata, and partial
+tile16 token-indexed float atomic accumulation. It leaves gate/down
+row2048/rowspan scheduling, shared-cache specialization, Q4_K,
+hyperconnection, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

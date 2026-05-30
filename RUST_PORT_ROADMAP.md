@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c5.
+- Status: active; split beginning with M14.5a through M14.5c2c6.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8949,9 +8949,36 @@ Stage split:
 
 ##### M14.5c2c5: Tile16 Row32 Atomic Down
 
-- Status: active.
+- Status: done.
 - Goal: port the high-token tile16 row32 atomic down projection selection
   before widened-row and shared-cache specialization boundaries.
+- Oracle: current-C `use_down_tile16` dispatch, separate tile16 descriptor
+  construction, and `moe_down_expert_tile16_row32_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c5/routed-moe-tile16-row32-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_tile16_row32_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in tile16 row32 atomic-down scheduling with
+  retained tile8 gate metadata and partial tile16 behavior. Gate/down
+  row2048/rowspan dispatch, shared-cache specialization, Q4_K,
+  hyperconnection, runtime graph integration, default route activation, and
+  C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust tile16 row32 atomic down projection selected
+    over separately built tile16 descriptors while gate/up remains tile8.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 81 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and matched partial tile16 atomic output on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2c5 comparator, retained
+    M14 checks, and unified parity passed with 160 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2c6: Gate Tile8 Rowspan Projection
+
+- Status: active.
+- Goal: port the tile8 widened-row gate/up scheduling variants before
+  widened-row atomic down and shared-cache specialization closure.
 
 ## Removal Criteria for C Host Code
 

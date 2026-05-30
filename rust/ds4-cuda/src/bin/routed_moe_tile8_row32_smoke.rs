@@ -8,7 +8,10 @@ use cuda_device::{
     cuda_module, kernel, thread, warp, DisjointSlice,
 };
 use cuda_host::ltoir;
-use ds4_cuda::{substrate::CudaOxideSubstrate, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE};
+use ds4_cuda::{
+    substrate::CudaOxideSubstrate, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE,
+    M14_5C2C5_SCOPE,
+};
 
 const QK_K: usize = 256;
 const IQ2_BLOCK_BYTES: usize = 66;
@@ -370,6 +373,69 @@ mod kernels {
         }
     }
 
+    #[kernel]
+    pub fn moe_down_expert_tile16_row32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_weights: &[u8],
+        midq_scales: &[f32],
+        midq_values: &[i8],
+        midq_bsums: &[i32],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        atomic_out: &[f32],
+    ) {
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        if row >= out_dim {
+            return;
+        }
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        if local_start & 8 != 0 {
+            return;
+        }
+        let row_blocks = ((expert * out_dim + row) * midq_blocks) as usize;
+        let mut entry = 0_u32;
+        while entry < 16 {
+            let local_pair = local_start + entry;
+            if local_pair < counts[expert as usize] {
+                let pair = sorted_pairs[(offsets[expert as usize] + local_pair) as usize];
+                let mut accumulator = 0.0_f32;
+                let mut block = lane;
+                while block < midq_blocks {
+                    accumulator += dev_dot_q2_k_q8_k_block(
+                        down_weights,
+                        row_blocks + block as usize,
+                        midq_scales,
+                        midq_values,
+                        midq_bsums,
+                        (pair * midq_blocks + block) as usize,
+                    );
+                    block += 8;
+                }
+                accumulator = quarter_warp_sum_f32(accumulator);
+                if lane == 0 {
+                    let token = pair / n_expert;
+                    let offset = (token * out_dim + row) as usize;
+                    let output =
+                        unsafe { &*(atomic_out.as_ptr().add(offset) as *const DeviceAtomicF32) };
+                    output.fetch_add(accumulator, AtomicOrdering::Relaxed);
+                }
+            }
+            entry += 1;
+        }
+    }
+
     fn dev_dot_iq2_xxs_q8_k_block(
         packed: &[u8],
         block: usize,
@@ -479,6 +545,8 @@ mod kernels {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tile4 = std::env::var_os("DS4_CUDA_MOE_TILE4").is_some();
     let atomic_down = std::env::var_os("DS4_CUDA_MOE_ATOMIC_DOWN").is_some();
+    let tile16 = std::env::var_os("DS4_CUDA_MOE_DOWN_TILE16").is_some();
+    assert!(!tile16 || (atomic_down && !tile4));
     let substrate = CudaOxideSubstrate::open(0)?;
     let raw_module = ltoir::load_kernel_module(
         substrate.context(),
@@ -491,12 +559,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let selected_values = selected_values();
     let route_values = route_values();
     let metadata = expert_tile_metadata(&selected_values, if tile4 { 4 } else { 8 });
+    let down_metadata = if tile16 {
+        expert_tile_metadata(&selected_values, 16)
+    } else {
+        expert_tile_metadata(&selected_values, if tile4 { 4 } else { 8 })
+    };
     if tile4 {
         assert!(metadata
             .tile_experts
             .iter()
             .zip(&metadata.tile_starts)
             .any(|(&expert, &start)| expert == 1 && start == 8));
+    }
+    if tile16 {
+        assert_eq!(down_metadata.counts[1], 9);
+        assert!(down_metadata
+            .tile_experts
+            .iter()
+            .zip(&down_metadata.tile_starts)
+            .any(|(&expert, &start)| expert == 1 && start == 0));
     }
     let xq = expected_quantized_rows(&input_values(), N_TOKENS);
     let expected_gate = expected_gate_up_mid(
@@ -529,33 +610,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &module,
         &down_values,
         &midq,
-        &metadata,
+        &down_metadata,
         tile4,
         atomic_down,
+        tile16,
     )?;
     substrate.end_commands()?;
     if atomic_down {
         let expected_atomic = expected_atomic_down(&expected_down);
         assert_close(&substrate.download(&actual_down)?, &expected_atomic);
-        let alternate_metadata = expert_tile_metadata(&selected_values, if tile4 { 8 } else { 4 });
-        let alternate = run_down(
-            &substrate,
-            &module,
-            &down_values,
-            &midq,
-            &alternate_metadata,
-            !tile4,
-            true,
-        )?;
-        substrate.end_commands()?;
-        assert_close(&substrate.download(&alternate)?, &expected_atomic);
+        if !tile16 {
+            let alternate_metadata =
+                expert_tile_metadata(&selected_values, if tile4 { 8 } else { 4 });
+            let alternate = run_down(
+                &substrate,
+                &module,
+                &down_values,
+                &midq,
+                &alternate_metadata,
+                !tile4,
+                true,
+                false,
+            )?;
+            substrate.end_commands()?;
+            assert_close(&substrate.download(&alternate)?, &expected_atomic);
+        }
     } else {
         assert_close(&substrate.download(&actual_down)?, &expected_down);
     }
 
     let short_tiles = ExpertTileMetadata {
         tile_experts: vec![],
-        ..metadata
+        ..down_metadata
     };
     assert!(matches!(
         run_down(
@@ -565,12 +651,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &midq,
             &short_tiles,
             tile4,
-            atomic_down
+            atomic_down,
+            tile16
         ),
         Err(TileProjectionError::InvalidShape)
     ));
 
-    if atomic_down {
+    if tile16 {
+        println!(
+            "{{\"milestone\":\"M14.5c2c5\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"tile16_atomic_down_matches\":true,\"tile16_partial_tile_matches\":true,\"gate_tile8_metadata_retained\":true,\"token_indexed_accumulation_matches\":true,\"device_zero_before_atomic_matches\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_device_atomic_f32_fetch_add\":true,\"consumes_atomic_row32_surface\":{},\"owns_moe_down_expert_tile16_row32_kernel\":{},\"owns_tile16_atomic_down_dispatch\":{},\"owns_rowspan_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2C5_SCOPE.consumes_atomic_row32_surface,
+            M14_5C2C5_SCOPE.owns_moe_down_expert_tile16_row32_kernel,
+            M14_5C2C5_SCOPE.owns_tile16_atomic_down_dispatch,
+            M14_5C2C5_SCOPE.owns_rowspan_dispatch,
+            M14_5C2C5_SCOPE.owns_shared_cache_specialization,
+            M14_5C2C5_SCOPE.owns_q4_k_or_runtime_graph,
+            M14_5C2C5_SCOPE.changes_default_route,
+        );
+    } else if atomic_down {
         println!(
             "{{\"milestone\":\"M14.5c2c4\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"tile8_atomic_down_matches\":true,\"tile4_atomic_down_matches\":true,\"token_indexed_accumulation_matches\":true,\"device_zero_before_atomic_matches\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_device_atomic_f32_fetch_add\":true,\"consumes_tile_row32_projection_surface\":{},\"owns_zero_kernel_for_atomic_down\":{},\"owns_tile4_and_tile8_row32_atomic_down_dispatch\":{},\"owns_tile16_or_rowspan_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
             substrate.device_name()?,
@@ -735,6 +834,7 @@ fn run_down(
     metadata: &ExpertTileMetadata,
     tile4: bool,
     atomic_mode: bool,
+    tile16: bool,
 ) -> Result<DeviceBuffer<f32>, TileProjectionError> {
     validate_metadata(metadata)?;
     let down_weights = substrate.upload(down_values)?;
@@ -766,7 +866,26 @@ fn run_down(
         block_dim: (THREADS, 1, 1),
         shared_mem_bytes: 0,
     };
-    if tile4 {
+    if tile16 {
+        module.moe_down_expert_tile16_row32_kernel(
+            substrate.stream(),
+            launch,
+            1,
+            OUT_DIM,
+            N_ROUTED,
+            &down_weights,
+            &scales,
+            &values,
+            &bsums,
+            &sorted_pairs,
+            &offsets,
+            &counts,
+            &tile_total,
+            &tile_experts,
+            &tile_starts,
+            &atomic_output,
+        )?;
+    } else if tile4 {
         module.moe_down_expert_tile4_row32_kernel(
             substrate.stream(),
             launch,

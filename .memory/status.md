@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.5c2c5 Tile16 Row32 Atomic Down
+- Active item: M14.5c2c6 Gate Tile8 Rowspan Projection
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.5c2c4 Atomic Expert-Tile Down Output.
+- Last validated source before the active item: M14.5c2c5 Tile16 Row32 Atomic Down.
+- Earlier M14.5c2c4 Atomic Expert-Tile Down Output.
 - Earlier M14.5c2c3 Tile4 Row32 Projection.
 - Earlier M14.5c2c2 Default Tile8 Row32 Projection.
 - Earlier M14.5c2c1 Expert-Tile Descriptor Metadata.
@@ -216,6 +217,20 @@
 
 ## Last Evidence
 
+- M14.5c2c5 Tile16 Row32 Atomic Down adds executable-local Rust cuda-oxide
+  tile16 Q2_K/Q8_K atomic down projection using separately built down tile
+  descriptors while retaining tile8 gate scheduling. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 81 tests;
+  live cargo-oxide execution emitted portable `sm_80` PTX through libdevice
+  and matched token-indexed partial tile16 output on `NVIDIA B300 SXM6 AC`.
+  Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.5c2c5/routed-moe-tile16-row32-smoke.json`
+  and `ds4-parity/check_routed_moe_tile16_row32_smoke.py --negative-test`.
+  Gate/down row2048/rowspan dispatch, shared-cache specialization, Q4_K,
+  hyperconnection, runtime route activation, and C CUDA removal remain
+  unclaimed. Local formatting, diff, library tests, the M14.5c2c5 comparator,
+  retained M14 checks, and unified parity passed with 160 passed, 50 skipped,
+  and 0 failed.
 - M14.5c2c4 Atomic Expert-Tile Down Output adds executable-local Rust
   cuda-oxide `zero_kernel` initialization and token-indexed
   `DeviceAtomicF32::fetch_add` down accumulation for both tile8 and tile4
