@@ -3066,6 +3066,22 @@ pub unsafe extern "C" fn ds4_gpu_store_raw_kv_batch_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_kv_fp8_store_raw_tensor(
+    kv: *mut Ds4GpuTensor,
+    raw_cache: *mut Ds4GpuTensor,
+    raw_cap: u32,
+    row: u32,
+    head_dim: u32,
+    n_rot: u32,
+) -> c_int {
+    if unsafe { ds4_gpu_dsv4_fp8_kv_quantize_tensor(kv, 1, head_dim, n_rot) } == 0 {
+        return 0;
+    }
+    unsafe { ds4_gpu_store_raw_kv_tensor(raw_cache, kv.cast_const(), raw_cap, row, head_dim) }
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

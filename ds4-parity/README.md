@@ -3719,6 +3719,21 @@ ring writes, composed FP8/raw storage, compressor, attention, routed MoE,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public composed FP8 raw KV storage ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_composed_kv_fp8_raw_store_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public quantize-then-raw-store wrapper
+through the two existing embedded Rust kernels, proves FP8 prefix mutation,
+untouched rotary tail, FP16 raw-row storage, and `uint32_t` row modulo, then
+checks current-C failure ordering by rejecting a short raw destination only
+after retaining the FP8 mutation in `kv`. Compressor, attention, routed MoE,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
