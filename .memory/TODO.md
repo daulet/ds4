@@ -9747,6 +9747,42 @@
 
 ############## M14.6b2b2b2b2b2b2b2b2b2b2b: Residual Model-Control Selection Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2 because cross-range registration disablement
+  and reset are independently observable from remaining failure selection.
 - Goal: connect residual model-control selection/cache behavior and remaining
   failure routing without claiming graph compute closure or route promotion.
+
+############### M14.6b2b2b2b2b2b2b2b2b2b2b1: Public Cross-Range Registration Disable ABI
+
+- Status: done
+- Goal: preserve current-C per-range read-only registration disablement after
+  selected errors and reset it on public model replacement while leaving
+  remaining failure selection and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b1/abi-model-control-registration-disable-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_registration_disable_smoke.py --negative-test`.
+- Evidence: Rust now retains a model-lifetime registration gate, disables it
+  only after `CUDA_ERROR_NOT_SUPPORTED` or `CUDA_ERROR_INVALID_VALUE`, and
+  resets it on public map replacement or cleanup. A C-linked B300 consumer
+  interposes `cuMemHostRegister_v2` with error code 801, observes two
+  attempts before the first range disables retries, no attempt for a second
+  disjoint range, and two new attempts after model replacement. Weighted RMS
+  continues through device-copy fallback without claiming successful
+  zero-copy registration. Local tests pass with 107 tests, B300
+  release-feature tests pass with 114 tests, and the static library retains
+  29 exports. The prior public registered-fallback, whole-map-registration,
+  fd-budget, and fd source-page/progress linked consumers pass against the
+  new static library. The public registration-disable checker passes 102
+  checks, and the default unified report passes with 193 passed, 45 skipped,
+  and 0 failed. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Remaining
+  failure selection, whole-archive retention, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+############### M14.6b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
+
+- Status: active
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.

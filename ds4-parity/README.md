@@ -3219,6 +3219,22 @@ claim physical page eviction or TTY refresh rendering. Residual model-control
 selection, whole-archive retention, and the executable-stack warning remain
 open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b1 Rust CUDA public cross-range
+registration-disable ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_registration_disable_smoke.py --negative-test
+```
+
+The fixture interposes `cuMemHostRegister_v2` from a C-linked B300 consumer
+with error code 801. It proves that the public range-cache path attempts
+whole-map then first-range registration, suppresses a subsequent disjoint
+range attempt after the selected failure, and retries after model
+replacement resets the gate. Weighted RMS results verify device-copy
+fallback output; successful zero-copy registration, remaining failure
+selection, whole-archive retention, and the executable-stack warning remain
+open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

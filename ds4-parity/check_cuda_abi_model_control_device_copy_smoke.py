@@ -258,7 +258,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b Residual Model-Control Selection Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy" in texts["status"],
         "active item missing",
     )
     report.check("M14.6b2b2b2b2a Basic Model-Control Device-Copy ABI Export" in texts["status"], "status evidence missing")

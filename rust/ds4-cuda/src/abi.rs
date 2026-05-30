@@ -1,6 +1,7 @@
 use std::ffi::{c_char, c_int, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use cuda_core::{
@@ -31,6 +32,7 @@ static ABI_MODEL_ARENAS: Mutex<AbiModelArenaState> = Mutex::new(AbiModelArenaSta
 static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::new(None);
 static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
 static ABI_REGISTERED_MODEL: Mutex<Option<AbiRegisteredModel>> = Mutex::new(None);
+static ABI_MODEL_RANGE_MAPPING_SUPPORTED: AtomicBool = AtomicBool::new(true);
 static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_map: 0,
     model_size: 0,
@@ -318,6 +320,40 @@ fn abi_registered_source(
 ) -> Option<(&'static [u8], u64)> {
     let (source, _, device_offset) = abi_page_bounded_source(model_map, model_size, offset, bytes)?;
     Some((source, device_offset))
+}
+
+fn abi_range_registration_disables(error: &cuda_core::DriverError) -> bool {
+    [
+        cuda_core::sys::cudaError_enum_CUDA_ERROR_NOT_SUPPORTED,
+        cuda_core::sys::cudaError_enum_CUDA_ERROR_INVALID_VALUE,
+    ]
+    .contains(&error.0)
+}
+
+fn try_register_abi_model_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+) -> Option<AbiModelRangeStorage> {
+    if !ABI_MODEL_RANGE_MAPPING_SUPPORTED.load(Ordering::Relaxed) {
+        return None;
+    }
+    let (registered_source, device_offset) =
+        abi_registered_source(model_map, model_size, offset, bytes)?;
+    match backend.register_read_only_host_range(registered_source) {
+        Ok(registration) => Some(AbiModelRangeStorage::ReadOnlyRegistered {
+            requested_device_ptr: registration.cu_deviceptr().checked_add(device_offset)?,
+            _registration: registration,
+        }),
+        Err(error) => {
+            if abi_range_registration_disables(&error) {
+                ABI_MODEL_RANGE_MAPPING_SUPPORTED.store(false, Ordering::Relaxed);
+            }
+            None
+        }
+    }
 }
 
 fn pageable_hmm_fallback_selected() -> bool {
@@ -1195,18 +1231,13 @@ fn with_cached_abi_model_range<T>(
                 requested_device_ptr,
             }) => return operation(requested_device_ptr),
             None => {
-                match abi_registered_source(model_map, model_size, offset as u64, bytes as u64)
-                    .and_then(|(registered_source, device_offset)| {
-                        let registration = backend
-                            .register_read_only_host_range(registered_source)
-                            .ok()?;
-                        Some(AbiModelRangeStorage::ReadOnlyRegistered {
-                            requested_device_ptr: registration
-                                .cu_deviceptr()
-                                .checked_add(device_offset)?,
-                            _registration: registration,
-                        })
-                    }) {
+                match try_register_abi_model_range(
+                    backend,
+                    model_map,
+                    model_size,
+                    offset as u64,
+                    bytes as u64,
+                ) {
                     Some(storage) => storage,
                     None => {
                         // SAFETY: the public C ABI requires `model_map` to remain readable
@@ -1314,6 +1345,7 @@ pub extern "C" fn ds4_gpu_cleanup() {
             if let Ok(mut control) = ABI_MODEL_CONTROL.lock() {
                 control.model_map = 0;
                 control.model_size = 0;
+                ABI_MODEL_RANGE_MAPPING_SUPPORTED.store(true, Ordering::Relaxed);
                 configure_abi_model_fd(&mut control, -1);
                 control.model_fd_host_base = 0;
             }
@@ -1952,6 +1984,7 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             *ABI_REGISTERED_MODEL.lock().ok()? = None;
             control.model_map = model_map as usize;
             control.model_size = model_size;
+            ABI_MODEL_RANGE_MAPPING_SUPPORTED.store(true, Ordering::Relaxed);
             if control.model_fd >= 0 && control.model_fd_host_base == 0 {
                 control.model_fd_host_base = model_map as usize;
             }
@@ -2047,7 +2080,7 @@ mod tests {
     use super::{
         abi_direct_io_error_disables, abi_model_arena_chunk_bytes_from_value,
         abi_model_cache_limit_bytes_from_value, abi_model_copy_chunk_bytes_from_value,
-        disable_abi_direct_io_after_error, AbiModelControl,
+        abi_range_registration_disables, disable_abi_direct_io_after_error, AbiModelControl,
     };
 
     #[test]
@@ -2082,6 +2115,21 @@ mod tests {
             Some(libc::EIO)
         ));
         assert_eq!(non_qualifying.model_direct_align, 4096);
+    }
+
+    #[test]
+    fn public_range_registration_disable_errors_match_current_c_policy() {
+        for raw in [
+            cuda_core::sys::cudaError_enum_CUDA_ERROR_NOT_SUPPORTED,
+            cuda_core::sys::cudaError_enum_CUDA_ERROR_INVALID_VALUE,
+        ] {
+            assert!(abi_range_registration_disables(&cuda_core::DriverError(
+                raw
+            )));
+        }
+        assert!(!abi_range_registration_disables(&cuda_core::DriverError(
+            cuda_core::sys::cudaError_enum_CUDA_ERROR_OUT_OF_MEMORY,
+        )));
     }
 
     #[test]

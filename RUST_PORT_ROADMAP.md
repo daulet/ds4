@@ -10125,10 +10125,55 @@ Stage split:
 
 ############## M14.6b2b2b2b2b2b2b2b2b2b2b: Residual Model-Control Selection Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2 because cross-range registration disablement
+  and reset are independently observable from remaining failure selection.
 - Goal: connect residual model-control selection/cache behavior and remaining
-  failure routing without claiming remaining graph compute or route
-  promotion.
+  failure routing without claiming remaining graph compute or route promotion.
+
+############### M14.6b2b2b2b2b2b2b2b2b2b2b1: Public Cross-Range Registration Disable ABI
+
+- Status: done.
+- Goal: preserve current-C per-range read-only registration disablement after
+  selected errors and reset it on public model replacement while leaving
+  remaining failure selection and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b1/abi-model-control-registration-disable-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_registration_disable_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` retains a model-lifetime registration gate,
+    disables it only after `CUDA_ERROR_NOT_SUPPORTED` or
+    `CUDA_ERROR_INVALID_VALUE`, and re-enables it during public map
+    replacement or cleanup.
+  - A C-linked B300 consumer interposes `cuMemHostRegister_v2` with error
+    code 801. It observes one whole-map and one first-range attempt, no
+    attempt for a second disjoint range after disablement, and two new
+    attempts after replacing the active map.
+  - The consumer verifies weighted RMS results through the device-copy
+    fallback; it does not claim a successful zero-copy registration path.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 107 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 114 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - The preceding public registered-fallback, whole-map-registration,
+    fd-budget, and fd source-page/progress C-linked B300 consumers rerun
+    successfully against the registration-disable-aware static library.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_registration_disable_smoke.py
+    --negative-test` passes with 102 checks, and the default unified parity
+    report passes with 193 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Remaining failure selection, q8/f16 hooks, remaining graph compute,
+    whole-archive retention, route promotion, and the generated
+    `.note.GNU-stack` warning remain open.
+
+############### M14.6b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
+
+- Status: active.
+- Goal: connect remaining model-control failure selection without claiming
+  remaining graph compute or route promotion.
 
 ## Removal Criteria for C Host Code
 

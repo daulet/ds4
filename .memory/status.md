@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b Residual Model-Control Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,24 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b1 Public Cross-Range Registration Disable ABI
+  retains a model-lifetime registration gate in the Rust public range-cache
+  path, disables later per-range attempts after the current-C error pair, and
+  resets the gate with map replacement or cleanup. A C-linked B300 consumer
+  interposes `cuMemHostRegister_v2` with error code 801 and observes one
+  whole-map plus one first-range attempt, no second disjoint-range attempt
+  after disablement, and two new attempts after replacing the map. It
+  verifies device-copy fallback weighted outputs without claiming successful
+  zero-copy registration. Local library tests pass with 107 tests; B300
+  release-feature tests pass with 114 tests, the static library retains 29
+  exports, and the preceding public registered-fallback,
+  whole-map-registration, fd-budget, and fd source-page/progress linked
+  consumers pass against it. The public registration-disable checker passes
+  102 checks, and the default unified report passes with 193 passed, 45
+  skipped, and 0 failed. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Remaining
+  failure selection, whole-archive retention, route promotion, and remaining
+  graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b2b2b2a Public Fd Source-Page And Progress ABI applies
   source-file and source-mapping discard advice after each public fd upload
   chunk, emits and suppresses current-C non-TTY progress behavior, and resets
