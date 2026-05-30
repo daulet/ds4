@@ -3765,6 +3765,21 @@ attention, routed MoE, remaining graph compute, whole-archive retention
 policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public compressor ratio-4 replay ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_compressor_replay_ratio4_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public ratio-4 replay wrapper through
+one embedded replay-pool kernel composed with weighted RMS, stride-4 RoPE,
+optional FP8 processing, and final state rebuild. It proves FP32 and FP16 APE
+output, output-before-state ordering, zero-RoPE handling, and validation
+rejection. Compressor update/general prefill, attention, routed MoE, remaining
+graph compute, whole-archive retention policy, route promotion, C CUDA
+removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

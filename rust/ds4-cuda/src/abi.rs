@@ -2959,6 +2959,7 @@ pub unsafe extern "C" fn ds4_gpu_rope_tail_tensor(
                         head_dim,
                         n_rot,
                         pos0,
+                        1,
                         n_ctx_orig,
                         inverse,
                         freq_base,
@@ -3320,6 +3321,264 @@ pub unsafe extern "C" fn ds4_gpu_compressor_prefill_state_ratio4_tensor(
                             )
                         })
                     })
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_compressor_prefill_ratio4_replay_tensor(
+    comp_cache: *mut Ds4GpuTensor,
+    state_kv: *mut Ds4GpuTensor,
+    state_score: *mut Ds4GpuTensor,
+    kv: *const Ds4GpuTensor,
+    sc: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    ape_offset: u64,
+    ape_type: u32,
+    norm_offset: u64,
+    norm_type: u32,
+    head_dim: u32,
+    pos0: u32,
+    n_tokens: u32,
+    n_rot: u32,
+    n_ctx_orig: u32,
+    quantize_fp8: bool,
+    freq_base: f32,
+    freq_scale: f32,
+    ext_factor: f32,
+    attn_factor: f32,
+    beta_fast: f32,
+    beta_slow: f32,
+    rms_eps: f32,
+) -> c_int {
+    status(|| {
+        let Some(comp_cache) = (unsafe { tensor_ref(comp_cache.cast_const()) }) else {
+            return false;
+        };
+        let Some(state_kv) = (unsafe { tensor_ref(state_kv.cast_const()) }) else {
+            return false;
+        };
+        let Some(state_score) = (unsafe { tensor_ref(state_score.cast_const()) }) else {
+            return false;
+        };
+        let Some(kv) = (unsafe { tensor_ref(kv) }) else {
+            return false;
+        };
+        let Some(sc) = (unsafe { tensor_ref(sc) }) else {
+            return false;
+        };
+        let Some(width) = 2_u32.checked_mul(head_dim) else {
+            return false;
+        };
+        let n_comp = n_tokens / 4;
+        let Some(input_elements) = u64::from(n_tokens).checked_mul(u64::from(width)) else {
+            return false;
+        };
+        let state_elements = 8_u64 * u64::from(width);
+        let Some(comp_elements) = u64::from(n_comp).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let ape_elements = 4_u64 * u64::from(width);
+        let Some(input_bytes) = input_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(state_bytes) = state_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(comp_bytes) = comp_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let ape_element_bytes = if ape_type == 1 {
+            size_of::<u16>() as u64
+        } else {
+            size_of::<f32>() as u64
+        };
+        let Some(ape_bytes) = ape_elements.checked_mul(ape_element_bytes) else {
+            return false;
+        };
+        let norm_bytes = u64::from(head_dim) * size_of::<f32>() as u64;
+        let tail_elements = 4_u64 * u64::from(width);
+        let Ok(tail_grid_blocks) = u32::try_from(tail_elements.div_ceil(256_u64)) else {
+            return false;
+        };
+        let Some(pairs) = n_comp.checked_mul(n_rot / 2) else {
+            return false;
+        };
+        if model_map.is_null()
+            || head_dim == 0
+            || n_tokens == 0
+            || n_tokens & 3 != 0
+            || pos0 & 3 != 0
+            || n_rot > head_dim
+            || n_rot & 1 != 0
+            || ape_type > 1
+            || norm_type != 0
+            || width == 0
+            || tail_grid_blocks == 0
+            || (n_rot != 0 && pairs == 0)
+            || ape_offset > model_size
+            || ape_bytes > model_size - ape_offset
+            || norm_offset > model_size
+            || norm_bytes > model_size - norm_offset
+            || kv.bytes < input_bytes
+            || sc.bytes < input_bytes
+            || state_kv.bytes < state_bytes
+            || state_score.bytes < state_bytes
+            || comp_cache.bytes < comp_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                ape_offset,
+                ape_bytes,
+                |ape_ptr| {
+                    let pooled = with_abi_kernels(backend, |kernels| {
+                        // SAFETY: replay input, prior state, output, APE range,
+                        // and fixed-ratio launch dimensions are validated above.
+                        Some(unsafe {
+                            kernels.compressor_prefill_ratio4_replay_pool_tensor(
+                                backend.stream(),
+                                comp_cache.device_ptr(),
+                                kv.device_ptr(),
+                                sc.device_ptr(),
+                                state_kv.device_ptr(),
+                                state_score.device_ptr(),
+                                ape_ptr,
+                                input_elements,
+                                state_elements,
+                                comp_elements,
+                                ape_elements,
+                                ape_type,
+                                head_dim,
+                                pos0,
+                                n_comp,
+                            )
+                        })
+                    })?;
+                    if !pooled {
+                        return Some(false);
+                    }
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        norm_offset,
+                        norm_bytes,
+                        |norm_ptr| {
+                            with_abi_kernels(backend, |kernels| {
+                                // SAFETY: the complete replay output and
+                                // selected cached norm range were validated.
+                                if !unsafe {
+                                    kernels.rms_norm_weight_rows_tensor(
+                                        backend.stream(),
+                                        comp_cache.device_ptr(),
+                                        comp_cache.device_ptr(),
+                                        norm_ptr,
+                                        head_dim,
+                                        n_comp,
+                                        rms_eps,
+                                    )
+                                } {
+                                    return Some(false);
+                                }
+                                if n_rot != 0
+                                    && !unsafe {
+                                        kernels.rope_tail_tensor(
+                                            backend.stream(),
+                                            comp_cache.device_ptr(),
+                                            n_comp,
+                                            1,
+                                            head_dim,
+                                            n_rot,
+                                            pos0,
+                                            4,
+                                            n_ctx_orig,
+                                            false,
+                                            freq_base,
+                                            freq_scale,
+                                            ext_factor,
+                                            attn_factor,
+                                            beta_fast,
+                                            beta_slow,
+                                            pairs,
+                                        )
+                                    }
+                                {
+                                    return Some(false);
+                                }
+                                if quantize_fp8
+                                    && !unsafe {
+                                        kernels.dsv4_fp8_kv_quantize_tensor(
+                                            backend.stream(),
+                                            comp_cache.device_ptr(),
+                                            n_comp,
+                                            head_dim,
+                                            n_rot,
+                                        )
+                                    }
+                                {
+                                    return Some(false);
+                                }
+                                backend.context().bind_to_thread().ok()?;
+                                let state_len = usize::try_from(state_elements).ok()?;
+                                // SAFETY: state rebuild follows successful
+                                // compressed output work on the same stream.
+                                unsafe {
+                                    cuda_core::sys::cuMemsetD32Async(
+                                        state_kv.device_ptr(),
+                                        0.0_f32.to_bits(),
+                                        state_len,
+                                        backend.stream().cu_stream(),
+                                    )
+                                }
+                                .result()
+                                .ok()?;
+                                unsafe {
+                                    cuda_core::sys::cuMemsetD32Async(
+                                        state_score.device_ptr(),
+                                        f32::NEG_INFINITY.to_bits(),
+                                        state_len,
+                                        backend.stream().cu_stream(),
+                                    )
+                                }
+                                .result()
+                                .ok()?;
+                                // SAFETY: the final four source rows and the
+                                // rebuilt state/APE spans are validated above.
+                                Some(unsafe {
+                                    kernels.compressor_set_rows_tensor(
+                                        backend.stream(),
+                                        kv.device_ptr(),
+                                        sc.device_ptr(),
+                                        state_kv.device_ptr(),
+                                        state_score.device_ptr(),
+                                        ape_ptr,
+                                        input_elements,
+                                        state_elements,
+                                        ape_elements,
+                                        ape_type,
+                                        width,
+                                        4,
+                                        pos0,
+                                        n_tokens - 4,
+                                        0,
+                                        4,
+                                        tail_grid_blocks,
+                                    )
+                                })
+                            })
+                        },
+                    )
                 },
             )
         })
