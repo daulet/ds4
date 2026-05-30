@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2 Embedding Indexer And Elementwise Kernels
+- Active item: M14.2b SwiGLU And Directional Steering Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -17,7 +17,12 @@
   M14.1b3a and M14.1b3b because managed-KV/memory-report policy only needs a
   memory-capacity query, while Q8 caches and quality mode need BLAS or kernel
   ownership.
-- Last validated source before the active item: M14.1c Substrate Route Closure Gate.
+- M14.2 Embedding Indexer And Elementwise Kernels is split into M14.2a
+  through M14.2e because standalone elementwise, nonlinear/reduction,
+  model-backed embedding, indexer/top-k, and closure work need separate live
+  CUDA evidence boundaries.
+- Last validated source before the active item: M14.2a Add And Repeat Elementwise Kernels.
+- Earlier M14.1c Substrate Route Closure Gate.
 - Earlier M14.1b4 Fill Kernel And Command Lifetime.
 - Earlier M14.1b3b Q8 Cache And Quality Policy.
 - Earlier M14.1b3a Managed KV And Memory Report Policy.
@@ -129,6 +134,22 @@
 
 ## Last Evidence
 
+- M14.2a Add And Repeat Elementwise Kernels introduces the executable-local
+  Rust cuda-oxide `add_kernel` and `repeat_hc_kernel` smoke path with
+  current-C-shaped 256-thread launch geometry and safe disjoint output
+  writes. On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+  passed with 22 tests and live cargo-oxide execution selected portable
+  `sm_80` while proving add output, repeated-HC-row output, add bounds
+  rejection, and repeat-shape rejection. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.2a/elementwise-kernel-smoke.json` and
+  `ds4-parity/check_elementwise_kernel_smoke.py --negative-test`. Embedding,
+  indexer/top-k, SwiGLU, directional steering, route activation, and C CUDA
+  removal remain unclaimed. Local formatter, diff, and workspace tests
+  passed; the 69-check comparator passed and unified parity passed with 109
+  passed, 50 skipped, and 0 failed. Non-interactive Claude review timed out
+  without a completed result; adversarial self-review corrected the
+  `repeat_hc` wrapper to preserve current-C's 64-bit shape product before the
+  recorded B300 execution.
 - M14.1c Substrate Route Closure Gate closes the opt-in Rust resource
   substrate boundary for later kernel stages. It corrects the M14.0
   inventory after the Q8 policy milestone proved that

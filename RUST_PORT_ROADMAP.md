@@ -7227,6 +7227,65 @@ Stage split:
     symbols remain M14.3-only, the begin command maps only the current-C
     no-op, and closure makes no route or removal claim.
 
+#### M14.2: Embedding Indexer And Elementwise Kernels
+
+- Status: split before implementation into M14.2a through M14.2e.
+- Goal: port the M14.2 operation family through bounded Rust CUDA kernel
+  slices while retaining current-C oracles and the opt-in-only route.
+- Stage split:
+  - M14.2a: Add And Repeat Elementwise Kernels.
+  - M14.2b: SwiGLU And Directional Steering Kernels.
+  - M14.2c: Embedding Kernel Pair.
+  - M14.2d: Indexer And Top-K Kernels.
+  - M14.2e: M14.2 Kernel Closure Gate.
+
+##### M14.2a: Add And Repeat Elementwise Kernels
+
+- Status: done.
+- Goal: port the bounded f32 `add_kernel` and `repeat_hc_kernel` operations
+  through executable-local Rust cuda-oxide kernels before the more complex
+  M14.2 families.
+- Oracle: current-C `add_kernel`, `ds4_gpu_add_tensor`, `repeat_hc_kernel`,
+  and `ds4_gpu_repeat_hc_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2a/elementwise-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_elementwise_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust kernels match bounded add and repeated-row outputs and
+  reject invalid host-side arguments; embedding, indexer/top-k, SwiGLU,
+  directional steering, route activation, and C CUDA removal remain
+  unclaimed.
+- Evidence:
+  - Added executable-local Rust `add_kernel` and `repeat_hc_kernel` kernels
+    with current-C-shaped 256-thread launch geometry and safe disjoint output
+    writes.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 22 tests and cargo-oxide executed both kernels on
+    `NVIDIA B300 SXM6 AC` using portable `sm_80`, proving add output,
+    repeated-HC-row output, add bounds rejection, and repeat-shape rejection.
+  - Local formatter, diff, and workspace tests passed; the 69-check
+    comparator passed and unified parity passed with 109 passed, 50 skipped,
+    and 0 failed.
+  - Non-interactive Claude review timed out without a completed result;
+    adversarial self-review corrected an initial `repeat_hc` wrapper narrowing
+    by preserving current-C's 64-bit shape product before B300 execution and
+    found no remaining defect within this bounded claim.
+  - This stage remains opt-in; it does not claim any model-backed embedding,
+    selection, nonlinear/reduction, route, or removal ownership.
+
+##### M14.2b: SwiGLU And Directional Steering Kernels
+
+- Status: planned.
+- Goal: port the remaining standalone f32 nonlinear and projection kernels
+  before introducing model-backed embedding or indexer/top-k code.
+- Oracle: current-C `swiglu_kernel`, `ds4_gpu_swiglu_tensor`,
+  `directional_steering_project_kernel`, and
+  `ds4_gpu_directional_steering_project_tensor`.
+- Comparator: operation-level B300 kernel smoke with explicit numeric
+  tolerance and shape/bounds rejection.
+- Acceptance: only these two kernels become Rust-owned; model-backed and
+  selection families plus route/removal policy remain pending.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

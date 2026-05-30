@@ -920,6 +920,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.2a cuda-oxide add/repeat elementwise kernel smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_elementwise_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -2213,6 +2213,18 @@ It corrects the inventory so converted Q8 cache ownership and dequant kernels
 remain assigned to M14.3, and rejects default-route promotion or C CUDA
 removal.
 
+Validate the M14.2a Rust CUDA add/repeat elementwise kernel smoke:
+
+```sh
+python3 ds4-parity/check_elementwise_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `add_kernel` and `repeat_hc_kernel`
+execution on B300. It proves f32 add output, repeated-HC-row output, and
+bounded argument rejection while leaving embedding, indexer/top-k, SwiGLU,
+directional steering, runtime graph integration, and default-route ownership
+unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

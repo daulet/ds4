@@ -175,7 +175,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
         "Active item: M14.1" in texts["status"]
-        or "Active item: M14.2 Embedding Indexer And Elementwise Kernels" in texts["status"],
+        or "Active item: M14.2" in texts["status"],
         "next active stage missing",
     )
     report.check("M14.1a Host Substrate Buffer Roundtrip" in texts["status"], "status evidence missing")

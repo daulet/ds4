@@ -7584,3 +7584,39 @@
   out without a completed result; adversarial self-review found no remaining
   ownership-boundary or route-claim defect.
 - Owner path: M14.1 artifacts and route policy.
+
+#### M14.2: Embedding Indexer And Elementwise Kernels
+
+- Status: split before implementation into M14.2a through M14.2e.
+- Stage split: M14.2a Add And Repeat Elementwise Kernels; M14.2b SwiGLU And
+  Directional Steering Kernels; M14.2c Embedding Kernel Pair; M14.2d Indexer
+  And Top-K Kernels; M14.2e Kernel Closure Gate.
+
+##### M14.2a: Add And Repeat Elementwise Kernels
+
+- Status: done
+- Goal: port `add_kernel` and `repeat_hc_kernel` through an executable-local
+  Rust cuda-oxide smoke while keeping the route opt-in.
+- Oracle: current-C add/repeat kernels and exported tensor wrappers.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2a/elementwise-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_elementwise_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added Rust `add_kernel` and `repeat_hc_kernel` with current-C
+  256-thread launch geometry; B300 feature-enabled `ds4-cuda` tests passed
+  with 22 tests and live cargo-oxide execution selected `sm_80` and proved
+  add output, repeat-HC output, add bounds rejection, and repeat-shape
+  rejection. Local formatter, diff, and workspace tests passed; the 69-check
+  comparator passed and unified parity passed with 109 passed, 50 skipped,
+  and 0 failed. Non-interactive Claude review timed out without a completed
+  result; adversarial self-review fixed the `repeat_hc` wrapper to preserve
+  current-C's 64-bit shape product before B300 execution. Embedding,
+  indexer/top-k, SwiGLU, directional steering, route activation, and removal
+  remain unclaimed.
+
+##### M14.2b: SwiGLU And Directional Steering Kernels
+
+- Status: planned
+- Goal: port the standalone nonlinear and projection kernels without claiming
+  model-backed embedding/indexer families or route activation.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.

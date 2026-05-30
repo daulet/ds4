@@ -194,7 +194,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(
         "Active item: M14.1b" in texts["status"]
         or "Active item: M14.1c Substrate Route Closure Gate" in texts["status"]
-        or "Active item: M14.2 Embedding Indexer And Elementwise Kernels" in texts["status"],
+        or "Active item: M14.2" in texts["status"],
         "next active stage missing",
     )
     report.check("M14.1b1 Bounded Model Residency Handles" in texts["status"], "status evidence missing")
