@@ -1886,6 +1886,35 @@ pub const M14_5C2E_SCOPE: RoutedMoeSharedCacheScope = RoutedMoeSharedCacheScope 
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeQwarpFallbackScope {
+    pub opt_in_only: bool,
+    pub uses_q8_k_activation_quantization: bool,
+    pub owns_moe_gate_up_mid_qwarp32_kernel: bool,
+    pub owns_moe_down_qwarp32_kernel: bool,
+    pub owns_moe_gate_up_mid_sorted_qwarp32_kernel: bool,
+    pub owns_moe_down_sorted_qwarp32_kernel: bool,
+    pub owns_no_decode_lut_generic_dispatch: bool,
+    pub owns_no_p2_sorted_batch_dispatch: bool,
+    pub uses_moe_sum_surface: bool,
+    pub owns_hyperconnection_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2F_SCOPE: RoutedMoeQwarpFallbackScope = RoutedMoeQwarpFallbackScope {
+    opt_in_only: true,
+    uses_q8_k_activation_quantization: true,
+    owns_moe_gate_up_mid_qwarp32_kernel: true,
+    owns_moe_down_qwarp32_kernel: true,
+    owns_moe_gate_up_mid_sorted_qwarp32_kernel: true,
+    owns_moe_down_sorted_qwarp32_kernel: true,
+    owns_no_decode_lut_generic_dispatch: true,
+    owns_no_p2_sorted_batch_dispatch: true,
+    uses_moe_sum_surface: true,
+    owns_hyperconnection_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1921,7 +1950,7 @@ mod tests {
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
-        M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE,
+        M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE, M14_5C2F_SCOPE,
     };
 
     #[test]
@@ -2890,6 +2919,21 @@ mod tests {
         assert!(M14_5C2E_SCOPE.owns_gate_and_down_cached_rowspan_dispatch);
         assert!(!M14_5C2E_SCOPE.owns_hyperconnection_or_runtime_graph);
         assert!(!M14_5C2E_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_qwarp_fallback_scope_leaves_hyperconnection_and_route_pending() {
+        assert!(M14_5C2F_SCOPE.opt_in_only);
+        assert!(M14_5C2F_SCOPE.uses_q8_k_activation_quantization);
+        assert!(M14_5C2F_SCOPE.owns_moe_gate_up_mid_qwarp32_kernel);
+        assert!(M14_5C2F_SCOPE.owns_moe_down_qwarp32_kernel);
+        assert!(M14_5C2F_SCOPE.owns_moe_gate_up_mid_sorted_qwarp32_kernel);
+        assert!(M14_5C2F_SCOPE.owns_moe_down_sorted_qwarp32_kernel);
+        assert!(M14_5C2F_SCOPE.owns_no_decode_lut_generic_dispatch);
+        assert!(M14_5C2F_SCOPE.owns_no_p2_sorted_batch_dispatch);
+        assert!(M14_5C2F_SCOPE.uses_moe_sum_surface);
+        assert!(!M14_5C2F_SCOPE.owns_hyperconnection_or_runtime_graph);
+        assert!(!M14_5C2F_SCOPE.changes_default_route);
     }
 
     #[test]

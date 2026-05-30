@@ -8,7 +8,7 @@ use cuda_device::{
     cuda_module, kernel, thread, warp, DisjointSlice, SharedArray,
 };
 use cuda_host::ltoir;
-use ds4_cuda::{substrate::CudaOxideSubstrate, M14_5C2B2_SCOPE};
+use ds4_cuda::{substrate::CudaOxideSubstrate, M14_5C2B2_SCOPE, M14_5C2F_SCOPE};
 
 const QK_K: usize = 256;
 const IQ2_BLOCK_BYTES: usize = 66;
@@ -177,6 +177,264 @@ mod kernels {
         let position = cursor.fetch_add(1, AtomicOrdering::Relaxed);
         unsafe {
             *sorted_pairs.get_unchecked_mut(position as usize) = pair as u32;
+        }
+    }
+
+    #[kernel]
+    pub fn moe_gate_up_mid_qwarp32_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq_scales: &[f32],
+        xq_values: &[i8],
+        selected: &[i32],
+        route_weights: &[f32],
+        iq2_grids: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let pair = thread::blockIdx_y();
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let mut rr = 0_u32;
+        while rr < 4 {
+            let row = thread::blockIdx_x() * 128 + row_lane + rr * 32;
+            if row < expert_mid_dim {
+                let row_blocks = ((expert as u32 * expert_mid_dim + row) * xq_blocks) as usize;
+                let mut gate = 0.0_f32;
+                let mut up = 0.0_f32;
+                let mut block = lane;
+                while block < xq_blocks {
+                    let q8_block = (token * xq_blocks + block) as usize;
+                    gate += dev_dot_iq2_xxs_q8_k_block(
+                        gate_weights,
+                        row_blocks + block as usize,
+                        xq_scales,
+                        xq_values,
+                        q8_block,
+                        iq2_grids,
+                        iq2_signs,
+                    );
+                    up += dev_dot_iq2_xxs_q8_k_block(
+                        up_weights,
+                        row_blocks + block as usize,
+                        xq_scales,
+                        xq_values,
+                        q8_block,
+                        iq2_grids,
+                        iq2_signs,
+                    );
+                    block += 8;
+                }
+                gate = quarter_warp_sum_f32(gate);
+                up = quarter_warp_sum_f32(up);
+                if lane == 0 {
+                    if clamp > 1.0e-6 {
+                        if gate > clamp {
+                            gate = clamp;
+                        }
+                        if up > clamp {
+                            up = clamp;
+                        }
+                        if up < -clamp {
+                            up = -clamp;
+                        }
+                    }
+                    let offset = (pair * expert_mid_dim + row) as usize;
+                    unsafe {
+                        *gate_out.get_unchecked_mut(offset) = gate;
+                        *up_out.get_unchecked_mut(offset) = up;
+                        *mid_out.get_unchecked_mut(offset) =
+                            (gate / (1.0 + (-gate).exp())) * up * route_weights[pair as usize];
+                    }
+                }
+            }
+            rr += 1;
+        }
+    }
+
+    #[kernel]
+    pub fn moe_down_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_weights: &[u8],
+        midq_scales: &[f32],
+        midq_values: &[i8],
+        midq_bsums: &[i32],
+        selected: &[i32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        let pair = thread::blockIdx_y();
+        if row >= out_dim {
+            return;
+        }
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_blocks = ((expert as u32 * out_dim + row) * midq_blocks) as usize;
+        let mut accumulator = 0.0_f32;
+        let mut block = lane;
+        while block < midq_blocks {
+            accumulator += dev_dot_q2_k_q8_k_block(
+                down_weights,
+                row_blocks + block as usize,
+                midq_scales,
+                midq_values,
+                midq_bsums,
+                (pair * midq_blocks + block) as usize,
+            );
+            block += 8;
+        }
+        accumulator = quarter_warp_sum_f32(accumulator);
+        if lane == 0 {
+            unsafe {
+                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) = accumulator;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn moe_gate_up_mid_sorted_qwarp32_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq_scales: &[f32],
+        xq_values: &[i8],
+        sorted_pairs: &[u32],
+        selected: &[i32],
+        route_weights: &[f32],
+        iq2_grids: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        let pair = sorted_pairs[thread::blockIdx_y() as usize];
+        if row >= expert_mid_dim {
+            return;
+        }
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_blocks = ((expert as u32 * expert_mid_dim + row) * xq_blocks) as usize;
+        let mut gate = 0.0_f32;
+        let mut up = 0.0_f32;
+        let mut block = lane;
+        while block < xq_blocks {
+            let q8_block = (token * xq_blocks + block) as usize;
+            gate += dev_dot_iq2_xxs_q8_k_block(
+                gate_weights,
+                row_blocks + block as usize,
+                xq_scales,
+                xq_values,
+                q8_block,
+                iq2_grids,
+                iq2_signs,
+            );
+            up += dev_dot_iq2_xxs_q8_k_block(
+                up_weights,
+                row_blocks + block as usize,
+                xq_scales,
+                xq_values,
+                q8_block,
+                iq2_grids,
+                iq2_signs,
+            );
+            block += 8;
+        }
+        gate = quarter_warp_sum_f32(gate);
+        up = quarter_warp_sum_f32(up);
+        if lane == 0 {
+            if clamp > 1.0e-6 {
+                if gate > clamp {
+                    gate = clamp;
+                }
+                if up > clamp {
+                    up = clamp;
+                }
+                if up < -clamp {
+                    up = -clamp;
+                }
+            }
+            let offset = (pair * expert_mid_dim + row) as usize;
+            unsafe {
+                *gate_out.get_unchecked_mut(offset) = gate;
+                *up_out.get_unchecked_mut(offset) = up;
+                *mid_out.get_unchecked_mut(offset) =
+                    (gate / (1.0 + (-gate).exp())) * up * route_weights[pair as usize];
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn moe_down_sorted_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_weights: &[u8],
+        midq_scales: &[f32],
+        midq_values: &[i8],
+        midq_bsums: &[i32],
+        sorted_pairs: &[u32],
+        selected: &[i32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        let pair = sorted_pairs[thread::blockIdx_y() as usize];
+        if row >= out_dim {
+            return;
+        }
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_blocks = ((expert as u32 * out_dim + row) * midq_blocks) as usize;
+        let mut accumulator = 0.0_f32;
+        let mut block = lane;
+        while block < midq_blocks {
+            accumulator += dev_dot_q2_k_q8_k_block(
+                down_weights,
+                row_blocks + block as usize,
+                midq_scales,
+                midq_values,
+                midq_bsums,
+                (pair * midq_blocks + block) as usize,
+            );
+            block += 8;
+        }
+        accumulator = quarter_warp_sum_f32(accumulator);
+        if lane == 0 {
+            unsafe {
+                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) = accumulator;
+            }
         }
     }
 
@@ -486,6 +744,79 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let route_weights = substrate.upload(&route_values)?;
     let grids = substrate.upload(&IQ2_GRIDS)?;
     let signs = substrate.upload(&IQ2_SIGNS)?;
+    let qwarp_fallback = std::env::var_os("DS4_CUDA_MOE_QWARP_FALLBACK").is_some();
+    let expected = expected_sorted_p2_moe(
+        &gate_values,
+        &up_values,
+        &down_values,
+        &x_values,
+        &selected_values,
+        &route_values,
+    );
+
+    if qwarp_fallback {
+        let generic = run_generic_qwarp_single(
+            &substrate,
+            &module,
+            &gate_weights,
+            &up_weights,
+            &down_weights,
+            &x,
+            &selected,
+            &route_weights,
+            &grids,
+            &signs,
+        )?;
+        let sorted = run_sorted_p2_moe(
+            &substrate,
+            &module,
+            &gate_weights,
+            &up_weights,
+            &down_weights,
+            &x,
+            &selected,
+            &route_weights,
+            &grids,
+            &signs,
+            true,
+        )?;
+        substrate.end_commands()?;
+        assert_generic_qwarp_output(&substrate, &generic, &expected)?;
+        assert_output(&substrate, &sorted, &expected, &selected_values)?;
+
+        let short_selected = substrate.zeroed::<i32>(N_ROUTED as usize - 1)?;
+        assert!(matches!(
+            run_generic_qwarp_single(
+                &substrate,
+                &module,
+                &gate_weights,
+                &up_weights,
+                &down_weights,
+                &x,
+                &short_selected,
+                &route_weights,
+                &grids,
+                &signs,
+            ),
+            Err(MoeError::InvalidShape)
+        ));
+
+        println!(
+            "{{\"milestone\":\"M14.5c2f\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"generic_single_gate_up_matches\":true,\"generic_single_down_and_sum_matches\":true,\"sorted_no_p2_gate_up_matches\":true,\"sorted_no_p2_down_and_sum_matches\":true,\"batched_q8_input_quantize_matches\":true,\"sorted_pair_metadata_consumed\":true,\"negative_expert_fallback_matches\":true,\"partial_row_tiles_match\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"uses_q8_k_activation_quantization\":{},\"owns_moe_gate_up_mid_qwarp32_kernel\":{},\"owns_moe_down_qwarp32_kernel\":{},\"owns_moe_gate_up_mid_sorted_qwarp32_kernel\":{},\"owns_moe_down_sorted_qwarp32_kernel\":{},\"owns_no_decode_lut_generic_dispatch\":{},\"owns_no_p2_sorted_batch_dispatch\":{},\"uses_moe_sum_surface\":{},\"owns_hyperconnection_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2F_SCOPE.uses_q8_k_activation_quantization,
+            M14_5C2F_SCOPE.owns_moe_gate_up_mid_qwarp32_kernel,
+            M14_5C2F_SCOPE.owns_moe_down_qwarp32_kernel,
+            M14_5C2F_SCOPE.owns_moe_gate_up_mid_sorted_qwarp32_kernel,
+            M14_5C2F_SCOPE.owns_moe_down_sorted_qwarp32_kernel,
+            M14_5C2F_SCOPE.owns_no_decode_lut_generic_dispatch,
+            M14_5C2F_SCOPE.owns_no_p2_sorted_batch_dispatch,
+            M14_5C2F_SCOPE.uses_moe_sum_surface,
+            M14_5C2F_SCOPE.owns_hyperconnection_or_runtime_graph,
+            M14_5C2F_SCOPE.changes_default_route,
+        );
+        return Ok(());
+    }
 
     let output = run_sorted_p2_moe(
         &substrate,
@@ -498,16 +829,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &route_weights,
         &grids,
         &signs,
+        false,
     )?;
     substrate.end_commands()?;
-    let expected = expected_sorted_p2_moe(
-        &gate_values,
-        &up_values,
-        &down_values,
-        &x_values,
-        &selected_values,
-        &route_values,
-    );
     assert_output(&substrate, &output, &expected, &selected_values)?;
 
     let short_selected = substrate.zeroed::<i32>(PAIR_COUNT as usize - 1)?;
@@ -523,6 +847,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &route_weights,
             &grids,
             &signs,
+            false,
         ),
         Err(MoeError::InvalidShape)
     ));
@@ -575,6 +900,14 @@ struct ExpectedSortedP2Output {
     out: Vec<f32>,
 }
 
+struct GenericQwarpOutput {
+    gate: DeviceBuffer<f32>,
+    up: DeviceBuffer<f32>,
+    mid: DeviceBuffer<f32>,
+    down: DeviceBuffer<f32>,
+    out: DeviceBuffer<f32>,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_sorted_p2_moe(
     substrate: &CudaOxideSubstrate,
@@ -587,6 +920,7 @@ fn run_sorted_p2_moe(
     route_weights: &DeviceBuffer<f32>,
     grids: &DeviceBuffer<u64>,
     signs: &DeviceBuffer<u8>,
+    qwarp_fallback: bool,
 ) -> Result<SortedP2Output, MoeError> {
     if gate_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * IQ2_BLOCK_BYTES
         || up_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * IQ2_BLOCK_BYTES
@@ -633,52 +967,100 @@ fn run_sorted_p2_moe(
     let mut gate = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
     let mut up = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
     let mut mid = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
-    module.moe_gate_up_mid_sorted_p2_qwarp32_kernel(
-        substrate.stream(),
-        LaunchConfig {
-            grid_dim: (EXPERT_MID_DIM.div_ceil(16), PAIR_COUNT.div_ceil(2), 1),
-            block_dim: (THREADS, 1, 1),
-            shared_mem_bytes: 0,
-        },
-        EXPERT_IN_DIM / QK_K as u32,
-        EXPERT_MID_DIM,
-        N_ROUTED,
-        PAIR_COUNT,
-        CLAMP,
-        gate_weights,
-        up_weights,
-        &input_q.scales,
-        &input_q.values,
-        &sorted_pairs,
-        selected,
-        route_weights,
-        grids,
-        signs,
-        &mut gate,
-        &mut up,
-        &mut mid,
-    )?;
+    if qwarp_fallback {
+        module.moe_gate_up_mid_sorted_qwarp32_kernel(
+            substrate.stream(),
+            LaunchConfig {
+                grid_dim: (EXPERT_MID_DIM.div_ceil(32), PAIR_COUNT, 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
+            EXPERT_IN_DIM / QK_K as u32,
+            EXPERT_MID_DIM,
+            N_ROUTED,
+            CLAMP,
+            gate_weights,
+            up_weights,
+            &input_q.scales,
+            &input_q.values,
+            &sorted_pairs,
+            selected,
+            route_weights,
+            grids,
+            signs,
+            &mut gate,
+            &mut up,
+            &mut mid,
+        )?;
+    } else {
+        module.moe_gate_up_mid_sorted_p2_qwarp32_kernel(
+            substrate.stream(),
+            LaunchConfig {
+                grid_dim: (EXPERT_MID_DIM.div_ceil(16), PAIR_COUNT.div_ceil(2), 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
+            EXPERT_IN_DIM / QK_K as u32,
+            EXPERT_MID_DIM,
+            N_ROUTED,
+            PAIR_COUNT,
+            CLAMP,
+            gate_weights,
+            up_weights,
+            &input_q.scales,
+            &input_q.values,
+            &sorted_pairs,
+            selected,
+            route_weights,
+            grids,
+            signs,
+            &mut gate,
+            &mut up,
+            &mut mid,
+        )?;
+    }
     let mid_q = quantize_rows(substrate, module, &mid, PAIR_COUNT)?;
     let mut down = substrate.zeroed::<f32>((PAIR_COUNT * OUT_DIM) as usize)?;
-    module.moe_down_sorted_p2_qwarp32_kernel(
-        substrate.stream(),
-        LaunchConfig {
-            grid_dim: (OUT_DIM.div_ceil(16), PAIR_COUNT.div_ceil(2), 1),
-            block_dim: (THREADS, 1, 1),
-            shared_mem_bytes: 0,
-        },
-        EXPERT_MID_DIM / QK_K as u32,
-        OUT_DIM,
-        N_ROUTED,
-        PAIR_COUNT,
-        down_weights,
-        &mid_q.scales,
-        &mid_q.values,
-        &mid_q.bsums,
-        &sorted_pairs,
-        selected,
-        &mut down,
-    )?;
+    if qwarp_fallback {
+        module.moe_down_sorted_qwarp32_kernel(
+            substrate.stream(),
+            LaunchConfig {
+                grid_dim: (OUT_DIM.div_ceil(32), PAIR_COUNT, 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
+            EXPERT_MID_DIM / QK_K as u32,
+            OUT_DIM,
+            N_ROUTED,
+            down_weights,
+            &mid_q.scales,
+            &mid_q.values,
+            &mid_q.bsums,
+            &sorted_pairs,
+            selected,
+            &mut down,
+        )?;
+    } else {
+        module.moe_down_sorted_p2_qwarp32_kernel(
+            substrate.stream(),
+            LaunchConfig {
+                grid_dim: (OUT_DIM.div_ceil(16), PAIR_COUNT.div_ceil(2), 1),
+                block_dim: (THREADS, 1, 1),
+                shared_mem_bytes: 0,
+            },
+            EXPERT_MID_DIM / QK_K as u32,
+            OUT_DIM,
+            N_ROUTED,
+            PAIR_COUNT,
+            down_weights,
+            &mid_q.scales,
+            &mid_q.values,
+            &mid_q.bsums,
+            &sorted_pairs,
+            selected,
+            &mut down,
+        )?;
+    }
     let mut out = substrate.zeroed::<f32>((N_TOKENS * OUT_DIM) as usize)?;
     module.moe_sum_kernel(
         substrate.stream(),
@@ -694,6 +1076,95 @@ fn run_sorted_p2_moe(
         offsets,
         cursors,
         sorted_pairs,
+        gate,
+        up,
+        mid,
+        down,
+        out,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_generic_qwarp_single(
+    substrate: &CudaOxideSubstrate,
+    module: &kernels::LoadedModule,
+    gate_weights: &DeviceBuffer<u8>,
+    up_weights: &DeviceBuffer<u8>,
+    down_weights: &DeviceBuffer<u8>,
+    x: &DeviceBuffer<f32>,
+    selected: &DeviceBuffer<i32>,
+    route_weights: &DeviceBuffer<f32>,
+    grids: &DeviceBuffer<u64>,
+    signs: &DeviceBuffer<u8>,
+) -> Result<GenericQwarpOutput, MoeError> {
+    if gate_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * IQ2_BLOCK_BYTES
+        || up_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * IQ2_BLOCK_BYTES
+        || down_weights.len() < MODEL_EXPERTS * OUT_DIM as usize * Q2_BLOCK_BYTES
+        || x.len() < EXPERT_IN_DIM as usize
+        || selected.len() < N_ROUTED as usize
+        || route_weights.len() < N_ROUTED as usize
+        || grids.len() < IQ2_GRIDS.len()
+        || signs.len() < IQ2_SIGNS.len()
+    {
+        return Err(MoeError::InvalidShape);
+    }
+    let input_q = quantize_rows(substrate, module, x, 1)?;
+    let mut gate = substrate.zeroed::<f32>((N_ROUTED * EXPERT_MID_DIM) as usize)?;
+    let mut up = substrate.zeroed::<f32>((N_ROUTED * EXPERT_MID_DIM) as usize)?;
+    let mut mid = substrate.zeroed::<f32>((N_ROUTED * EXPERT_MID_DIM) as usize)?;
+    module.moe_gate_up_mid_qwarp32_kernel(
+        substrate.stream(),
+        LaunchConfig {
+            grid_dim: (EXPERT_MID_DIM.div_ceil(128), N_ROUTED, 1),
+            block_dim: (THREADS, 1, 1),
+            shared_mem_bytes: 0,
+        },
+        EXPERT_IN_DIM / QK_K as u32,
+        EXPERT_MID_DIM,
+        N_ROUTED,
+        CLAMP,
+        gate_weights,
+        up_weights,
+        &input_q.scales,
+        &input_q.values,
+        selected,
+        route_weights,
+        grids,
+        signs,
+        &mut gate,
+        &mut up,
+        &mut mid,
+    )?;
+    let mid_q = quantize_rows(substrate, module, &mid, N_ROUTED)?;
+    let mut down = substrate.zeroed::<f32>((N_ROUTED * OUT_DIM) as usize)?;
+    module.moe_down_qwarp32_kernel(
+        substrate.stream(),
+        LaunchConfig {
+            grid_dim: (OUT_DIM.div_ceil(32), N_ROUTED, 1),
+            block_dim: (THREADS, 1, 1),
+            shared_mem_bytes: 0,
+        },
+        EXPERT_MID_DIM / QK_K as u32,
+        OUT_DIM,
+        N_ROUTED,
+        down_weights,
+        &mid_q.scales,
+        &mid_q.values,
+        &mid_q.bsums,
+        selected,
+        &mut down,
+    )?;
+    let mut out = substrate.zeroed::<f32>(OUT_DIM as usize)?;
+    module.moe_sum_kernel(
+        substrate.stream(),
+        one_dimensional_launch(OUT_DIM),
+        OUT_DIM,
+        N_ROUTED,
+        1,
+        &down,
+        &mut out,
+    )?;
+    Ok(GenericQwarpOutput {
         gate,
         up,
         mid,
@@ -981,6 +1452,36 @@ fn assert_output(
     assert_close(&substrate.download(&actual.mid)?, &expected.mid);
     assert_close(&substrate.download(&actual.down)?, &expected.down);
     assert_close(&substrate.download(&actual.out)?, &expected.out);
+    Ok(())
+}
+
+fn assert_generic_qwarp_output(
+    substrate: &CudaOxideSubstrate,
+    actual: &GenericQwarpOutput,
+    expected: &ExpectedSortedP2Output,
+) -> Result<(), DriverError> {
+    let pair_values = (N_ROUTED * EXPERT_MID_DIM) as usize;
+    let down_values = (N_ROUTED * OUT_DIM) as usize;
+    assert_close(
+        &substrate.download(&actual.gate)?,
+        &expected.gate[..pair_values],
+    );
+    assert_close(
+        &substrate.download(&actual.up)?,
+        &expected.up[..pair_values],
+    );
+    assert_close(
+        &substrate.download(&actual.mid)?,
+        &expected.mid[..pair_values],
+    );
+    assert_close(
+        &substrate.download(&actual.down)?,
+        &expected.down[..down_values],
+    );
+    assert_close(
+        &substrate.download(&actual.out)?,
+        &expected.out[..OUT_DIM as usize],
+    );
     Ok(())
 }
 

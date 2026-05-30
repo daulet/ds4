@@ -2895,6 +2895,17 @@ synchronized cached Q8/IQ2/Q2 inputs and row512, row1024, and row2048
 gate/down output equivalence. It leaves generic/sorted qwarp fallback
 projection, hyperconnection, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2f Rust CUDA routed MoE qwarp fallback smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_qwarp_fallback_smoke.py --negative-test
+```
+
+The fixture records current-C selectable qwarp fallback behavior on B300:
+single-token no-decode-LUT generic projection and batched
+no-expert-tiles/no-P2 sorted projection. It leaves hyperconnection, runtime
+route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

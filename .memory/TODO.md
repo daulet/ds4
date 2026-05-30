@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2f
+- Status: active; split beginning with M14.5a through M14.5d
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -9002,6 +9002,28 @@
 
 ##### M14.5c2f: Generic And Sorted Qwarp Quantized Routed MoE
 
-- Status: active
+- Status: done
 - Goal: port current-C quantized fallback projections selected when
   decode-LUT or sorted-P2/expert-tile scheduling is disabled.
+- Evidence:
+  - Added opt-in `DS4_CUDA_MOE_QWARP_FALLBACK=1` generic single-token and
+    sorted no-P2 kernels in
+    `rust/ds4-cuda/src/bin/routed_moe_sorted_p2_smoke.rs`.
+  - Captured B300 evidence in
+    `ds4-parity/baselines/backend/m14.5c2f/routed-moe-qwarp-fallback-smoke.json`
+    with comparator
+    `ds4-parity/check_routed_moe_qwarp_fallback_smoke.py --negative-test`.
+  - Live B300 execution emitted portable `sm_80` PTX through libdevice,
+    matched generic and sorted qwarp gate/down/summed output, and passed
+    feature tests with 86 tests. The local CUDA-feature build is blocked
+    because `/usr/local/cuda/include/cuda.h` is absent on this Mac.
+    Hyperconnection, runtime route activation, and C CUDA removal remain
+    unclaimed. Local formatting, diff and library tests, the M14.5c2f
+    comparator, retained selector checks, and unified parity passed with 170
+    passed, 45 skipped, and 0 failed.
+
+##### M14.5d: Hyperconnection Split And Expansion Kernels
+
+- Status: active
+- Goal: port current-C hyperconnection split, weighted-sum, expansion, and
+  output-weight kernel surfaces after routed-MoE compute closure.

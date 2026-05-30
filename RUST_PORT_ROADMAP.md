@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2f.
+- Status: active; split beginning with M14.5a through M14.5d.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -9088,9 +9088,42 @@ Stage split:
 
 ##### M14.5c2f: Generic And Sorted Qwarp Quantized Routed MoE
 
-- Status: active.
+- Status: done.
 - Goal: port the selectable current-C quantized fallback projections used
   when decode-LUT or sorted-P2/expert-tile scheduling is disabled.
+- Oracle: current-C `moe_gate_up_mid_qwarp32_kernel`,
+  `moe_down_qwarp32_kernel`, `moe_gate_up_mid_sorted_qwarp32_kernel`,
+  `moe_down_sorted_qwarp32_kernel`, and their selector branches.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2f/routed-moe-qwarp-fallback-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_qwarp_fallback_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in single-token no-decode-LUT qwarp gate/up
+  with generic non-direct down/sum and batched no-expert-tiles/no-P2 sorted
+  qwarp gate/down/sum execution over already validated Q8 and sorted-pair
+  surfaces. Hyperconnection, runtime graph integration, default route
+  activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added `DS4_CUDA_MOE_QWARP_FALLBACK=1`-selected generic and sorted qwarp
+    kernels in the existing sorted-P2 executable-local Rust smoke binary.
+  - Live B300 cargo-oxide execution found eleven kernels, emitted portable
+    `sm_80` PTX through libdevice, and matched generic single-token and
+    sorted no-P2 gate/down/summed output on `NVIDIA B300 SXM6 AC`.
+  - B300 feature tests passed with 86 tests. The local CUDA-feature build is
+    unavailable on this Mac because `/usr/local/cuda/include/cuda.h` is
+    absent; B300 is the execution proof.
+  - Local formatting, diff and library tests, the M14.5c2f comparator, the
+    retained selector checks, and unified parity passed with 170 passed, 45
+    skipped, and 0 failed.
+  - Hyperconnection, runtime graph integration, default route activation, and
+    C CUDA removal remain unclaimed.
+
+##### M14.5d: Hyperconnection Split And Expansion Kernels
+
+- Status: active.
+- Goal: port the remaining current-C hyperconnection split, weighted-sum,
+  expansion, and output-weight kernel surfaces after routed-MoE compute
+  closure.
 
 ## Removal Criteria for C Host Code
 
