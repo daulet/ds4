@@ -9503,10 +9503,10 @@ Stage split:
 
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
-- Status: active; split into M14.6b2b2b2b2a and M14.6b2b2b2b2b because
-  public ABI linkage through the already validated device-copy cache is
-  separable from registered/HMM/fd-backed and environment-selected residency
-  policy.
+- Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1, and
+  M14.6b2b2b2b2b2 because baseline public linkage and bounded registered-range
+  fallback can be validated separately from pageable HMM/fd-backed and
+  environment-selected residency policy.
 - Goal: export the model-map, file-descriptor, map-range, and cache-range
   control surfaces needed to substitute Rust beneath model-backed runtime
   callers without reducing the current-C residency policy contract.
@@ -9550,11 +9550,52 @@ Stage split:
     preload/copy selection, q8/f16 cache hooks, whole-archive retention, and
     the generated `.note.GNU-stack` linker warning remain open.
 
-##### M14.6b2b2b2b2b: Registered HMM And Fd-Backed Model-Control Policy
+##### M14.6b2b2b2b2b1: Registered Attempt And Device-Copy Fallback ABI
+
+- Status: done.
+- Goal: connect a safely bounded read-only registered caller-map attempt and
+  explicit device-copy fallback to the public cached-range ABI without
+  claiming pageable HMM, fd-backed staging, remaining graph compute, or route
+  promotion.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b1/abi-model-control-registered-fallback-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_registered_fallback_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now retains either a
+    `ReadOnlyRegisteredHostMemory` guard with its adjusted requested device
+    pointer or the previous `DeviceBuffer` fallback. It only forms the
+    page-rounded registered slice when that slice is wholly inside the
+    caller-declared model mapping; otherwise it uses device copy.
+  - The live registered-range probe on `ds4-rust-port-b300` (`NVIDIA B300
+    SXM6 AC`) observes `read_only_registration_error_code=801`,
+    `mmap_device_copy_fallback=true`, and `fallback_readback_matches=true`.
+    A C-linked consumer then passes a page-aligned model mapping through
+    `ds4_gpu_cache_model_range`, consumes it through weighted RMS with matching
+    output, and `nm` confirms the 29 exported `ds4_gpu_*` symbols are unchanged.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 95 tests; local
+    feature-gated compilation remains blocked by the missing local CUDA header
+    at `/usr/local/cuda/include/cuda.h`. B300 `cargo test --locked --release
+    -p ds4-cuda --features cuda-oxide-kernels --lib` passes with 97 tests.
+  - `check_cuda_abi_model_control_registered_fallback_smoke.py
+    --negative-test` passes with 94 checks, and unified parity passes with 181
+    passed, 45 skipped, and no failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the source, C oracle, comparator, B300 probe, and public C-linked proof,
+    but timed out after 60 seconds without completed findings. Self-review
+    retained synchronization before registration release and kept pageable
+    HMM, fd staging, and cross-range registration-disable policy outside this
+    leaf.
+  - Current C disables later registration attempts after selected unsupported
+    errors; that optimization, pageable HMM/prefetch, fd-backed direct-I/O,
+    preload/copy environment selection, q8/f16 cache hooks, whole-archive
+    retention, and the generated `.note.GNU-stack` linker warning remain open.
+
+##### M14.6b2b2b2b2b2: Pageable HMM And Fd-Backed Model-Control Policy
 
 - Status: active.
-- Goal: connect the independently validated registered mapped-host, pageable
-  HMM/prefetch, fd-backed direct-I/O staging, preload/copy selection, and
+- Goal: connect the independently validated pageable HMM/prefetch, fd-backed
+  direct-I/O staging, registration-disable, preload/copy selection, and
   cache-policy branches to the public control ABI without changing output
   semantics or prematurely promoting the runtime route.
 

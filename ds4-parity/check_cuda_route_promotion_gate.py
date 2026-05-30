@@ -195,6 +195,7 @@ def validate_wiring(report: ReportState, texts: dict[str, str]) -> None:
                 "M14.6b2b2b2a Plain RMS Norm ABI Export",
                 "M14.6b2b2b2b1 Weighted RMS Device-Copy ABI Export",
                 "M14.6b2b2b2b2a Basic Model-Control Device-Copy ABI Export",
+                "M14.6b2b2b2b2b1 Registered Attempt And Device-Copy Fallback ABI",
             ]
         ),
         "active stage missing",

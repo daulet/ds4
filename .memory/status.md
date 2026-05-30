@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b Registered HMM And Fd-Backed Model-Control Policy
+- Active item: M14.6b2b2b2b2b2 Pageable HMM And Fd-Backed Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,22 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b1 Registered Attempt And Device-Copy Fallback ABI adds a
+  page-bounded read-only registered-host attempt to the public cached-range
+  helper and retains the existing synchronized device-copy fallback when the
+  attempt is unsafe or rejected. The B300 registered-range probe reports CUDA
+  error code 801 with matching device-copy fallback, and a C-linked public ABI
+  consumer passes a page-aligned cached-range weighted RMS call with 29
+  unchanged exports. Local default library tests pass with 95 tests; local
+  feature-gated compilation remains blocked by the absent CUDA header; B300
+  release-feature tests pass with 97 tests. The registered-fallback checker
+  passes with 94 checks, and unified parity passes with 181 passed, 45
+  skipped, and no failures. The required non-interactive Claude adversarial
+  review timed out after 60 seconds without completed findings. Pageable
+  HMM/prefetch, fd staging, cross-range registration
+  disable, preload/copy selection, q8/f16 cache hooks, whole-archive
+  retention, the executable-stack warning, and remaining graph compute remain
+  active before route promotion.
 - M14.6b2b2b2b2a Basic Model-Control Device-Copy ABI Export adds Rust-owned
   `ds4_gpu_set_model_map`, `ds4_gpu_set_model_fd`,
   `ds4_gpu_set_model_map_range`, and `ds4_gpu_cache_model_range` surfaces.

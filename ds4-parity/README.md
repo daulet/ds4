@@ -3037,6 +3037,22 @@ registered/HMM/prefetch, fd-backed direct-I/O, preload selection, q8/f16
 cache policy, whole-archive retention, and the executable-stack warning
 remain open.
 
+Validate the M14.6b2b2b2b2b1 Rust CUDA registered-attempt device-copy
+fallback ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_registered_fallback_smoke.py --negative-test
+```
+
+The fixture combines the live B300 registered-range probe, which reports CUDA
+error code 801 and a matching device-copy fallback, with a C-linked public ABI
+consumer using a page-aligned model mapping. The Rust cache helper attempts
+read-only registration only when the rounded host range remains within the
+caller-declared map and otherwise retains the device-copy route. Pageable
+HMM/prefetch, fd-backed staging, cross-range registration-disable policy,
+preload selection, q8/f16 cache hooks, whole-archive retention, and the
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -3,7 +3,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Mutex;
 
-use cuda_core::{DeviceBuffer, IntoResult, ManagedBuffer};
+use cuda_core::{DeviceBuffer, IntoResult, ManagedBuffer, ReadOnlyRegisteredHostMemory};
 
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::abi_kernels::AbiKernelModule;
@@ -25,7 +25,27 @@ struct AbiModelRange {
     model_size: u64,
     offset: u64,
     bytes: u64,
-    device: DeviceBuffer<u8>,
+    storage: AbiModelRangeStorage,
+}
+
+enum AbiModelRangeStorage {
+    DeviceCopy(DeviceBuffer<u8>),
+    ReadOnlyRegistered {
+        _registration: ReadOnlyRegisteredHostMemory<'static, u8>,
+        requested_device_ptr: u64,
+    },
+}
+
+impl AbiModelRange {
+    fn device_ptr(&self) -> u64 {
+        match &self.storage {
+            AbiModelRangeStorage::DeviceCopy(buffer) => buffer.cu_deviceptr(),
+            AbiModelRangeStorage::ReadOnlyRegistered {
+                requested_device_ptr,
+                ..
+            } => *requested_device_ptr,
+        }
+    }
 }
 
 struct AbiModelControl {
@@ -84,6 +104,38 @@ fn with_abi_kernels<T>(
     operation(kernels.as_ref()?)
 }
 
+fn abi_registered_source(
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+) -> Option<(&'static [u8], u64)> {
+    let page_size = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok()?;
+    if page_size == 0 || !page_size.is_power_of_two() {
+        return None;
+    }
+    let model_start = model_map as usize;
+    let model_end = model_start.checked_add(usize::try_from(model_size).ok()?)?;
+    let start = model_start.checked_add(usize::try_from(offset).ok()?)?;
+    let end = start.checked_add(usize::try_from(bytes).ok()?)?;
+    let registered_start = start & !(page_size - 1);
+    let registered_end = end.checked_add(page_size - 1)? & !(page_size - 1);
+    if registered_start < model_start || registered_end > model_end {
+        return None;
+    }
+    // SAFETY: the public C ABI requires the active model mapping to remain
+    // readable and immutable until replacement or cleanup. The registered
+    // slice is fully contained in that declared mapping and its guard is
+    // retained in ABI_MODEL_RANGES until that completion boundary.
+    let source = unsafe {
+        std::slice::from_raw_parts(
+            registered_start as *const u8,
+            registered_end.checked_sub(registered_start)?,
+        )
+    };
+    Some((source, u64::try_from(start - registered_start).ok()?))
+}
+
 fn with_cached_abi_model_range<T>(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
@@ -110,10 +162,7 @@ fn with_cached_abi_model_range<T>(
                 .checked_add(range.bytes)
                 .is_some_and(|range_end| end <= range_end)
     }) {
-        let ptr = range
-            .device
-            .cu_deviceptr()
-            .checked_add(offset - range.offset)?;
+        let ptr = range.device_ptr().checked_add(offset - range.offset)?;
         return operation(ptr);
     }
     let offset = usize::try_from(offset).ok()?;
@@ -122,15 +171,36 @@ fn with_cached_abi_model_range<T>(
     // `model_size` bytes while this operation executes; bounds were checked
     // above and the asynchronous upload is synchronized before returning.
     let source = unsafe { std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes) };
-    let device = backend.upload(source).ok()?;
+    let registered_storage =
+        abi_registered_source(model_map, model_size, offset as u64, bytes as u64).and_then(
+            |(registered_source, device_offset)| {
+                let registration = backend
+                    .register_read_only_host_range(registered_source)
+                    .ok()?;
+                Some(AbiModelRangeStorage::ReadOnlyRegistered {
+                    requested_device_ptr: registration.cu_deviceptr().checked_add(device_offset)?,
+                    _registration: registration,
+                })
+            },
+        );
+    let storage = match registered_storage {
+        Some(storage) => storage,
+        None => AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?),
+    };
     backend.synchronize().ok()?;
-    let ptr = device.cu_deviceptr();
+    let ptr = match &storage {
+        AbiModelRangeStorage::DeviceCopy(device) => device.cu_deviceptr(),
+        AbiModelRangeStorage::ReadOnlyRegistered {
+            requested_device_ptr,
+            ..
+        } => *requested_device_ptr,
+    };
     ranges.push(AbiModelRange {
         model_map: model_map as usize,
         model_size,
         offset: offset as u64,
         bytes: bytes as u64,
-        device,
+        storage,
     });
     operation(ptr)
 }

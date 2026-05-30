@@ -1456,6 +1456,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b1 Rust CUDA registered-attempt device-copy fallback ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_model_control_registered_fallback_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

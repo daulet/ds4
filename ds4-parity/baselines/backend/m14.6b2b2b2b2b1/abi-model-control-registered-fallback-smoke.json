@@ -1,0 +1,108 @@
+{
+  "schema": "ds4.cuda_abi_model_control_registered_fallback_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b1",
+  "status": "b300-pass-staticlib-registered-attempt-device-copy-fallback-abi",
+  "goal": "Rust-own the page-bounded read-only registration attempt and explicit caller-map device-copy fallback behind the public cached model-range ABI without claiming pageable HMM, fd-backed staging, remaining graph compute, or route promotion.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "cuda_model_range_ptr",
+      "ds4_gpu_cache_model_range"
+    ],
+    "semantics": [
+      "current C page-aligns a requested immutable host range, attempts read-only mapped host registration, and caches its adjusted device pointer on success",
+      "current C falls back to device allocation and host-to-device copy after registration is rejected",
+      "current C disables repeated range registration attempts after selected registration errors; this cross-range optimization remains pending in Rust"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b1/abi_model_control_registered_fallback_link_smoke.c",
+    "range_path": "with_cached_abi_model_range retains either a ReadOnlyRegisteredHostMemory guard with an adjusted requested device pointer or a DeviceCopy fallback buffer",
+    "raw_mapping_boundary": "abi_registered_source only forms a page-rounded borrowed source slice when it is wholly inside the caller-declared model mapping",
+    "linked_compute_consumer": "ds4_gpu_rms_norm_weight_tensor consumes a page-bounded public cache request from a C-linked Rust static-library consumer",
+    "remaining_residency_policy_boundary": "pageable HMM/prefetch, fd-backed direct-I/O staging, cross-range registration-disable policy, environment-selected preload/copy policy, and q8/f16 cache hooks remain pending"
+  },
+  "exported_symbols": [
+    "ds4_gpu_add_tensor",
+    "ds4_gpu_begin_commands",
+    "ds4_gpu_cache_model_range",
+    "ds4_gpu_cleanup",
+    "ds4_gpu_directional_steering_project_tensor",
+    "ds4_gpu_end_commands",
+    "ds4_gpu_flush_commands",
+    "ds4_gpu_init",
+    "ds4_gpu_repeat_hc_tensor",
+    "ds4_gpu_rms_norm_plain_rows_tensor",
+    "ds4_gpu_rms_norm_plain_tensor",
+    "ds4_gpu_rms_norm_weight_rows_tensor",
+    "ds4_gpu_rms_norm_weight_tensor",
+    "ds4_gpu_set_model_fd",
+    "ds4_gpu_set_model_map",
+    "ds4_gpu_set_model_map_range",
+    "ds4_gpu_should_use_managed_kv_cache",
+    "ds4_gpu_swiglu_tensor",
+    "ds4_gpu_synchronize",
+    "ds4_gpu_tensor_alloc",
+    "ds4_gpu_tensor_alloc_managed",
+    "ds4_gpu_tensor_bytes",
+    "ds4_gpu_tensor_contents",
+    "ds4_gpu_tensor_copy",
+    "ds4_gpu_tensor_fill_f32",
+    "ds4_gpu_tensor_free",
+    "ds4_gpu_tensor_read",
+    "ds4_gpu_tensor_view",
+    "ds4_gpu_tensor_write"
+  ],
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_page_bounded_read_only_registration_attempt": true,
+    "owns_device_copy_fallback_after_registration_error": true,
+    "owns_pageable_hmm_policy": false,
+    "owns_fd_backed_staging_policy": false,
+    "owns_cross_range_registration_disable_policy": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 95,
+    "feature_release_test_count": 97,
+    "registration_probe": {
+      "command": "cargo run --locked -p ds4-cuda --features cuda-oxide-backend --bin ds4-cuda-model-registered-range-smoke -- /workspace/ds4/ds4flash.gguf",
+      "range_offset": 13,
+      "range_bytes": 4096,
+      "registration_page_size": 4096,
+      "read_only_registration_attempted": true,
+      "read_only_registration_supported": false,
+      "read_only_registration_error_code": 801,
+      "mmap_device_copy_fallback": true,
+      "fallback_readback_matches": true
+    },
+    "staticlib_build_command": "cargo build --locked --release --features cuda-oxide-kernels -p ds4-cuda --lib with rustc-codegen-cuda",
+    "c_link_command": "cc -I. -o /tmp/ds4_abi_model_control_registered_fallback_link_smoke ds4-parity/fixtures/backend/m14.6b2b2b2b2b1/abi_model_control_registered_fallback_link_smoke.c -Wl,--whole-archive target-staticlib/release/libds4_cuda.a -Wl,--no-whole-archive -lcuda -ldl -lpthread -lm -lrt -lutil",
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "page_aligned_model_map": true,
+      "page_bounded_public_range_consumed_by_weighted_rms": true,
+      "device_copy_fallback_output_matches": true,
+      "embedded_libdevice_module_loaded": true,
+      "temporary_link_artifacts_cleaned": true
+    }
+  },
+  "integration_risks": [
+    "B300 rejects the read-only registered-host operation with CUDA error code 801, so the public path is validated there through its required device-copy fallback rather than successful zero-copy execution",
+    "Rust does not yet preserve current C cross-range registration-disable policy after an unsupported registration error",
+    "pageable HMM/prefetch and fd-backed direct-I/O staging remain outside this public ABI leaf",
+    "production still compiles ds4_cuda.cu, and static-library consumers still require whole-archive retention before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2 Pageable HMM And Fd-Backed Model-Control Policy"
+}

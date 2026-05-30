@@ -9287,9 +9287,10 @@
 
 ##### M14.6b2b2b2b2: Public Model-Map Control ABI Assembly
 
-- Status: active; split into M14.6b2b2b2b2a and M14.6b2b2b2b2b because
-  baseline public linkage through device-copy caching can be validated
-  separately from optimized residency-policy selection.
+- Status: active; split through M14.6b2b2b2b2a, M14.6b2b2b2b2b1, and
+  M14.6b2b2b2b2b2 because baseline public linkage and bounded registered-range
+  fallback can be validated separately from remaining optimized
+  residency-policy selection.
 - Goal: export model-map, file-descriptor, map-range, and cache-range
   controls without weakening the current-C residency-policy contract.
 
@@ -9318,9 +9319,37 @@
   q8/f16 cache hooks, whole-archive retention, and the `.note.GNU-stack`
   warning remain pending.
 
-##### M14.6b2b2b2b2b: Registered HMM And Fd-Backed Model-Control Policy
+##### M14.6b2b2b2b2b1: Registered Attempt And Device-Copy Fallback ABI
+
+- Status: done
+- Goal: connect page-bounded read-only registered caller-map attempts and
+  explicit device-copy fallback to the public cache-range ABI without claiming
+  pageable HMM, fd-backed staging, graph-compute closure, or route promotion.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b1/abi-model-control-registered-fallback-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_registered_fallback_smoke.py --negative-test`.
+- Evidence: `rust/ds4-cuda/src/abi.rs` retains either a read-only registered
+  guard or a device-copy buffer and attempts registration only for a
+  page-rounded source wholly inside the declared raw model map. On B300 the
+  existing registration probe reports CUDA error code 801 and matching
+  device-copy fallback, while a C-linked public ABI consumer executes a
+  page-aligned cached-range weighted RMS call with matching output and 29
+  unchanged exports. Local default library tests pass with 95 tests; local
+  feature-gated compilation is blocked by the absent CUDA header; B300
+  release-feature tests pass with 97 tests. The registered-fallback checker
+  passes with 94 checks, and unified parity passes with 181 passed, 45
+  skipped, and no failures. The required non-interactive Claude review timed
+  out after 60 seconds without completed findings;
+  self-review kept synchronized lifetime release and left cross-range
+  registration-disable, pageable HMM/prefetch, fd staging, preload/copy
+  selection, q8/f16 cache hooks, whole-archive retention, and the
+  `.note.GNU-stack` warning pending.
+
+##### M14.6b2b2b2b2b2: Pageable HMM And Fd-Backed Model-Control Policy
 
 - Status: active
-- Goal: connect the validated residency-policy branches to the public
-  model-control ABI without claiming remaining graph compute or route
-  promotion.
+- Goal: connect pageable HMM/prefetch, fd-backed direct-I/O staging,
+  registration-disable, preload/copy selection, and remaining cache-policy
+  branches to the public model-control ABI without claiming remaining graph
+  compute or route promotion.
