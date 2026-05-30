@@ -11012,10 +11012,54 @@ Stage split:
 
 ################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb because the base
+  public Q8 matmul consumer can be compared independently from specialized
+  pair/HC graph consumers and route work.
 - Goal: connect public Q8 matmul consumers, remaining graph compute,
   whole-archive retention policy, and production route-promotion work
   without claiming C CUDA removal before those gates pass.
+
+################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba: Public Q8 Matmul ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_matmul_q8_0_tensor` through the current-C Q8
+  expanded BLAS and native prequantized dispatch boundary without claiming
+  specialized Q8 consumers or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba/abi-q8-matmul-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_q8_matmul_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the public Q8 matmul entry point,
+    consumes retained F32/F16 converted buffers for multi-token BLAS, and
+    retains ABI-owned quantized activation scratch across native Q8 launches.
+  - `rust/ds4-cuda/src/abi_kernels.rs` promotes activation quantization and
+    native warp8, batch-warp8, and generic matmul kernels, with CUDA-Oxide
+    DP4A for full blocks and scalar fallback selected by
+    `DS4_CUDA_NO_Q8_DP4A`.
+  - A C-linked B300 consumer proves default DP4A and its scalar-disable
+    override, batch-warp and generic override dispatch, F16 and F32 expanded
+    BLAS opt-in routes, and invalid-range rejection.
+  - Local library tests pass with 126 tests; B300 release-feature tests pass
+    with 133 tests; the static library exposes 36 Rust ABI symbols; all 36
+    preceding linked ABI consumers pass against the rebuilt archive with the
+    known generated embedded-object executable-stack warning.
+  - All 40 CUDA ABI comparators pass, and the unified parity report passes
+    with 212 passed, 45 skipped, and 0 failed.
+  - Pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+    completed findings.
+  - Specialized public Q8 pair/HC consumers, remaining graph compute,
+    whole-archive retention policy, route promotion, C CUDA removal, and the
+    generated embedded-object executable-stack warning remain open.
+
+################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: connect specialized public Q8 pair/HC consumers, remaining graph
+  compute, whole-archive retention policy, and production route-promotion
+  work without claiming C CUDA removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 

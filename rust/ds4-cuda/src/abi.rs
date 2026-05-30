@@ -13,12 +13,15 @@ use cuda_core::{
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::abi_kernels::AbiKernelModule;
 use crate::allocation_policy::managed_kv_decision;
-use crate::q8_policy::{q8_preload_format, Q8CacheOptions, Q8CacheState, Q8PreloadFormat};
+use crate::q8_policy::{
+    q8_f32_cache_allowed, q8_preload_format, Q8CacheOptions, Q8CacheState, Q8PreloadFormat,
+};
 use crate::substrate::CudaOxideSubstrate;
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::{
-    select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
-    F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch,
+    q8_dp4a_enabled, select_f16_pair_projection_path, select_f16_projection_path,
+    select_f32_projection_path, select_q8_matmul_path, F16PairProjectionDispatch,
+    F16PairProjectionPath, F16ProjectionDispatch, Q8MatmulDispatchOptions, Q8MatmulPath,
 };
 
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
@@ -26,6 +29,8 @@ static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_F16_ACTIVATIONS: Mutex<Option<DeviceBuffer<f16>>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_Q8_ACTIVATIONS: Mutex<Option<AbiQ8Activations>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_Q8_CACHE: Mutex<AbiQ8Cache> = Mutex::new(AbiQ8Cache {
     f16_ranges: Vec::new(),
@@ -87,7 +92,7 @@ struct AbiQ8F16Range {
     weight_bytes: u64,
     in_dim: u64,
     out_dim: u64,
-    _device: DeviceBuffer<f16>,
+    device: DeviceBuffer<f16>,
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -97,7 +102,7 @@ struct AbiQ8F32Range {
     weight_bytes: u64,
     in_dim: u64,
     out_dim: u64,
-    _device: DeviceBuffer<f32>,
+    device: DeviceBuffer<f32>,
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -105,6 +110,12 @@ struct AbiQ8Cache {
     f16_ranges: Vec<AbiQ8F16Range>,
     f32_ranges: Vec<AbiQ8F32Range>,
     state: Q8CacheState,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiQ8Activations {
+    quantized: DeviceBuffer<i8>,
+    scales: DeviceBuffer<f32>,
 }
 
 #[cfg(target_os = "linux")]
@@ -373,6 +384,31 @@ fn with_abi_f16_activations<T>(
     operation(activations.as_mut()?)
 }
 
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_q8_activations<T>(
+    backend: &CudaOxideSubstrate,
+    quantized_elements: usize,
+    scale_elements: usize,
+    operation: impl FnOnce(&mut AbiQ8Activations) -> Option<T>,
+) -> Option<T> {
+    if quantized_elements == 0 || scale_elements == 0 {
+        return None;
+    }
+    let mut activations = ABI_Q8_ACTIVATIONS.lock().ok()?;
+    if activations.as_ref().is_none_or(|current| {
+        current.quantized.len() < quantized_elements || current.scales.len() < scale_elements
+    }) {
+        if activations.is_some() {
+            backend.synchronize().ok()?;
+        }
+        *activations = Some(AbiQ8Activations {
+            quantized: backend.zeroed::<i8>(quantized_elements).ok()?,
+            scales: backend.zeroed::<f32>(scale_elements).ok()?,
+        });
+    }
+    operation(activations.as_mut()?)
+}
+
 fn abi_no_tf32_selected() -> bool {
     std::env::var_os("DS4_CUDA_NO_TF32").is_some()
 }
@@ -444,6 +480,56 @@ fn q8_range_matches<T>(
     ranges
         .iter()
         .any(|range| matches(range) == (model_map as usize, offset, weight_bytes, in_dim, out_dim))
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn abi_q8_f16_ptr(
+    model_map: *const c_void,
+    offset: u64,
+    weight_bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+) -> Option<u64> {
+    ABI_Q8_CACHE
+        .lock()
+        .ok()?
+        .f16_ranges
+        .iter()
+        .find_map(|range| {
+            ((
+                range.model_map,
+                range.offset,
+                range.weight_bytes,
+                range.in_dim,
+                range.out_dim,
+            ) == (model_map as usize, offset, weight_bytes, in_dim, out_dim))
+                .then(|| range.device.cu_deviceptr())
+        })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn abi_q8_f32_ptr(
+    model_map: *const c_void,
+    offset: u64,
+    weight_bytes: u64,
+    in_dim: u64,
+    out_dim: u64,
+) -> Option<u64> {
+    ABI_Q8_CACHE
+        .lock()
+        .ok()?
+        .f32_ranges
+        .iter()
+        .find_map(|range| {
+            ((
+                range.model_map,
+                range.offset,
+                range.weight_bytes,
+                range.in_dim,
+                range.out_dim,
+            ) == (model_map as usize, offset, weight_bytes, in_dim, out_dim))
+                .then(|| range.device.cu_deviceptr())
+        })
 }
 
 fn abi_page_bounded_source(
@@ -1562,6 +1648,7 @@ fn cache_abi_q8_f16_range(
     in_dim: u64,
     out_dim: u64,
     label: &str,
+    preload: bool,
 ) -> bool {
     let Some((elements, elements_usize, packed_bytes)) = abi_q8_shape(in_dim, out_dim) else {
         return true;
@@ -1602,16 +1689,20 @@ fn cache_abi_q8_f16_range(
         out_dim,
         out_bytes,
         backend.memory_capacity().ok(),
-        true,
+        preload,
     );
     if !admission.admitted {
-        cache.state.disable_optional_preload_after_failure();
+        if preload {
+            cache.state.disable_optional_preload_after_failure();
+        }
         return true;
     }
     let Ok(device) = backend.zeroed::<f16>(elements_usize) else {
         cache.f16_ranges.clear();
         cache.state.disable_f16_after_failure();
-        cache.state.disable_optional_preload_after_failure();
+        if preload {
+            cache.state.disable_optional_preload_after_failure();
+        }
         return true;
     };
     let launched = with_cached_abi_model_range(
@@ -1643,7 +1734,9 @@ fn cache_abi_q8_f16_range(
         let _ = backend.synchronize();
         cache.f16_ranges.clear();
         cache.state.disable_f16_after_failure();
-        cache.state.disable_optional_preload_after_failure();
+        if preload {
+            cache.state.disable_optional_preload_after_failure();
+        }
         return true;
     }
     cache.state.record_f16_success(out_bytes);
@@ -1653,7 +1746,7 @@ fn cache_abi_q8_f16_range(
         weight_bytes: bytes,
         in_dim,
         out_dim,
-        _device: device,
+        device,
     });
     true
 }
@@ -1736,7 +1829,7 @@ fn cache_abi_q8_f32_range(
         weight_bytes: bytes,
         in_dim,
         out_dim,
-        _device: device,
+        device,
     });
     true
 }
@@ -1788,6 +1881,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             }
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut activations) = ABI_F16_ACTIVATIONS.lock() {
+                *activations = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut activations) = ABI_Q8_ACTIVATIONS.lock() {
                 *activations = None;
             }
             #[cfg(feature = "cuda-oxide-kernels")]
@@ -2576,6 +2673,301 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f32_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
+    out: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: *const Ds4GpuTensor,
+    n_tok: u64,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(x) = (unsafe { tensor_ref(x) }) else {
+            return false;
+        };
+        let Some((_weight_elements, weight_elements_usize, weight_bytes)) =
+            abi_q8_shape(in_dim, out_dim)
+        else {
+            return false;
+        };
+        let Some(x_elements) = in_dim.checked_mul(n_tok) else {
+            return false;
+        };
+        let Some(out_elements) = out_dim.checked_mul(n_tok) else {
+            return false;
+        };
+        let Some(x_bytes) = x_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(out_bytes) = out_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_tok == 0
+            || weight_offset > model_size
+            || weight_bytes > model_size - weight_offset
+            || x.bytes < x_bytes
+            || out.bytes < out_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                weight_offset,
+                weight_bytes,
+                |packed_weight_ptr| {
+                    let blas = (n_tok > 1).then(|| backend.blas_handle().ok()).flatten();
+                    if blas.is_some()
+                        && abi_q8_f32_ptr(model_map, weight_offset, weight_bytes, in_dim, out_dim)
+                            .is_none()
+                        && q8_f32_cache_allowed(
+                            abi_q8_cache_options(),
+                            Some("q8_0"),
+                            in_dim,
+                            out_dim,
+                        )
+                    {
+                        let _ = cache_abi_q8_f32_range(
+                            backend,
+                            model_map,
+                            model_size,
+                            weight_offset,
+                            weight_bytes,
+                            in_dim,
+                            out_dim,
+                        );
+                    }
+                    let expanded_f32_ptr = blas.as_ref().and_then(|_| {
+                        abi_q8_f32_ptr(model_map, weight_offset, weight_bytes, in_dim, out_dim)
+                    });
+                    if blas.is_some() && expanded_f32_ptr.is_none() {
+                        let _ = cache_abi_q8_f16_range(
+                            backend,
+                            model_map,
+                            model_size,
+                            weight_offset,
+                            weight_bytes,
+                            in_dim,
+                            out_dim,
+                            "q8_0",
+                            false,
+                        );
+                    }
+                    let expanded_f16_ptr = blas.as_ref().and_then(|_| {
+                        abi_q8_f16_ptr(model_map, weight_offset, weight_bytes, in_dim, out_dim)
+                    });
+                    let mut path = select_q8_matmul_path(Q8MatmulDispatchOptions {
+                        cublas_ready: blas.is_some(),
+                        expanded_f32_blas_ready: expanded_f32_ptr.is_some(),
+                        expanded_f16_blas_ready: expanded_f16_ptr.is_some(),
+                        n_tokens: n_tok,
+                        blocks: in_dim.div_ceil(32),
+                        no_batch_warp: std::env::var_os("DS4_CUDA_NO_Q8_BATCH_WARP").is_some(),
+                    });
+                    if path == Q8MatmulPath::ExpandedF32Blas {
+                        let Some(blas) = blas.as_ref() else {
+                            return Some(false);
+                        };
+                        if !apply_abi_blas_math(blas) {
+                            return Some(false);
+                        }
+                        let Some(x_elements) = usize::try_from(x_elements).ok() else {
+                            return Some(false);
+                        };
+                        let Some(out_elements) = usize::try_from(out_elements).ok() else {
+                            return Some(false);
+                        };
+                        let Some(in_dim) = usize::try_from(in_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(out_dim) = usize::try_from(out_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(n_tok) = usize::try_from(n_tok).ok() else {
+                            return Some(false);
+                        };
+                        let weights = ManuallyDrop::new(unsafe {
+                            DeviceBuffer::<f32>::from_raw_parts(
+                                expanded_f32_ptr?,
+                                weight_elements_usize,
+                                backend.context().clone(),
+                            )
+                        });
+                        let activations = ManuallyDrop::new(unsafe {
+                            DeviceBuffer::<f32>::from_raw_parts(
+                                x.device_ptr(),
+                                x_elements,
+                                backend.context().clone(),
+                            )
+                        });
+                        let mut output = ManuallyDrop::new(unsafe {
+                            DeviceBuffer::<f32>::from_raw_parts(
+                                out.device_ptr(),
+                                out_elements,
+                                backend.context().clone(),
+                            )
+                        });
+                        return Some(
+                            blas.project_f32(
+                                backend.stream(),
+                                ProjectionConfig::new(in_dim, out_dim, n_tok),
+                                &weights,
+                                &activations,
+                                &mut output,
+                            )
+                            .is_ok(),
+                        );
+                    }
+                    if path == Q8MatmulPath::ExpandedF16Blas {
+                        let Some(blas) = blas.as_ref() else {
+                            return Some(false);
+                        };
+                        if !apply_abi_blas_math(blas) {
+                            return Some(false);
+                        }
+                        let Some(x_elements) = usize::try_from(x_elements).ok() else {
+                            return Some(false);
+                        };
+                        let Some(out_elements) = usize::try_from(out_elements).ok() else {
+                            return Some(false);
+                        };
+                        let Some(in_dim) = usize::try_from(in_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(out_dim) = usize::try_from(out_dim).ok() else {
+                            return Some(false);
+                        };
+                        let Some(n_tok) = usize::try_from(n_tok).ok() else {
+                            return Some(false);
+                        };
+                        let projected =
+                            with_abi_f16_activations(backend, x_elements, |activations| {
+                                with_abi_kernels(backend, |kernels| {
+                                    if !unsafe {
+                                        kernels.f32_to_f16_tensor(
+                                            backend.stream(),
+                                            x.device_ptr(),
+                                            activations.cu_deviceptr(),
+                                            x_elements as u64,
+                                        )
+                                    } {
+                                        return Some(false);
+                                    }
+                                    let weights = ManuallyDrop::new(unsafe {
+                                        DeviceBuffer::<f16>::from_raw_parts(
+                                            expanded_f16_ptr?,
+                                            weight_elements_usize,
+                                            backend.context().clone(),
+                                        )
+                                    });
+                                    let mut output = ManuallyDrop::new(unsafe {
+                                        DeviceBuffer::<f32>::from_raw_parts(
+                                            out.device_ptr(),
+                                            out_elements,
+                                            backend.context().clone(),
+                                        )
+                                    });
+                                    Some(
+                                        blas.project_f16_f32(
+                                            backend.stream(),
+                                            ProjectionConfig::new(in_dim, out_dim, n_tok),
+                                            &weights,
+                                            activations,
+                                            &mut output,
+                                        )
+                                        .is_ok(),
+                                    )
+                                })
+                            })
+                            .unwrap_or(false);
+                        if projected {
+                            return Some(true);
+                        }
+                        let _ = backend.synchronize();
+                        if let Ok(mut cache) = ABI_Q8_CACHE.lock() {
+                            cache.f16_ranges.clear();
+                            cache.state.disable_f16_after_failure();
+                        }
+                        path = select_q8_matmul_path(Q8MatmulDispatchOptions {
+                            cublas_ready: false,
+                            expanded_f32_blas_ready: false,
+                            expanded_f16_blas_ready: false,
+                            n_tokens: n_tok as u64,
+                            blocks: (in_dim as u64).div_ceil(32),
+                            no_batch_warp: std::env::var_os("DS4_CUDA_NO_Q8_BATCH_WARP").is_some(),
+                        });
+                    }
+                    let blocks = in_dim.div_ceil(32);
+                    let Some(quantized_elements) = n_tok
+                        .checked_mul(blocks)
+                        .and_then(|value| value.checked_mul(32))
+                    else {
+                        return Some(false);
+                    };
+                    let Some(scale_elements) = n_tok.checked_mul(blocks) else {
+                        return Some(false);
+                    };
+                    let Some(quantized_elements) = usize::try_from(quantized_elements).ok() else {
+                        return Some(false);
+                    };
+                    let Some(scale_elements) = usize::try_from(scale_elements).ok() else {
+                        return Some(false);
+                    };
+                    with_abi_q8_activations(
+                        backend,
+                        quantized_elements,
+                        scale_elements,
+                        |activations| {
+                            with_abi_kernels(backend, |kernels| {
+                                if !unsafe {
+                                    kernels.quantize_q8_f32_tensor(
+                                        backend.stream(),
+                                        x.device_ptr(),
+                                        activations.quantized.cu_deviceptr(),
+                                        activations.scales.cu_deviceptr(),
+                                        in_dim,
+                                        blocks,
+                                        n_tok,
+                                    )
+                                } {
+                                    return Some(false);
+                                }
+                                Some(unsafe {
+                                    kernels.matmul_q8_tensor(
+                                        backend.stream(),
+                                        out.device_ptr(),
+                                        packed_weight_ptr,
+                                        activations.quantized.cu_deviceptr(),
+                                        activations.scales.cu_deviceptr(),
+                                        in_dim,
+                                        out_dim,
+                                        n_tok,
+                                        path,
+                                        q8_dp4a_enabled(
+                                            std::env::var_os("DS4_CUDA_NO_Q8_DP4A").is_some(),
+                                        ),
+                                    )
+                                })
+                            })
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn rms_norm_plain_rows_impl(
     out: *mut Ds4GpuTensor,
     x: *const Ds4GpuTensor,
@@ -3025,6 +3417,7 @@ pub unsafe extern "C" fn ds4_gpu_cache_q8_f16_range(
                     in_dim,
                     out_dim,
                     label.as_ref(),
+                    true,
                 ),
                 Some(Q8PreloadFormat::F32) => cache_abi_q8_f32_range(
                     backend, model_map, model_size, offset, bytes, in_dim, out_dim,

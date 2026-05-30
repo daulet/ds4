@@ -10470,7 +10470,44 @@
 
 ################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb because the base
+  public Q8 matmul consumer has a bounded linked comparator independently
+  from specialized pair/HC graph consumers and route work.
 - Goal: connect public Q8 matmul consumers, remaining graph compute,
   whole-archive retention policy, and production route-promotion work
   without claiming C CUDA removal before those gates pass.
+
+################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba: Public Q8 Matmul ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_matmul_q8_0_tensor` through current-C-compatible
+  expanded BLAS and native prequantized dispatch without claiming Q8
+  pair/HC consumers or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba/abi-q8-matmul-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_q8_matmul_smoke.py --negative-test`.
+- Evidence: Rust consumes retained Q8 F32/F16 converted ranges for
+  multi-token BLAS, retains ABI-owned quantized activation scratch for the
+  native routes, and embeds current-C-compatible quantize, warp8,
+  batch-warp8, generic, DP4A, and scalar-fallback kernels. A C-linked B300
+  consumer proves default DP4A and `DS4_CUDA_NO_Q8_DP4A`, batch-warp and
+  `DS4_CUDA_NO_Q8_BATCH_WARP`, opt-in F16 and F32 expanded BLAS, and invalid
+  range rejection. Local library tests pass with 126 tests; B300
+  release-feature tests pass with 133 tests; the static library exposes 36
+  Rust ABI symbols; all 36 preceding linked ABI consumers pass against the
+  rebuilt archive with the known executable-stack warning. All 40 CUDA ABI
+  comparators pass, and the unified parity report passes with 212 passed, 45
+  skipped, and 0 failed. Pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Specialized
+  Q8 pair/HC consumers, remaining graph compute, whole-archive retention,
+  route promotion, C CUDA removal, and the warning remain pending.
+
+################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active
+- Goal: connect specialized public Q8 pair/HC consumers, remaining graph
+  compute, whole-archive retention policy, and production route-promotion
+  work without claiming C CUDA removal before those gates pass.

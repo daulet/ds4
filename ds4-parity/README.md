@@ -3509,6 +3509,20 @@ matmul consumers, remaining graph compute, whole-archive retention policy,
 route promotion, C CUDA removal, and the embedded-object executable-stack
 warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba Rust CUDA
+public Q8 matmul ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_q8_matmul_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes `ds4_gpu_matmul_q8_0_tensor` through
+default DP4A, the scalar-disable override, native batched and generic
+dispatch, and opt-in F16 and F32 expanded BLAS routes. Specialized Q8
+pair/HC consumers, remaining graph compute, whole-archive retention policy,
+route promotion, C CUDA removal, and the embedded-object executable-stack
+warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

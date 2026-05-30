@@ -1,0 +1,73 @@
+{
+  "schema": "ds4.cuda_abi_q8_matmul_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-q8-matmul-abi",
+  "goal": "Rust-own the public Q8_0 matmul ABI through current-C-compatible expanded BLAS and native prequantized dispatch without claiming specialized Q8 consumers or route promotion.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_matmul_q8_0_tensor"
+    ],
+    "semantics": [
+      "current C resolves a packed Q8 model range, uses expanded F32 then F16 BLAS for eligible multi-token work, and otherwise quantizes F32 activations into native Q8 kernels",
+      "current C selects one-token warp8, eligible batched warp8, or generic native dispatch and enables DP4A unless DS4_CUDA_NO_Q8_DP4A is present",
+      "current C falls back to native Q8 after a failed expanded F16 BLAS attempt"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba/abi_q8_matmul_link_smoke.c",
+    "converted_blas_path": "ds4_gpu_matmul_q8_0_tensor consumes ABI_Q8_CACHE and retained ABI_F16_ACTIVATIONS before selecting project_f32 or project_f16_f32",
+    "native_dispatch_path": "ABI_Q8_ACTIVATIONS retains prequantized activation and scale scratch consumed by embedded warp8, batch-warp8, or generic kernels",
+    "dp4a_path": "embedded Q8 kernels select cuda_device integer::dp4a_i8 for full blocks unless DS4_CUDA_NO_Q8_DP4A is set",
+    "remaining_compute_boundary": "Q8 pair and HC expansion consumers, remaining graph compute, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 36,
+    "exported_compute_symbol_count": 13,
+    "public_gpu_abi_function_count": 81,
+    "consumes_q8_quality_controls": true,
+    "owns_matmul_q8_0_tensor": true,
+    "owns_expanded_blas_dispatch": true,
+    "owns_native_prequantized_dispatch": true,
+    "owns_dp4a_and_scalar_selection": true,
+    "owns_pair_or_hc_expand_consumers": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 126,
+    "feature_release_test_count": 133,
+    "staticlib_export_count": 36,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "native_single_token_dp4a_output_matches": true,
+      "native_scalar_disable_output_matches": true,
+      "native_batch_warp_output_matches": true,
+      "native_generic_disable_output_matches": true,
+      "expanded_f16_blas_output_matches": true,
+      "expanded_f32_blas_output_matches": true,
+      "invalid_range_rejected": true,
+      "embedded_q8_matmul_kernels_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 36,
+      "predecessor_relink_executable_stack_warning_count": 36
+    }
+  },
+  "integration_risks": [
+    "specialized Q8 pair and HC expansion consumers and remaining graph compute still route through C until separately exported and compared",
+    "production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

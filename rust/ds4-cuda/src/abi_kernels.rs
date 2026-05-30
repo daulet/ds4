@@ -7,7 +7,7 @@ use cuda_core::embedded::{
     embedded_modules_from_current_exe, ArtifactPayloadKind, EmbeddedModuleError,
 };
 use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, LaunchConfig};
-use cuda_device::{cuda_module, kernel, thread, DisjointSlice, SharedArray};
+use cuda_device::{cuda_module, integer, kernel, thread, warp, DisjointSlice, SharedArray};
 use cuda_host::ltoir::{self, LtoirError};
 
 const THREADS_PER_BLOCK: u32 = 256;
@@ -289,6 +289,264 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_quantize_q8_0_f32_kernel(
+        in_dim: u64,
+        blocks: u64,
+        n_tok: u64,
+        x: &[f32],
+        mut xq: DisjointSlice<i8>,
+        mut xscale: DisjointSlice<f32>,
+    ) {
+        static mut VALUES: SharedArray<f32, 32> = SharedArray::UNINIT;
+
+        let block = thread::blockIdx_x() as u64;
+        let token = thread::blockIdx_y() as u64;
+        let lane = thread::threadIdx_x() as usize;
+        if block >= blocks || token >= n_tok {
+            return;
+        }
+        let start = block * 32;
+        let remaining = in_dim - start;
+        let count = if remaining < 32 { remaining } else { 32 } as usize;
+        let input_base = token as usize * in_dim as usize + start as usize;
+        let value = if lane < count {
+            x[input_base + lane]
+        } else {
+            0.0
+        };
+        let magnitude = if value < 0.0 { -value } else { value };
+        unsafe {
+            VALUES[lane] = magnitude;
+        }
+        thread::sync_threads();
+
+        let mut stride = 16;
+        while stride > 0 {
+            if lane < stride {
+                unsafe {
+                    if VALUES[lane + stride] > VALUES[lane] {
+                        VALUES[lane] = VALUES[lane + stride];
+                    }
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+
+        let scale = unsafe { VALUES[0] } / 127.0;
+        let inverse = if scale != 0.0 { 1.0 / scale } else { 0.0 };
+        let output_base = (token * blocks + block) as usize * 32;
+        if lane == 0 {
+            unsafe {
+                *xscale.get_unchecked_mut((token * blocks + block) as usize) = scale;
+            }
+        }
+        let quantized = if lane < count {
+            clamp_q8(round_ties_even(value * inverse))
+        } else {
+            0
+        };
+        unsafe {
+            *xq.get_unchecked_mut(output_base + lane) = quantized;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_matmul_q8_0_preq_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        n_tok: u64,
+        blocks: u64,
+        use_dp4a: u32,
+        weights: &[u8],
+        xq: &[i8],
+        xscale: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x() as u64;
+        let token = thread::blockIdx_y() as u64;
+        let tid = thread::threadIdx_x() as usize;
+        if row >= out_dim || token >= n_tok {
+            return;
+        }
+        let mut acc = 0.0_f32;
+        let mut block = tid as u64;
+        while block < blocks {
+            let remaining = in_dim - block * 32;
+            let count = if remaining < 32 { remaining } else { 32 };
+            let weight_base = ((row * blocks + block) * 34) as usize;
+            let scale_bits = weights[weight_base] as u16 | ((weights[weight_base + 1] as u16) << 8);
+            let weight_scale = f16::from_bits(scale_bits) as f32;
+            let xq_base = ((token * blocks + block) * 32) as usize;
+            let dot = q8_dot(weights, weight_base, xq, xq_base, count, use_dp4a != 0);
+            acc += weight_scale * xscale[(token * blocks + block) as usize] * dot as f32;
+            block += 256;
+        }
+        unsafe {
+            PARTIAL[tid] = acc;
+        }
+        thread::sync_threads();
+        let mut stride = 128_usize;
+        while stride > 0 {
+            if tid < stride {
+                unsafe {
+                    PARTIAL[tid] += PARTIAL[tid + stride];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        if tid == 0 {
+            unsafe {
+                *out.get_unchecked_mut(token as usize * out_dim as usize + row as usize) =
+                    PARTIAL[0];
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_matmul_q8_0_preq_warp8_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        blocks: u64,
+        use_dp4a: u32,
+        weights: &[u8],
+        xq: &[i8],
+        xscale: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let row = thread::blockIdx_x() as u64 * 8 + (thread::threadIdx_x() >> 5) as u64;
+        let lane = (thread::threadIdx_x() & 31) as u64;
+        if row >= out_dim {
+            return;
+        }
+        let mut acc = 0.0_f32;
+        let mut block = lane;
+        while block < blocks {
+            let remaining = in_dim - block * 32;
+            let count = if remaining < 32 { remaining } else { 32 };
+            let weight_base = ((row * blocks + block) * 34) as usize;
+            let scale_bits = weights[weight_base] as u16 | ((weights[weight_base + 1] as u16) << 8);
+            let weight_scale = f16::from_bits(scale_bits) as f32;
+            let xq_base = (block * 32) as usize;
+            let dot = q8_dot(weights, weight_base, xq, xq_base, count, use_dp4a != 0);
+            acc += weight_scale * xscale[block as usize] * dot as f32;
+            block += 32;
+        }
+        let mut offset = 16_u32;
+        while offset > 0 {
+            acc += warp::shuffle_down_f32(acc, offset);
+            offset >>= 1;
+        }
+        if lane == 0 {
+            unsafe {
+                *out.get_unchecked_mut(row as usize) = acc;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_matmul_q8_0_preq_batch_warp8_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        n_tok: u64,
+        blocks: u64,
+        use_dp4a: u32,
+        weights: &[u8],
+        xq: &[i8],
+        xscale: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let row = thread::blockIdx_x() as u64 * 8 + (thread::threadIdx_x() >> 5) as u64;
+        let token = thread::blockIdx_y() as u64;
+        let lane = (thread::threadIdx_x() & 31) as u64;
+        if row >= out_dim || token >= n_tok {
+            return;
+        }
+        let mut acc = 0.0_f32;
+        let mut block = lane;
+        while block < blocks {
+            let remaining = in_dim - block * 32;
+            let count = if remaining < 32 { remaining } else { 32 };
+            let weight_base = ((row * blocks + block) * 34) as usize;
+            let scale_bits = weights[weight_base] as u16 | ((weights[weight_base + 1] as u16) << 8);
+            let weight_scale = f16::from_bits(scale_bits) as f32;
+            let xq_base = ((token * blocks + block) * 32) as usize;
+            let dot = q8_dot(weights, weight_base, xq, xq_base, count, use_dp4a != 0);
+            acc += weight_scale * xscale[(token * blocks + block) as usize] * dot as f32;
+            block += 32;
+        }
+        let mut offset = 16_u32;
+        while offset > 0 {
+            acc += warp::shuffle_down_f32(acc, offset);
+            offset >>= 1;
+        }
+        if lane == 0 {
+            unsafe {
+                *out.get_unchecked_mut(token as usize * out_dim as usize + row as usize) = acc;
+            }
+        }
+    }
+
+    fn q8_dot(
+        weights: &[u8],
+        weight_base: usize,
+        xq: &[i8],
+        xq_base: usize,
+        count: u64,
+        use_dp4a: bool,
+    ) -> i32 {
+        let mut dot = 0_i32;
+        if use_dp4a && count == 32 {
+            let mut lane = 0_usize;
+            while lane < 32 {
+                let weight_word = (weights[weight_base + 2 + lane] as u32
+                    | (weights[weight_base + 2 + lane + 1] as u32) << 8
+                    | (weights[weight_base + 2 + lane + 2] as u32) << 16
+                    | (weights[weight_base + 2 + lane + 3] as u32) << 24)
+                    as i32;
+                let x_word = (xq[xq_base + lane] as u8 as u32
+                    | (xq[xq_base + lane + 1] as u8 as u32) << 8
+                    | (xq[xq_base + lane + 2] as u8 as u32) << 16
+                    | (xq[xq_base + lane + 3] as u8 as u32) << 24)
+                    as i32;
+                dot = integer::dp4a_i8(weight_word, x_word, dot);
+                lane += 4;
+            }
+        } else {
+            let mut lane = 0_u64;
+            while lane < count {
+                dot += (weights[weight_base + 2 + lane as usize] as i8 as i32)
+                    * xq[xq_base + lane as usize] as i32;
+                lane += 1;
+            }
+        }
+        dot
+    }
+
+    fn round_ties_even(value: f32) -> i32 {
+        let lower = value.floor();
+        let fraction = value - lower;
+        let mut rounded = lower as i32;
+        if fraction > 0.5 || (fraction == 0.5 && (rounded & 1) != 0) {
+            rounded += 1;
+        }
+        rounded
+    }
+
+    fn clamp_q8(value: i32) -> i8 {
+        if value > 127 {
+            127
+        } else if value < -128 {
+            -128
+        } else {
+            value as i8
+        }
+    }
+
+    #[kernel]
     pub fn abi_f32_to_f16_kernel(count: u64, x: &[f32], mut out: DisjointSlice<f16>) {
         let index = thread::index_1d();
         let offset = index.get();
@@ -540,6 +798,10 @@ pub(crate) struct AbiKernelModule {
     rms_norm_weight_kernel: CudaFunction,
     dequant_q8_0_to_f16_kernel: CudaFunction,
     dequant_q8_0_to_f32_kernel: CudaFunction,
+    quantize_q8_0_f32_kernel: CudaFunction,
+    matmul_q8_0_preq_kernel: CudaFunction,
+    matmul_q8_0_preq_warp8_kernel: CudaFunction,
+    matmul_q8_0_preq_batch_warp8_kernel: CudaFunction,
     f32_to_f16_kernel: CudaFunction,
     matmul_f16_kernel: CudaFunction,
     matmul_f16_serial_kernel: CudaFunction,
@@ -575,6 +837,18 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             dequant_q8_0_to_f32_kernel: module
                 .load_function("abi_dequant_q8_0_to_f32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            quantize_q8_0_f32_kernel: module
+                .load_function("abi_quantize_q8_0_f32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_q8_0_preq_kernel: module
+                .load_function("abi_matmul_q8_0_preq_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_q8_0_preq_warp8_kernel: module
+                .load_function("abi_matmul_q8_0_preq_warp8_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_q8_0_preq_batch_warp8_kernel: module
+                .load_function("abi_matmul_q8_0_preq_batch_warp8_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             f32_to_f16_kernel: module
                 .load_function("abi_f32_to_f16_kernel")
@@ -955,6 +1229,187 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.dequant_q8_0_to_f32_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn quantize_q8_f32_tensor(
+        &self,
+        stream: &CudaStream,
+        x_ptr: u64,
+        xq_ptr: u64,
+        xscale_ptr: u64,
+        in_dim: u64,
+        blocks: u64,
+        n_tok: u64,
+    ) -> bool {
+        let Ok(grid_x) = u32::try_from(blocks) else {
+            return false;
+        };
+        let Ok(grid_y) = u32::try_from(n_tok) else {
+            return false;
+        };
+        let config = LaunchConfig {
+            grid_dim: (grid_x, grid_y, 1),
+            block_dim: (32, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut in_dim = in_dim;
+        let mut blocks = blocks;
+        let mut n_tok = n_tok;
+        let mut x_ptr = x_ptr;
+        let mut x_len = in_dim * n_tok;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = n_tok * blocks * 32;
+        let mut xscale_ptr = xscale_ptr;
+        let mut xscale_len = n_tok * blocks;
+        let mut params = [
+            (&mut in_dim as *mut u64).cast::<c_void>(),
+            (&mut blocks as *mut u64).cast::<c_void>(),
+            (&mut n_tok as *mut u64).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+            (&mut xq_ptr as *mut u64).cast::<c_void>(),
+            (&mut xq_len as *mut u64).cast::<c_void>(),
+            (&mut xscale_ptr as *mut u64).cast::<c_void>(),
+            (&mut xscale_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates source activation bounds and retains both
+        // Q8 scratch allocations through the subsequent consumer launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.quantize_q8_0_f32_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn matmul_q8_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        weight_ptr: u64,
+        xq_ptr: u64,
+        xscale_ptr: u64,
+        in_dim: u64,
+        out_dim: u64,
+        n_tok: u64,
+        path: crate::Q8MatmulPath,
+        use_dp4a: bool,
+    ) -> bool {
+        let blocks = in_dim.div_ceil(32);
+        let Ok(grid_y) = u32::try_from(n_tok) else {
+            return false;
+        };
+        let (function, config) = match path {
+            crate::Q8MatmulPath::PrequantizedWarp8 => {
+                let Ok(grid_x) = u32::try_from(out_dim.div_ceil(8)) else {
+                    return false;
+                };
+                (
+                    &self.matmul_q8_0_preq_warp8_kernel,
+                    LaunchConfig {
+                        grid_dim: (grid_x, 1, 1),
+                        block_dim: (THREADS_PER_BLOCK, 1, 1),
+                        shared_mem_bytes: 0,
+                    },
+                )
+            }
+            crate::Q8MatmulPath::PrequantizedBatchWarp8 => {
+                let Ok(grid_x) = u32::try_from(out_dim.div_ceil(8)) else {
+                    return false;
+                };
+                (
+                    &self.matmul_q8_0_preq_batch_warp8_kernel,
+                    LaunchConfig {
+                        grid_dim: (grid_x, grid_y, 1),
+                        block_dim: (THREADS_PER_BLOCK, 1, 1),
+                        shared_mem_bytes: 0,
+                    },
+                )
+            }
+            crate::Q8MatmulPath::PrequantizedGeneric => {
+                let Ok(grid_x) = u32::try_from(out_dim) else {
+                    return false;
+                };
+                (
+                    &self.matmul_q8_0_preq_kernel,
+                    LaunchConfig {
+                        grid_dim: (grid_x, grid_y, 1),
+                        block_dim: (THREADS_PER_BLOCK, 1, 1),
+                        shared_mem_bytes: 0,
+                    },
+                )
+            }
+            crate::Q8MatmulPath::ExpandedF32Blas | crate::Q8MatmulPath::ExpandedF16Blas => {
+                return false;
+            }
+        };
+        let mut in_dim = in_dim;
+        let mut out_dim = out_dim;
+        let mut n_tok = n_tok;
+        let mut blocks = blocks;
+        let mut use_dp4a = u32::from(use_dp4a);
+        let mut weight_ptr = weight_ptr;
+        let mut weight_len = out_dim * blocks * 34;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = n_tok * blocks * 32;
+        let mut xscale_ptr = xscale_ptr;
+        let mut xscale_len = n_tok * blocks;
+        let mut out_ptr = out_ptr;
+        let mut out_len = n_tok * out_dim;
+        let mut params = match path {
+            crate::Q8MatmulPath::PrequantizedWarp8 => vec![
+                (&mut in_dim as *mut u64).cast::<c_void>(),
+                (&mut out_dim as *mut u64).cast::<c_void>(),
+                (&mut blocks as *mut u64).cast::<c_void>(),
+                (&mut use_dp4a as *mut u32).cast::<c_void>(),
+                (&mut weight_ptr as *mut u64).cast::<c_void>(),
+                (&mut weight_len as *mut u64).cast::<c_void>(),
+                (&mut xq_ptr as *mut u64).cast::<c_void>(),
+                (&mut xq_len as *mut u64).cast::<c_void>(),
+                (&mut xscale_ptr as *mut u64).cast::<c_void>(),
+                (&mut xscale_len as *mut u64).cast::<c_void>(),
+                (&mut out_ptr as *mut u64).cast::<c_void>(),
+                (&mut out_len as *mut u64).cast::<c_void>(),
+            ],
+            crate::Q8MatmulPath::PrequantizedBatchWarp8
+            | crate::Q8MatmulPath::PrequantizedGeneric => vec![
+                (&mut in_dim as *mut u64).cast::<c_void>(),
+                (&mut out_dim as *mut u64).cast::<c_void>(),
+                (&mut n_tok as *mut u64).cast::<c_void>(),
+                (&mut blocks as *mut u64).cast::<c_void>(),
+                (&mut use_dp4a as *mut u32).cast::<c_void>(),
+                (&mut weight_ptr as *mut u64).cast::<c_void>(),
+                (&mut weight_len as *mut u64).cast::<c_void>(),
+                (&mut xq_ptr as *mut u64).cast::<c_void>(),
+                (&mut xq_len as *mut u64).cast::<c_void>(),
+                (&mut xscale_ptr as *mut u64).cast::<c_void>(),
+                (&mut xscale_len as *mut u64).cast::<c_void>(),
+                (&mut out_ptr as *mut u64).cast::<c_void>(),
+                (&mut out_len as *mut u64).cast::<c_void>(),
+            ],
+            crate::Q8MatmulPath::ExpandedF32Blas | crate::Q8MatmulPath::ExpandedF16Blas => {
+                return false;
+            }
+        };
+        // SAFETY: the ABI validates output, cached packed weights, and
+        // retained quantized scratch spans before selecting this native path.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

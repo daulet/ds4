@@ -3,7 +3,22 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbba: Public Q8 Matmul ABI
+  is validated. Rust exports `ds4_gpu_matmul_q8_0_tensor`, consumes the
+  previously exported converted-cache and quality-control state for
+  multi-token F32/F16 BLAS dispatch, and retains prequantized activation
+  scratch for native warp8, batch-warp8, and generic Q8 kernels with
+  default DP4A plus scalar-disable selection. A C-linked B300 witness proves
+  all five dispatch behaviors and rejects an invalid range. Local tests pass
+  with 126 tests; B300 feature tests pass with 133 tests; the static library
+  exposes 36 symbols; all 36 preceding linked ABI consumers pass against the
+  rebuilt archive with the known executable-stack warning. All 40 CUDA ABI
+  comparators pass, and the unified report passes with 212 passed, 45
+  skipped, and 0 failed. Pre-implementation and final pass-end Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed
+  findings. Specialized Q8 pair/HC consumers, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbba: Public Q8 Cache And Quality Controls ABI
   is validated. Rust exports `ds4_gpu_cache_q8_f16_range`,
   `ds4_gpu_print_memory_report`, and `ds4_gpu_set_quality`, retaining Q8

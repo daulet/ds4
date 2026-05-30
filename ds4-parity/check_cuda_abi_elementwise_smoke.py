@@ -61,7 +61,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_set_model_map",
     "ds4_gpu_set_model_map_range",
     "ds4_gpu_matmul_f16_tensor",
-    "ds4_gpu_matmul_f16_pair_tensor", "ds4_gpu_matmul_f32_tensor", "ds4_gpu_cache_q8_f16_range", "ds4_gpu_print_memory_report", "ds4_gpu_set_quality",
+    "ds4_gpu_matmul_f16_pair_tensor", "ds4_gpu_matmul_f32_tensor", "ds4_gpu_cache_q8_f16_range", "ds4_gpu_print_memory_report", "ds4_gpu_set_quality", "ds4_gpu_matmul_q8_0_tensor",
 ]
 
 
