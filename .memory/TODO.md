@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2d
+- Status: active; split beginning with M14.5a through M14.5c2e
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8957,6 +8957,28 @@
 
 ##### M14.5c2d: Single-Token Q4_K Routed MoE
 
-- Status: active
+- Status: done
 - Goal: port the current-C single-token Q4_K gate/up and direct down-sum
   branch after the IQ2/Q2 tiled routed-MoE family is functionally covered.
+- Evidence:
+  - Added opt-in `DS4_CUDA_MOE_Q4_K=1` kernels for packed Q4_K/Q8_K dot,
+    single-token gate/up, and direct sum-six down in
+    `rust/ds4-cuda/src/bin/routed_moe_quantized_single_smoke.rs`.
+  - Captured B300 evidence in
+    `ds4-parity/baselines/backend/m14.5c2d/routed-moe-q4-k-single-smoke.json`
+    with comparator
+    `ds4-parity/check_routed_moe_q4_k_single_smoke.py --negative-test`.
+  - Live B300 execution emitted portable `sm_80` PTX through libdevice,
+    matched Q4_K output against the Rust oracle, and passed feature tests
+    with 84 tests. The local CUDA-feature build is blocked because
+    `/usr/local/cuda/include/cuda.h` is absent on this Mac. Shared-cache
+    specialization, hyperconnection, runtime route activation, and C CUDA
+    removal remain unclaimed. Local formatting, diff and library tests, the
+    M14.5c2d comparator, retained selector run, and unified parity passed with
+    168 passed, 45 skipped, and 0 failed.
+
+##### M14.5c2e: Shared-Cache Expert-Tile Projection
+
+- Status: active
+- Goal: port current-C expert-tile shared-memory staging for Q8 input blocks
+  and IQ2 lookup/sign tables before beginning hyperconnection kernels.

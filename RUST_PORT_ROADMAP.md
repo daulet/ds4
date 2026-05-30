@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2d.
+- Status: active; split beginning with M14.5a through M14.5c2e.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -9033,9 +9033,38 @@ Stage split:
 
 ##### M14.5c2d: Single-Token Q4_K Routed MoE
 
-- Status: active.
+- Status: done.
 - Goal: port the current-C single-token Q4_K gate/up and direct down-sum
   branch after the IQ2/Q2 tiled routed-MoE family is functionally covered.
+- Evidence:
+  - Added the opt-in `DS4_CUDA_MOE_Q4_K=1` route to the existing
+    executable-local Rust quantized single-token smoke binary, with Q4_K/Q8_K
+    packed dot, gate/up, and direct sum-six down kernels.
+  - The current-C oracle remains `dev_q4_K_get_scale_min`,
+    `dev_dot_q4_K_q8_K_block`,
+    `moe_gate_up_mid_decode_q4K_qwarp32_kernel`, and
+    `moe_down_q4K_sum6_qwarp32_kernel`.
+  - The fixture and comparator are
+    `ds4-parity/baselines/backend/m14.5c2d/routed-moe-q4-k-single-smoke.json`
+    and `ds4-parity/check_routed_moe_q4_k_single_smoke.py --negative-test`.
+  - B300 feature tests passed with 84 tests; live cargo-oxide execution found
+    five kernels, emitted portable `sm_80` PTX through libdevice, and matched
+    Q4_K gate/up plus direct down output on `NVIDIA B300 SXM6 AC`.
+  - The local CUDA-kernel feature build is unavailable on this Mac because
+    `/usr/local/cuda/include/cuda.h` is absent; B300 is the execution proof.
+  - Shared-cache expert-tile specialization, hyperconnection, runtime graph
+    integration, default route activation, and C CUDA removal remain
+    unclaimed.
+  - Local formatting, diff and library tests, the M14.5c2d comparator, the
+    retained selector run, and unified parity passed with 168 passed, 45
+    skipped, and 0 failed.
+
+##### M14.5c2e: Shared-Cache Expert-Tile Projection
+
+- Status: active.
+- Goal: port the current-C expert-tile gate/down specialization that stages
+  Q8 blocks and IQ2 lookup tables in shared memory before starting
+  hyperconnection kernels.
 
 ## Removal Criteria for C Host Code
 

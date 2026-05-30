@@ -1618,6 +1618,29 @@ pub const M14_5C2A_SCOPE: RoutedMoeQuantizedSingleScope = RoutedMoeQuantizedSing
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeQ4KSingleScope {
+    pub opt_in_only: bool,
+    pub consumes_quantized_single_surface: bool,
+    pub owns_q4_k_q8_k_dot: bool,
+    pub owns_moe_gate_up_mid_decode_q4_k_qwarp32_kernel: bool,
+    pub owns_moe_down_q4_k_sum6_qwarp32_kernel: bool,
+    pub owns_single_token_type12_dispatch: bool,
+    pub owns_hyperconnection_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2D_SCOPE: RoutedMoeQ4KSingleScope = RoutedMoeQ4KSingleScope {
+    opt_in_only: true,
+    consumes_quantized_single_surface: true,
+    owns_q4_k_q8_k_dot: true,
+    owns_moe_gate_up_mid_decode_q4_k_qwarp32_kernel: true,
+    owns_moe_down_q4_k_sum6_qwarp32_kernel: true,
+    owns_single_token_type12_dispatch: true,
+    owns_hyperconnection_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RoutedMoeSortedPairsScope {
     pub opt_in_only: bool,
     pub consumes_quantized_single_surface: bool,
@@ -1879,7 +1902,7 @@ mod tests {
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
-        M14_5C2C6_SCOPE, M14_5C2C7_SCOPE,
+        M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE,
     };
 
     #[test]
@@ -2708,6 +2731,18 @@ mod tests {
         assert!(!M14_5C2A_SCOPE.owns_q4_k_dispatch);
         assert!(!M14_5C2A_SCOPE.owns_hyperconnection_or_runtime_graph);
         assert!(!M14_5C2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_q4_k_single_scope_leaves_hyperconnection_and_route_pending() {
+        assert!(M14_5C2D_SCOPE.opt_in_only);
+        assert!(M14_5C2D_SCOPE.consumes_quantized_single_surface);
+        assert!(M14_5C2D_SCOPE.owns_q4_k_q8_k_dot);
+        assert!(M14_5C2D_SCOPE.owns_moe_gate_up_mid_decode_q4_k_qwarp32_kernel);
+        assert!(M14_5C2D_SCOPE.owns_moe_down_q4_k_sum6_qwarp32_kernel);
+        assert!(M14_5C2D_SCOPE.owns_single_token_type12_dispatch);
+        assert!(!M14_5C2D_SCOPE.owns_hyperconnection_or_runtime_graph);
+        assert!(!M14_5C2D_SCOPE.changes_default_route);
     }
 
     #[test]

@@ -2873,6 +2873,17 @@ on B300: functional row512, row1024, and row2048 output equivalence over
 retained tile16 descriptors. It leaves shared-cache specialization, Q4_K,
 hyperconnection, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2d Rust CUDA single-token Q4_K routed MoE smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_q4_k_single_smoke.py --negative-test
+```
+
+The fixture records the current-C single-token type-12 path on B300: packed
+Q4_K/Q8_K gate/up and direct six-expert down output with optional auxiliary
+writes. It leaves shared-cache expert-tile specialization, hyperconnection,
+runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

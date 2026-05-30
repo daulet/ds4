@@ -5,11 +5,12 @@ use std::fmt;
 use cuda_core::{DeviceBuffer, DriverError, LaunchConfig};
 use cuda_device::{cuda_module, kernel, thread, warp, DisjointSlice, SharedArray};
 use cuda_host::ltoir;
-use ds4_cuda::{substrate::CudaOxideSubstrate, M14_5C2A_SCOPE};
+use ds4_cuda::{substrate::CudaOxideSubstrate, M14_5C2A_SCOPE, M14_5C2D_SCOPE};
 
 const QK_K: usize = 256;
 const IQ2_BLOCK_BYTES: usize = 66;
 const Q2_BLOCK_BYTES: usize = 84;
+const Q4_BLOCK_BYTES: usize = 144;
 const THREADS: u32 = 256;
 const MODEL_EXPERTS: usize = 4;
 const ROUTED_EXPERTS: u32 = 6;
@@ -202,6 +203,90 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn moe_gate_up_mid_decode_q4_k_qwarp32_kernel(
+        write_aux: u32,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq_scales: &[f32],
+        xq_values: &[i8],
+        xq_bsums: &[i32],
+        selected: &[i32],
+        route_weights: &[f32],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let pair = thread::blockIdx_y();
+        if pair >= n_expert {
+            return;
+        }
+        let mut expert = selected[pair as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let mut rr = 0_u32;
+        while rr < 4 {
+            let row = thread::blockIdx_x() * 128 + row_lane + rr * 32;
+            if row < expert_mid_dim {
+                let row_blocks = ((expert as u32 * expert_mid_dim + row) * xq_blocks) as usize;
+                let mut gate = 0.0_f32;
+                let mut up = 0.0_f32;
+                let mut block = lane;
+                while block < xq_blocks {
+                    gate += dev_dot_q4_k_q8_k_block(
+                        gate_weights,
+                        row_blocks + block as usize,
+                        xq_scales,
+                        xq_values,
+                        xq_bsums,
+                        block as usize,
+                    );
+                    up += dev_dot_q4_k_q8_k_block(
+                        up_weights,
+                        row_blocks + block as usize,
+                        xq_scales,
+                        xq_values,
+                        xq_bsums,
+                        block as usize,
+                    );
+                    block += 8;
+                }
+                gate = quarter_warp_sum_f32(gate);
+                up = quarter_warp_sum_f32(up);
+                if lane == 0 {
+                    if clamp > 1.0e-6 {
+                        if gate > clamp {
+                            gate = clamp;
+                        }
+                        if up > clamp {
+                            up = clamp;
+                        }
+                        if up < -clamp {
+                            up = -clamp;
+                        }
+                    }
+                    let offset = (pair * expert_mid_dim + row) as usize;
+                    unsafe {
+                        if write_aux != 0 {
+                            *gate_out.get_unchecked_mut(offset) = gate;
+                            *up_out.get_unchecked_mut(offset) = up;
+                        }
+                        *mid_out.get_unchecked_mut(offset) =
+                            (gate / (1.0 + (-gate).exp())) * up * route_weights[pair as usize];
+                    }
+                }
+            }
+            rr += 1;
+        }
+    }
+
+    #[kernel]
     pub fn moe_down_sum6_qwarp32_kernel(
         midq_blocks: u32,
         out_dim: u32,
@@ -229,6 +314,56 @@ mod kernels {
             let mut block = lane;
             while block < midq_blocks {
                 accumulator += dev_dot_q2_k_q8_k_block(
+                    down_weights,
+                    row_blocks + block as usize,
+                    midq_scales,
+                    midq_values,
+                    midq_bsums,
+                    (slot * midq_blocks + block) as usize,
+                );
+                block += 8;
+            }
+            accumulator = quarter_warp_sum_f32(accumulator);
+            if lane == 0 {
+                total += accumulator;
+            }
+            slot += 1;
+        }
+        if lane == 0 {
+            unsafe {
+                *out.get_unchecked_mut(row as usize) = total;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn moe_down_q4_k_sum6_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        down_weights: &[u8],
+        midq_scales: &[f32],
+        midq_values: &[i8],
+        midq_bsums: &[i32],
+        selected: &[i32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        if row >= out_dim {
+            return;
+        }
+        let mut total = 0.0_f32;
+        let mut slot = 0_u32;
+        while slot < ROUTED_EXPERTS {
+            let mut expert = selected[slot as usize];
+            if expert < 0 {
+                expert = 0;
+            }
+            let row_blocks = ((expert as u32 * out_dim + row) * midq_blocks) as usize;
+            let mut accumulator = 0.0_f32;
+            let mut block = lane;
+            while block < midq_blocks {
+                accumulator += dev_dot_q4_k_q8_k_block(
                     down_weights,
                     row_blocks + block as usize,
                     midq_scales,
@@ -343,6 +478,54 @@ mod kernels {
         q8_scales[q8_block] * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
     }
 
+    fn dev_dot_q4_k_q8_k_block(
+        packed: &[u8],
+        block: usize,
+        q8_scales: &[f32],
+        q8_values: &[i8],
+        q8_bsums: &[i32],
+        q8_block: usize,
+    ) -> f32 {
+        let base = block * Q4_BLOCK_BYTES;
+        let weight_scale = f16::from_bits(load_u16(packed, base)) as f32;
+        let weight_min = f16::from_bits(load_u16(packed, base + 2)) as f32;
+        let q_base = q8_block * QK_K;
+        let bsum_base = q8_block * 16;
+        let scale_base = base + 4;
+        let qs_base = base + 16;
+        let mut quant_sum = 0_i32;
+        let mut min_sum = 0_i32;
+        let mut group = 0_usize;
+        while group < 8 {
+            let scale = if group < 4 {
+                packed[scale_base + group] & 63
+            } else {
+                (packed[scale_base + group + 4] & 0x0f)
+                    | ((packed[scale_base + group - 4] >> 6) << 4)
+            };
+            let minimum = if group < 4 {
+                packed[scale_base + group + 4] & 63
+            } else {
+                (packed[scale_base + group + 4] >> 4) | ((packed[scale_base + group] >> 6) << 4)
+            };
+            min_sum += minimum as i32
+                * (q8_bsums[bsum_base + 2 * group] + q8_bsums[bsum_base + 2 * group + 1]);
+            let q4 = qs_base + (group >> 1) * 32;
+            let shift = if group & 1 == 0 { 0 } else { 4 };
+            let q8 = q_base + group * 32;
+            let mut lane = 0_usize;
+            let mut subtotal = 0_i32;
+            while lane < 32 {
+                subtotal +=
+                    ((packed[q4 + lane] >> shift) & 0x0f) as i32 * q8_values[q8 + lane] as i32;
+                lane += 1;
+            }
+            quant_sum += scale as i32 * subtotal;
+            group += 1;
+        }
+        q8_scales[q8_block] * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
+    }
+
     fn quarter_warp_sum_f32(mut value: f32) -> f32 {
         let mut offset = 4_u32;
         while offset > 0 {
@@ -384,9 +567,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "../../ds4_cuda_routed_moe_quantized_single_smoke",
     )?;
     let module = kernels::from_module(raw_module)?;
-    let gate_values = packed_iq2_weights(3);
-    let up_values = packed_iq2_weights(11);
-    let down_values = packed_q2_weights(19);
+    let q4_k = std::env::var_os("DS4_CUDA_MOE_Q4_K").is_some();
+    let gate_values = if q4_k {
+        packed_q4_k_weights(EXPERT_MID_DIM as usize, 3)
+    } else {
+        packed_iq2_weights(3)
+    };
+    let up_values = if q4_k {
+        packed_q4_k_weights(EXPERT_MID_DIM as usize, 11)
+    } else {
+        packed_iq2_weights(11)
+    };
+    let down_values = if q4_k {
+        packed_q4_k_weights(OUT_DIM as usize, 19)
+    } else {
+        packed_q2_weights(19)
+    };
     let x_values = input_values();
     let selected_values = vec![0, 2, -1, 3, 1, 0];
     let route_values = vec![0.48, 0.33, 0.25, 0.2, 0.15, 0.09];
@@ -411,6 +607,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &grids,
         &signs,
         false,
+        q4_k,
     )?;
     substrate.flush_commands()?;
     let expected_default = expected_quantized_moe(
@@ -422,6 +619,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &route_values,
         false,
         CLAMP,
+        q4_k,
     );
     assert_output(&substrate, &default_output, &expected_default)?;
 
@@ -437,6 +635,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &grids,
         &signs,
         true,
+        q4_k,
     )?;
     substrate.flush_commands()?;
     let expected_aux = expected_quantized_moe(
@@ -448,6 +647,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &route_values,
         true,
         CLAMP,
+        q4_k,
     );
     assert_output(&substrate, &aux_output, &expected_aux)?;
     assert_close(&expected_default.mid, &expected_aux.mid);
@@ -461,6 +661,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &route_values,
         true,
         0.0,
+        q4_k,
     );
     assert!(expected_aux
         .mid
@@ -490,24 +691,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &grids,
             &signs,
             false,
+            q4_k,
         ),
         Err(MoeError::InvalidShape)
     ));
 
-    println!(
-        "{{\"milestone\":\"M14.5c2a\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"q8_k_input_quantize_matches\":true,\"q8_k_mid_quantize_matches\":true,\"packed_iq2_q8_k_decode_matches\":true,\"packed_q2_q8_k_sum6_matches\":true,\"default_single_token_output_matches\":true,\"optional_gate_up_write_matches\":true,\"negative_expert_fallback_matches\":true,\"zero_quantize_matches\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"consumes_f32_fallback_surface\":{},\"owns_q8_k_activation_quantization\":{},\"owns_iq2_xxs_q8_k_gate_up_decode_lut\":{},\"owns_q2_k_q8_k_direct_sum6_down\":{},\"owns_default_single_token_iq2_q2_dispatch\":{},\"owns_optional_gate_up_aux_write\":{},\"owns_batched_sorted_or_tiled_dispatch\":{},\"owns_q4_k_dispatch\":{},\"owns_hyperconnection_or_runtime_graph\":{},\"changes_default_route\":{}}}",
-        substrate.device_name()?,
-        M14_5C2A_SCOPE.consumes_f32_fallback_surface,
-        M14_5C2A_SCOPE.owns_q8_k_activation_quantization,
-        M14_5C2A_SCOPE.owns_iq2_xxs_q8_k_gate_up_decode_lut,
-        M14_5C2A_SCOPE.owns_q2_k_q8_k_direct_sum6_down,
-        M14_5C2A_SCOPE.owns_default_single_token_iq2_q2_dispatch,
-        M14_5C2A_SCOPE.owns_optional_gate_up_aux_write,
-        M14_5C2A_SCOPE.owns_batched_sorted_or_tiled_dispatch,
-        M14_5C2A_SCOPE.owns_q4_k_dispatch,
-        M14_5C2A_SCOPE.owns_hyperconnection_or_runtime_graph,
-        M14_5C2A_SCOPE.changes_default_route,
-    );
+    if q4_k {
+        println!(
+            "{{\"milestone\":\"M14.5c2d\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"q4_k_gate_up_matches\":true,\"q4_k_direct_sum6_down_matches\":true,\"single_token_type12_dispatch_matches\":true,\"optional_gate_up_write_matches\":true,\"negative_expert_fallback_matches\":true,\"q8_k_input_quantize_reused\":true,\"q8_k_mid_quantize_reused\":true,\"zero_quantize_matches\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"consumes_quantized_single_surface\":{},\"owns_q4_k_q8_k_dot\":{},\"owns_moe_gate_up_mid_decode_q4_k_qwarp32_kernel\":{},\"owns_moe_down_q4_k_sum6_qwarp32_kernel\":{},\"owns_single_token_type12_dispatch\":{},\"owns_hyperconnection_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2D_SCOPE.consumes_quantized_single_surface,
+            M14_5C2D_SCOPE.owns_q4_k_q8_k_dot,
+            M14_5C2D_SCOPE.owns_moe_gate_up_mid_decode_q4_k_qwarp32_kernel,
+            M14_5C2D_SCOPE.owns_moe_down_q4_k_sum6_qwarp32_kernel,
+            M14_5C2D_SCOPE.owns_single_token_type12_dispatch,
+            M14_5C2D_SCOPE.owns_hyperconnection_or_runtime_graph,
+            M14_5C2D_SCOPE.changes_default_route,
+        );
+    } else {
+        println!(
+            "{{\"milestone\":\"M14.5c2a\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"q8_k_input_quantize_matches\":true,\"q8_k_mid_quantize_matches\":true,\"packed_iq2_q8_k_decode_matches\":true,\"packed_q2_q8_k_sum6_matches\":true,\"default_single_token_output_matches\":true,\"optional_gate_up_write_matches\":true,\"negative_expert_fallback_matches\":true,\"zero_quantize_matches\":true,\"invalid_shape_rejected\":true,\"uses_quarter_warp_shuffle_reduction\":true,\"uses_libdevice_link_path\":true,\"consumes_f32_fallback_surface\":{},\"owns_q8_k_activation_quantization\":{},\"owns_iq2_xxs_q8_k_gate_up_decode_lut\":{},\"owns_q2_k_q8_k_direct_sum6_down\":{},\"owns_default_single_token_iq2_q2_dispatch\":{},\"owns_optional_gate_up_aux_write\":{},\"owns_batched_sorted_or_tiled_dispatch\":{},\"owns_q4_k_dispatch\":{},\"owns_hyperconnection_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2A_SCOPE.consumes_f32_fallback_surface,
+            M14_5C2A_SCOPE.owns_q8_k_activation_quantization,
+            M14_5C2A_SCOPE.owns_iq2_xxs_q8_k_gate_up_decode_lut,
+            M14_5C2A_SCOPE.owns_q2_k_q8_k_direct_sum6_down,
+            M14_5C2A_SCOPE.owns_default_single_token_iq2_q2_dispatch,
+            M14_5C2A_SCOPE.owns_optional_gate_up_aux_write,
+            M14_5C2A_SCOPE.owns_batched_sorted_or_tiled_dispatch,
+            M14_5C2A_SCOPE.owns_q4_k_dispatch,
+            M14_5C2A_SCOPE.owns_hyperconnection_or_runtime_graph,
+            M14_5C2A_SCOPE.changes_default_route,
+        );
+    }
     Ok(())
 }
 
@@ -554,15 +770,21 @@ fn run_quantized_moe(
     grids: &DeviceBuffer<u64>,
     signs: &DeviceBuffer<u8>,
     write_aux: bool,
+    q4_k: bool,
 ) -> Result<QuantizedMoeOutput, MoeError> {
-    if gate_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * IQ2_BLOCK_BYTES
-        || up_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * IQ2_BLOCK_BYTES
-        || down_weights.len() < MODEL_EXPERTS * OUT_DIM as usize * Q2_BLOCK_BYTES
+    let gate_block_bytes = if q4_k {
+        Q4_BLOCK_BYTES
+    } else {
+        IQ2_BLOCK_BYTES
+    };
+    let down_block_bytes = if q4_k { Q4_BLOCK_BYTES } else { Q2_BLOCK_BYTES };
+    if gate_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * gate_block_bytes
+        || up_weights.len() < MODEL_EXPERTS * EXPERT_MID_DIM as usize * gate_block_bytes
+        || down_weights.len() < MODEL_EXPERTS * OUT_DIM as usize * down_block_bytes
         || x.len() < EXPERT_IN_DIM as usize
         || selected.len() < ROUTED_EXPERTS as usize
         || route_weights.len() < ROUTED_EXPERTS as usize
-        || grids.len() < IQ2_GRIDS.len()
-        || signs.len() < IQ2_SIGNS.len()
+        || (!q4_k && (grids.len() < IQ2_GRIDS.len() || signs.len() < IQ2_SIGNS.len()))
     {
         return Err(MoeError::InvalidShape);
     }
@@ -570,48 +792,87 @@ fn run_quantized_moe(
     let mut gate = substrate.zeroed::<f32>((ROUTED_EXPERTS * EXPERT_MID_DIM) as usize)?;
     let mut up = substrate.zeroed::<f32>((ROUTED_EXPERTS * EXPERT_MID_DIM) as usize)?;
     let mut mid = substrate.zeroed::<f32>((ROUTED_EXPERTS * EXPERT_MID_DIM) as usize)?;
-    module.moe_gate_up_mid_decode_lut_qwarp32_kernel(
-        substrate.stream(),
-        LaunchConfig {
-            grid_dim: (EXPERT_MID_DIM.div_ceil(128), ROUTED_EXPERTS, 1),
-            block_dim: (THREADS, 1, 1),
-            shared_mem_bytes: 0,
-        },
-        u32::from(write_aux),
-        EXPERT_IN_DIM / QK_K as u32,
-        EXPERT_MID_DIM,
-        ROUTED_EXPERTS,
-        CLAMP,
-        gate_weights,
-        up_weights,
-        &input_q.scales,
-        &input_q.values,
-        selected,
-        route_weights,
-        grids,
-        signs,
-        &mut gate,
-        &mut up,
-        &mut mid,
-    )?;
+    let gate_launch = LaunchConfig {
+        grid_dim: (EXPERT_MID_DIM.div_ceil(128), ROUTED_EXPERTS, 1),
+        block_dim: (THREADS, 1, 1),
+        shared_mem_bytes: 0,
+    };
+    if q4_k {
+        module.moe_gate_up_mid_decode_q4_k_qwarp32_kernel(
+            substrate.stream(),
+            gate_launch,
+            u32::from(write_aux),
+            EXPERT_IN_DIM / QK_K as u32,
+            EXPERT_MID_DIM,
+            ROUTED_EXPERTS,
+            CLAMP,
+            gate_weights,
+            up_weights,
+            &input_q.scales,
+            &input_q.values,
+            &input_q.bsums,
+            selected,
+            route_weights,
+            &mut gate,
+            &mut up,
+            &mut mid,
+        )?;
+    } else {
+        module.moe_gate_up_mid_decode_lut_qwarp32_kernel(
+            substrate.stream(),
+            gate_launch,
+            u32::from(write_aux),
+            EXPERT_IN_DIM / QK_K as u32,
+            EXPERT_MID_DIM,
+            ROUTED_EXPERTS,
+            CLAMP,
+            gate_weights,
+            up_weights,
+            &input_q.scales,
+            &input_q.values,
+            selected,
+            route_weights,
+            grids,
+            signs,
+            &mut gate,
+            &mut up,
+            &mut mid,
+        )?;
+    }
     let mid_q = quantize_rows(substrate, module, &mid, ROUTED_EXPERTS)?;
     let mut out = substrate.zeroed::<f32>(OUT_DIM as usize)?;
-    module.moe_down_sum6_qwarp32_kernel(
-        substrate.stream(),
-        LaunchConfig {
-            grid_dim: (OUT_DIM.div_ceil(32), 1, 1),
-            block_dim: (THREADS, 1, 1),
-            shared_mem_bytes: 0,
-        },
-        EXPERT_MID_DIM / QK_K as u32,
-        OUT_DIM,
-        down_weights,
-        &mid_q.scales,
-        &mid_q.values,
-        &mid_q.bsums,
-        selected,
-        &mut out,
-    )?;
+    let down_launch = LaunchConfig {
+        grid_dim: (OUT_DIM.div_ceil(32), 1, 1),
+        block_dim: (THREADS, 1, 1),
+        shared_mem_bytes: 0,
+    };
+    if q4_k {
+        module.moe_down_q4_k_sum6_qwarp32_kernel(
+            substrate.stream(),
+            down_launch,
+            EXPERT_MID_DIM / QK_K as u32,
+            OUT_DIM,
+            down_weights,
+            &mid_q.scales,
+            &mid_q.values,
+            &mid_q.bsums,
+            selected,
+            &mut out,
+        )?;
+    } else {
+        module.moe_down_sum6_qwarp32_kernel(
+            substrate.stream(),
+            down_launch,
+            EXPERT_MID_DIM / QK_K as u32,
+            OUT_DIM,
+            down_weights,
+            &mid_q.scales,
+            &mid_q.values,
+            &mid_q.bsums,
+            selected,
+            &mut out,
+        )?;
+    }
     Ok(QuantizedMoeOutput {
         input_q,
         gate,
@@ -662,6 +923,7 @@ fn expected_quantized_moe(
     route_weights: &[f32],
     write_aux: bool,
     clamp: f32,
+    q4_k: bool,
 ) -> ExpectedQuantizedMoeOutput {
     let input_q = expected_quantized_rows(x, 1);
     let mut gate = vec![0.0_f32; (ROUTED_EXPERTS * EXPERT_MID_DIM) as usize];
@@ -675,8 +937,16 @@ fn expected_quantized_moe(
         };
         for row in 0..EXPERT_MID_DIM as usize {
             let block = expert * EXPERT_MID_DIM as usize + row;
-            let mut gate_value = iq2_q8_k_dot(gate_weights, block, &input_q, 0);
-            let mut up_value = iq2_q8_k_dot(up_weights, block, &input_q, 0);
+            let mut gate_value = if q4_k {
+                q4_k_q8_k_dot(gate_weights, block, &input_q, 0)
+            } else {
+                iq2_q8_k_dot(gate_weights, block, &input_q, 0)
+            };
+            let mut up_value = if q4_k {
+                q4_k_q8_k_dot(up_weights, block, &input_q, 0)
+            } else {
+                iq2_q8_k_dot(up_weights, block, &input_q, 0)
+            };
             if clamp > 1.0e-6 {
                 gate_value = gate_value.min(clamp);
                 up_value = up_value.clamp(-clamp, clamp);
@@ -699,7 +969,11 @@ fn expected_quantized_moe(
             } else {
                 selected[pair] as usize
             };
-            out[row] += q2_q8_k_dot(down_weights, expert * OUT_DIM as usize + row, &mid_q, pair);
+            out[row] += if q4_k {
+                q4_k_q8_k_dot(down_weights, expert * OUT_DIM as usize + row, &mid_q, pair)
+            } else {
+                q2_q8_k_dot(down_weights, expert * OUT_DIM as usize + row, &mid_q, pair)
+            };
         }
     }
     ExpectedQuantizedMoeOutput {
@@ -813,6 +1087,40 @@ fn q2_q8_k_dot(packed: &[u8], block: usize, q8: &ExpectedQuantizedRows, q8_block
     q8.scales[q8_block] * (d * quant_sum as f32 - dmin * min_sum as f32)
 }
 
+fn q4_k_q8_k_dot(packed: &[u8], block: usize, q8: &ExpectedQuantizedRows, q8_block: usize) -> f32 {
+    let base = block * Q4_BLOCK_BYTES;
+    let d = f16::from_bits(u16::from_le_bytes([packed[base], packed[base + 1]])) as f32;
+    let dmin = f16::from_bits(u16::from_le_bytes([packed[base + 2], packed[base + 3]])) as f32;
+    let scale_base = base + 4;
+    let qs_base = base + 16;
+    let mut quant_sum = 0_i32;
+    let mut min_sum = 0_i32;
+    for group in 0..8 {
+        let scale = if group < 4 {
+            packed[scale_base + group] & 63
+        } else {
+            (packed[scale_base + group + 4] & 0x0f) | ((packed[scale_base + group - 4] >> 6) << 4)
+        };
+        let minimum = if group < 4 {
+            packed[scale_base + group + 4] & 63
+        } else {
+            (packed[scale_base + group + 4] >> 4) | ((packed[scale_base + group] >> 6) << 4)
+        };
+        min_sum += minimum as i32
+            * (q8.bsums[q8_block * 16 + 2 * group] + q8.bsums[q8_block * 16 + 2 * group + 1]);
+        let q4_base = qs_base + (group >> 1) * 32;
+        let shift = if group & 1 == 0 { 0 } else { 4 };
+        let q8_base = q8_block * QK_K + group * 32;
+        let subtotal = (0..32)
+            .map(|lane| {
+                ((packed[q4_base + lane] >> shift) & 0x0f) as i32 * q8.values[q8_base + lane] as i32
+            })
+            .sum::<i32>();
+        quant_sum += scale as i32 * subtotal;
+    }
+    q8.scales[q8_block] * (d * quant_sum as f32 - dmin * min_sum as f32)
+}
+
 fn packed_iq2_weights(seed: usize) -> Vec<u8> {
     let mut packed = Vec::with_capacity(MODEL_EXPERTS * EXPERT_MID_DIM as usize * IQ2_BLOCK_BYTES);
     for expert in 0..MODEL_EXPERTS {
@@ -859,6 +1167,25 @@ fn packed_q2_weights(seed: usize) -> Vec<u8> {
             let dmin = (0.001953125_f32 + ((row + seed) % 2) as f32 * 0.0009765625) as f16;
             packed.extend_from_slice(&d.to_bits().to_le_bytes());
             packed.extend_from_slice(&dmin.to_bits().to_le_bytes());
+        }
+    }
+    packed
+}
+
+fn packed_q4_k_weights(rows: usize, seed: usize) -> Vec<u8> {
+    let mut packed = Vec::with_capacity(MODEL_EXPERTS * rows * Q4_BLOCK_BYTES);
+    for expert in 0..MODEL_EXPERTS {
+        for row in 0..rows {
+            let d = (0.00390625_f32 + ((expert + row + seed) % 3) as f32 * 0.001953125) as f16;
+            let dmin = (0.001953125_f32 + ((row + seed) % 2) as f32 * 0.0009765625) as f16;
+            packed.extend_from_slice(&d.to_bits().to_le_bytes());
+            packed.extend_from_slice(&dmin.to_bits().to_le_bytes());
+            for scale in 0..12 {
+                packed.push(((expert * 19 + row * 11 + scale * 7 + seed) % 256) as u8);
+            }
+            for lane in 0..128 {
+                packed.push(((expert * 17 + row * 13 + lane * 5 + seed) % 256) as u8);
+            }
         }
     }
     packed
