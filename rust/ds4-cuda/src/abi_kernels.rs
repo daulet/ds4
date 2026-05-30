@@ -233,6 +233,131 @@ mod kernels {
             i += nth;
         }
     }
+
+    #[kernel]
+    pub fn abi_matmul_f16_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        n_tok: u64,
+        weights: &[f16],
+        x: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x() as u64;
+        let token = thread::blockIdx_y() as u64;
+        if row >= out_dim || token >= n_tok {
+            return;
+        }
+        let tid = thread::threadIdx_x() as usize;
+        let nth = thread::blockDim_x() as usize;
+        let weight_base = row as usize * in_dim as usize;
+        let x_base = token as usize * in_dim as usize;
+        let mut sum = 0.0_f32;
+        let mut i = tid;
+        while i < in_dim as usize {
+            sum += weights[weight_base + i] as f32 * x[x_base + i];
+            i += nth;
+        }
+        unsafe {
+            PARTIAL[tid] = sum;
+        }
+        thread::sync_threads();
+        let mut stride = nth >> 1;
+        while stride > 0 {
+            if tid < stride {
+                unsafe {
+                    PARTIAL[tid] += PARTIAL[tid + stride];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        if tid == 0 {
+            unsafe {
+                *out.get_unchecked_mut(token as usize * out_dim as usize + row as usize) =
+                    PARTIAL[0];
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_matmul_f16_serial_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        n_tok: u64,
+        weights: &[f16],
+        x: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let row = thread::blockIdx_x() as u64;
+        let token = thread::blockIdx_y() as u64;
+        if row >= out_dim || token >= n_tok || thread::threadIdx_x() != 0 {
+            return;
+        }
+        let weight_base = row as usize * in_dim as usize;
+        let x_base = token as usize * in_dim as usize;
+        let mut sum = 0.0_f32;
+        let mut i = 0_usize;
+        while i < in_dim as usize {
+            sum += weights[weight_base + i] as f32 * x[x_base + i];
+            i += 1;
+        }
+        unsafe {
+            *out.get_unchecked_mut(token as usize * out_dim as usize + row as usize) = sum;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_matmul_f16_ordered_chunks_kernel(
+        in_dim: u64,
+        out_dim: u64,
+        n_tok: u64,
+        weights: &[f16],
+        x: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 32> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x() as u64;
+        let token = thread::blockIdx_y() as u64;
+        if row >= out_dim || token >= n_tok {
+            return;
+        }
+        let tid = thread::threadIdx_x() as usize;
+        let chunk = (in_dim as usize + 31) / 32;
+        let start = tid * chunk;
+        let mut end = start + chunk;
+        if end > in_dim as usize {
+            end = in_dim as usize;
+        }
+        let weight_base = row as usize * in_dim as usize;
+        let x_base = token as usize * in_dim as usize;
+        let mut sum = 0.0_f32;
+        let mut i = start;
+        while i < end {
+            sum += weights[weight_base + i] as f32 * x[x_base + i];
+            i += 1;
+        }
+        unsafe {
+            PARTIAL[tid] = sum;
+        }
+        thread::sync_threads();
+        if tid == 0 {
+            let mut total = 0.0_f32;
+            let mut lane = 0_usize;
+            while lane < 32 {
+                unsafe {
+                    total += PARTIAL[lane];
+                }
+                lane += 1;
+            }
+            unsafe {
+                *out.get_unchecked_mut(token as usize * out_dim as usize + row as usize) = total;
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -243,6 +368,9 @@ pub(crate) struct AbiKernelModule {
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
+    matmul_f16_kernel: CudaFunction,
+    matmul_f16_serial_kernel: CudaFunction,
+    matmul_f16_ordered_chunks_kernel: CudaFunction,
 }
 
 impl AbiKernelModule {
@@ -266,6 +394,15 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_f16_kernel: module
+                .load_function("abi_matmul_f16_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_f16_serial_kernel: module
+                .load_function("abi_matmul_f16_serial_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_f16_ordered_chunks_kernel: module
+                .load_function("abi_matmul_f16_ordered_chunks_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
         })
     }
@@ -540,6 +677,77 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.rms_norm_weight_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn matmul_f16_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        weight_ptr: u64,
+        x_ptr: u64,
+        in_dim: u64,
+        out_dim: u64,
+        n_tok: u64,
+        path: crate::F16ProjectionPath,
+    ) -> bool {
+        let threads = match path {
+            crate::F16ProjectionPath::Base => THREADS_PER_BLOCK,
+            crate::F16ProjectionPath::Serial => 1,
+            crate::F16ProjectionPath::OrderedChunks => 32,
+            crate::F16ProjectionPath::Blas => return false,
+        };
+        let grid_x = match u32::try_from(out_dim) {
+            Ok(value) => value,
+            Err(_) => return false,
+        };
+        let grid_y = match u32::try_from(n_tok) {
+            Ok(value) => value,
+            Err(_) => return false,
+        };
+        let function = match path {
+            crate::F16ProjectionPath::Base => &self.matmul_f16_kernel,
+            crate::F16ProjectionPath::Serial => &self.matmul_f16_serial_kernel,
+            crate::F16ProjectionPath::OrderedChunks => &self.matmul_f16_ordered_chunks_kernel,
+            crate::F16ProjectionPath::Blas => return false,
+        };
+        let config = LaunchConfig {
+            grid_dim: (grid_x, grid_y, 1),
+            block_dim: (threads, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut in_dim = in_dim;
+        let mut out_dim = out_dim;
+        let mut n_tok = n_tok;
+        let mut weight_ptr = weight_ptr;
+        let mut weight_len = in_dim * out_dim;
+        let mut x_ptr = x_ptr;
+        let mut x_len = in_dim * n_tok;
+        let mut out_ptr = out_ptr;
+        let mut out_len = out_dim * n_tok;
+        let mut params = [
+            (&mut in_dim as *mut u64).cast::<c_void>(),
+            (&mut out_dim as *mut u64).cast::<c_void>(),
+            (&mut n_tok as *mut u64).cast::<c_void>(),
+            (&mut weight_ptr as *mut u64).cast::<c_void>(),
+            (&mut weight_len as *mut u64).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates single-token output/input ranges and
+        // retains the model-backed F16 weight range through launch submission.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

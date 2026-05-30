@@ -3,7 +3,18 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbba: Public Single-Token F16 Projection ABI
+  is validated. Rust exports `ds4_gpu_matmul_f16_tensor` for
+  single-token base, ordered-chunks, and serial paths through cached F16
+  model ranges; local tests pass with 120 tests, B300 feature tests pass
+  with 127 tests, the static library exposes 30 symbols, and fourteen
+  predecessor linked consumers pass. The focused comparator and default
+  unified report pass with 206 passed, 45 skipped, and 0 failed; required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Multi-token/paired F16, Q8/F16 cache hooks,
+  remaining graph compute, whole-archive/route promotion, and the generated
+  embedded-object executable-stack warning remain open.
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation

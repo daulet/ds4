@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "cuda-oxide-kernels", feature(f16))]
+
 pub const CUDA_OXIDE_REVISION: &str = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2836,6 +2838,34 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBA_SCOPE: CudaAbiFdFinalSyncFailu
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiF16SingleTokenProjectionScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_matmul_f16_single_token_tensor: bool,
+    pub owns_base_ordered_and_serial_single_token_paths: bool,
+    pub owns_live_model_range_f16_projection_observation: bool,
+    pub owns_multi_token_blas_or_pair_projection: bool,
+    pub owns_q8_f16_cache_hook: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE: CudaAbiF16SingleTokenProjectionScope =
+    CudaAbiF16SingleTokenProjectionScope {
+        exported_abi_symbol_count: 30,
+        exported_compute_symbol_count: 10,
+        owns_matmul_f16_single_token_tensor: true,
+        owns_base_ordered_and_serial_single_token_paths: true,
+        owns_live_model_range_f16_projection_observation: true,
+        owns_multi_token_blas_or_pair_projection: false,
+        owns_q8_f16_cache_hook: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2892,6 +2922,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBA_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBA_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -4508,6 +4539,35 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBA_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBA_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_f16_single_token_projection_scope_leaves_blas_q8_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE.exported_abi_symbol_count,
+            30
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE.exported_compute_symbol_count,
+            10
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE.owns_matmul_f16_single_token_tensor);
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE
+                .owns_base_ordered_and_serial_single_token_paths
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE
+                .owns_live_model_range_f16_projection_observation
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE
+                .owns_multi_token_blas_or_pair_projection
+        );
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE.owns_q8_f16_cache_hook);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE.changes_default_route);
     }
 
     #[test]

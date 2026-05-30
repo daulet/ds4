@@ -3421,6 +3421,21 @@ fallback independently of strict mode. Q8/f16 hooks, graph compute,
 whole-archive retention, route promotion, and the executable-stack warning
 remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbba Rust CUDA public
+single-token F16 projection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_matmul_f16_single_token_smoke.py --negative-test
+```
+
+The C-linked B300 fixture dispatches `ds4_gpu_matmul_f16_tensor` through the
+default ordered-chunks, forced base, and forced serial single-token paths,
+then mutates host model bytes to verify the cached F16 range remains the
+projection weight source. It rejects multi-token projection until the BLAS
+boundary is owned. Paired F16, Q8/F16 cache hooks, remaining graph compute,
+whole-archive retention policy, route promotion, C CUDA removal, and the
+generated embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

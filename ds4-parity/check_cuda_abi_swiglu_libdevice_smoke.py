@@ -60,6 +60,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_set_model_fd",
     "ds4_gpu_set_model_map",
     "ds4_gpu_set_model_map_range",
+    "ds4_gpu_matmul_f16_tensor",
 ]
 
 

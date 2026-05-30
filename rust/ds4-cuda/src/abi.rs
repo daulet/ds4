@@ -13,6 +13,8 @@ use cuda_core::{
 use crate::abi_kernels::AbiKernelModule;
 use crate::allocation_policy::managed_kv_decision;
 use crate::substrate::CudaOxideSubstrate;
+#[cfg(feature = "cuda-oxide-kernels")]
+use crate::{select_f16_projection_path, F16ProjectionDispatch};
 
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -1779,6 +1781,89 @@ pub unsafe extern "C" fn ds4_gpu_swiglu_tensor(
                     )
                 })
             })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_matmul_f16_tensor(
+    out: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: *const Ds4GpuTensor,
+    n_tok: u64,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(x) = (unsafe { tensor_ref(x) }) else {
+            return false;
+        };
+        let Some(weight_elements) = in_dim.checked_mul(out_dim) else {
+            return false;
+        };
+        let Some(weight_bytes) = weight_elements.checked_mul(size_of::<u16>() as u64) else {
+            return false;
+        };
+        let Some(x_bytes) = in_dim.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(out_bytes) = out_dim.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || in_dim == 0
+            || out_dim == 0
+            || n_tok != 1
+            || weight_offset > model_size
+            || weight_bytes > model_size - weight_offset
+            || x.bytes < x_bytes
+            || out.bytes < out_bytes
+        {
+            return false;
+        }
+        let path = select_f16_projection_path(F16ProjectionDispatch {
+            blas_ready: false,
+            serial_f16: std::env::var_os("DS4_CUDA_SERIAL_F16_MATMUL").is_some(),
+            serial_router: std::env::var_os("DS4_CUDA_SERIAL_ROUTER").is_some(),
+            no_ordered_f16_matmul: std::env::var_os("DS4_CUDA_NO_ORDERED_F16_MATMUL").is_some(),
+            in_dim,
+            out_dim,
+            n_tokens: n_tok,
+        });
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                weight_offset,
+                weight_bytes,
+                |weight_ptr| {
+                    with_abi_kernels(backend, |kernels| {
+                        // SAFETY: this leaf validates the single-token tensor
+                        // and cached model-weight bounds before selecting the
+                        // equivalent current-C base, ordered, or serial path.
+                        Some(unsafe {
+                            kernels.matmul_f16_tensor(
+                                backend.stream(),
+                                out.device_ptr(),
+                                weight_ptr,
+                                x.device_ptr(),
+                                in_dim,
+                                out_dim,
+                                n_tok,
+                                path,
+                            )
+                        })
+                    })
+                },
+            )
         })
         .unwrap_or(false)
     })
