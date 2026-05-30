@@ -408,6 +408,23 @@ pub const M14_2D2B2A_SCOPE: IndexerWmma32KernelScope = IndexerWmma32KernelScope 
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexerWmma64KernelScope {
+    pub opt_in_only: bool,
+    pub owns_indexer_scores_wmma64_kernel: bool,
+    pub owns_wmma128_and_dispatch_priority: bool,
+    pub owns_specialized_topk_dispatch: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2D2B2B_SCOPE: IndexerWmma64KernelScope = IndexerWmma64KernelScope {
+    opt_in_only: true,
+    owns_indexer_scores_wmma64_kernel: true,
+    owns_wmma128_and_dispatch_priority: false,
+    owns_specialized_topk_dispatch: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -424,6 +441,7 @@ mod tests {
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
         M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
         M14_2C_SCOPE, M14_2D1_SCOPE, M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE,
+        M14_2D2B2B_SCOPE,
     };
 
     #[test]
@@ -642,5 +660,14 @@ mod tests {
         assert!(!M14_2D2B2A_SCOPE.owns_wmma64_and_wmma128_dispatch);
         assert!(!M14_2D2B2A_SCOPE.owns_specialized_topk_dispatch);
         assert!(!M14_2D2B2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn wmma64_scope_leaves_wmma128_priority_topk_and_route_pending() {
+        assert!(M14_2D2B2B_SCOPE.opt_in_only);
+        assert!(M14_2D2B2B_SCOPE.owns_indexer_scores_wmma64_kernel);
+        assert!(!M14_2D2B2B_SCOPE.owns_wmma128_and_dispatch_priority);
+        assert!(!M14_2D2B2B_SCOPE.owns_specialized_topk_dispatch);
+        assert!(!M14_2D2B2B_SCOPE.changes_default_route);
     }
 }

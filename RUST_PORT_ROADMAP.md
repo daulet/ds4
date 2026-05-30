@@ -7568,13 +7568,41 @@ Stage split:
 
 ##### M14.2d2b2b: WMMA64 Tensor-Core Indexer Score Kernel
 
-- Status: active.
+- Status: done.
 - Goal: port current-C's 64-component four-warp WMMA score branch after the
   two-warp mapping is proven.
+- Oracle: current-C `indexer_scores_wmma64_kernel` and its
+  `indexer_scores_wmma64_kernel<<<grid, 128>>>` launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2b2b/indexer-wmma64-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_wmma64_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Acceptance: Rust owns only the 64-component four-warp WMMA score tile and
+  host-side bounds validation; WMMA128 priority, specialized top-k, route
+  activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexer_scores_wmma64_kernel` using four
+    warps, native `f16` shared staging, and two cuda-oxide
+    `mma_m16n8k16_f32_f16` accumulators per warp to cover current-C's
+    `16 x 64` output tile.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 30 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved WMMA64 output across two 64-component blocks,
+    four-warp tile mapping, per-token weighting, NaN/negative suppression,
+    causal masking, and invalid-shape rejection on `NVIDIA B300 SXM6 AC`.
+  - Local workspace tests, formatter/diff checks, the 73-check WMMA64
+    comparator, and unified parity passed with 122 passed, 45 skipped, and
+    0 failed. Non-interactive Claude review produced no completed result
+    before its timeout; adversarial self-review compared four-warp column
+    ownership, accumulator scatter, causal early exit, and explicit `fmaxf`
+    semantics against current C.
+  - This stage remains opt-in; it does not claim WMMA128 priority,
+    specialized top-k dispatch, runtime route, or C CUDA removal ownership.
 
 ##### M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority
 
-- Status: pending.
+- Status: active.
 - Goal: port current-C's 128-component eight-warp WMMA score branch and close
   the 128/64/32/base priority selection contract.
 

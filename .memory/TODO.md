@@ -7836,12 +7836,33 @@
 
 ##### M14.2d2b2b: WMMA64 Tensor-Core Indexer Score Kernel
 
-- Status: active
+- Status: done
 - Goal: port current-C's four-warp, 64-component tensor-core score branch.
+- Oracle: `indexer_scores_wmma64_kernel` and its 128-thread launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2b2b/indexer-wmma64-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_wmma64_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Evidence: added executable-local Rust `indexer_scores_wmma64_kernel` using
+  four warps, native `f16` staging, and cuda-oxide `m16n8k16` MMA calls.
+  B300 feature-enabled `ds4-cuda` tests passed with 30 tests and live
+  cargo-oxide execution emitted portable `sm_80` PTX and proved WMMA64
+  output over two 64-component blocks, four-warp tile mapping, per-token
+  weighting, NaN/negative suppression, causal masking, and invalid-shape
+  rejection on `NVIDIA B300 SXM6 AC`. WMMA128 priority, specialized top-k
+  dispatch, route activation, and C CUDA removal remain unclaimed. Local
+  formatter/diff checks, workspace tests, the 73-check WMMA64 comparator,
+  and unified parity passed with 122 passed, 45 skipped, and 0 failed.
+  Non-interactive Claude review produced no completed result before its
+  timeout; adversarial self-review compared four-warp column ownership,
+  accumulator scatter, causal early exit, and explicit `fmaxf` semantics
+  against current C.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
 
 ##### M14.2d2b2c: WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority
 
-- Status: pending
+- Status: active
 - Goal: port current-C's eight-warp, 128-component score branch and final
   widened-WMMA priority contract.
 
