@@ -1138,6 +1138,29 @@ pub const M14_4C3B_SCOPE: CompressorPrefillOrchestrationScope =
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionDecodeSingleMixedScope {
+    pub opt_in_only: bool,
+    pub owns_attention_decode_heads_surface: bool,
+    pub owns_single_token_ring_raw_and_compressed_attention: bool,
+    pub owns_masked_compressed_rows: bool,
+    pub owns_batched_or_online_decode: bool,
+    pub owns_prefill_indexed_or_output_q8_attention: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4D1_SCOPE: AttentionDecodeSingleMixedScope = AttentionDecodeSingleMixedScope {
+    opt_in_only: true,
+    owns_attention_decode_heads_surface: true,
+    owns_single_token_ring_raw_and_compressed_attention: true,
+    owns_masked_compressed_rows: true,
+    owns_batched_or_online_decode: false,
+    owns_prefill_indexed_or_output_q8_attention: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1164,7 +1187,7 @@ mod tests {
         M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
-        M14_4C3B_SCOPE,
+        M14_4C3B_SCOPE, M14_4D1_SCOPE,
     };
 
     #[test]
@@ -1644,6 +1667,18 @@ mod tests {
         assert!(!M14_4C3B_SCOPE.owns_attention_kernels);
         assert!(!M14_4C3B_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4C3B_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_single_decode_scope_leaves_batched_and_other_attention_pending() {
+        assert!(M14_4D1_SCOPE.opt_in_only);
+        assert!(M14_4D1_SCOPE.owns_attention_decode_heads_surface);
+        assert!(M14_4D1_SCOPE.owns_single_token_ring_raw_and_compressed_attention);
+        assert!(M14_4D1_SCOPE.owns_masked_compressed_rows);
+        assert!(!M14_4D1_SCOPE.owns_batched_or_online_decode);
+        assert!(!M14_4D1_SCOPE.owns_prefill_indexed_or_output_q8_attention);
+        assert!(!M14_4D1_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4D1_SCOPE.changes_default_route);
     }
 
     #[test]

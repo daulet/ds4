@@ -2598,6 +2598,18 @@ remainder placement, replay output ordering, weighted RMS/RoPE composition,
 F16 APE input, and optional FP8 compressed output while leaving attention,
 runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.4d1 Rust CUDA single-token mixed attention decode smoke:
+
+```sh
+python3 ds4-parity/check_attention_decode_single_mixed_smoke.py --negative-test
+```
+
+The fixture records executable-local `ds4_gpu_attention_decode_heads_tensor`
+semantics on B300. It proves wrapped raw rows, compressed-row masking,
+learned-sink softmax participation, and raw-only output while leaving
+batched/window/heads8, prefill/indexed/output-Q8 attention, runtime route,
+and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

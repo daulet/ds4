@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4c3b and split next into M14.4d1
+- Status: active; done through M14.4d1 and split next into M14.4d2
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8478,12 +8478,35 @@
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; split first into M14.4d1
+- Status: active; done through M14.4d1 and split next into M14.4d2
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
-###### M14.4d1: Attention Decode Mixed Kernels
+###### M14.4d1: Single-Token Mixed Attention Decode Surface
+
+- Status: done
+- Goal: port the exported single-token mixed attention decode behavior before
+  batched/window/heads8, prefill/indexed, or output-Q8 ownership.
+- Oracle: current-C `ds4_gpu_attention_decode_heads_tensor` and the
+  `single_all` branch of `attention_decode_mixed_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d1/attention-decode-single-mixed-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_decode_single_mixed_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust single-token mixed-attention
+  execution using the current-C visible-row and sink-softmax semantics. B300
+  feature-enabled tests passed with 57 tests; live cargo-oxide execution
+  emitted portable `sm_80` PTX with libdevice linkage and matched
+  masked/unmasked compressed rows, wrapped raw rows, sink softmax, and
+  raw-only outputs on `NVIDIA B300 SXM6 AC`. Batched/window/heads8 decode,
+  prefill/indexed/output-Q8 attention, runtime route activation, and C CUDA
+  removal remain unclaimed. Local formatting, diff, library tests, the d1
+  comparator, retained M14 checks, and unified parity passed with 141 passed,
+  50 skipped, and 0 failed.
+
+###### M14.4d2: Batched And Online Attention Decode Kernels
 
 - Status: active
-- Goal: port base mixed attention decode behavior and its bounded host
-  surface before optimized heads8, prefill/indexed, or output-Q8 ownership.
+- Goal: port batched/window mixed decode and optimized online decode behavior
+  before prefill, indexed, or output-Q8 attention ownership.
