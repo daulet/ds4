@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4b and split next into M14.4c
+- Status: active; done through M14.4c1 and split next into M14.4c2
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8367,6 +8367,38 @@
 
 ##### M14.4c: Composed KV Storage And Compressor Kernels
 
+- Status: active; done through M14.4c1 and split next into M14.4c2
+- Goal: port composed KV storage and bounded compressor kernels before
+  claiming attention execution.
+
+###### M14.4c1: Composed FP8 Raw Storage And Compressor Row Stores
+
+- Status: done
+- Goal: port `ds4_gpu_kv_fp8_store_raw_tensor`, `compressor_store_kernel`,
+  and `compressor_set_rows_kernel` before claiming compressor pooling.
+- Oracle: current-C `ds4_gpu_kv_fp8_store_raw_tensor`,
+  `compressor_store_kernel`, `compressor_set_rows_kernel`, and
+  `model_scalar_dev`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4c1/composed-kv-compressor-store-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_composed_kv_compressor_store_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust composed FP8 quantization plus
+  raw-store execution and ratio-4 compressor store/set-row execution. B300
+  feature-enabled tests passed with 53 tests; live cargo-oxide execution
+  emitted portable `sm_80` PTX with libdevice linkage and matched composed
+  storage, ratio-4 row geometry, and F32/F16 APE outputs on
+  `NVIDIA B300 SXM6 AC`. Compressor pooling/shift, wrapper orchestration,
+  normalization/RoPE composition, attention, runtime route activation, and C
+  CUDA removal remain unclaimed.
+  Local formatting, diff, library tests, the 67-check comparator, retained
+  M14 checks, and unified parity passed with 137 passed, 50 skipped, and
+  0 failed.
+
+###### M14.4c2: Compressor Pooling And Ratio-4 Shift Kernels
+
 - Status: active
-- Goal: port `ds4_gpu_kv_fp8_store_raw_tensor` composition and bounded
-  compressor storage/update kernels before claiming attention execution.
+- Goal: port `compressor_prefill_pool_kernel`,
+  `compressor_update_pool_kernel`, and `compressor_shift_ratio4_kernel`
+  before claiming update/prefill wrapper orchestration.

@@ -1144,6 +1144,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.4c1 cuda-oxide composed KV and compressor-store smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_composed_kv_compressor_store_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

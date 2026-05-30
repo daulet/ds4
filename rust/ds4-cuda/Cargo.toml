@@ -212,3 +212,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-raw-kv-indexer-qat-smoke"
 path = "src/bin/raw_kv_indexer_qat_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-composed-kv-compressor-store-smoke"
+path = "src/bin/composed_kv_compressor_store_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

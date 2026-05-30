@@ -2550,6 +2550,18 @@ E2M1FN activation-simulation round trip. It leaves same-launch overlapping
 row ordering, composed FP8 store, compressor, attention, runtime route, and
 C CUDA removal unclaimed.
 
+Validate the M14.4c1 Rust CUDA composed KV and compressor-store smoke:
+
+```sh
+python3 ds4-parity/check_composed_kv_compressor_store_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local composed FP8 quantization plus raw-store
+execution and `compressor_store_kernel`/`compressor_set_rows_kernel` execution
+on B300. It proves ratio-4 state-row selection and both F32 and F16 APE reads.
+It leaves compressor pooling/shift, wrapper orchestration, attention, runtime
+route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
