@@ -157,10 +157,11 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     report.check(set(EXPECTED_SYMBOLS) <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
         "BufferedFdDeviceCopy",
+        "fn fd_weight_cache_selected() -> bool",
         "fn buffered_fd_weight_cache_selected() -> bool",
-        'std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_some()',
         'std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_some()',
         'std::env::var_os("DS4_CUDA_NO_FD_CACHE").is_none()',
+        "!direct_model_read_selected()",
         "fn try_upload_abi_buffered_fd_range(",
         "libc::pread(",
         "Some(libc::EINTR)",
@@ -241,7 +242,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy" in texts["status"],
         "active item missing",
     )
     report.check(

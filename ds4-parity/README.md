@@ -3268,6 +3268,20 @@ same cache-return boundary for prefetched host reads. Remaining failure
 selection, whole-archive retention, and the executable-stack warning remain
 open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2a Rust CUDA public default fd
+selection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_default_fd_selection_smoke.py --negative-test
+```
+
+The fixture supplies a bound model fd from a C-linked B300 consumer after
+deterministically rejecting whole-map registration. It proves that buffered
+fd reads do not require `DS4_CUDA_WEIGHT_CACHE`, remain selected under
+`DS4_CUDA_WEIGHT_PRELOAD`, and are bypassed by `DS4_CUDA_NO_FD_CACHE` before
+fallback range handling. Remaining failure selection, whole-archive
+retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

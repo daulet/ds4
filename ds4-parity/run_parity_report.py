@@ -1576,6 +1576,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2a Rust CUDA public default-fd selection ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_model_control_default_fd_selection_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

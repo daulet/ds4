@@ -1,0 +1,71 @@
+{
+  "schema": "ds4.cuda_abi_model_control_default_fd_selection_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2a",
+  "status": "b300-pass-staticlib-default-fd-selection-abi",
+  "goal": "Rust-own current-C public bound-fd selection without requiring DS4_CUDA_WEIGHT_CACHE, including preload continuation and explicit fd disablement, while leaving remaining failure selection and route promotion pending.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "cuda_model_range_ptr",
+      "cuda_model_range_ptr_from_fd"
+    ],
+    "semantics": [
+      "after global model/direct and retained-range lookups, current C attempts a bound model fd whenever DS4_CUDA_NO_FD_CACHE is absent",
+      "the fd-selection guard does not require DS4_CUDA_WEIGHT_CACHE and is reached even when DS4_CUDA_WEIGHT_PRELOAD is set",
+      "setting DS4_CUDA_NO_FD_CACHE bypasses fd staging and continues into registration or host-to-device copy fallback"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2a/abi_model_control_default_fd_selection_link_smoke.c",
+    "selection_path": "fd_weight_cache_selected now requires only that fd caching is not disabled and direct-host bypass is not selected, preserving buffered fd staging for a bound fd without the historical weight-cache flag",
+    "corrected_predecessor_boundary": "the buffered-fd predecessor checker now treats DS4_CUDA_WEIGHT_CACHE as its observation setup rather than as the current-C fd eligibility contract",
+    "remaining_policy_boundary": "remaining residual failure selection, q8/f16 hooks, remaining compute exports, and route promotion stay pending"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_fd_selection_without_weight_cache_flag": true,
+    "owns_weight_preload_fd_selection": true,
+    "owns_no_fd_cache_disable_selection": true,
+    "owns_live_default_fd_output_observation": true,
+    "owns_remaining_failure_selection": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 110,
+    "feature_release_test_count": 117,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "buffered_only_environment": true,
+      "default_fd_staging_without_weight_cache": true,
+      "weight_preload_does_not_suppress_fd_staging": true,
+      "no_fd_cache_disables_fd_staging": true,
+      "whole_map_registration_attempts_preserved": true,
+      "range_registration_only_after_fd_disable": true,
+      "weighted_outputs_match": true,
+      "embedded_libdevice_module_loaded": true,
+      "staticlib_export_count_unchanged": true,
+      "buffered_fd_regression_passed": true,
+      "direct_model_regression_passed": true,
+      "pageable_hmm_regression_passed": true,
+      "full_model_copy_regression_passed": true
+    }
+  },
+  "integration_risks": [
+    "the linked consumer proves buffered public fd selection on B300 after deterministic whole-map registration rejection with interposed CUDA error code 801; the prior direct-I/O fd path remains covered by its predecessor artifact",
+    "the no-fd-cache case proves selection bypass and observes fallback output, but remaining allocation or transfer failure branches are not forced in this consumer",
+    "remaining model-control failure selection, q8/f16 hooks, production linker selection, and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy"
+}

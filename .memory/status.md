@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,22 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2a Public Default Fd Selection ABI selects
+  a configured model fd whenever fd caching is not disabled and direct-host
+  bypass is not selected, without incorrectly requiring
+  `DS4_CUDA_WEIGHT_CACHE`. A C-linked B300 consumer rejects whole-map
+  registration with error code 801, verifies file-backed weighted output
+  with the weight-cache flag absent and with preload set, then verifies
+  `DS4_CUDA_NO_FD_CACHE` moves to fallback host-weight output with a
+  range-registration attempt. Local library tests pass with 110 tests; B300
+  release-feature tests pass with 117 tests, the static library retains 29
+  exports, and buffered-fd, direct-model, pageable-HMM, and full-model-copy
+  linked consumers pass against it. The public default-fd selection checker
+  passes 91 checks, and the default unified report passes with 196 passed, 45
+  skipped, and 0 failed. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Remaining
+  failure selection, route promotion, and remaining graph compute remain
+  active.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b1 Public Direct-Model Read Selection ABI
   resolves nonempty `DS4_CUDA_DIRECT_MODEL` reads from the caller mapping
   before per-range staging after global copied/registered state, while

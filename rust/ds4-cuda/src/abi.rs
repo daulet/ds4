@@ -419,9 +419,7 @@ fn direct_model_read_selected() -> bool {
 }
 
 fn fd_weight_cache_selected() -> bool {
-    std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_some()
-        && std::env::var_os("DS4_CUDA_NO_FD_CACHE").is_none()
-        && !std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_some_and(|value| !value.is_empty())
+    std::env::var_os("DS4_CUDA_NO_FD_CACHE").is_none() && !direct_model_read_selected()
 }
 
 fn buffered_fd_weight_cache_selected() -> bool {

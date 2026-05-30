@@ -9858,6 +9858,43 @@
 
 ################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b because public bound-fd selection without
+  the weight-cache flag and its preload/disable boundaries are independently
+  observable from remaining failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.
+
+################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2a: Public Default Fd Selection ABI
+
+- Status: done
+- Goal: preserve current-C bound-fd selection when `DS4_CUDA_WEIGHT_CACHE` is
+  absent, retain fd selection under `DS4_CUDA_WEIGHT_PRELOAD`, and honor
+  `DS4_CUDA_NO_FD_CACHE` bypass while leaving remaining failure selection and
+  route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-default-fd-selection-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_default_fd_selection_smoke.py --negative-test`.
+- Evidence: Rust now selects a configured model fd whenever fd caching is not
+  disabled and direct-host bypass is not selected, without requiring
+  `DS4_CUDA_WEIGHT_CACHE`. A C-linked B300 consumer rejects whole-map
+  registration with error code 801, observes file-backed weighted output
+  with the weight-cache flag absent and under preload, then observes fallback
+  host-weight output and a range-registration attempt with
+  `DS4_CUDA_NO_FD_CACHE`. Local tests pass with 110 tests, B300
+  release-feature tests pass with 117 tests, and the static library retains
+  29 exports. The preceding buffered-fd, direct-model, pageable-HMM, and
+  full-model-copy linked consumers pass against the new static library.
+  The public default-fd selection checker passes 91 checks, and the default
+  unified report passes with 196 passed, 45 skipped, and 0 failed. The
+  required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  Remaining failure selection, whole-archive retention, route promotion, and
+  the `.note.GNU-stack` warning remain pending.
+
+################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
+
 - Status: active
 - Goal: connect remaining model-control failure selection without claiming
   graph compute closure or route promotion.

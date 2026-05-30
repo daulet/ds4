@@ -2566,6 +2566,34 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE: CudaAbiDirectModelReadScope =
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiDefaultFdSelectionScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_fd_selection_without_weight_cache_flag: bool,
+    pub owns_weight_preload_fd_selection: bool,
+    pub owns_no_fd_cache_disable_selection: bool,
+    pub owns_live_default_fd_output_observation: bool,
+    pub owns_remaining_failure_selection: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE: CudaAbiDefaultFdSelectionScope =
+    CudaAbiDefaultFdSelectionScope {
+        exported_abi_symbol_count: 29,
+        exported_compute_symbol_count: 9,
+        owns_fd_selection_without_weight_cache_flag: true,
+        owns_weight_preload_fd_selection: true,
+        owns_no_fd_cache_disable_selection: true,
+        owns_live_default_fd_output_observation: true,
+        owns_remaining_failure_selection: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2616,7 +2644,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
-        M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
     };
 
     #[test]
@@ -3971,6 +3999,26 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_default_fd_selection_scope_leaves_remaining_failure_selection_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.exported_abi_symbol_count,
+            29
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.exported_compute_symbol_count,
+            9
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_fd_selection_without_weight_cache_flag);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_weight_preload_fd_selection);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_no_fd_cache_disable_selection);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_live_default_fd_output_observation);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_remaining_failure_selection);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.changes_default_route);
     }
 
     #[test]

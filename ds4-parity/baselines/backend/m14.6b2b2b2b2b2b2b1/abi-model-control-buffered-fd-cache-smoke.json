@@ -21,7 +21,7 @@
     "abi_source": "rust/ds4-cuda/src/abi.rs",
     "scope_source": "rust/ds4-cuda/src/lib.rs",
     "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b1/abi_model_control_buffered_fd_cache_link_smoke.c",
-    "selection_path": "DS4_CUDA_WEIGHT_CACHE and DS4_CUDA_NO_DIRECT_IO select buffered fd range upload only when fd caching is not disabled and direct-host bypass is not selected",
+    "selection_path": "the fixture selects DS4_CUDA_WEIGHT_CACHE plus DS4_CUDA_NO_DIRECT_IO for buffered observation; current-C fd eligibility depends on a bound fd with DS4_CUDA_NO_FD_CACHE absent and direct-host bypass not selected",
     "lifetime_boundary": "synchronous pinned upload completes before the public cached-range DeviceBuffer is retained until model replacement or cleanup",
     "remaining_policy_boundary": "O_DIRECT reopen and aligned reads, asynchronous four-slot staging, cache-budget and source-page advice/progress, residual copy failure policy, q8/f16 hooks, remaining compute exports, and route promotion stay pending"
   },

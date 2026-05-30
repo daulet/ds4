@@ -10268,6 +10268,52 @@ Stage split:
 
 ################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b because public bound-fd selection without
+  the weight-cache flag and its preload/disable boundaries are independently
+  observable from remaining failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  remaining graph compute or route promotion.
+
+################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2a: Public Default Fd Selection ABI
+
+- Status: done.
+- Goal: preserve current-C bound-fd selection when `DS4_CUDA_WEIGHT_CACHE` is
+  absent, retain fd selection under `DS4_CUDA_WEIGHT_PRELOAD`, and honor
+  `DS4_CUDA_NO_FD_CACHE` bypass while leaving remaining failure selection and
+  route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-default-fd-selection-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_default_fd_selection_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now selects a configured model fd whenever fd
+    caching is not disabled and direct-host bypass is not selected, without
+    incorrectly requiring `DS4_CUDA_WEIGHT_CACHE`.
+  - A C-linked B300 consumer interposes whole-map registration with error
+    code 801 and verifies file-backed weighted RMS output with the
+    weight-cache flag absent and with preload set, then verifies
+    `DS4_CUDA_NO_FD_CACHE` produces fallback host-weight output with the
+    expected range-registration attempt.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 110 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 117 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - The preceding buffered-fd, direct-model, pageable-HMM, and
+    full-model-copy C-linked B300 consumers rerun successfully against the
+    default-fd-aware static library.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_default_fd_selection_smoke.py
+    --negative-test` passes with 91 checks, and the default unified parity
+    report passes with 196 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Remaining failure selection, q8/f16 hooks, remaining graph compute,
+    whole-archive retention, route promotion, and the generated
+    `.note.GNU-stack` warning remain open.
+
+################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
+
 - Status: active.
 - Goal: connect remaining model-control failure selection without claiming
   remaining graph compute or route promotion.
