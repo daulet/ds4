@@ -10616,6 +10616,41 @@
 
 ##################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbb because direct and
+  split-stride hyperconnection weighted-sum reductions form a bounded public
+  ABI leaf independently from Sinkhorn and later fused reductions.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+###################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba: Public Hyperconnection Weighted Sum ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_hc_weighted_sum_tensor` and
+  `ds4_gpu_hc_weighted_sum_split_tensor` through one stride-aware embedded
+  reduction kernel without claiming Sinkhorn, fused reductions, or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba/abi-hc-weighted-sum-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_hc_weighted_sum_smoke.py --negative-test`.
+- Evidence: Rust exports both weighted-sum wrappers through
+  `abi_hc_weighted_sum_kernel`, retaining valid current-C output-token
+  derivation while validating accessed residual and split spans. A C-linked
+  B300 witness proves direct and split-stride output plus short-input and
+  zero-shape rejection. Local tests pass with 130 tests; B300 feature tests
+  pass with 137 tests; the static library exposes 44 symbols; all 40
+  preceding linked ABI consumers pass against the rebuilt archive with the
+  known embedded-object executable-stack warning. All 44 CUDA ABI comparators
+  pass, and the unified parity report passes with 216 passed, 45 skipped,
+  and 0 failed. The pre-implementation and final pass-end non-interactive
+  Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  Sinkhorn, fused reductions, remaining graph compute, whole-archive/route
+  promotion, C CUDA removal, and the warning remain pending.
+
+###################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

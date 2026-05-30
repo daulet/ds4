@@ -3562,6 +3562,20 @@ fallback, and checks clamped SwiGLU output and invalid range rejection.
 Remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba Rust CUDA
+public hyperconnection weighted-sum ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_hc_weighted_sum_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes direct and split-stride weighted-sum
+reductions through the embedded Rust kernel, with noisy unused split entries
+to prove stride selection, then checks short-input and zero-shape rejection.
+Sinkhorn, fused reductions, remaining graph compute, whole-archive retention
+policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

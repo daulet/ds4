@@ -2136,6 +2136,122 @@ pub unsafe extern "C" fn ds4_gpu_repeat_hc_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+unsafe fn hc_weighted_sum_impl(
+    out: &Ds4GpuTensor,
+    residual_hc: &Ds4GpuTensor,
+    weights: &Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+    weight_stride: u32,
+) -> bool {
+    let Some(out_bytes_per_token) = u64::from(n_embd).checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    if out_bytes_per_token == 0 || n_hc == 0 || weight_stride < n_hc {
+        return false;
+    }
+    let n_tokens = out.bytes / out_bytes_per_token;
+    let Ok(n_tokens_u32) = u32::try_from(n_tokens) else {
+        return false;
+    };
+    if n_tokens_u32 == 0 {
+        return false;
+    }
+    let Some(residual_elements) = n_tokens
+        .checked_mul(u64::from(n_hc))
+        .and_then(|value| value.checked_mul(u64::from(n_embd)))
+    else {
+        return false;
+    };
+    let Some(residual_bytes) = residual_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(weight_elements) = (n_tokens - 1)
+        .checked_mul(u64::from(weight_stride))
+        .and_then(|value| value.checked_add(u64::from(n_hc)))
+    else {
+        return false;
+    };
+    let Some(weight_bytes) = weight_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    if residual_hc.bytes < residual_bytes || weights.bytes < weight_bytes {
+        return false;
+    }
+    with_backend(|backend| {
+        with_abi_kernels(backend, |kernels| {
+            // SAFETY: bounds above cover the token-strided residual and
+            // weight accesses for the current-C weighted-sum contract.
+            Some(unsafe {
+                kernels.hc_weighted_sum_tensor(
+                    backend.stream(),
+                    out.device_ptr(),
+                    residual_hc.device_ptr(),
+                    weights.device_ptr(),
+                    n_embd,
+                    n_hc,
+                    n_tokens_u32,
+                    weight_stride,
+                )
+            })
+        })
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_hc_weighted_sum_tensor(
+    out: *mut Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    weights: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(residual_hc) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(weights) = (unsafe { tensor_ref(weights) }) else {
+            return false;
+        };
+        unsafe { hc_weighted_sum_impl(out, residual_hc, weights, n_embd, n_hc, n_hc) }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_hc_weighted_sum_split_tensor(
+    out: *mut Ds4GpuTensor,
+    residual_hc: *const Ds4GpuTensor,
+    split: *const Ds4GpuTensor,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(residual_hc) = (unsafe { tensor_ref(residual_hc) }) else {
+            return false;
+        };
+        let Some(split) = (unsafe { tensor_ref(split) }) else {
+            return false;
+        };
+        let Some(weight_stride) = n_hc.checked_mul(n_hc).and_then(|comb| {
+            n_hc.checked_mul(2)
+                .and_then(|prefix| prefix.checked_add(comb))
+        }) else {
+            return false;
+        };
+        unsafe { hc_weighted_sum_impl(out, residual_hc, split, n_embd, n_hc, weight_stride) }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 #[allow(clippy::too_many_arguments)]
 unsafe fn hc_expand_impl(
     out_hc: &Ds4GpuTensor,

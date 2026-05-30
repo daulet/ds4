@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba: Public Hyperconnection Weighted Sum ABI
+  is validated. Rust exports `ds4_gpu_hc_weighted_sum_tensor` and
+  `ds4_gpu_hc_weighted_sum_split_tensor` through a stride-aware embedded
+  reduction kernel with `u64` flattened indexing, retaining valid current-C
+  token derivation while rejecting residual and split buffers shorter than
+  their accessed spans. A C-linked B300 witness proves direct and
+  split-stride output plus short-input and zero-shape rejection. Local tests
+  pass with 130 tests; B300 feature tests pass with 137 tests; the static
+  library exposes 44 symbols; all 40 preceding linked ABI consumers pass
+  against the rebuilt archive with the known executable-stack warning.
+  All 44 CUDA ABI comparators pass, and the unified report passes with 216
+  passed, 45 skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Sinkhorn, fused reductions, remaining
+  graph compute, whole-archive/route promotion, C CUDA removal, and the
+  warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbba: Public Shared Gate Up SwiGLU Q8 ABI
   is validated. Rust exports `ds4_gpu_shared_gate_up_swiglu_q8_0_tensor`
   through an embedded private paired-Q8 kernel with retained DP4A/scalar

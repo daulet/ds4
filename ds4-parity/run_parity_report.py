@@ -1736,6 +1736,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba Rust CUDA public hyperconnection weighted-sum ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_hc_weighted_sum_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

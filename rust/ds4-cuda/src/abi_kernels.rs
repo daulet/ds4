@@ -40,6 +40,35 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_hc_weighted_sum_kernel(
+        n_embd: u32,
+        n_hc: u32,
+        n_tokens: u32,
+        weight_stride: u32,
+        residual_hc: &[f32],
+        weights: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d().get() as u64;
+        if index >= u64::from(n_embd) * u64::from(n_tokens) {
+            return;
+        }
+        let dimension = index % u64::from(n_embd);
+        let token = index / u64::from(n_embd);
+        let mut accumulator = 0.0_f32;
+        let mut source_hc = 0_u64;
+        while source_hc < u64::from(n_hc) {
+            accumulator += residual_hc
+                [((token * u64::from(n_hc) + source_hc) * u64::from(n_embd) + dimension) as usize]
+                * weights[(token * u64::from(weight_stride) + source_hc) as usize];
+            source_hc += 1;
+        }
+        unsafe {
+            *out.get_unchecked_mut(index as usize) = accumulator;
+        }
+    }
+
+    #[kernel]
     pub fn abi_hc_expand_kernel(
         n_embd: u32,
         n_hc: u32,
@@ -974,6 +1003,7 @@ mod kernels {
 pub(crate) struct AbiKernelModule {
     add_kernel: CudaFunction,
     repeat_hc_kernel: CudaFunction,
+    hc_weighted_sum_kernel: CudaFunction,
     hc_expand_kernel: CudaFunction,
     directional_steering_project_kernel: CudaFunction,
     swiglu_kernel: CudaFunction,
@@ -1004,6 +1034,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             repeat_hc_kernel: module
                 .load_function("abi_repeat_hc_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            hc_weighted_sum_kernel: module
+                .load_function("abi_hc_weighted_sum_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             hc_expand_kernel: module
                 .load_function("abi_hc_expand_kernel")
@@ -1138,6 +1171,61 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.repeat_hc_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn hc_weighted_sum_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        residual_hc_ptr: u64,
+        weights_ptr: u64,
+        n_embd: u32,
+        n_hc: u32,
+        n_tokens: u32,
+        weight_stride: u32,
+    ) -> bool {
+        let count = u64::from(n_embd) * u64::from(n_tokens);
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let residual_len = count * u64::from(n_hc);
+        let weights_len = (u64::from(n_tokens) - 1) * u64::from(weight_stride) + u64::from(n_hc);
+        let mut n_embd = n_embd;
+        let mut n_hc = n_hc;
+        let mut n_tokens = n_tokens;
+        let mut weight_stride = weight_stride;
+        let mut residual_hc_ptr = residual_hc_ptr;
+        let mut residual_hc_len = residual_len;
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = weights_len;
+        let mut out_ptr = out_ptr;
+        let mut out_len = count;
+        let mut params = [
+            (&mut n_embd as *mut u32).cast::<c_void>(),
+            (&mut n_hc as *mut u32).cast::<c_void>(),
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut weight_stride as *mut u32).cast::<c_void>(),
+            (&mut residual_hc_ptr as *mut u64).cast::<c_void>(),
+            (&mut residual_hc_len as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates all token-strided residual and
+        // weight spans through the last accessed hyperconnection.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.hc_weighted_sum_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

@@ -3138,6 +3138,32 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE:
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiHcWeightedSumScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_hc_weighted_sum_tensor: bool,
+    pub owns_hc_weighted_sum_split_tensor: bool,
+    pub owns_hc_weighted_sum_kernel: bool,
+    pub owns_sinkhorn_or_fused_hc_reductions: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE: CudaAbiHcWeightedSumScope =
+    CudaAbiHcWeightedSumScope {
+        exported_abi_symbol_count: 44,
+        exported_compute_symbol_count: 21,
+        owns_hc_weighted_sum_tensor: true,
+        owns_hc_weighted_sum_split_tensor: true,
+        owns_hc_weighted_sum_kernel: true,
+        owns_sinkhorn_or_fused_hc_reductions: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -3204,6 +3230,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -5134,6 +5161,40 @@ mod tests {
         );
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_hc_weighted_sum_scope_keeps_fused_reductions_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE.exported_abi_symbol_count,
+            44
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE.exported_compute_symbol_count,
+            21
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE.owns_hc_weighted_sum_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_hc_weighted_sum_split_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE.owns_hc_weighted_sum_kernel
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_sinkhorn_or_fused_hc_reductions
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_remaining_graph_compute_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi
+        );
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBA_SCOPE.changes_default_route);
     }
 
     #[test]
