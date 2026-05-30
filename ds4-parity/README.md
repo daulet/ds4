@@ -3676,6 +3676,20 @@ compressor, attention, remaining graph compute, whole-archive retention
 policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public indexer QAT ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_indexer_qat_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the normalized Hadamard plus E2M1FN
+block-quantization path over two 128-wide rows through the embedded Rust
+kernel, then checks short-tensor, zero-row, wrong-width, and null rejection.
+Standalone RoPE, raw KV storage, compressor, attention, routed MoE,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

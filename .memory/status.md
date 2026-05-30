@@ -3,7 +3,22 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexer QAT ABI
+  is validated on B300. Rust exports `ds4_gpu_dsv4_indexer_qat_tensor`
+  through an embedded 128-thread normalized Hadamard plus E2M1FN block
+  quantization kernel. A C-linked B300 witness proves two-row output,
+  per-32-value FP4 scaling, and short-tensor, invalid-shape, and null
+  rejection. Local tests pass with 138 tests; B300 feature tests pass with
+  145 tests; the static library exposes 53 symbols; all 48 preceding linked
+  ABI consumers pass against the rebuilt archive with the known
+  executable-stack warning. All 52 CUDA ABI comparators pass, and the
+  unified report passes with 224 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. RoPE, raw KV storage, compressor,
+  attention, remaining graph compute, whole-archive/route promotion, C CUDA
+  removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbba: Public FP8 KV Quantization ABI
   is validated on B300. Rust exports `ds4_gpu_dsv4_fp8_kv_quantize_tensor`
   through an embedded in-place E4M3FN prefix kernel. A C-linked B300 witness

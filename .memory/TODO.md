@@ -10900,6 +10900,40 @@
 
 ############################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because public indexer Hadamard/FP4 QAT is independently comparable before
+  standalone RoPE, KV storage, compressor, attention, routed MoE, and route
+  work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+############################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexer QAT ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_dsv4_indexer_qat_tensor` through its public
+  in-place normalized Hadamard plus E2M1FN block-quantization kernel without
+  claiming standalone RoPE, raw KV storage, compressor, attention, routed
+  MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba/abi-indexer-qat-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_indexer_qat_smoke.py --negative-test`.
+- Evidence: Rust exports the in-place public indexer QAT wrapper through an
+  embedded 128-thread normalized Hadamard plus E2M1FN kernel. A C-linked
+  B300 witness proves two-row transformed output, per-32-value FP4 scaling,
+  short-tensor rejection, invalid-shape rejection, and null rejection. Local
+  tests pass with 138 tests; B300 feature tests pass with 145 tests; the
+  static library exposes 53 symbols; all 48 preceding linked ABI consumers
+  pass against the rebuilt archive with the known executable-stack warning.
+  All 52 CUDA ABI comparators pass, and the unified parity report passes with
+  224 passed, 45 skipped, and 0 failed.
+  The pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+############################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

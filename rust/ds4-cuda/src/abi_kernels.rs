@@ -719,6 +719,108 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_indexer_hadamard_fp4_kernel(n_rows: u32, head_dim: u32, mut x: DisjointSlice<f32>) {
+        static mut VALUES: SharedArray<f32, 128> = SharedArray::UNINIT;
+        static mut MAGNITUDES: SharedArray<f32, 128> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x();
+        let tid = thread::threadIdx_x() as usize;
+        if row >= n_rows || head_dim != 128 || tid >= 128 {
+            return;
+        }
+        let base = row as usize * head_dim as usize;
+        unsafe {
+            VALUES[tid] = *x.as_mut_ptr().add(base + tid);
+        }
+        thread::sync_threads();
+
+        let mut stride = 1_usize;
+        while stride < 128 {
+            if tid & stride == 0 {
+                let pair = (tid & !(2 * stride - 1)) + (tid & (stride - 1));
+                let a = unsafe { VALUES[pair] };
+                let b = unsafe { VALUES[pair + stride] };
+                unsafe {
+                    VALUES[pair] = a + b;
+                    VALUES[pair + stride] = a - b;
+                }
+            }
+            thread::sync_threads();
+            stride <<= 1;
+        }
+
+        let value = unsafe { VALUES[tid] } * 0.08838834764831845;
+        let block_base = (tid >> 5) * 32;
+        let lane = tid & 31;
+        unsafe {
+            MAGNITUDES[tid] = abi_absolute(value);
+        }
+        thread::sync_threads();
+        stride = 16;
+        while stride > 0 {
+            if lane < stride {
+                let other = unsafe { MAGNITUDES[block_base + lane + stride] };
+                if other > unsafe { MAGNITUDES[block_base + lane] } {
+                    unsafe {
+                        MAGNITUDES[block_base + lane] = other;
+                    }
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+
+        let amax = if unsafe { MAGNITUDES[block_base] } > 7.052966104933725e-38 {
+            unsafe { MAGNITUDES[block_base] }
+        } else {
+            7.052966104933725e-38
+        };
+        let scale = 2.0_f32.powf((amax / 6.0).log2().ceil());
+        let mut scaled = value / scale;
+        if scaled > 6.0 {
+            scaled = 6.0;
+        } else if scaled < -6.0 {
+            scaled = -6.0;
+        }
+        unsafe {
+            *x.get_unchecked_mut(base + tid) = abi_e2m1fn_dequant(scaled) * scale;
+        }
+    }
+
+    fn abi_e2m1fn_value(value: i32) -> f32 {
+        match value & 7 {
+            0 => 0.0,
+            1 => 0.5,
+            2 => 1.0,
+            3 => 1.5,
+            4 => 2.0,
+            5 => 3.0,
+            6 => 4.0,
+            _ => 6.0,
+        }
+    }
+
+    fn abi_e2m1fn_dequant(value: f32) -> f32 {
+        let sign = if value < 0.0 { -1.0 } else { 1.0 };
+        let mut magnitude = abi_absolute(value);
+        if magnitude > 6.0 {
+            magnitude = 6.0;
+        }
+        let mut best = 0_i32;
+        let mut best_diff = magnitude;
+        let mut candidate = 1_i32;
+        while candidate < 8 {
+            let diff = abi_absolute(magnitude - abi_e2m1fn_value(candidate));
+            if diff < best_diff || (diff == best_diff && candidate & 1 == 0 && best & 1 != 0) {
+                best = candidate;
+                best_diff = diff;
+            }
+            candidate += 1;
+        }
+        sign * abi_e2m1fn_value(best)
+    }
+
+    #[kernel]
     pub fn abi_rms_norm_weight_kernel(
         n: u32,
         rows: u32,
@@ -1523,6 +1625,7 @@ pub(crate) struct AbiKernelModule {
     rms_norm_plain_kernel: CudaFunction,
     head_rms_norm_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
+    indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
     dequant_q8_0_to_f16_kernel: CudaFunction,
     dequant_q8_0_to_f32_kernel: CudaFunction,
@@ -1588,6 +1691,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             fp8_kv_quantize_kernel: module
                 .load_function("abi_fp8_kv_quantize_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_hadamard_fp4_kernel: module
+                .load_function("abi_indexer_hadamard_fp4_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
@@ -2456,6 +2562,44 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.fp8_kv_quantize_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn dsv4_indexer_qat_tensor(
+        &self,
+        stream: &CudaStream,
+        x_ptr: u64,
+        n_rows: u32,
+        head_dim: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (n_rows, 1, 1),
+            block_dim: (128, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let count = u64::from(n_rows) * u64::from(head_dim);
+        let mut n_rows = n_rows;
+        let mut head_dim = head_dim;
+        let mut x_ptr = x_ptr;
+        let mut x_len = count;
+        let mut params = [
+            (&mut n_rows as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates the full mutable 128-wide row span and
+        // rejects invalid grid and head dimensions before submission.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.indexer_hadamard_fp4_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

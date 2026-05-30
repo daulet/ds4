@@ -11523,6 +11523,45 @@ Stage split:
 
 ############################################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because public indexer Hadamard/FP4 QAT is independently comparable before
+  standalone RoPE, KV storage, compressor, attention, routed MoE, and route
+  work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+############################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexer QAT ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_dsv4_indexer_qat_tensor` through its public
+  in-place normalized Hadamard plus E2M1FN block-quantization kernel without
+  claiming standalone RoPE, raw KV storage, compressor, attention, routed
+  MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba/abi-indexer-qat-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_indexer_qat_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the in-place public wrapper with
+    checked tensor-span, nonzero-row, and exact 128-wide validation.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds the 128-thread Hadamard/E2M1FN
+    kernel already proved in the opt-in M14.4b campaign.
+  - A C-linked B300 consumer proves two-row transformed output, per-32-value
+    FP4 scaling, short-tensor rejection, invalid-shape rejection, and null
+    rejection.
+  - Local library tests pass with 138 tests; B300 release-feature tests pass
+    with 145 tests; the static library exposes 53 Rust ABI symbols; all 48
+    preceding linked ABI consumers pass against the rebuilt archive with the
+    known generated embedded-object executable-stack warning.
+  - All 52 CUDA ABI comparators pass, and the unified parity report passes
+    with 224 passed, 45 skipped, and 0 failed.
+  - The pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+############################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

@@ -2862,6 +2862,44 @@ pub unsafe extern "C" fn ds4_gpu_dsv4_fp8_kv_quantize_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_dsv4_indexer_qat_tensor(
+    x: *mut Ds4GpuTensor,
+    n_rows: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| {
+        let Some(x) = (unsafe { tensor_ref(x.cast_const()) }) else {
+            return false;
+        };
+        let Some(elements) = u64::from(n_rows).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(bytes) = elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if n_rows == 0 || head_dim != 128 || x.bytes < bytes {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: the mutable tensor span and the exact row width
+                // required by the in-place Hadamard kernel are validated above.
+                Some(unsafe {
+                    kernels.dsv4_indexer_qat_tensor(
+                        backend.stream(),
+                        x.device_ptr(),
+                        n_rows,
+                        head_dim,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,
