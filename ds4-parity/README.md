@@ -2481,6 +2481,17 @@ The fixture records executable-local `f32_to_f16_kernel` execution and
 dense projection dispatch while leaving Q8, route, and removal ownership
 unclaimed.
 
+Validate the M14.3d1 Rust CUDA Q8 conversion kernel smoke:
+
+```sh
+python3 ds4-parity/check_q8_conversion_kernel_smoke.py --negative-test
+```
+
+The fixture records packed Q8 F16/F32 dequantization and activation
+quantization execution on B300. It proves nearest-even rounding and
+partial-block padding while leaving Q8 matmul, dispatch, route, and removal
+ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

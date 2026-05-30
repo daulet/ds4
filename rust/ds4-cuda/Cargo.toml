@@ -182,3 +182,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-blas-projection-smoke"
 path = "src/bin/blas_projection_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-q8-conversion-smoke"
+path = "src/bin/q8_conversion_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

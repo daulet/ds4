@@ -867,6 +867,27 @@ pub const M14_3C3_SCOPE: BlasProjectionKernelScope = BlasProjectionKernelScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Q8ConversionKernelScope {
+    pub opt_in_only: bool,
+    pub owns_dequant_q8_0_to_f16_kernel: bool,
+    pub owns_dequant_q8_0_to_f32_kernel: bool,
+    pub owns_quantize_q8_0_f32_kernel: bool,
+    pub owns_quantized_matmul_kernels: bool,
+    pub owns_q8_matmul_dispatch_policy: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_3D1_SCOPE: Q8ConversionKernelScope = Q8ConversionKernelScope {
+    opt_in_only: true,
+    owns_dequant_q8_0_to_f16_kernel: true,
+    owns_dequant_q8_0_to_f32_kernel: true,
+    owns_quantize_q8_0_f32_kernel: true,
+    owns_quantized_matmul_kernels: false,
+    owns_q8_matmul_dispatch_policy: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -890,6 +911,7 @@ mod tests {
         M14_2D2A_SCOPE, M14_2D2B1_SCOPE, M14_2D2B2A_SCOPE, M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE,
         M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE, M14_2D2C4_SCOPE, M14_2D2C5_SCOPE,
         M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE, M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE,
+        M14_3D1_SCOPE,
     };
 
     #[test]
@@ -1248,6 +1270,17 @@ mod tests {
         assert!(M14_3C3_SCOPE.owns_live_f16_and_f32_blas_paths);
         assert!(!M14_3C3_SCOPE.owns_q8_conversion_or_matmul_kernels);
         assert!(!M14_3C3_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn q8_conversion_scope_leaves_quantized_matmul_and_route_pending() {
+        assert!(M14_3D1_SCOPE.opt_in_only);
+        assert!(M14_3D1_SCOPE.owns_dequant_q8_0_to_f16_kernel);
+        assert!(M14_3D1_SCOPE.owns_dequant_q8_0_to_f32_kernel);
+        assert!(M14_3D1_SCOPE.owns_quantize_q8_0_f32_kernel);
+        assert!(!M14_3D1_SCOPE.owns_quantized_matmul_kernels);
+        assert!(!M14_3D1_SCOPE.owns_q8_matmul_dispatch_policy);
+        assert!(!M14_3D1_SCOPE.changes_default_route);
     }
 
     #[test]

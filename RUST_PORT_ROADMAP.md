@@ -7857,7 +7857,7 @@ Stage split:
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
 - Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2,
-  M14.3c1, M14.3c2, and M14.3c3 are done, and M14.3d1 is active.
+  M14.3c1, M14.3c2, M14.3c3, and M14.3d1 are done, and M14.3d2 is active.
 - Goal: port the M14.3 dense projection, Q8 conversion, and normalization
   operation family through bounded Rust CUDA slices.
 
@@ -8046,10 +8046,39 @@ Stage split:
 
 ##### M14.3d1: Q8 Dequantization And Activation Quantization Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port `dequant_q8_0_to_f16_kernel`,
   `dequant_q8_0_to_f32_kernel`, and `quantize_q8_0_f32_kernel` without
   claiming Q8 matmul dispatch or route integration.
+- Oracle: current-C packed Q8 dequantization and `lrintf`-based activation
+  quantization kernels.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3d1/q8-conversion-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_q8_conversion_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: quantized matmul kernels, Q8 dispatch, runtime route activation,
+  and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `dequant_q8_0_to_f16_kernel`,
+    `dequant_q8_0_to_f32_kernel`, and `quantize_q8_0_f32_kernel` while
+    preserving current-C's 34-byte packed Q8 blocks, ties-to-even rounding,
+    and partial-block zero padding.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 46 tests. Live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and proved packed F16/F32 dequantization, activation
+    quantization, ties-to-even results, partial-block padding, and
+    invalid-shape behavior on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 75-check comparator, and
+    unified parity passed with 136 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained quantized-matmul, Q8-dispatch, route,
+    and removal non-claims.
+
+##### M14.3d2: Base And Prequantized Q8 Matmul Kernels
+
+- Status: active.
+- Goal: port base and prequantized Q8 matmul execution before claiming paired
+  or HC-expansion kernels and final Q8 dispatch policy.
 
 ## Removal Criteria for C Host Code
 
