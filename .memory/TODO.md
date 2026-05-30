@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4c2 and split next into M14.4c3
+- Status: active; done through M14.4c3a and split next into M14.4c3b
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8367,7 +8367,7 @@
 
 ##### M14.4c: Composed KV Storage And Compressor Kernels
 
-- Status: active; done through M14.4c2 and split next into M14.4c3
+- Status: active; done through M14.4c3a and split next into M14.4c3b
 - Goal: port composed KV storage and bounded compressor kernels before
   claiming attention execution.
 
@@ -8421,9 +8421,36 @@
   M14 checks, and unified parity passed with 138 passed, 50 skipped, and
   0 failed.
 
-###### M14.4c3: Compressor Update And Prefill Orchestration
+###### M14.4c3a: Compressor Update Orchestration
+
+- Status: done
+- Goal: compose owned compressor row storage, update pooling, weighted RMS
+  normalization, RoPE, and ratio-4 shift into the current-C update surface
+  before claiming prefill/replay orchestration.
+- Oracle: current-C `ds4_gpu_compressor_update_tensor`,
+  `compressor_store_kernel`, `compressor_update_pool_kernel`,
+  `rms_norm_weight_kernel`, `rope_tail_kernel`, and
+  `compressor_shift_ratio4_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4c3a/compressor-update-orchestration-smoke.json`.
+- Comparator:
+  `ds4-parity/check_compressor_update_orchestration_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust compressor update orchestration with
+  a nonzero compressed-row offset, F16 APE, weighted RMS normalization, YARN
+  RoPE, and ratio-4 post-emission state shift coverage. B300 feature-enabled
+  tests passed with 55 tests; live cargo-oxide execution emitted portable
+  `sm_80` PTX with libdevice linkage and matched non-emitting, ratio-4
+  emitting, and general-ratio emitting outputs on `NVIDIA B300 SXM6 AC`.
+  Prefill/replay orchestration, FP8 compressed-cache composition, attention,
+  runtime route activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, library tests, the c3a comparator, retained M14
+  checks, and unified parity passed with 139 passed, 50 skipped, and
+  0 failed.
+
+###### M14.4c3b: Compressor Prefill And Replay Orchestration
 
 - Status: active
-- Goal: compose owned compressor storage/pooling/shift kernels with owned
-  normalization, RoPE, and optional FP8 operations into the current-C update
-  and prefill surfaces before claiming attention execution.
+- Goal: compose owned compressor kernels with normalization, RoPE, and
+  optional FP8 operations into the current-C prefill and replay surfaces
+  before claiming attention execution.

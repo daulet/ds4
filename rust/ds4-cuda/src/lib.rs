@@ -1093,6 +1093,27 @@ pub const M14_4C2_SCOPE: CompressorPoolShiftKernelScope = CompressorPoolShiftKer
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompressorUpdateOrchestrationScope {
+    pub opt_in_only: bool,
+    pub owns_compressor_update_orchestration: bool,
+    pub owns_store_pool_norm_rope_shift_sequence: bool,
+    pub owns_compressor_prefill_orchestration: bool,
+    pub owns_attention_kernels: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4C3A_SCOPE: CompressorUpdateOrchestrationScope = CompressorUpdateOrchestrationScope {
+    opt_in_only: true,
+    owns_compressor_update_orchestration: true,
+    owns_store_pool_norm_rope_shift_sequence: true,
+    owns_compressor_prefill_orchestration: false,
+    owns_attention_kernels: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1118,7 +1139,7 @@ mod tests {
         M14_2D2B2B_SCOPE, M14_2D2B2C_SCOPE, M14_2D2C1_SCOPE, M14_2D2C2_SCOPE, M14_2D2C3_SCOPE,
         M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
-        M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE,
+        M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
     };
 
     #[test]
@@ -1575,6 +1596,17 @@ mod tests {
         assert!(!M14_4C2_SCOPE.owns_attention_kernels);
         assert!(!M14_4C2_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4C2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn compressor_update_scope_leaves_prefill_attention_and_route_pending() {
+        assert!(M14_4C3A_SCOPE.opt_in_only);
+        assert!(M14_4C3A_SCOPE.owns_compressor_update_orchestration);
+        assert!(M14_4C3A_SCOPE.owns_store_pool_norm_rope_shift_sequence);
+        assert!(!M14_4C3A_SCOPE.owns_compressor_prefill_orchestration);
+        assert!(!M14_4C3A_SCOPE.owns_attention_kernels);
+        assert!(!M14_4C3A_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4C3A_SCOPE.changes_default_route);
     }
 
     #[test]

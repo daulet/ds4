@@ -222,3 +222,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-compressor-pool-shift-smoke"
 path = "src/bin/compressor_pool_shift_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-compressor-update-orchestration-smoke"
+path = "src/bin/compressor_update_orchestration_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

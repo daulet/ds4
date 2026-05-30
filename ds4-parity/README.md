@@ -2574,6 +2574,18 @@ execution on B300. It proves general-ratio, ratio-4, ratio-4 replay, and F16
 APE pool behavior while leaving update/prefill wrapper orchestration,
 attention, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.4c3a Rust CUDA compressor update orchestration smoke:
+
+```sh
+python3 ds4-parity/check_compressor_update_orchestration_smoke.py --negative-test
+```
+
+The fixture records executable-local update orchestration through store,
+pooling, weighted RMS normalization, YARN RoPE, and ratio-4 shift execution
+on B300. It proves ratio-4 non-emission, ratio-4 emission with F16 APE and a
+nonzero compressed row, and general-ratio emission while leaving prefill and
+replay orchestration, attention, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
