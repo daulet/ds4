@@ -199,6 +199,7 @@ def validate_wiring(report: ReportState, texts: dict[str, str]) -> None:
                 "M14.6b2b2b2b2b2a Pageable HMM Fallback ABI",
                 "M14.6b2b2b2b2b2b1 Chunk-Selected Model Copy ABI",
                 "M14.6b2b2b2b2b2b2a Whole-Map Registration Precedence ABI",
+                "M14.6b2b2b2b2b2b2b1 Buffered Fd-Backed Weight Cache ABI",
             ]
         ),
         "active stage missing",

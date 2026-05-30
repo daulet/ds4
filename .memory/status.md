@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b Fd-Backed And Residual Model-Control Policy
+- Active item: M14.6b2b2b2b2b2b2b2 Direct-I/O And Residual Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,24 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b1 Buffered Fd-Backed Weight Cache ABI adds the
+  deterministic public buffered fd-cache subset selected by
+  `DS4_CUDA_WEIGHT_CACHE=1` and `DS4_CUDA_NO_DIRECT_IO=1`. Rust binds an fd
+  configured before the next model map, reads the requested range into a
+  pinned buffer using `pread`, and retains the uploaded device range ahead
+  of page-bounded registration and caller-map copy fallback. An aligned
+  C-linked B300 consumer uses distinct host and fd weights, then rewrites the
+  file after caching; weighted RMS still observes the original fd bytes.
+  Local library tests pass with 99 tests; B300 release-feature tests pass
+  with 101 tests, and the static library retains 29 exports. The buffered fd
+  checker passes with 96 checks, and unified parity passes with 185 passed,
+  45 skipped, and no failures. Self-review fixed fd-before-range-registration
+  priority and interrupted-`pread` retry behavior to match current C.
+  The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Direct-I/O
+  reopen/alignment, asynchronous staging, cache-budget and source-page
+  policy, residual failure policy, whole-archive retention, the
+  executable-stack warning, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2a Whole-Map Registration Precedence ABI adds the
   current-C whole-map read-only registration attempt and registered-pointer
   precedence to the public Rust model-control path. An empty

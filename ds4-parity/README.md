@@ -3098,6 +3098,22 @@ after host mutation. Successful global zero-copy registration, fd-backed
 staging, residual failure/cache policy, whole-archive retention, and the
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b1 Rust CUDA buffered fd-backed weight-cache
+ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_buffered_fd_cache_smoke.py --negative-test
+```
+
+The fixture selects `DS4_CUDA_WEIGHT_CACHE=1` with
+`DS4_CUDA_NO_DIRECT_IO=1`, configures the fd before establishing an aligned
+host map, and deliberately gives the file and host mapping different weights.
+On B300, after the recorded whole-map registration rejection, Rust consumes
+the original file weights and retains the cached device bytes even after the
+backing file is changed. Direct-I/O reopen/alignment, asynchronous staging,
+cache-budget and source-page policy, residual failure handling, whole-archive
+retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

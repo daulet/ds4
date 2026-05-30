@@ -9387,9 +9387,10 @@
 ###### M14.6b2b2b2b2b2b: Registration And Fd-Backed Residual Model-Control Policy
 
 - Status: active; split into M14.6b2b2b2b2b2b1,
-  M14.6b2b2b2b2b2b2a, and M14.6b2b2b2b2b2b2b because deterministic
-  successful chunk-selected copying and whole-map registration precedence are
-  independently testable from fd-backed staging and residual failure/cache
+  M14.6b2b2b2b2b2b2a, M14.6b2b2b2b2b2b2b1, and
+  M14.6b2b2b2b2b2b2b2 because deterministic successful chunk-selected
+  copying, whole-map registration precedence, and buffered fd caching are
+  independently testable from direct-I/O staging and residual failure/cache
   policy.
 - Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
   staging, registration-disable, preload/copy selection, and remaining
@@ -9453,9 +9454,37 @@
   retention, route promotion, and the `.note.GNU-stack` warning remain
   pending.
 
-####### M14.6b2b2b2b2b2b2b: Fd-Backed And Residual Model-Control Policy
+####### M14.6b2b2b2b2b2b2b1: Buffered Fd-Backed Weight Cache ABI
+
+- Status: done
+- Goal: connect the deterministic buffered fd-backed public weight-cache
+  subset while leaving direct-I/O, asynchronous/budget, residual policy, and
+  route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b1/abi-model-control-buffered-fd-cache-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_buffered_fd_cache_smoke.py --negative-test`.
+- Evidence: Rust binds an fd configured before the next model map and, only
+  for `DS4_CUDA_WEIGHT_CACHE=1` plus `DS4_CUDA_NO_DIRECT_IO=1`, uploads a
+  buffered `pread` range into pinned-backed retained device storage before
+  page-bounded registration or caller-map fallback. An aligned C-linked B300
+  consumer uses different fd and host-map weights and rewrites the file
+  after caching; weighted RMS still observes the original fd-backed bytes.
+  Local library tests pass with 99 tests, B300 release-feature tests pass
+  with 101 tests, and the static library retains 29 exports. The buffered fd
+  checker passes with 96 checks, and unified parity passes with 185 passed,
+  45 skipped, and no failures. Self-review corrected fd-vs-range-registration
+  priority and interrupted-`pread` retry behavior to match current C.
+  The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Direct-I/O
+  reopen/alignment, asynchronous staging, cache budget, source-page
+  advice/progress, residual failure/cache policy, graph compute closure,
+  whole-archive retention, route promotion, and the `.note.GNU-stack`
+  warning remain pending.
+
+####### M14.6b2b2b2b2b2b2b2: Direct-I/O And Residual Model-Control Policy
 
 - Status: active
-- Goal: connect fd-backed direct-I/O staging, chunk-copy failure routing and
-  residual model-control selection/cache policy without claiming graph
-  compute closure or route promotion.
+- Goal: connect public fd-backed direct-I/O staging, asynchronous/budget
+  policy, chunk-copy failure routing, and residual model-control policy
+  without claiming graph compute closure or route promotion.

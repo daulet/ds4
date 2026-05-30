@@ -23,7 +23,8 @@ static ABI_REGISTERED_MODEL: Mutex<Option<AbiRegisteredModel>> = Mutex::new(None
 static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_map: 0,
     model_size: 0,
-    _model_fd: -1,
+    model_fd: -1,
+    model_fd_host_base: 0,
 });
 
 struct AbiModelRange {
@@ -36,6 +37,7 @@ struct AbiModelRange {
 
 enum AbiModelRangeStorage {
     DeviceCopy(DeviceBuffer<u8>),
+    BufferedFdDeviceCopy(DeviceBuffer<u8>),
     ReadOnlyRegistered {
         _registration: ReadOnlyRegisteredHostMemory<'static, u8>,
         requested_device_ptr: u64,
@@ -45,7 +47,8 @@ enum AbiModelRangeStorage {
 impl AbiModelRange {
     fn device_ptr(&self) -> u64 {
         match &self.storage {
-            AbiModelRangeStorage::DeviceCopy(buffer) => buffer.cu_deviceptr(),
+            AbiModelRangeStorage::DeviceCopy(buffer)
+            | AbiModelRangeStorage::BufferedFdDeviceCopy(buffer) => buffer.cu_deviceptr(),
             AbiModelRangeStorage::ReadOnlyRegistered {
                 requested_device_ptr,
                 ..
@@ -141,7 +144,8 @@ impl AbiCopiedModel {
 struct AbiModelControl {
     model_map: usize,
     model_size: u64,
-    _model_fd: c_int,
+    model_fd: c_int,
+    model_fd_host_base: usize,
 }
 
 enum TensorStorage {
@@ -295,6 +299,59 @@ fn chunk_selected_model_copy_selected() -> bool {
 
 fn full_model_copy_selected() -> bool {
     std::env::var_os("DS4_CUDA_COPY_MODEL").is_some_and(|value| !value.is_empty())
+}
+
+fn buffered_fd_weight_cache_selected() -> bool {
+    std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_some()
+        && std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_some()
+        && std::env::var_os("DS4_CUDA_NO_FD_CACHE").is_none()
+        && !std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_some_and(|value| !value.is_empty())
+}
+
+fn try_upload_abi_buffered_fd_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    offset: u64,
+    bytes: u64,
+) -> Option<DeviceBuffer<u8>> {
+    if !buffered_fd_weight_cache_selected() || bytes == 0 {
+        return None;
+    }
+    let fd = {
+        let control = ABI_MODEL_CONTROL.lock().ok()?;
+        if control.model_fd < 0
+            || (control.model_fd_host_base != 0 && control.model_fd_host_base != model_map as usize)
+        {
+            return None;
+        }
+        control.model_fd
+    };
+    let bytes = usize::try_from(bytes).ok()?;
+    let mut staging = backend.pinned_zeroed::<u8>(bytes).ok()?;
+    let mut done = 0usize;
+    while done < bytes {
+        let file_offset = offset.checked_add(u64::try_from(done).ok()?)?;
+        let file_offset = libc::off_t::try_from(file_offset).ok()?;
+        let result = unsafe {
+            libc::pread(
+                fd,
+                staging.as_mut_slice()[done..].as_mut_ptr().cast(),
+                bytes - done,
+                file_offset,
+            )
+        };
+        if result < 0 {
+            if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            return None;
+        }
+        if result == 0 {
+            return None;
+        }
+        done = done.checked_add(usize::try_from(result).ok()?)?;
+    }
+    backend.upload_pinned_u8_range(&staging, 0, bytes).ok()
 }
 
 fn try_copy_abi_model_window(
@@ -465,25 +522,29 @@ fn with_cached_abi_model_range<T>(
     // `model_size` bytes while this operation executes; bounds were checked
     // above and the asynchronous upload is synchronized before returning.
     let source = unsafe { std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes) };
-    let registered_storage =
-        abi_registered_source(model_map, model_size, offset as u64, bytes as u64).and_then(
-            |(registered_source, device_offset)| {
-                let registration = backend
-                    .register_read_only_host_range(registered_source)
-                    .ok()?;
-                Some(AbiModelRangeStorage::ReadOnlyRegistered {
-                    requested_device_ptr: registration.cu_deviceptr().checked_add(device_offset)?,
-                    _registration: registration,
-                })
+    let storage =
+        match try_upload_abi_buffered_fd_range(backend, model_map, offset as u64, bytes as u64) {
+            Some(device) => AbiModelRangeStorage::BufferedFdDeviceCopy(device),
+            None => match abi_registered_source(model_map, model_size, offset as u64, bytes as u64)
+                .and_then(|(registered_source, device_offset)| {
+                    let registration = backend
+                        .register_read_only_host_range(registered_source)
+                        .ok()?;
+                    Some(AbiModelRangeStorage::ReadOnlyRegistered {
+                        requested_device_ptr: registration
+                            .cu_deviceptr()
+                            .checked_add(device_offset)?,
+                        _registration: registration,
+                    })
+                }) {
+                Some(storage) => storage,
+                None => AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?),
             },
-        );
-    let storage = match registered_storage {
-        Some(storage) => storage,
-        None => AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?),
-    };
+        };
     backend.synchronize().ok()?;
     let ptr = match &storage {
-        AbiModelRangeStorage::DeviceCopy(device) => device.cu_deviceptr(),
+        AbiModelRangeStorage::DeviceCopy(device)
+        | AbiModelRangeStorage::BufferedFdDeviceCopy(device) => device.cu_deviceptr(),
         AbiModelRangeStorage::ReadOnlyRegistered {
             requested_device_ptr,
             ..
@@ -558,7 +619,8 @@ pub extern "C" fn ds4_gpu_cleanup() {
             if let Ok(mut control) = ABI_MODEL_CONTROL.lock() {
                 control.model_map = 0;
                 control.model_size = 0;
-                control._model_fd = -1;
+                control.model_fd = -1;
+                control.model_fd_host_base = 0;
             }
             *backend = None;
         }
@@ -1188,6 +1250,9 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             *ABI_REGISTERED_MODEL.lock().ok()? = None;
             control.model_map = model_map as usize;
             control.model_size = model_size;
+            if control.model_fd >= 0 && control.model_fd_host_base == 0 {
+                control.model_fd_host_base = model_map as usize;
+            }
             if !full_model_copy_selected() {
                 let _ = try_register_abi_model(backend, model_map, model_size);
             }
@@ -1203,7 +1268,8 @@ pub extern "C" fn ds4_gpu_set_model_fd(fd: c_int) -> c_int {
         let Ok(mut control) = ABI_MODEL_CONTROL.lock() else {
             return false;
         };
-        control._model_fd = fd;
+        control.model_fd = fd;
+        control.model_fd_host_base = control.model_map;
         true
     })
 }

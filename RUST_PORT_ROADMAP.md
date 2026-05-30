@@ -9644,9 +9644,10 @@ Stage split:
 ###### M14.6b2b2b2b2b2b: Registration And Fd-Backed Residual Model-Control Policy
 
 - Status: active; split into M14.6b2b2b2b2b2b1,
-  M14.6b2b2b2b2b2b2a, and M14.6b2b2b2b2b2b2b because deterministic
-  successful chunk-selected copying and whole-map registration precedence are
-  separately testable from fd-backed staging and residual failure/cache
+  M14.6b2b2b2b2b2b2a, M14.6b2b2b2b2b2b2b1, and
+  M14.6b2b2b2b2b2b2b2 because deterministic successful chunk-selected
+  copying, whole-map registration precedence, and buffered fd caching are
+  separately testable from direct-I/O staging and residual failure/cache
   policy.
 - Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
   staging, registration-disable, preload/copy selection, and remaining
@@ -9733,12 +9734,54 @@ Stage split:
     whole-archive retention, route promotion, and the generated
     `.note.GNU-stack` warning remain open.
 
-####### M14.6b2b2b2b2b2b2b: Fd-Backed And Residual Model-Control Policy
+####### M14.6b2b2b2b2b2b2b1: Buffered Fd-Backed Weight Cache ABI
+
+- Status: done.
+- Goal: connect the deterministic buffered fd-backed public weight-cache
+  subset while leaving direct-I/O reopen, asynchronous staging, budget,
+  residual failure/cache policy, and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b1/abi-model-control-buffered-fd-cache-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_buffered_fd_cache_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` binds a configured fd to the current or next
+    model map and selects a buffered `pread` into CUDA-pinned storage only
+    for the bounded `DS4_CUDA_WEIGHT_CACHE=1` plus
+    `DS4_CUDA_NO_DIRECT_IO=1` environment. The resulting device range is
+    retained ahead of page-bounded registration and caller-map device-copy
+    fallback.
+  - The aligned C-linked B300 consumer configures the fd before the host
+    mapping, gives the file and mapping different weights, and rewrites the
+    file after the initial cache call. Weighted RMS continues to observe the
+    original fd-backed cached bytes, proving fd precedence and cache reuse.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 99 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features cuda-oxide-kernels
+    --lib` passes with 101 tests, the static library rebuilds, and the Rust
+    export set remains 29 symbols.
+  - `check_cuda_abi_model_control_buffered_fd_cache_smoke.py --negative-test`
+    passes with 96 checks, and unified parity passes with 185 passed, 45
+    skipped, and no failures.
+  - Self-review moved fd upload before constructing the per-range registered
+    candidate and made interrupted buffered reads retry `EINTR`, matching
+    current-C fd-before-range-map and `cuda_pread_full` behavior.
+  - The required non-interactive Claude adversarial review was invoked with
+    the buffered-fd boundary, current-C oracle, comparator, and B300
+    evidence, but returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without
+    completed findings.
+  - Direct-I/O fd reopen/aligned reads, asynchronous staging, range-arena
+    budget, source-page discard/progress, residual model-copy failure/cache
+    policy, q8/f16 hooks, remaining graph compute, whole-archive retention,
+    route promotion, and the generated `.note.GNU-stack` warning remain
+    open.
+
+####### M14.6b2b2b2b2b2b2b2: Direct-I/O And Residual Model-Control Policy
 
 - Status: active.
-- Goal: connect fd-backed direct-I/O staging, chunk-copy failure routing and
-  residual model-control selection/cache policy without claiming remaining
-  graph compute or route promotion.
+- Goal: connect public fd-backed direct-I/O staging, asynchronous/budget
+  policy, chunk-copy failure routing, and residual model-control
+  selection/cache policy without claiming remaining graph compute or route
+  promotion.
 
 ## Removal Criteria for C Host Code
 

@@ -2251,6 +2251,33 @@ pub const M14_6B2B2B2B2B2B2A_SCOPE: CudaAbiWholeMapRegistrationScope =
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiBufferedFdCacheScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_buffered_fd_weight_cache_path: bool,
+    pub owns_model_fd_host_base_binding: bool,
+    pub owns_direct_io_fd_reopen_policy: bool,
+    pub owns_async_fd_staging_ring: bool,
+    pub owns_fd_cache_budget_policy: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B1_SCOPE: CudaAbiBufferedFdCacheScope = CudaAbiBufferedFdCacheScope {
+    exported_abi_symbol_count: 29,
+    exported_compute_symbol_count: 9,
+    owns_buffered_fd_weight_cache_path: true,
+    owns_model_fd_host_base_binding: true,
+    owns_direct_io_fd_reopen_policy: false,
+    owns_async_fd_staging_ring: false,
+    owns_fd_cache_budget_policy: false,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2296,7 +2323,7 @@ mod tests {
         M14_5D_SCOPE, M14_6A_GATE, M14_6B1_SCOPE, M14_6B2A_SCOPE, M14_6B2B1_SCOPE,
         M14_6B2B2A_SCOPE, M14_6B2B2B1_SCOPE, M14_6B2B2B2A_SCOPE, M14_6B2B2B2B1_SCOPE,
         M14_6B2B2B2B2A_SCOPE, M14_6B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2A_SCOPE,
-        M14_6B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2A_SCOPE,
+        M14_6B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2A_SCOPE, M14_6B2B2B2B2B2B2B1_SCOPE,
     };
 
     #[test]
@@ -3453,6 +3480,20 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2A_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_buffered_fd_cache_scope_leaves_direct_io_ring_and_route_pending() {
+        assert_eq!(M14_6B2B2B2B2B2B2B1_SCOPE.exported_abi_symbol_count, 29);
+        assert_eq!(M14_6B2B2B2B2B2B2B1_SCOPE.exported_compute_symbol_count, 9);
+        assert!(M14_6B2B2B2B2B2B2B1_SCOPE.owns_buffered_fd_weight_cache_path);
+        assert!(M14_6B2B2B2B2B2B2B1_SCOPE.owns_model_fd_host_base_binding);
+        assert!(!M14_6B2B2B2B2B2B2B1_SCOPE.owns_direct_io_fd_reopen_policy);
+        assert!(!M14_6B2B2B2B2B2B2B1_SCOPE.owns_async_fd_staging_ring);
+        assert!(!M14_6B2B2B2B2B2B2B1_SCOPE.owns_fd_cache_budget_policy);
+        assert!(!M14_6B2B2B2B2B2B2B1_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B1_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B1_SCOPE.changes_default_route);
     }
 
     #[test]

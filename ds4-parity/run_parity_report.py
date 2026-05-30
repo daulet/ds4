@@ -1488,6 +1488,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b1 Rust CUDA buffered fd cache ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_model_control_buffered_fd_cache_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -1,0 +1,67 @@
+{
+  "schema": "ds4.cuda_abi_model_control_buffered_fd_cache_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b1",
+  "status": "b300-pass-staticlib-buffered-fd-cache-abi",
+  "goal": "Rust-own the deterministic buffered fd-backed weight-cache subset behind the public model-control ABI while leaving direct-I/O reopen, asynchronous staging, cache-budget, failure, and route policy pending.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_set_model_fd",
+      "cuda_model_range_ptr",
+      "cuda_model_range_ptr_from_fd",
+      "cuda_model_stage_read"
+    ],
+    "semantics": [
+      "current C binds a configured fd to the current model map or the next established map",
+      "after global model residency and existing cached ranges, fd-backed cached bytes precede page-bounded registration and caller-map device-copy fallback",
+      "DS4_CUDA_NO_DIRECT_IO selects buffered pread behavior while preserving fd-backed device caching"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b1/abi_model_control_buffered_fd_cache_link_smoke.c",
+    "selection_path": "DS4_CUDA_WEIGHT_CACHE and DS4_CUDA_NO_DIRECT_IO select buffered fd range upload only when fd caching is not disabled and direct-host bypass is not selected",
+    "lifetime_boundary": "synchronous pinned upload completes before the public cached-range DeviceBuffer is retained until model replacement or cleanup",
+    "remaining_policy_boundary": "O_DIRECT reopen and aligned reads, asynchronous four-slot staging, cache-budget and source-page advice/progress, residual copy failure policy, q8/f16 hooks, remaining compute exports, and route promotion stay pending"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_buffered_fd_weight_cache_path": true,
+    "owns_model_fd_host_base_binding": true,
+    "owns_direct_io_fd_reopen_policy": false,
+    "owns_async_fd_staging_ring": false,
+    "owns_fd_cache_budget_policy": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 99,
+    "feature_release_test_count": 101,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "page_aligned_host_map": true,
+      "fd_before_map_binds_host_base": true,
+      "buffered_fd_weight_cache_selected": true,
+      "fd_bytes_precede_mutated_host_map": true,
+      "repeated_cache_reuses_fd_device_copy": true,
+      "weighted_output_matches": true,
+      "embedded_libdevice_module_loaded": true,
+      "temporary_link_artifacts_cleaned": true
+    }
+  },
+  "integration_risks": [
+    "B300 validation covers only the explicit buffered fd-weight-cache environment after the separately recorded whole-map registration rejection; successful global registration still precedes this path",
+    "direct-I/O fd reopen/aligned reads, asynchronous staging ring, range-arena budget fallback, source-page discard/progress, residual model-copy failure policy, q8/f16 hooks, production linker selection, and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2 Direct-I/O And Residual Model-Control Policy"
+}
