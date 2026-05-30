@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c.
+- Status: active; split beginning with M14.5a through M14.5c2c2.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8833,12 +8833,39 @@ Stage split:
     M14 checks, and unified parity passed with 155 passed, 50 skipped, and 0
     failed.
 
-##### M14.5c2c: Expert-Tile And Atomic Batch Scheduling
+##### M14.5c2c1: Expert-Tile Descriptor Metadata
+
+- Status: done.
+- Goal: port the current-C expert-tile offset and descriptor construction
+  before any tile-local gate/down projection is claimed.
+- Oracle: current-C `moe_build_expert_tile_offsets_kernel`,
+  `moe_build_expert_tiles_kernel`, and `expert_tile_m` selection.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c1/routed-moe-expert-tiles-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_expert_tiles_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in tile descriptor generation for default
+  eight-pair and alternate four-pair expert grouping, including partial tiles
+  and negative-expert bucket-zero counts. Tile-local projection,
+  atomic-down/rowspan dispatch, Q4_K, hyperconnection, runtime graph
+  integration, default route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust tile offset and descriptor kernels composed
+    with the sorted-pair expert-count surface for both block sizes.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 77 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    and matched tile totals, expert identifiers, starts, partial tiles, and
+    expert-zero fallback on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2c1 comparator, retained
+    M14 checks, and unified parity passed with 156 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2c2: Default Tile8 Row32 Projection
 
 - Status: active.
-- Goal: port current-C expert-tile batched IQ2-XXS/Q2_K execution and
-  atomic-down scheduling branches after the no-expert-tiles P2 route is
-  closed.
+- Goal: port current-C default eight-pair row32 expert-tile gate/down
+  projection after the descriptor metadata is closed, leaving atomic-down
+  and wider-row variants for subsequent evidence boundaries.
 
 ## Removal Criteria for C Host Code
 

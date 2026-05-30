@@ -1673,6 +1673,31 @@ pub const M14_5C2B2_SCOPE: RoutedMoeSortedP2Scope = RoutedMoeSortedP2Scope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeExpertTilesScope {
+    pub opt_in_only: bool,
+    pub consumes_sorted_pair_metadata_surface: bool,
+    pub owns_moe_build_expert_tile_offsets_kernel: bool,
+    pub owns_moe_build_expert_tiles_kernel: bool,
+    pub owns_tile4_and_tile8_descriptor_metadata: bool,
+    pub owns_tile_projection_kernels: bool,
+    pub owns_atomic_down_or_rowspan_dispatch: bool,
+    pub owns_q4_k_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2C1_SCOPE: RoutedMoeExpertTilesScope = RoutedMoeExpertTilesScope {
+    opt_in_only: true,
+    consumes_sorted_pair_metadata_surface: true,
+    owns_moe_build_expert_tile_offsets_kernel: true,
+    owns_moe_build_expert_tiles_kernel: true,
+    owns_tile4_and_tile8_descriptor_metadata: true,
+    owns_tile_projection_kernels: false,
+    owns_atomic_down_or_rowspan_dispatch: false,
+    owns_q4_k_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1707,6 +1732,7 @@ mod tests {
         M14_4C3A_SCOPE, M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
+        M14_5C2C1_SCOPE,
     };
 
     #[test]
@@ -2564,6 +2590,19 @@ mod tests {
         assert!(!M14_5C2B2_SCOPE.owns_expert_tile_or_atomic_down);
         assert!(!M14_5C2B2_SCOPE.owns_q4_k_or_runtime_graph);
         assert!(!M14_5C2B2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_expert_tiles_scope_leaves_projection_and_route_pending() {
+        assert!(M14_5C2C1_SCOPE.opt_in_only);
+        assert!(M14_5C2C1_SCOPE.consumes_sorted_pair_metadata_surface);
+        assert!(M14_5C2C1_SCOPE.owns_moe_build_expert_tile_offsets_kernel);
+        assert!(M14_5C2C1_SCOPE.owns_moe_build_expert_tiles_kernel);
+        assert!(M14_5C2C1_SCOPE.owns_tile4_and_tile8_descriptor_metadata);
+        assert!(!M14_5C2C1_SCOPE.owns_tile_projection_kernels);
+        assert!(!M14_5C2C1_SCOPE.owns_atomic_down_or_rowspan_dispatch);
+        assert!(!M14_5C2C1_SCOPE.owns_q4_k_or_runtime_graph);
+        assert!(!M14_5C2C1_SCOPE.changes_default_route);
     }
 
     #[test]

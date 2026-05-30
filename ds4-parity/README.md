@@ -2788,6 +2788,18 @@ per-token summation, partial row/pair tiles, and negative-expert fallback. It
 leaves expert-tile/atomic-down scheduling, Q4_K, hyperconnection, runtime
 route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2c1 Rust CUDA routed MoE expert-tile metadata smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_expert_tiles_smoke.py --negative-test
+```
+
+The fixture records current-C batched expert-tile descriptor behavior on B300:
+default eight-pair and alternate four-pair tile offsets, expert/start
+descriptors, partial final tiles, and negative-expert bucket-zero counts. It
+leaves tile-local projection, atomic-down/rowspan execution, Q4_K,
+hyperconnection, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
