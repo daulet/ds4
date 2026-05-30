@@ -3690,6 +3690,20 @@ Standalone RoPE, raw KV storage, compressor, attention, routed MoE,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public standalone RoPE ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_rope_tail_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes interpolated forward and inverse YaRN
+rotary-tail transforms through the embedded Rust kernel, proves the
+non-RoPE prefix remains unchanged, then checks zero-pair, invalid-shape, and
+null rejection. Raw KV storage, compressor, attention, routed MoE, remaining
+graph compute, whole-archive retention policy, route promotion, C CUDA
+removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -10934,6 +10934,41 @@
 
 ############################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because public standalone RoPE is independently comparable before raw KV
+  storage, compressor, attention, routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+############################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Standalone RoPE ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_rope_tail_tensor` through its public unit-stride
+  rotary-tail kernel without claiming raw KV storage, compressor, attention,
+  routed MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-rope-tail-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_rope_tail_smoke.py --negative-test`.
+- Evidence: Rust exports the public standalone RoPE wrapper through an
+  embedded rotary-tail kernel preserving valid interpolation, inverse, and
+  YaRN behavior. A C-linked B300 witness proves interpolated forward output,
+  inverse YaRN output, untouched non-RoPE prefixes, zero-pair rejection,
+  invalid-shape rejection, and null rejection. Local tests pass with 139
+  tests; B300 feature tests pass with 146 tests; the static library exposes
+  54 symbols and embeds 32 kernels; all 49 preceding linked ABI consumers
+  pass against the rebuilt archive with the known executable-stack warning.
+  All 53 CUDA ABI comparators pass, and the unified parity report passes with
+  225 passed, 45 skipped, and 0 failed. Rust preserves current-C widened row
+  addressing and rejects zero-grid and overflowing pair construction rather
+  than retaining current-C invalid launch behavior. The pre-implementation
+  and final pass-end non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+############################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

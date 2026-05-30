@@ -2900,6 +2900,83 @@ pub unsafe extern "C" fn ds4_gpu_dsv4_indexer_qat_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_rope_tail_tensor(
+    x: *mut Ds4GpuTensor,
+    n_tok: u32,
+    n_head: u32,
+    head_dim: u32,
+    n_rot: u32,
+    pos0: u32,
+    n_ctx_orig: u32,
+    inverse: bool,
+    freq_base: f32,
+    freq_scale: f32,
+    ext_factor: f32,
+    attn_factor: f32,
+    beta_fast: f32,
+    beta_slow: f32,
+) -> c_int {
+    status(|| {
+        let Some(x) = (unsafe { tensor_ref(x.cast_const()) }) else {
+            return false;
+        };
+        let Some(elements) = u64::from(n_tok)
+            .checked_mul(u64::from(n_head))
+            .and_then(|count| count.checked_mul(u64::from(head_dim)))
+        else {
+            return false;
+        };
+        let Some(bytes) = elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(pairs) = n_tok
+            .checked_mul(n_head)
+            .and_then(|rows| rows.checked_mul(n_rot / 2))
+        else {
+            return false;
+        };
+        if n_tok == 0
+            || n_head == 0
+            || n_rot == 0
+            || n_rot > head_dim
+            || n_rot & 1 != 0
+            || x.bytes < bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: the full mutable tensor span, rotary width, and
+                // checked nonzero pair launch are validated above.
+                Some(unsafe {
+                    kernels.rope_tail_tensor(
+                        backend.stream(),
+                        x.device_ptr(),
+                        n_tok,
+                        n_head,
+                        head_dim,
+                        n_rot,
+                        pos0,
+                        n_ctx_orig,
+                        inverse,
+                        freq_base,
+                        freq_scale,
+                        ext_factor,
+                        attn_factor,
+                        beta_fast,
+                        beta_slow,
+                        pairs,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

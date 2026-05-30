@@ -607,6 +607,96 @@ mod kernels {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_rope_tail_kernel(
+        n_tok: u32,
+        n_head: u32,
+        head_dim: u32,
+        n_rot: u32,
+        pos0: u32,
+        pos_stride: u32,
+        n_ctx_orig: u32,
+        inverse: u32,
+        freq_base: f32,
+        freq_scale: f32,
+        ext_factor: f32,
+        attn_factor: f32,
+        beta_fast: f32,
+        beta_slow: f32,
+        mut x: DisjointSlice<f32>,
+    ) {
+        let gid = thread::blockIdx_x() * thread::blockDim_x() + thread::threadIdx_x();
+        let pairs_per_head = n_rot / 2;
+        let pairs = n_tok * n_head * pairs_per_head;
+        if gid >= pairs {
+            return;
+        }
+        let pair = gid % pairs_per_head;
+        let row = gid / pairs_per_head;
+        let head = row % n_head;
+        let token = row / n_head;
+        let n_nope = head_dim - n_rot;
+        let rot_i = pair * 2;
+
+        let mut corr0 = 0.0_f32;
+        let mut corr1 = 0.0_f32;
+        if ext_factor != 0.0 {
+            let denom = 2.0_f32 * freq_base.ln();
+            corr0 = (n_rot as f32
+                * (n_ctx_orig as f32 / (beta_fast * 2.0_f32 * 3.1415927_f32)).ln()
+                / denom)
+                .floor();
+            corr1 = (n_rot as f32
+                * (n_ctx_orig as f32 / (beta_slow * 2.0_f32 * 3.1415927_f32)).ln()
+                / denom)
+                .ceil();
+            if corr0 < 0.0 {
+                corr0 = 0.0;
+            }
+            if corr1 > (n_rot - 1) as f32 {
+                corr1 = (n_rot - 1) as f32;
+            }
+        }
+
+        let theta_extrap =
+            (pos0 + token * pos_stride) as f32 * freq_base.powf(-(rot_i as f32) / n_rot as f32);
+        let theta_interp = freq_scale * theta_extrap;
+        let mut theta = theta_interp;
+        let mut mscale = attn_factor;
+        if ext_factor != 0.0 {
+            let denom = if corr1 - corr0 > 0.001 {
+                corr1 - corr0
+            } else {
+                0.001
+            };
+            let mut y = (pair as f32 - corr0) / denom;
+            if y < 0.0 {
+                y = 0.0;
+            } else if y > 1.0 {
+                y = 1.0;
+            }
+            let ramp_mix = (1.0 - y) * ext_factor;
+            theta = theta_interp * (1.0 - ramp_mix) + theta_extrap * ramp_mix;
+            mscale *= 1.0 + 0.1 * (1.0 / freq_scale).ln();
+        }
+        let c = theta.cos() * mscale;
+        let mut s = theta.sin() * mscale;
+        if inverse != 0 {
+            s = -s;
+        }
+
+        let base = ((u64::from(token) * u64::from(n_head) + u64::from(head)) * u64::from(head_dim)
+            + u64::from(n_nope)
+            + u64::from(rot_i)) as usize;
+        let x0 = unsafe { *x.as_mut_ptr().add(base) };
+        let x1 = unsafe { *x.as_mut_ptr().add(base + 1) };
+        unsafe {
+            *x.get_unchecked_mut(base) = x0 * c - x1 * s;
+            *x.get_unchecked_mut(base + 1) = x0 * s + x1 * c;
+        }
+    }
+
     #[kernel]
     pub fn abi_fp8_kv_quantize_kernel(
         n_tok: u32,
@@ -1624,6 +1714,7 @@ pub(crate) struct AbiKernelModule {
     swiglu_kernel: CudaFunction,
     rms_norm_plain_kernel: CudaFunction,
     head_rms_norm_kernel: CudaFunction,
+    rope_tail_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
@@ -1688,6 +1779,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             head_rms_norm_kernel: module
                 .load_function("abi_head_rms_norm_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            rope_tail_kernel: module
+                .load_function("abi_rope_tail_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             fp8_kv_quantize_kernel: module
                 .load_function("abi_fp8_kv_quantize_kernel")
@@ -2562,6 +2656,81 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.fp8_kv_quantize_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn rope_tail_tensor(
+        &self,
+        stream: &CudaStream,
+        x_ptr: u64,
+        n_tok: u32,
+        n_head: u32,
+        head_dim: u32,
+        n_rot: u32,
+        pos0: u32,
+        n_ctx_orig: u32,
+        inverse: bool,
+        freq_base: f32,
+        freq_scale: f32,
+        ext_factor: f32,
+        attn_factor: f32,
+        beta_fast: f32,
+        beta_slow: f32,
+        pairs: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (pairs.div_ceil(THREADS_PER_BLOCK), 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let count = u64::from(n_tok) * u64::from(n_head) * u64::from(head_dim);
+        let mut n_tok = n_tok;
+        let mut n_head = n_head;
+        let mut head_dim = head_dim;
+        let mut n_rot = n_rot;
+        let mut pos0 = pos0;
+        let mut pos_stride = 1_u32;
+        let mut n_ctx_orig = n_ctx_orig;
+        let mut inverse = u32::from(inverse);
+        let mut freq_base = freq_base;
+        let mut freq_scale = freq_scale;
+        let mut ext_factor = ext_factor;
+        let mut attn_factor = attn_factor;
+        let mut beta_fast = beta_fast;
+        let mut beta_slow = beta_slow;
+        let mut x_ptr = x_ptr;
+        let mut x_len = count;
+        let mut params = [
+            (&mut n_tok as *mut u32).cast::<c_void>(),
+            (&mut n_head as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut n_rot as *mut u32).cast::<c_void>(),
+            (&mut pos0 as *mut u32).cast::<c_void>(),
+            (&mut pos_stride as *mut u32).cast::<c_void>(),
+            (&mut n_ctx_orig as *mut u32).cast::<c_void>(),
+            (&mut inverse as *mut u32).cast::<c_void>(),
+            (&mut freq_base as *mut f32).cast::<c_void>(),
+            (&mut freq_scale as *mut f32).cast::<c_void>(),
+            (&mut ext_factor as *mut f32).cast::<c_void>(),
+            (&mut attn_factor as *mut f32).cast::<c_void>(),
+            (&mut beta_fast as *mut f32).cast::<c_void>(),
+            (&mut beta_slow as *mut f32).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates the complete mutable tensor span, rotary
+        // width, and nonzero checked pair grid before launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.rope_tail_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

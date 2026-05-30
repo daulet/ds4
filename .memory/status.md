@@ -3,7 +3,24 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Standalone RoPE ABI
+  is validated on B300. Rust exports `ds4_gpu_rope_tail_tensor` through an
+  embedded public unit-stride rotary-tail kernel. A C-linked B300 witness
+  proves interpolated forward output, inverse YaRN output, untouched
+  non-RoPE prefixes, and zero-pair, invalid-shape, and null rejection. Local
+  tests pass with 139 tests; B300 feature tests pass with 146 tests; the
+  static library exposes 54 symbols and embeds 32 kernels; all 49 preceding
+  linked ABI consumers pass against the rebuilt archive with the known
+  executable-stack warning. All 53 CUDA ABI comparators pass, and the
+  unified report passes with 225 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Rust preserves current-C widened row
+  addressing and rejects zero-grid and overflowing pair construction rather
+  than retaining current-C invalid launch behavior. Raw KV storage,
+  compressor, attention, routed MoE, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexer QAT ABI
   is validated on B300. Rust exports `ds4_gpu_dsv4_indexer_qat_tensor`
   through an embedded 128-thread normalized Hadamard plus E2M1FN block
