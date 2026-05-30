@@ -1424,6 +1424,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b1 Rust CUDA SwiGLU libdevice ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_swiglu_libdevice_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

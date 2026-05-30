@@ -1,0 +1,95 @@
+{
+  "schema": "ds4.cuda_abi_swiglu_libdevice_smoke.v1",
+  "milestone": "M14.6b2b2b1",
+  "status": "b300-pass-staticlib-swiglu-libdevice-abi",
+  "goal": "Rust-own ds4_gpu_swiglu_tensor through a reusable embedded cuda-oxide module that links libdevice PTX at load time without claiming the remaining graph compute surface or production route.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbol": "ds4_gpu_swiglu_tensor",
+    "semantics": [
+      "reject null tensors and undersized tensor ranges",
+      "apply finite-or-NaN clamp behavior independently to gate and up inputs",
+      "compute SiLU through exponential math and apply output weight"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b1/abi_swiglu_link_smoke.c",
+    "kernel_entry": "abi_swiglu_kernel",
+    "artifact_name": "ds4-cuda",
+    "artifact_target": "sm_80",
+    "linked_cubin_target": "sm_103",
+    "libdevice_path": "cuda_host::ltoir::build_cubin_from_ptx_with_libdevice",
+    "extracted_ptx_path_shape": "/tmp/ds4-cuda-abi-<pid>/ds4-cuda-abi.ptx",
+    "successful_load_cleanup": "remove the process-scoped PTX, LTOIR, and cubin directory after cuModuleLoad succeeds",
+    "linkage_requirement": "-Wl,--whole-archive target-staticlib/release/libds4_cuda.a -Wl,--no-whole-archive -lcuda",
+    "launch_boundary": "raw cuda_core::launch_kernel_on_stream parameters retain the current-C output/input alias boundary"
+  },
+  "exported_symbols": [
+    "ds4_gpu_add_tensor",
+    "ds4_gpu_begin_commands",
+    "ds4_gpu_cleanup",
+    "ds4_gpu_directional_steering_project_tensor",
+    "ds4_gpu_end_commands",
+    "ds4_gpu_flush_commands",
+    "ds4_gpu_init",
+    "ds4_gpu_repeat_hc_tensor",
+    "ds4_gpu_should_use_managed_kv_cache",
+    "ds4_gpu_swiglu_tensor",
+    "ds4_gpu_synchronize",
+    "ds4_gpu_tensor_alloc",
+    "ds4_gpu_tensor_alloc_managed",
+    "ds4_gpu_tensor_bytes",
+    "ds4_gpu_tensor_contents",
+    "ds4_gpu_tensor_copy",
+    "ds4_gpu_tensor_fill_f32",
+    "ds4_gpu_tensor_free",
+    "ds4_gpu_tensor_read",
+    "ds4_gpu_tensor_view",
+    "ds4_gpu_tensor_write"
+  ],
+  "ownership": {
+    "exported_abi_symbol_count": 21,
+    "exported_compute_symbol_count": 5,
+    "public_gpu_abi_function_count": 81,
+    "owns_swiglu_tensor": true,
+    "uses_embedded_libdevice_link_path": true,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 91,
+    "feature_release_test_count": 93,
+    "non_release_feature_test_blocker": "cuda-oxide codegen rejects std::f32::<impl f32>::exp in reusable library device code before libdevice lowering",
+    "staticlib_build_command": "cargo build --locked --release --features cuda-oxide-kernels -p ds4-cuda --lib with rustc-codegen-cuda",
+    "c_link_command": "cc -I. -o /tmp/ds4_abi_swiglu_link_smoke ds4-parity/fixtures/backend/m14.6b2b2b1/abi_swiglu_link_smoke.c -Wl,--whole-archive target-staticlib/release/libds4_cuda.a -Wl,--no-whole-archive -lcuda -ldl -lpthread -lm -lrt -lutil",
+    "cleanup_check_command": "test -z \"$(find /tmp -maxdepth 2 -path '/tmp/ds4-cuda-abi-*/*' -type f -print)\"",
+    "generated_artifact_target": "sm_80",
+    "linked_cubin_target": "sm_103",
+    "linker_warning": "generated embed object lacks .note.GNU-stack and currently warns about an executable stack",
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "embedded_libdevice_module_loaded": true,
+      "swiglu_clamped_output_matches": true,
+      "swiglu_unclamped_output_matches": true,
+      "swiglu_alias_output_matches": true,
+      "invalid_shape_rejected": true,
+      "zero_count_rejected": true,
+      "null_rejected": true,
+      "temporary_link_artifacts_cleaned": true
+    }
+  },
+  "integration_risks": [
+    "the embedded module object has no retaining symbol, so consumers must retain the complete static archive until production build integration provides an equivalent mechanism",
+    "the generated embed object currently produces an executable-stack linker warning that should be resolved before production route promotion",
+    "the cuda-oxide non-release feature build rejects reusable library f32 exponential device code, so production proof currently depends on release code generation"
+  ],
+  "next_required_stage": "M14.6b2b2b2 Remaining Rust CUDA Kernel ABI Assembly"
+}

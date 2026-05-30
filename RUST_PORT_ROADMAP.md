@@ -9363,6 +9363,55 @@ Stage split:
 
 ##### M14.6b2b2b: Remaining Rust CUDA Kernel ABI Assembly
 
+- Status: active; split into M14.6b2b2b1 and M14.6b2b2b2 because the first
+  nonlinear ABI export requires a reusable embedded-libdevice loading path
+  independently from the remaining graph compute ABI.
+- Goal: export the remaining graph compute ABI symbols and resolve embedded
+  artifact production-link integration before selecting a Rust CUDA route.
+
+##### M14.6b2b2b1: SwiGLU Libdevice ABI Export
+
+- Status: done.
+- Goal: export `ds4_gpu_swiglu_tensor` through the reusable embedded Rust
+  CUDA module while linking the embedded PTX against libdevice at load time.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b1/abi-swiglu-libdevice-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_swiglu_libdevice_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` adds uniquely named
+    `abi_swiglu_kernel` and loads embedded PTX through
+    `cuda_host::ltoir::build_cubin_from_ptx_with_libdevice` when the bundle
+    contains `__nv_*` references; `abi.rs` preserves the current-C
+    output/input alias boundary through raw launch parameters.
+  - A C consumer of `libds4_cuda.a` on `ds4-rust-port-b300`
+    (`NVIDIA B300 SXM6 AC`) passes clamped, unclamped, aliasing,
+    invalid-shape, zero-count, and null-input checks. It creates a linked
+    process-local `/tmp/ds4-cuda-abi-<pid>/ds4-cuda-abi.sm_103.cubin`,
+    removes the extracted/link artifacts after module load, and `nm`
+    confirms 21 `ds4_gpu_*` exports.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 91 tests and
+    B300 `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 93 tests. The non-release
+    cuda-oxide feature test rejects reusable library
+    `std::f32::<impl f32>::exp` device code before libdevice lowering; this
+    is recorded as an outstanding
+    backend codegen constraint, not omitted.
+  - Whole-archive retention and the generated embedded object's
+    `.note.GNU-stack` warning remain production integration requirements.
+  - `check_cuda_abi_swiglu_libdevice_smoke.py --negative-test` passes with
+    96 checks, and unified parity passes with 177 passed, 45 skipped, and no
+    failures.
+  - The required non-interactive Claude review was invoked with the source,
+    oracle, comparator, B300 proof, and known-linker/codegen-risk bundle, but
+    timed out after 60 seconds without a completed result. Adversarial
+    self-review removed successful runtime link artifacts after module load
+    and kept the non-release cuda-oxide codegen failure explicit.
+  - Remaining graph compute exports, production linker selection, and
+    default-route promotion remain pending.
+
+##### M14.6b2b2b2: Remaining Rust CUDA Kernel ABI Assembly
+
 - Status: active.
 - Goal: export the remaining graph compute ABI symbols and resolve embedded
   artifact production-link integration before selecting a Rust CUDA route.

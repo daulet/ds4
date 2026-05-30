@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b Remaining Rust CUDA Kernel ABI Assembly
+- Active item: M14.6b2b2b2 Remaining Rust CUDA Kernel ABI Assembly
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,7 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.6b2b2a Directional Steering ABI Export.
+- Last validated source before the active item: M14.6b2b2b1 SwiGLU Libdevice ABI Export.
 - Earlier M14.6a Production Route Linkage Blocker.
 - Earlier M14.5d Hyperconnection Split And Expansion Kernels.
 - Earlier M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE.
@@ -225,6 +225,26 @@
 
 ## Last Evidence
 
+- M14.6b2b2b1 SwiGLU Libdevice ABI Export adds the Rust-owned
+  `ds4_gpu_swiglu_tensor` surface and a reusable embedded-PTX loader that
+  calls `cuda_host::ltoir::build_cubin_from_ptx_with_libdevice` when the
+  module contains `__nv_*` references. The C-linked static-library smoke on
+  `NVIDIA B300 SXM6 AC` passes clamped, unclamped, output/input alias,
+  invalid-shape, zero-count, and null-input checks; it produces a linked
+  `sm_103` cubin from embedded `sm_80` PTX, removes temporary link artifacts
+  after successful module load, and `nm` confirms 21 exported `ds4_gpu_*`
+  symbols. Local library tests pass with 91 tests and B300
+  release-feature tests pass with 93 tests. Non-release cuda-oxide feature
+  codegen rejects reusable-library `std::f32::<impl f32>::exp` before
+  libdevice lowering;
+  whole-archive retention, the generated embedded object's executable-stack
+  warning, remaining graph compute exports, production-link selection, and
+  route promotion stay active under M14.6b2b2b2. The SwiGLU ABI checker
+  passes with 96 checks, and unified parity passes with 177 passed, 45
+  skipped, and no failures. The required non-interactive Claude review timed
+  out after 60 seconds without a completed result; adversarial self-review
+  removed successful runtime link artifacts after module load and kept the
+  non-release codegen failure explicit.
 - M14.6b2b2a Directional Steering ABI Export adds the Rust-owned
   `ds4_gpu_directional_steering_project_tensor` surface using uniquely named
   `abi_directional_steering_project_kernel` and raw in-place launch

@@ -263,3 +263,17 @@ available directly from the repo.
 - Permanent rule: speculative decode port stages must give MTP draft,
   exact-N=2 verifier, suffix verifier, frontier mutation, and end-to-end
   stream parity their own validation surfaces before integration.
+
+## 2026-05-30: Embedded Libdevice Kernels Need A Staticlib Load Boundary
+
+- Symptom: the reusable Rust ABI module could load add and steering PTX
+  directly, but adding SwiGLU requires resolving `__nv_expf` before a C
+  consumer can execute the static library.
+- Root cause: `cuda-core` embeds portable PTX in the final executable, while
+  `cuda-host` links libdevice only from a filesystem PTX path; ordinary
+  embedded loading cannot resolve libdevice references.
+- Permanent rule: for reusable nonlinear ABI kernels, extract the embedded
+  PTX and pass it through the cuda-host libdevice cubin builder before module
+  load, then remove successful process-local link artifacts. Record
+  whole-archive retention and non-release codegen behavior as production
+  integration requirements.

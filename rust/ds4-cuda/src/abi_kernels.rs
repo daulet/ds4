@@ -1,7 +1,14 @@
 use std::ffi::c_void;
+use std::fmt;
+use std::path::PathBuf;
+use std::sync::Arc;
 
-use cuda_core::{CudaFunction, CudaStream, LaunchConfig};
+use cuda_core::embedded::{
+    embedded_modules_from_current_exe, ArtifactPayloadKind, EmbeddedModuleError,
+};
+use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, LaunchConfig};
 use cuda_device::{cuda_module, kernel, thread, DisjointSlice, SharedArray};
+use cuda_host::ltoir::{self, LtoirError};
 
 const THREADS_PER_BLOCK: u32 = 256;
 const ABI_KERNEL_ARTIFACT: &str = "ds4-cuda";
@@ -89,6 +96,38 @@ mod kernels {
             i += nth;
         }
     }
+
+    #[kernel]
+    pub fn abi_swiglu_kernel(
+        count: u32,
+        clamp: f32,
+        weight: f32,
+        gate: &[f32],
+        up: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d();
+        let i = index.get();
+        if i >= count as usize {
+            return;
+        }
+
+        let mut g = gate[i];
+        let mut u = up[i];
+        if clamp > 1.0e-6_f32 {
+            if (g.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || g > clamp {
+                g = clamp;
+            }
+            if (u.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || u < -clamp {
+                u = -clamp;
+            } else if u > clamp {
+                u = clamp;
+            }
+        }
+        if let Some(element) = out.get_mut(index) {
+            *element = (g / (1.0_f32 + (-g).exp())) * u * weight;
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -96,26 +135,25 @@ pub(crate) struct AbiKernelModule {
     add_kernel: CudaFunction,
     repeat_hc_kernel: CudaFunction,
     directional_steering_project_kernel: CudaFunction,
+    swiglu_kernel: CudaFunction,
 }
 
 impl AbiKernelModule {
-    pub(crate) fn load(
-        context: &std::sync::Arc<cuda_core::CudaContext>,
-    ) -> Result<Self, cuda_core::EmbeddedModuleError> {
-        let module = kernels::load_named(context, ABI_KERNEL_ARTIFACT)?;
+    pub(crate) fn load(context: &Arc<CudaContext>) -> Result<Self, AbiKernelLoadError> {
+        let module = load_abi_module(context)?;
         Ok(Self {
             add_kernel: module
-                .as_cuda_module()
                 .load_function("abi_add_kernel")
-                .map_err(cuda_core::EmbeddedModuleError::Driver)?,
+                .map_err(AbiKernelLoadError::Driver)?,
             repeat_hc_kernel: module
-                .as_cuda_module()
                 .load_function("abi_repeat_hc_kernel")
-                .map_err(cuda_core::EmbeddedModuleError::Driver)?,
+                .map_err(AbiKernelLoadError::Driver)?,
             directional_steering_project_kernel: module
-                .as_cuda_module()
                 .load_function("abi_directional_steering_project_kernel")
-                .map_err(cuda_core::EmbeddedModuleError::Driver)?,
+                .map_err(AbiKernelLoadError::Driver)?,
+            swiglu_kernel: module
+                .load_function("abi_swiglu_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
         })
     }
 
@@ -253,6 +291,54 @@ impl AbiKernelModule {
         }
         .is_ok()
     }
+
+    pub(crate) unsafe fn swiglu_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        gate_ptr: u64,
+        up_ptr: u64,
+        count: u32,
+        clamp: f32,
+        weight: f32,
+    ) -> bool {
+        let Some(config) = launch_config(u64::from(count)) else {
+            return false;
+        };
+        let mut count = count;
+        let mut clamp = clamp;
+        let mut weight = weight;
+        let mut gate_ptr = gate_ptr;
+        let mut gate_len = u64::from(count);
+        let mut up_ptr = up_ptr;
+        let mut up_len = u64::from(count);
+        let mut out_ptr = out_ptr;
+        let mut out_len = u64::from(count);
+        let mut params = [
+            (&mut count as *mut u32).cast::<c_void>(),
+            (&mut clamp as *mut f32).cast::<c_void>(),
+            (&mut weight as *mut f32).cast::<c_void>(),
+            (&mut gate_ptr as *mut u64).cast::<c_void>(),
+            (&mut gate_len as *mut u64).cast::<c_void>(),
+            (&mut up_ptr as *mut u64).cast::<c_void>(),
+            (&mut up_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates every device range and holds the
+        // owning CUDA context and loaded module through launch submission.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.swiglu_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
 }
 
 fn launch_config(count: u64) -> Option<LaunchConfig> {
@@ -263,4 +349,89 @@ fn launch_config(count: u64) -> Option<LaunchConfig> {
         block_dim: (THREADS_PER_BLOCK, 1, 1),
         shared_mem_bytes: 0,
     })
+}
+
+fn load_abi_module(context: &Arc<CudaContext>) -> Result<Arc<CudaModule>, AbiKernelLoadError> {
+    let module = embedded_modules_from_current_exe()
+        .map_err(AbiKernelLoadError::Embedded)?
+        .into_iter()
+        .find(|module| module.name() == ABI_KERNEL_ARTIFACT)
+        .ok_or_else(|| {
+            AbiKernelLoadError::Embedded(EmbeddedModuleError::ModuleNotFound {
+                name: ABI_KERNEL_ARTIFACT.to_string(),
+            })
+        })?;
+    let ptx = module
+        .payload(ArtifactPayloadKind::Ptx)
+        .ok_or_else(|| AbiKernelLoadError::Embedded(EmbeddedModuleError::NoModules))?;
+    if !ptx.windows(b"__nv_".len()).any(|window| window == b"__nv_") {
+        return module.load(context).map_err(AbiKernelLoadError::Embedded);
+    }
+
+    let artifact_dir = std::env::temp_dir().join(format!("ds4-cuda-abi-{}", std::process::id()));
+    std::fs::create_dir_all(&artifact_dir).map_err(|source| AbiKernelLoadError::Io {
+        path: artifact_dir.clone(),
+        source,
+    })?;
+    let ptx_path = artifact_dir.join("ds4-cuda-abi.ptx");
+    std::fs::write(&ptx_path, ptx).map_err(|source| AbiKernelLoadError::Io {
+        path: ptx_path.clone(),
+        source,
+    })?;
+    let cubin_path =
+        ltoir::build_cubin_from_ptx_with_libdevice(&ptx_path, &link_target_arch(context)?)
+            .map_err(AbiKernelLoadError::Link)?;
+    let loaded = context
+        .load_module_from_file(cubin_path.to_string_lossy().as_ref())
+        .map_err(AbiKernelLoadError::Driver)?;
+    std::fs::remove_dir_all(&artifact_dir).map_err(|source| AbiKernelLoadError::Io {
+        path: artifact_dir,
+        source,
+    })?;
+    Ok(loaded)
+}
+
+fn link_target_arch(context: &CudaContext) -> Result<String, AbiKernelLoadError> {
+    if let Ok(arch) = std::env::var("CUDA_OXIDE_LINK_TARGET") {
+        return Ok(arch);
+    }
+    let (major, minor) = context
+        .compute_capability()
+        .map_err(AbiKernelLoadError::Driver)?;
+    Ok(format!("sm_{major}{minor}"))
+}
+
+#[derive(Debug)]
+pub(crate) enum AbiKernelLoadError {
+    Embedded(EmbeddedModuleError),
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    Link(LtoirError),
+    Driver(DriverError),
+}
+
+impl fmt::Display for AbiKernelLoadError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Embedded(error) => error.fmt(formatter),
+            Self::Io { path, source } => {
+                write!(formatter, "failed to write {}: {source}", path.display())
+            }
+            Self::Link(error) => error.fmt(formatter),
+            Self::Driver(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for AbiKernelLoadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Embedded(error) => Some(error),
+            Self::Io { source, .. } => Some(source),
+            Self::Link(error) => Some(error),
+            Self::Driver(error) => Some(error),
+        }
+    }
 }

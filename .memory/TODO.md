@@ -9190,6 +9190,39 @@
 
 ##### M14.6b2b2b: Remaining Rust CUDA Kernel ABI Assembly
 
+- Status: active; split into M14.6b2b2b1 and M14.6b2b2b2
+- Goal: export the remaining graph compute ABI symbols and resolve embedded
+  artifact production-link integration before selecting a Rust CUDA route.
+
+##### M14.6b2b2b1: SwiGLU Libdevice ABI Export
+
+- Status: done
+- Goal: export `ds4_gpu_swiglu_tensor` through an embedded Rust CUDA module
+  whose PTX can be linked with libdevice from a C-linked static-library
+  consumer.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b1/abi-swiglu-libdevice-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_swiglu_libdevice_smoke.py --negative-test`.
+- Evidence: `abi_swiglu_kernel` is loaded from embedded PTX through
+  `cuda_host::ltoir::build_cubin_from_ptx_with_libdevice` when `__nv_*`
+  references are present. The B300 C-linked static-library smoke passes
+  clamped, unclamped, output/input alias, invalid-shape, zero-count, and
+  null-input checks; it emits and removes a process-local linked `sm_103`
+  cubin from embedded `sm_80` PTX, and `nm` confirms 21 exports. Local
+  library tests pass with 91 tests;
+  B300 release-feature tests pass with 93 tests. Non-release cuda-oxide
+  feature codegen rejects reusable library `std::f32::<impl f32>::exp`
+  before libdevice lowering and remains recorded as a backend constraint. Whole-archive
+  retention and `.note.GNU-stack` remain open before route promotion. The
+  SwiGLU ABI checker passes with 96 checks and unified parity passes with 177
+  passed, 45 skipped, and no failures. The required non-interactive Claude
+  review timed out after 60 seconds without a completed result; adversarial
+  self-review removed successful runtime link artifacts after module load and
+  retained the non-release codegen constraint explicitly.
+
+##### M14.6b2b2b2: Remaining Rust CUDA Kernel ABI Assembly
+
 - Status: active
 - Goal: export the remaining graph compute ABI symbols and resolve embedded
   artifact production-link integration before selecting a Rust CUDA route.

@@ -382,6 +382,51 @@ pub unsafe extern "C" fn ds4_gpu_directional_steering_project_tensor(
     })
 }
 
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_swiglu_tensor(
+    out: *mut Ds4GpuTensor,
+    gate: *const Ds4GpuTensor,
+    up: *const Ds4GpuTensor,
+    count: u32,
+    clamp: f32,
+    weight: f32,
+) -> c_int {
+    status(|| {
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(gate) = (unsafe { tensor_ref(gate) }) else {
+            return false;
+        };
+        let Some(up) = (unsafe { tensor_ref(up) }) else {
+            return false;
+        };
+        let bytes = u64::from(count) * size_of::<f32>() as u64;
+        if count == 0 || out.bytes < bytes || gate.bytes < bytes || up.bytes < bytes {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: bounds above cover each device pointer; raw launch
+                // preserves current-C support for output/input aliasing.
+                Some(unsafe {
+                    kernels.swiglu_tensor(
+                        backend.stream(),
+                        out.device_ptr(),
+                        gate.device_ptr(),
+                        up.device_ptr(),
+                        count,
+                        clamp,
+                        weight,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ds4_gpu_tensor_write(
     tensor: *mut Ds4GpuTensor,

@@ -2979,6 +2979,20 @@ static-library retention requirement and generated executable-stack warning
 remain open production-link integration work; other graph exports and route
 promotion remain pending.
 
+Validate the M14.6b2b2b1 Rust CUDA SwiGLU libdevice ABI export:
+
+```sh
+python3 ds4-parity/check_cuda_abi_swiglu_libdevice_smoke.py --negative-test
+```
+
+The fixture records `ds4_gpu_swiglu_tensor` running from a C consumer of the
+Rust static library on B300. Embedded PTX containing exponential libdevice
+references is extracted and linked into an `sm_103` cubin at module load
+time, then its temporary link directory is removed; clamped, unclamped, and
+output/input alias cases pass. Whole-archive retention, executable-stack
+warning removal, and the remaining graph exports remain open before route
+promotion.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

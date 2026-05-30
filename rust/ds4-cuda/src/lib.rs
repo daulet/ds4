@@ -2047,6 +2047,27 @@ pub const M14_6B2B2A_SCOPE: CudaAbiDirectionalSteeringScope = CudaAbiDirectional
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiSwigluScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_swiglu_tensor: bool,
+    pub uses_embedded_libdevice_link_path: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B1_SCOPE: CudaAbiSwigluScope = CudaAbiSwigluScope {
+    exported_abi_symbol_count: 21,
+    exported_compute_symbol_count: 5,
+    owns_swiglu_tensor: true,
+    uses_embedded_libdevice_link_path: true,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2090,7 +2111,7 @@ mod tests {
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
         M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE, M14_5C2F_SCOPE,
         M14_5D_SCOPE, M14_6A_GATE, M14_6B1_SCOPE, M14_6B2A_SCOPE, M14_6B2B1_SCOPE,
-        M14_6B2B2A_SCOPE,
+        M14_6B2B2A_SCOPE, M14_6B2B2B1_SCOPE,
     };
 
     #[test]
@@ -3143,6 +3164,17 @@ mod tests {
         assert!(!M14_6B2B2A_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn swiglu_abi_scope_leaves_remaining_graph_compute_and_route_pending() {
+        assert_eq!(M14_6B2B2B1_SCOPE.exported_abi_symbol_count, 21);
+        assert_eq!(M14_6B2B2B1_SCOPE.exported_compute_symbol_count, 5);
+        assert!(M14_6B2B2B1_SCOPE.owns_swiglu_tensor);
+        assert!(M14_6B2B2B1_SCOPE.uses_embedded_libdevice_link_path);
+        assert!(!M14_6B2B2B1_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B1_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B1_SCOPE.changes_default_route);
     }
 
     #[test]

@@ -50,6 +50,7 @@ EXPECTED_SYMBOLS = [
     "ds4_gpu_tensor_view",
     "ds4_gpu_tensor_write",
 ]
+CURRENT_SUCCESSOR_SYMBOLS = ["ds4_gpu_swiglu_tensor"]
 
 
 @dataclass
@@ -141,7 +142,10 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     symbols = sorted(set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"])))
-    report.check(symbols == EXPECTED_SYMBOLS, "Rust ABI symbol implementation drift")
+    report.check(
+        symbols == sorted(EXPECTED_SYMBOLS + CURRENT_SUCCESSOR_SYMBOLS),
+        "Rust ABI symbol successor progression drift",
+    )
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(set(EXPECTED_SYMBOLS) <= ffi_symbols, "Rust exports do not match public GPU ABI")
@@ -218,7 +222,17 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.6b2b2b Remaining Rust CUDA Kernel ABI Assembly" in texts["status"], "active item missing")
+    report.check(
+        any(
+            marker in texts["status"]
+            for marker in [
+                "Active item: M14.6b2b2b Remaining Rust CUDA Kernel ABI Assembly",
+                "Active item: M14.6b2b2b2 Remaining Rust CUDA Kernel ABI Assembly",
+                "M14.6b2b2b1 SwiGLU Libdevice ABI Export",
+            ]
+        ),
+        "active item missing",
+    )
     report.check("M14.6b2b2a Directional Steering ABI Export" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
