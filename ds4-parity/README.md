@@ -3633,6 +3633,21 @@ output row, model-range, and zero-hyperconnection rejection. Remaining graph
 compute, whole-archive retention policy, route promotion, C CUDA removal, and
 the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public embedding hyperconnection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_embedding_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes single-token hidden replication and
+batched token embedding through the embedded Rust kernels, validates
+invalid-token row-zero fallback and alternate cached model ranges, then
+checks Rust's guarded rejection of unsafe single-token and short-buffer
+requests. Remaining graph compute, whole-archive retention policy, route
+promotion, C CUDA removal, and the embedded-object executable-stack warning
+remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

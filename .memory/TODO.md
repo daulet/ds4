@@ -10796,6 +10796,43 @@
 
 ########################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbb because the
+  public single-token and batched embedding wrappers form a bounded ABI leaf
+  independently from remaining graph compute and route promotion.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+########################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba: Public Embedding Hyperconnection ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_embed_token_hc_tensor` and
+  `ds4_gpu_embed_tokens_hc_tensor` through their public FP16 embedding
+  kernels without claiming remaining graph compute or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba/abi-embedding-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_embedding_smoke.py --negative-test`.
+- Evidence: Rust exports both embedding wrappers through embedded kernels,
+  validating public tensor spans and consuming cached FP16 model rows. A
+  C-linked B300 witness proves single-token replication, batched invalid-ID
+  fallback to row zero, alternate model ranges, and invalid-input rejection.
+  Local tests pass with 135 tests; B300 feature tests pass with 142 tests;
+  the static library exposes 50 symbols; all 45 preceding linked ABI
+  consumers pass against the rebuilt archive with the known executable-stack
+  warning. All 49 CUDA ABI comparators pass, and the unified parity report
+  passes with 221 passed, 45 skipped, and 0 failed. Rust rejects
+  out-of-vocabulary single-token calls, short
+  single-token output, and zero-dimensional or overflowing launches instead
+  of retaining current-C unchecked or undefined behavior. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Remaining graph
+  compute, whole-archive/route promotion, C CUDA
+  removal, and the warning remain pending.
+
+########################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

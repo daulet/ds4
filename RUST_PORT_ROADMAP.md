@@ -11401,6 +11401,50 @@ Stage split:
 
 ########################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbb because the
+  public single-token and batched embedding wrappers are a bounded ABI leaf
+  independently from remaining graph compute and route promotion.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+########################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba: Public Embedding Hyperconnection ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_embed_token_hc_tensor` and
+  `ds4_gpu_embed_tokens_hc_tensor` through their public FP16 embedding
+  kernels without claiming remaining graph compute or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbba/abi-embedding-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_embedding_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports both embedding wrappers, validates the
+    accessed tensor spans, and resolves FP16 embedding rows through the
+    established cached model-range path.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds single-token replication and
+    batched token kernels; the batched path retains current-C invalid-ID
+    fallback to embedding row zero.
+  - A C-linked B300 consumer proves single-token replication, batched invalid
+    token fallback, alternate model ranges, and invalid-input rejection.
+  - Local library tests pass with 135 tests; B300 release-feature tests pass
+    with 142 tests; the static library exposes 50 Rust ABI symbols; all 45
+    preceding linked ABI consumers pass against the rebuilt archive with the
+    known generated embedded-object executable-stack warning.
+  - All 49 CUDA ABI comparators pass, and the unified parity report passes
+    with 221 passed, 45 skipped, and 0 failed.
+  - Rust rejects out-of-vocabulary single tokens, short single outputs, and
+    zero-dimensional or overflowing launches rather than retaining
+    current-C unchecked or undefined behavior.
+  - The pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Remaining graph compute, whole-archive retention policy, route promotion,
+    C CUDA removal, and the generated embedded-object executable-stack warning
+    remain open.
+
+########################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

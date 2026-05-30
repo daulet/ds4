@@ -2624,6 +2624,159 @@ pub unsafe extern "C" fn ds4_gpu_output_hc_weights_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_embed_token_hc_tensor(
+    out_hc: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    n_vocab: u32,
+    token: u32,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out_hc) = (unsafe { tensor_ref(out_hc.cast_const()) }) else {
+            return false;
+        };
+        let Some(weight_elements) = u64::from(n_vocab).checked_mul(u64::from(n_embd)) else {
+            return false;
+        };
+        let Some(weight_bytes) = weight_elements.checked_mul(size_of::<u16>() as u64) else {
+            return false;
+        };
+        let Some(out_elements) = u64::from(n_embd).checked_mul(u64::from(n_hc)) else {
+            return false;
+        };
+        let Some(out_bytes) = out_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_vocab == 0
+            || token >= n_vocab
+            || n_embd == 0
+            || n_hc == 0
+            || weight_offset > model_size
+            || weight_bytes > model_size - weight_offset
+            || out_hc.bytes < out_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                weight_offset,
+                weight_bytes,
+                |weights_ptr| {
+                    with_abi_kernels(backend, |kernels| {
+                        // SAFETY: single-token bounds, output capacity, and
+                        // cached FP16 embedding span are validated above.
+                        Some(unsafe {
+                            kernels.embed_token_hc_tensor(
+                                backend.stream(),
+                                out_hc.device_ptr(),
+                                weights_ptr,
+                                n_vocab,
+                                token,
+                                n_embd,
+                                n_hc,
+                            )
+                        })
+                    })
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_embed_tokens_hc_tensor(
+    out_hc: *mut Ds4GpuTensor,
+    tokens: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    n_vocab: u32,
+    n_tokens: u32,
+    n_embd: u32,
+    n_hc: u32,
+) -> c_int {
+    status(|| {
+        let Some(out_hc) = (unsafe { tensor_ref(out_hc.cast_const()) }) else {
+            return false;
+        };
+        let Some(tokens) = (unsafe { tensor_ref(tokens) }) else {
+            return false;
+        };
+        let Some(weight_elements) = u64::from(n_vocab).checked_mul(u64::from(n_embd)) else {
+            return false;
+        };
+        let Some(weight_bytes) = weight_elements.checked_mul(size_of::<u16>() as u64) else {
+            return false;
+        };
+        let Some(out_elements) = u64::from(n_tokens)
+            .checked_mul(u64::from(n_hc))
+            .and_then(|elements| elements.checked_mul(u64::from(n_embd)))
+        else {
+            return false;
+        };
+        let Some(out_bytes) = out_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(token_bytes) = u64::from(n_tokens).checked_mul(size_of::<i32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_vocab == 0
+            || n_tokens == 0
+            || n_embd == 0
+            || n_hc == 0
+            || weight_offset > model_size
+            || weight_bytes > model_size - weight_offset
+            || tokens.bytes < token_bytes
+            || out_hc.bytes < out_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                weight_offset,
+                weight_bytes,
+                |weights_ptr| {
+                    with_abi_kernels(backend, |kernels| {
+                        // SAFETY: source/output spans and cached embedding
+                        // storage are validated; invalid token IDs fall back
+                        // to embedding row zero inside the kernel.
+                        Some(unsafe {
+                            kernels.embed_tokens_hc_tensor(
+                                backend.stream(),
+                                out_hc.device_ptr(),
+                                tokens.device_ptr(),
+                                weights_ptr,
+                                n_vocab,
+                                n_tokens,
+                                n_embd,
+                                n_hc,
+                            )
+                        })
+                    })
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 unsafe fn hc_weighted_sum_impl(
     out: &Ds4GpuTensor,
     residual_hc: &Ds4GpuTensor,

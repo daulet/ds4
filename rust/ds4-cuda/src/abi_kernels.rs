@@ -780,6 +780,51 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_embed_token_hc_kernel(
+        token: u32,
+        n_embd: u32,
+        count: u64,
+        weights: &[f16],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d();
+        let i = index.get();
+        if (i as u64) < count {
+            let dimension = i % n_embd as usize;
+            if let Some(element) = out.get_mut(index) {
+                *element = weights[token as usize * n_embd as usize + dimension] as f32;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_embed_tokens_hc_kernel(
+        n_vocab: u32,
+        n_embd: u32,
+        n_hc: u32,
+        count: u64,
+        tokens: &[i32],
+        weights: &[f16],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d();
+        let gid = index.get();
+        if (gid as u64) < count {
+            let dimension = gid % n_embd as usize;
+            let token_index = gid / n_embd as usize / n_hc as usize;
+            let token = tokens[token_index];
+            let token = if token < 0 || token as u32 >= n_vocab {
+                0
+            } else {
+                token as usize
+            };
+            if let Some(element) = out.get_mut(index) {
+                *element = weights[token * n_embd as usize + dimension] as f32;
+            }
+        }
+    }
+
+    #[kernel]
     pub fn abi_matmul_q8_0_preq_warp8_kernel(
         in_dim: u64,
         out_dim: u64,
@@ -1305,6 +1350,8 @@ pub(crate) struct AbiKernelModule {
     hc_split_weighted_sum_fused_kernel: CudaFunction,
     hc_split_weighted_sum_norm_fused_kernel: CudaFunction,
     output_hc_weights_kernel: CudaFunction,
+    embed_token_hc_kernel: CudaFunction,
+    embed_tokens_hc_kernel: CudaFunction,
     hc_weighted_sum_kernel: CudaFunction,
     hc_expand_kernel: CudaFunction,
     directional_steering_project_kernel: CudaFunction,
@@ -1348,6 +1395,12 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             output_hc_weights_kernel: module
                 .load_function("abi_output_hc_weights_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            embed_token_hc_kernel: module
+                .load_function("abi_embed_token_hc_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            embed_tokens_hc_kernel: module
+                .load_function("abi_embed_tokens_hc_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             hc_weighted_sum_kernel: module
                 .load_function("abi_hc_weighted_sum_kernel")
@@ -1818,6 +1871,105 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.output_hc_weights_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn embed_token_hc_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        weights_ptr: u64,
+        n_vocab: u32,
+        token: u32,
+        n_embd: u32,
+        n_hc: u32,
+    ) -> bool {
+        let count = u64::from(n_embd) * u64::from(n_hc);
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut token = token;
+        let mut n_embd = n_embd;
+        let mut count = count;
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = u64::from(n_vocab) * u64::from(n_embd);
+        let mut out_ptr = out_ptr;
+        let mut out_len = count;
+        let mut params = [
+            (&mut token as *mut u32).cast::<c_void>(),
+            (&mut n_embd as *mut u32).cast::<c_void>(),
+            (&mut count as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates the single token, complete output
+        // span, and cached FP16 embedding range before launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.embed_token_hc_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn embed_tokens_hc_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        tokens_ptr: u64,
+        weights_ptr: u64,
+        n_vocab: u32,
+        n_tokens: u32,
+        n_embd: u32,
+        n_hc: u32,
+    ) -> bool {
+        let count = u64::from(n_tokens) * u64::from(n_hc) * u64::from(n_embd);
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut n_vocab = n_vocab;
+        let mut n_embd = n_embd;
+        let mut n_hc = n_hc;
+        let mut count = count;
+        let mut tokens_ptr = tokens_ptr;
+        let mut tokens_len = u64::from(n_tokens);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = u64::from(n_vocab) * u64::from(n_embd);
+        let mut out_ptr = out_ptr;
+        let mut out_len = count;
+        let mut params = [
+            (&mut n_vocab as *mut u32).cast::<c_void>(),
+            (&mut n_embd as *mut u32).cast::<c_void>(),
+            (&mut n_hc as *mut u32).cast::<c_void>(),
+            (&mut count as *mut u64).cast::<c_void>(),
+            (&mut tokens_ptr as *mut u64).cast::<c_void>(),
+            (&mut tokens_len as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates tokens and output spans plus the
+        // cached embedding range; the kernel bounds invalid IDs to row zero.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.embed_tokens_hc_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,
