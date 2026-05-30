@@ -1,0 +1,90 @@
+{
+  "schema": "ds4.routed_moe_f32_smoke.v1",
+  "milestone": "M14.5c1",
+  "status": "b300-pass",
+  "id": "m14.5c1-routed-moe-f32",
+  "goal": "Prove opt-in Rust cuda-oxide packed-weight F32-activation routed MoE fallback behavior without claiming optimized quantized dispatch or runtime integration.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "485bdd86fc1c900ad15ebd421b3b187619fe0903",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] routed MoE fallback kernels"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "dev_iq2_xxs_dot_f32 table-indexed packed gate and up decode",
+      "dev_q2_K_dot_f32 packed down decode",
+      "moe_gate_up_mid_f32_kernel, moe_down_f32_kernel, and moe_sum_kernel fallback launches",
+      "single-token and batched routed layout, clamp, route weight, and negative expert fallback"
+    ],
+    "excluded_behavior": [
+      "Q8 activation quantization, optimized routed-MoE dispatch, and Q4_K route",
+      "hyperconnection kernels, runtime graph integration, default route, and C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "executable-local packed IQ2-XXS gate/up and Q2_K down decode proof",
+      "current-C F32-activation gate/up, down, and expert-sum fallback kernels",
+      "single-token and batched routed MoE fallback layout with clamp and negative-expert behavior"
+    ],
+    "not_claimed_in_this_stage": [
+      "Q8 activation, optimized routed-MoE dispatch, or Q4_K routed-MoE path",
+      "hyperconnection, runtime graph integration, default CUDA route, or C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "consumes_router_selection_surface": true,
+    "owns_iq2_xxs_f32_gate_up_dot": true,
+    "owns_q2_k_f32_down_dot": true,
+    "owns_moe_gate_up_mid_f32_kernel": true,
+    "owns_moe_down_f32_kernel": true,
+    "owns_moe_sum_kernel": true,
+    "owns_single_and_batch_f32_activation_moe_surface": true,
+    "owns_q8_activation_or_optimized_moe_dispatch": false,
+    "owns_hyperconnection_or_runtime_graph": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 73,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-routed-moe-f32-smoke",
+    "backend_selected_target": "sm_80",
+    "uses_libdevice_link_path": true,
+    "stdout": {
+      "milestone": "M14.5c1",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "packed_iq2_gate_up_matches": true,
+      "packed_q2_down_matches": true,
+      "weighted_swiglu_matches": true,
+      "expert_sum_matches": true,
+      "negative_expert_fallback_matches": true,
+      "single_token_surface_matches": true,
+      "batch_surface_matches": true,
+      "clamp_behavior_matches": true,
+      "invalid_shape_rejected": true,
+      "uses_shared_reduction": true,
+      "uses_libdevice_link_path": true,
+      "consumes_router_selection_surface": true,
+      "owns_iq2_xxs_f32_gate_up_dot": true,
+      "owns_q2_k_f32_down_dot": true,
+      "owns_moe_gate_up_mid_f32_kernel": true,
+      "owns_moe_down_f32_kernel": true,
+      "owns_moe_sum_kernel": true,
+      "owns_single_and_batch_f32_activation_moe_surface": true,
+      "owns_q8_activation_or_optimized_moe_dispatch": false,
+      "owns_hyperconnection_or_runtime_graph": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.5c2 Quantized Routed MoE Dispatch"
+}

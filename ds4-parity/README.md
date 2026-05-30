@@ -2737,6 +2737,18 @@ equal-score index ordering, partial four-row blocks, hash fallback, and the
 warp/parallel/scalar disable-flag priority. It leaves routed MoE,
 hyperconnection, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c1 Rust CUDA routed MoE F32-activation fallback smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_f32_smoke.py --negative-test
+```
+
+The fixture records current-C packed-weight routed MoE fallback behavior on
+B300: table-indexed IQ2-XXS gate/up decode, Q2_K down decode, weighted
+SwiGLU/clamp behavior, negative-expert fallback, expert summation, and both
+single-token and batched layouts. It leaves Q8 activation/optimized dispatch,
+Q4_K, hyperconnection, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

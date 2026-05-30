@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c.
+- Status: active; split beginning with M14.5a through M14.5c2.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8713,11 +8713,42 @@ Stage split:
     retained M14 checks, and unified parity passed with 151 passed, 50
     skipped, and 0 failed.
 
-##### M14.5c: Routed MoE Base Surfaces
+##### M14.5c1: Packed F32-Activation Routed MoE Fallback
+
+- Status: done.
+- Goal: port the current-C routed-MoE fallback which decodes packed IQ2-XXS
+  gate/up weights and packed Q2_K down weights against F32 activations.
+- Oracle: current-C `dev_iq2_xxs_dot_f32`, `dev_q2_K_dot_f32`,
+  `moe_gate_up_mid_f32_kernel`, `moe_down_f32_kernel`, and `moe_sum_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c1/routed-moe-f32-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_f32_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in packed IQ2-XXS and Q2_K fallback decode,
+  weighted SwiGLU/clamp behavior, negative-expert fallback, expert summation,
+  and single-token and batched fallback layout. Q8 activation quantization,
+  optimized routed-MoE dispatch, Q4_K execution, hyperconnection, runtime
+  graph integration, default route activation, and C CUDA removal remain
+  pending.
+- Evidence:
+  - Added executable-local Rust packed-weight routed-MoE fallback kernels with
+    table-indexed IQ2-XXS gate/up decode, Q2_K down decode, shared reductions,
+    weighted activation, and expert summation.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 73 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and matched batch, single-token, clamp, and
+    negative-expert routed-MoE results on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c1 comparator, retained
+    M14 checks, and unified parity passed with 152 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2: Quantized Routed MoE Dispatch
 
 - Status: active.
-- Goal: port routed expert projection and activation surfaces after router
-  selection closure, before hyperconnection and route integration work.
+- Goal: port Q8 activation quantization and the optimized IQ2-XXS/Q2_K
+  routed-MoE dispatch branch after the exact packed fallback is closed;
+  further split optimized scheduling and Q4_K coverage if their live
+  validation boundaries diverge.
 
 ## Removal Criteria for C Host Code
 

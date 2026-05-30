@@ -1559,6 +1559,35 @@ pub const M14_5B_SCOPE: RouterOptimizedScope = RouterOptimizedScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeF32Scope {
+    pub opt_in_only: bool,
+    pub consumes_router_selection_surface: bool,
+    pub owns_iq2_xxs_f32_gate_up_dot: bool,
+    pub owns_q2_k_f32_down_dot: bool,
+    pub owns_moe_gate_up_mid_f32_kernel: bool,
+    pub owns_moe_down_f32_kernel: bool,
+    pub owns_moe_sum_kernel: bool,
+    pub owns_single_and_batch_f32_activation_moe_surface: bool,
+    pub owns_q8_activation_or_optimized_moe_dispatch: bool,
+    pub owns_hyperconnection_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C1_SCOPE: RoutedMoeF32Scope = RoutedMoeF32Scope {
+    opt_in_only: true,
+    consumes_router_selection_surface: true,
+    owns_iq2_xxs_f32_gate_up_dot: true,
+    owns_q2_k_f32_down_dot: true,
+    owns_moe_gate_up_mid_f32_kernel: true,
+    owns_moe_down_f32_kernel: true,
+    owns_moe_sum_kernel: true,
+    owns_single_and_batch_f32_activation_moe_surface: true,
+    owns_q8_activation_or_optimized_moe_dispatch: false,
+    owns_hyperconnection_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1592,7 +1621,7 @@ mod tests {
         M14_3D3_SCOPE, M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE,
         M14_4C3A_SCOPE, M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
-        M14_5B_SCOPE,
+        M14_5B_SCOPE, M14_5C1_SCOPE,
     };
 
     #[test]
@@ -2391,6 +2420,21 @@ mod tests {
             }),
             RouterSelectPath::Scalar
         );
+    }
+
+    #[test]
+    fn routed_moe_f32_scope_leaves_optimized_dispatch_and_route_pending() {
+        assert!(M14_5C1_SCOPE.opt_in_only);
+        assert!(M14_5C1_SCOPE.consumes_router_selection_surface);
+        assert!(M14_5C1_SCOPE.owns_iq2_xxs_f32_gate_up_dot);
+        assert!(M14_5C1_SCOPE.owns_q2_k_f32_down_dot);
+        assert!(M14_5C1_SCOPE.owns_moe_gate_up_mid_f32_kernel);
+        assert!(M14_5C1_SCOPE.owns_moe_down_f32_kernel);
+        assert!(M14_5C1_SCOPE.owns_moe_sum_kernel);
+        assert!(M14_5C1_SCOPE.owns_single_and_batch_f32_activation_moe_surface);
+        assert!(!M14_5C1_SCOPE.owns_q8_activation_or_optimized_moe_dispatch);
+        assert!(!M14_5C1_SCOPE.owns_hyperconnection_or_runtime_graph);
+        assert!(!M14_5C1_SCOPE.changes_default_route);
     }
 
     #[test]
