@@ -2457,6 +2457,19 @@ F16 weight loads. It proves base multi-token output layout while leaving
 serial/ordered/paired F16 variants, cuBLAS dispatch, Q8, route, and removal
 ownership unclaimed.
 
+Validate the M14.3c2 Rust CUDA ordered and serial F16 projection smoke:
+
+```sh
+python3 ds4-parity/check_ordered_projection_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `matmul_f16_serial_kernel`,
+`matmul_f16_ordered_chunks_kernel`, and
+`matmul_f16_pair_ordered_chunks_kernel` execution on B300. It proves
+multi-token serial output, ordered chunk reduction, and unequal-width paired
+output while leaving cuBLAS dispatch, activation conversion, Q8, route, and
+removal ownership unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

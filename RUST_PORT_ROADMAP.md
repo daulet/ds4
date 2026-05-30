@@ -7856,8 +7856,8 @@ Stage split:
 
 #### M14.3: Dense Projection Quantization And Norm Kernels
 
-- Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2, and
-  M14.3c1 are done, and M14.3c2 is active.
+- Status: split after M14.3a implementation; M14.3a, M14.3b1, M14.3b2,
+  M14.3c1, and M14.3c2 are done, and M14.3c3 is active.
 - Goal: port the M14.3 dense projection, Q8 conversion, and normalization
   operation family through bounded Rust CUDA slices.
 
@@ -7952,8 +7952,9 @@ Stage split:
 
 ##### M14.3c: Dense F16 And F32 Projection Kernels
 
-- Status: split into M14.3c1 base reductions and M14.3c2 ordered, paired,
-  and serial F16 kernels before cuBLAS dispatch policy is claimed.
+- Status: split into M14.3c1 base reductions, M14.3c2 ordered, paired, and
+  serial F16 kernels, and M14.3c3 BLAS dispatch and activation conversion
+  before Q8 ownership is claimed.
 - Goal: port dense F16/F32 projection execution as a separately comparable
   slice before claiming Q8 conversion or quantized matmul ownership.
 
@@ -7986,9 +7987,40 @@ Stage split:
 
 ##### M14.3c2: Ordered Paired And Serial F16 Projection Kernels
 
+- Status: done.
+- Goal: port the remaining non-cuBLAS F16 projection kernels without claiming
+  their environment-controlled or cuBLAS selection policy.
+- Oracle: current-C `matmul_f16_serial_kernel`,
+  `matmul_f16_ordered_chunks_kernel`, and
+  `matmul_f16_pair_ordered_chunks_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.3c2/ordered-projection-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_ordered_projection_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: F16/F32 cuBLAS selection and activation conversion, Q8 kernels,
+  runtime route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust serial, ordered-chunk, and paired
+    ordered-chunk F16 kernels using primitive F16 loads and current-C's fixed
+    32-way accumulation order.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 43 tests. Live cargo-oxide execution emitted portable `sm_80` PTX
+    and proved serial multi-token, ordered-chunk, unequal-width paired, and
+    invalid-shape behavior on `NVIDIA B300 SXM6 AC`.
+  - Device compilation exposed unsupported `usize::min` lowering; replacing
+    it with current-C's explicit upper-bound clamp retained the kernel
+    contract.
+  - Local formatting, diff, workspace tests, the 74-check comparator, and
+    unified parity passed with 134 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained cuBLAS, activation-conversion, Q8, and
+    route non-claims.
+
+##### M14.3c3: F16 And F32 BLAS Dispatch And Activation Conversion
+
 - Status: active.
-- Goal: port the remaining non-cuBLAS F16 projection kernels and their
-  bounded selection contract without claiming cuBLAS or Q8 execution.
+- Goal: port the remaining dense F16/F32 dispatch and activation-conversion
+  behavior without claiming Q8 execution or default-route integration.
 
 ## Removal Criteria for C Host Code
 

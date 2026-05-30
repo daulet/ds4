@@ -1080,6 +1080,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.3c2 cuda-oxide ordered and serial F16 projection smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_ordered_projection_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)
