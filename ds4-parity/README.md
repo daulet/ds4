@@ -2347,6 +2347,18 @@ proves the `top_k == 512 && n_comp <= 1024` fast path, including partial
 component padding, while leaving larger top-k branches, indexed ascending
 sort, runtime route, and C CUDA removal pending.
 
+Validate the M14.2d2c2 Rust CUDA power-of-two top-k kernel smoke:
+
+```sh
+python3 ds4-parity/check_indexer_topk_pow2_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local 2048/4096 `u32`-index and 8192
+`u16`-index bitonic kernels on B300, preserving descending score and
+lower-index tie order. It proves the larger shared-memory kernel behavior
+while leaving CUB selection, chunked merging, indexed ascending sort,
+runtime route, and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

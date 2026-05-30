@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2d2c2 Power-Of-Two Top-K Kernels
+- Active item: M14.2d2c3 CUB-Or-Equivalent Top-K Branch
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -36,7 +36,8 @@
   through M14.2d2c5 because 1024 bitonic selection, larger power-of-two
   selection, CUB-or-equivalent selection, chunk/tree merge, and indexed
   ascending sort have separate CUDA launch and storage contracts.
-- Last validated source before the active item: M14.2d2c1 1024 Bitonic Top-K Kernel.
+- Last validated source before the active item: M14.2d2c2 Power-Of-Two Top-K Kernels.
+- Earlier M14.2d2c1 1024 Bitonic Top-K Kernel.
 - Earlier M14.2d2b2c WMMA128 Tensor-Core Indexer Score Kernel And Dispatch Priority.
 - Earlier M14.2d2b2b WMMA64 Tensor-Core Indexer Score Kernel.
 - Earlier M14.2d2b2a WMMA32 Tensor-Core Indexer Score Kernel.
@@ -159,6 +160,23 @@
 
 ## Last Evidence
 
+- M14.2d2c2 Power-Of-Two Top-K Kernels adds executable-local Rust cuda-oxide
+  `indexer_topk_pow2_2048_kernel`, `indexer_topk_pow2_4096_kernel`, and
+  `indexer_topk_pow2_u16_8192_kernel`, preserving current-C shared-memory
+  index width, descending order, and lower-index tie breaking. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 34
+  tests and live cargo-oxide execution emitted portable `sm_80` PTX and
+  proved each kernel output and sentinel exclusion on `NVIDIA B300 SXM6 AC`.
+  Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.2d2c2/indexer-topk-pow2-kernel-smoke.json`
+  and `ds4-parity/check_indexer_topk_pow2_kernel_smoke.py --negative-test`.
+  The stage does not claim B300 branch selection against the current-C CUB
+  optimization; CUB policy, chunked merging, indexed ascending sort, runtime
+  route activation, and C CUDA removal remain unclaimed. Local formatting,
+  diff, workspace tests, the 76-check comparator, and unified parity passed
+  with 125 passed, 45 skipped, and 0 failed. Non-interactive Claude review
+  timed out without a completed result; adversarial self-review retained the
+  CUB dispatch non-claim.
 - M14.2d2c1 1024 Bitonic Top-K Kernel adds executable-local Rust cuda-oxide
   `indexer_topk_1024_kernel` with the current-C 1024-thread shared-memory
   bitonic network, descending score order, and lower-index tie breaking.

@@ -7685,13 +7685,40 @@ Stage split:
 
 ##### M14.2d2c2: Power-Of-Two Top-K Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port the 2048/4096 and 8192 shared-memory power-of-two selection
   branches after the 1024 shape is proven.
+- Oracle: current-C `indexer_topk_pow2_kernel<2048>`,
+  `indexer_topk_pow2_kernel<4096>`, and fallback
+  `indexer_topk_pow2_u16_kernel<8192>` implementations.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c2/indexer-topk-pow2-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_pow2_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Acceptance: Rust owns direct execution of the power-of-two kernels and
+  their ordering/storage semantics; CUB selection, chunked merging, indexed
+  ascending sort, route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexer_topk_pow2_2048_kernel`,
+    `indexer_topk_pow2_4096_kernel`, and
+    `indexer_topk_pow2_u16_8192_kernel`, preserving current-C shared-memory
+    index width and lower-index tie order.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests
+    passed with 34 tests. Live cargo-oxide execution emitted portable
+    `sm_80` PTX and proved output and sentinel exclusion for all three
+    kernels on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, workspace tests, the 76-check comparator, and
+    unified parity passed with 125 passed, 45 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review retained the explicit non-claim for CUB branch
+    selection.
+  - This stage does not claim that the 8192 fallback wins current-C's CUB
+    selection on B300; CUB policy is isolated in M14.2d2c3.
 
 ##### M14.2d2c3: CUB-Or-Equivalent Top-K Branch
 
-- Status: pending.
+- Status: active.
 - Goal: port or explicitly close current-C's dynamic-shared-memory CUB
   selection optimization with equivalent validated ordering.
 

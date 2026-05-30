@@ -7928,12 +7928,30 @@
 
 ##### M14.2d2c2: Power-Of-Two Top-K Kernels
 
-- Status: active
+- Status: done
 - Goal: port 2048/4096 and 8192 power-of-two shared-memory top-k branches.
+- Oracle: `indexer_topk_pow2_kernel<2048>`,
+  `indexer_topk_pow2_kernel<4096>`, and fallback
+  `indexer_topk_pow2_u16_kernel<8192>`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2c2/indexer-topk-pow2-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_topk_pow2_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust 2048/4096 `u32`-index and 8192
+  `u16`-index bitonic kernels preserving current-C descending order and
+  lower-index ties. B300 feature-enabled tests passed with 34 tests and live
+  cargo-oxide execution emitted portable `sm_80` PTX and proved each kernel
+  output and sentinel exclusion. CUB selection, chunked merging, indexed
+  sort, runtime route, and C CUDA removal remain unclaimed. Local formatting,
+  diff, workspace tests, the 76-check comparator, and unified parity passed
+  with 125 passed, 45 skipped, and 0 failed. Non-interactive Claude review
+  timed out without a completed result; adversarial self-review retained the
+  CUB dispatch non-claim.
 
 ##### M14.2d2c3: CUB-Or-Equivalent Top-K Branch
 
-- Status: pending
+- Status: active
 - Goal: port or explicitly close current-C's CUB radix-sort optimization.
 
 ##### M14.2d2c4: Chunked And Tree-Merge Top-K Kernels
