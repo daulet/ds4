@@ -115,15 +115,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuda-device"
+version = "0.1.0"
+source = "git+https://github.com/daulet/cuda-oxide?rev=aabe10dc4fa0086375104458909e222d1ac1cfe3#aabe10dc4fa0086375104458909e222d1ac1cfe3"
+dependencies = [
+ "cuda-lowp",
+ "cuda-macros",
+]
+
+[[package]]
+name = "cuda-host"
+version = "0.1.0"
+source = "git+https://github.com/daulet/cuda-oxide?rev=aabe10dc4fa0086375104458909e222d1ac1cfe3#aabe10dc4fa0086375104458909e222d1ac1cfe3"
+dependencies = [
+ "cuda-core",
+ "cuda-macros",
+ "half",
+ "libnvvm-sys",
+ "nvjitlink-sys",
+ "thiserror",
+]
+
+[[package]]
 name = "cuda-lowp"
 version = "0.1.0"
 source = "git+https://github.com/daulet/cuda-oxide?rev=aabe10dc4fa0086375104458909e222d1ac1cfe3#aabe10dc4fa0086375104458909e222d1ac1cfe3"
+
+[[package]]
+name = "cuda-macros"
+version = "0.1.0"
+source = "git+https://github.com/daulet/cuda-oxide?rev=aabe10dc4fa0086375104458909e222d1ac1cfe3#aabe10dc4fa0086375104458909e222d1ac1cfe3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "reserved-oxide-symbols",
+ "syn",
+]
 
 [[package]]
 name = "ds4-cuda"
 version = "0.0.0"
 dependencies = [
  "cuda-core",
+ "cuda-device",
+ "cuda-host",
  "libc",
 ]
 
@@ -236,6 +271,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libnvvm-sys"
+version = "0.1.0"
+source = "git+https://github.com/daulet/cuda-oxide?rev=aabe10dc4fa0086375104458909e222d1ac1cfe3#aabe10dc4fa0086375104458909e222d1ac1cfe3"
+dependencies = [
+ "libloading",
+ "thiserror",
+]
+
+[[package]]
 name = "log"
 version = "0.4.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -261,6 +305,15 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "nvjitlink-sys"
+version = "0.1.0"
+source = "git+https://github.com/daulet/cuda-oxide?rev=aabe10dc4fa0086375104458909e222d1ac1cfe3#aabe10dc4fa0086375104458909e222d1ac1cfe3"
+dependencies = [
+ "libloading",
+ "thiserror",
 ]
 
 [[package]]
@@ -339,6 +392,11 @@ name = "regex-syntax"
 version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+
+[[package]]
+name = "reserved-oxide-symbols"
+version = "0.1.0"
+source = "git+https://github.com/daulet/cuda-oxide?rev=aabe10dc4fa0086375104458909e222d1ac1cfe3#aabe10dc4fa0086375104458909e222d1ac1cfe3"
 
 [[package]]
 name = "rustc-hash"

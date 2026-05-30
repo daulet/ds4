@@ -2187,6 +2187,19 @@ live TF32/default-math selection. It does not claim converted Q8 buffers or
 their failure-time release, dequant kernels, DS4 compute kernels, or route
 activation.
 
+Validate the M14.1b4 Rust fill-kernel and command-lifetime B300 smoke:
+
+```sh
+python3 ds4-parity/check_fill_command_lifetime_smoke.py --negative-test
+```
+
+The fixture records an executable-local `#[cuda_module]` fill kernel run on
+B300 after cuda-oxide stopped forcing the unsupported `sm_103` PTX target for
+a basic portable kernel. It proves prefix fill, negative-infinity fill,
+zero-count/bounds behavior, and context-wide flush/end/synchronize wrappers.
+It does not claim library artifact retention, dequant or graph compute
+kernels, runtime graph integration, or default-route ownership.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

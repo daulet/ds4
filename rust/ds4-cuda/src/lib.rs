@@ -239,6 +239,25 @@ pub const M14_1B3B_SCOPE: Q8QualityPolicyScope = Q8QualityPolicyScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FillCommandScope {
+    pub opt_in_only: bool,
+    pub owns_tensor_fill_f32: bool,
+    pub owns_command_synchronization: bool,
+    pub owns_dequant_kernels: bool,
+    pub owns_graph_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B4_SCOPE: FillCommandScope = FillCommandScope {
+    opt_in_only: true,
+    owns_tensor_fill_f32: true,
+    owns_command_synchronization: true,
+    owns_dequant_kernels: false,
+    owns_graph_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -253,7 +272,7 @@ mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
-        M14_1B3A_SCOPE, M14_1B3B_SCOPE,
+        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE,
     };
 
     #[test]
@@ -383,5 +402,15 @@ mod tests {
         assert!(!M14_1B3B_SCOPE.owns_dequant_kernels);
         assert!(!M14_1B3B_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B3B_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn fill_command_scope_leaves_dequant_graph_kernels_and_route_pending() {
+        assert!(M14_1B4_SCOPE.opt_in_only);
+        assert!(M14_1B4_SCOPE.owns_tensor_fill_f32);
+        assert!(M14_1B4_SCOPE.owns_command_synchronization);
+        assert!(!M14_1B4_SCOPE.owns_dequant_kernels);
+        assert!(!M14_1B4_SCOPE.owns_graph_kernels);
+        assert!(!M14_1B4_SCOPE.changes_default_route);
     }
 }

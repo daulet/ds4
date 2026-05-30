@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b4 Fill Kernel And Command Lifetime
+- Active item: M14.1c Substrate Route Closure Gate
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -17,7 +17,8 @@
   M14.1b3a and M14.1b3b because managed-KV/memory-report policy only needs a
   memory-capacity query, while Q8 caches and quality mode need BLAS or kernel
   ownership.
-- Last validated source before the active item: M14.1b3b Q8 Cache And Quality Policy.
+- Last validated source before the active item: M14.1b4 Fill Kernel And Command Lifetime.
+- Earlier M14.1b3b Q8 Cache And Quality Policy.
 - Earlier M14.1b3a Managed KV And Memory Report Policy.
 - Earlier M14.1b2c Model Map Cache Closure.
 - Earlier M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy.
@@ -127,6 +128,31 @@
 
 ## Last Evidence
 
+- M14.1b4 Fill Kernel And Command Lifetime adds the opt-in
+  `cuda-oxide-kernels` feature and executable-local
+  `ds4-cuda-fill-lifetime-smoke`. Its Rust `#[kernel] fill_f32` uses the
+  current-C 256-thread launch shape with explicit count semantics, while the
+  substrate now exposes context-wide flush/end/synchronize completion
+  wrappers. Initial B300 execution proved two toolchain defects before the
+  final success: library-only embedded modules were not retained in the
+  executable, and `cargo oxide run` forced `sm_103` while `/usr/bin/llc`
+  emitted invalid `.version 6.0 / .target sm_103` PTX, producing CUDA JIT
+  error 218. The cuda-oxide tool fix is
+  `981e3244a107d84d807cfb087793269c477cc764`; with that revision the B300
+  run selected portable `sm_80` and proved prefix fill, negative-infinity
+  fill, zero-count no-op, bounds rejection, and context-wide completion on
+  `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b4/fill-command-lifetime-smoke.json`
+  and `ds4-parity/check_fill_command_lifetime_smoke.py --negative-test`.
+  This remains an executable-local opt-in proof: library embedded-kernel
+  retention, dequant kernels, graph compute kernels, runtime graph
+  integration, and default-route ownership remain unclaimed. Local workspace
+  tests, formatter/diff checks, the 77-check comparator and retained M14
+  checks, B300 feature-enabled `ds4-cuda` tests, B300 `cargo-oxide` tests and
+  kernel execution, and unified parity (107 passed, 50 skipped, 0 failed)
+  passed. Non-interactive Claude review timed out without a completed result;
+  adversarial self-review found no remaining ownership, fill-semantic,
+  synchronization, or evidence defect.
 - M14.1b3b Q8 Cache And Quality Policy pins cuda-oxide revision
   `aabe10dc4fa0086375104458909e222d1ac1cfe3`, which adds typed
   `Blas::set_math_mode(BlasMathMode)` over the header-verified

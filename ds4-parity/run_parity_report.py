@@ -904,6 +904,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.1b4 cuda-oxide fill/command-lifetime smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_fill_command_lifetime_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

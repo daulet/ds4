@@ -3,6 +3,21 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-05-30: Embedded Kernel Proofs Need Final-Binary Ownership And Portable PTX Targets
+
+- Symptom: an M14.1b4 `#[cuda_module]` placed in `ds4-cuda` library code
+  compiled but the smoke executable reported `ModuleNotFound`; after moving
+  the module into the binary, B300 loading failed with CUDA error 218.
+- Root cause: cuda-oxide embeds non-generic PTX in the crate being linked as
+  the final executable for this path, while `cargo oxide run` also overrode
+  a basic backend-selected target with local B300 `sm_103`; `/usr/bin/llc`
+  emitted `.version 6.0 / .target sm_103`, which CUDA 13.2 rejects.
+- Permanent rule: put executable-owned embedded kernel modules in the final
+  binary until cross-crate artifact retention is explicitly implemented, and
+  let basic kernels use the backend-selected portable target on `sm_80`-or-
+  newer GPUs. cuda-oxide revision
+  `981e3244a107d84d807cfb087793269c477cc764` enforces the target rule.
+
 ## 2026-05-25: Stage-Progression Checkers Need Future Closure Markers
 
 - Symptom: after M13.5 moved `.memory/status.md` to the post-M13 decision, the

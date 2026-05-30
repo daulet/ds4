@@ -7153,9 +7153,44 @@ Stage split:
 
 ###### M14.1b4: Fill Kernel And Command Lifetime
 
-- Status: planned.
-- Goal: port `ds4_gpu_tensor_fill_f32` and command synchronization after the
-  cuda-oxide kernel compilation toolchain is verified on B300.
+- Status: complete.
+- Goal: prove `ds4_gpu_tensor_fill_f32` and current-C command synchronization
+  semantics through an opt-in executable-local Rust CUDA kernel on B300.
+- Oracle: current-C `ds4_gpu_tensor_fill_f32`, `fill_f32_kernel`,
+  `ds4_gpu_flush_commands`, `ds4_gpu_end_commands`, and
+  `ds4_gpu_synchronize`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b4/fill-command-lifetime-smoke.json`.
+- Comparator: `ds4-parity/check_fill_command_lifetime_smoke.py
+  --negative-test` plus executable Rust B300 kernel smoke.
+- Acceptance: the opt-in executable compiles and launches Rust `fill_f32`,
+  preserves prefix/zero-count/bounds behavior, and exposes context-wide
+  completion wrappers; dequant kernels, graph kernels, runtime graph
+  integration, and the default route remain unclaimed.
+- Evidence:
+  - Added the `cuda-oxide-kernels` feature and executable-local
+    `ds4-cuda-fill-lifetime-smoke` with a Rust `#[kernel] fill_f32` using the
+    current-C 256-thread launch shape and explicit count boundary.
+  - Pushed cuda-oxide tool fix
+    `981e3244a107d84d807cfb087793269c477cc764`: `cargo oxide run` no longer
+    raises a portable basic kernel from backend-selected `sm_80` to local
+    `sm_103`, which had emitted invalid `.version 6.0 / .target sm_103` PTX
+    and failed B300 JIT loading with CUDA error 218.
+  - On B300 pod `ds4-rust-port-b300`, `cargo test -p cargo-oxide` passed and
+    the kernel smoke executed on `NVIDIA B300 SXM6 AC` with backend-selected
+    `sm_80`, proving prefix fill, negative-infinity fill, zero-count no-op,
+    bounds rejection, and context-wide flush/end/synchronize behavior.
+  - This is an executable-local kernel proof. Library embedded-module
+    retention, dequant kernels, graph compute kernels, runtime graph
+    integration, and default-route ownership remain unclaimed.
+  - Validation passed through local workspace tests, formatter and diff
+    checks, the 77-check comparator and retained M14 checks, B300
+    feature-enabled `ds4-cuda` tests, B300 `cargo-oxide` tests and kernel
+    execution, and unified parity with 107 passed, 50 skipped, and 0 failed.
+    Non-interactive Claude review timed out without a completed result;
+    adversarial self-review verified the executable-local ownership boundary,
+    prefix-count behavior, and context-wide synchronization mapping before
+    finding no remaining bounded-claim defect.
 
 ##### M14.1c: Substrate Route Closure Gate
 

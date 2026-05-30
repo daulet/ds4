@@ -7536,9 +7536,29 @@
 
 ###### M14.1b4: Fill Kernel And Command Lifetime
 
-- Status: planned
-- Goal: port tensor fill and command synchronization after proving the
-  cuda-oxide kernel compiler toolchain on B300.
+- Status: done
+- Goal: prove an executable-local Rust `fill_f32` CUDA kernel and current-C
+  command completion semantics on the opt-in substrate.
+- Oracle: current-C `ds4_gpu_tensor_fill_f32`, `fill_f32_kernel`,
+  `ds4_gpu_flush_commands`, `ds4_gpu_end_commands`, and
+  `ds4_gpu_synchronize`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b4/fill-command-lifetime-smoke.json`.
+- Evidence: cuda-oxide tool revision
+  `981e3244a107d84d807cfb087793269c477cc764` fixes B300 `cargo oxide run`
+  target selection by retaining the backend-selected portable `sm_80` target
+  for a basic kernel instead of forcing rejected `sm_103` PTX. The B300
+  `ds4-cuda-fill-lifetime-smoke` execution proved prefix and
+  negative-infinity fills, zero-count and bounds behavior, and context-wide
+  flush/end/synchronize wrappers through a Rust `#[kernel]`. This does not
+  claim reusable library embedded-kernel linkage, dequant or graph compute
+  kernels, runtime graph integration, or route activation.
+- Validation: local workspace tests, formatter and diff checks, the 77-check
+  comparator and retained M14 checks, B300 feature-enabled `ds4-cuda` tests,
+  B300 `cargo-oxide` tests and live kernel execution, and unified parity
+  (107 passed, 50 skipped, 0 failed) passed. Non-interactive Claude review
+  timed out without a completed result; adversarial self-review found no
+  remaining ownership, fill-semantic, synchronization, or evidence defect.
 
 ##### M14.1c: Substrate Route Closure Gate
 

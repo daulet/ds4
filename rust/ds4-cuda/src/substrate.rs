@@ -34,6 +34,14 @@ impl CudaOxideSubstrate {
         self.context.ordinal()
     }
 
+    pub fn context(&self) -> &Arc<CudaContext> {
+        &self.context
+    }
+
+    pub fn stream(&self) -> &CudaStream {
+        &self.stream
+    }
+
     pub fn memory_capacity(&self) -> Result<DeviceMemoryCapacity, DriverError> {
         let memory = self.context.memory_info()?;
         Ok(DeviceMemoryCapacity {
@@ -48,6 +56,19 @@ impl CudaOxideSubstrate {
 
     pub fn synchronize(&self) -> Result<(), DriverError> {
         self.stream.synchronize()
+    }
+
+    /// Mirrors the current-C command API's device-wide completion boundary.
+    pub fn flush_commands(&self) -> Result<(), DriverError> {
+        self.context.synchronize()
+    }
+
+    pub fn end_commands(&self) -> Result<(), DriverError> {
+        self.context.synchronize()
+    }
+
+    pub fn synchronize_device(&self) -> Result<(), DriverError> {
+        self.context.synchronize()
     }
 
     pub fn upload<T: DeviceCopy>(&self, data: &[T]) -> Result<DeviceBuffer<T>, DriverError> {

@@ -191,7 +191,11 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check("M14.1b1: Bounded Model Residency Handles" in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.1b" in texts["status"], "next active stage missing")
+    report.check(
+        "Active item: M14.1b" in texts["status"]
+        or "Active item: M14.1c Substrate Route Closure Gate" in texts["status"],
+        "next active stage missing",
+    )
     report.check("M14.1b1 Bounded Model Residency Handles" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
