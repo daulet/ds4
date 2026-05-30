@@ -1240,6 +1240,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.4d8b cuda-oxide cuBLAS output-Q8 attention smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_attention_output_q8_cublas_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

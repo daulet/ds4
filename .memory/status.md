@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.4d8b CUBLAS Attention Output A Dispatch
+- Active item: M14.5 Router MoE And Hyperconnection Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.4d8a Native Q8 Attention Output Projection Surfaces.
+- Last validated source before the active item: M14.4d8b CUBLAS Attention Output A Dispatch.
+- Earlier M14.4d8a Native Q8 Attention Output Projection Surfaces.
 - Earlier M14.4d7 Optimized Indexed Sort And Heads8 Attention Kernels.
 - Earlier M14.4d6 Generic Indexed Mixed Attention Surface.
 - Earlier M14.4d5 Static Heads8 Online And CUBLAS Attention Prefill Dispatch.
@@ -205,6 +206,21 @@
 
 ## Last Evidence
 
+- M14.4d8b CUBLAS Attention Output A Dispatch adds executable-local Rust
+  cuda-oxide F16 grouped-head packing, low-output unpacking, live grouped-A
+  cuBLAS execution over F16-rounded operands through the safe SGEMM adapter,
+  and current-C-equivalent branch selection. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 69
+  tests; live cargo-oxide execution emitted portable `sm_80` PTX with
+  libdevice linkage and matched packed, grouped, and unpacked output on
+  `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.4d8b/attention-output-q8-cublas-smoke.json`
+  and `ds4-parity/check_attention_output_q8_cublas_smoke.py --negative-test`.
+  The safe cuda-oxide API exposes SGEMM rather than current-C's
+  `CUDA_R_16F` GemmEx entry point; runtime route activation and C CUDA
+  removal remain unclaimed. Local formatting, diff, library tests, the
+  66-check d8b comparator, retained attention checks, and unified parity
+  passed with 149 passed, 50 skipped, and 0 failed.
 - M14.4d8a Native Q8 Attention Output Projection Surfaces adds
   executable-local Rust cuda-oxide grouped A and B projection orchestration
   over Q8 prequantized inputs, covering low-only output, batched low/output,

@@ -2701,6 +2701,18 @@ batched two-stage grouped-output projections with partial Q8 blocks while
 leaving optional F16/cuBLAS A dispatch, runtime route, and C CUDA removal
 unclaimed.
 
+Validate the M14.4d8b Rust CUDA cuBLAS output-Q8 attention smoke:
+
+```sh
+python3 ds4-parity/check_attention_output_q8_cublas_smoke.py --negative-test
+```
+
+The fixture records the optional attention-output-A cuBLAS branch on B300:
+F16-rounded grouped-head packing, live grouped projection through the
+cuda-oxide safe SGEMM adapter, low-output unpacking, and the current-C branch
+predicate. It records the `CUDA_R_16F` GemmEx API difference explicitly and
+leaves runtime route activation and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

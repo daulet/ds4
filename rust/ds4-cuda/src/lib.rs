@@ -1434,6 +1434,60 @@ pub const M14_4D8A_SCOPE: AttentionOutputQ8NativeScope = AttentionOutputQ8Native
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttentionOutputAPath {
+    NativeQ8,
+    CublasF16,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionOutputADispatchOptions {
+    pub quality_mode: bool,
+    pub cublas_ready: bool,
+    pub n_tokens: u32,
+    pub cublas_min_tokens: u32,
+    pub no_cublas_attention_output_a: bool,
+    pub expanded_f16_ready: bool,
+}
+
+pub const fn select_attention_output_a_path(
+    options: AttentionOutputADispatchOptions,
+) -> AttentionOutputAPath {
+    if !options.quality_mode
+        && options.cublas_ready
+        && options.n_tokens >= options.cublas_min_tokens
+        && !options.no_cublas_attention_output_a
+        && options.expanded_f16_ready
+    {
+        AttentionOutputAPath::CublasF16
+    } else {
+        AttentionOutputAPath::NativeQ8
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionOutputQ8CublasScope {
+    pub opt_in_only: bool,
+    pub consumes_attention_output_q8_native_surface: bool,
+    pub owns_attention_output_a_cublas_dispatch: bool,
+    pub owns_attention_output_a_pack_unpack_kernels: bool,
+    pub owns_live_cublas_grouped_a_pipeline: bool,
+    pub uses_safe_sgemm_f16_rounded_adapter: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4D8B_SCOPE: AttentionOutputQ8CublasScope = AttentionOutputQ8CublasScope {
+    opt_in_only: true,
+    consumes_attention_output_q8_native_surface: true,
+    owns_attention_output_a_cublas_dispatch: true,
+    owns_attention_output_a_pack_unpack_kernels: true,
+    owns_live_cublas_grouped_a_pipeline: true,
+    uses_safe_sgemm_f16_rounded_adapter: true,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1447,13 +1501,14 @@ pub mod substrate;
 mod tests {
     use super::{
         q8_dp4a_enabled, select_attention_decode_path, select_attention_indexed_path,
-        select_attention_prefill_path, select_f16_pair_projection_path, select_f16_projection_path,
-        select_f32_projection_path, select_indexer_score_kernel, select_indexer_topk_kernel,
-        select_q8_matmul_path, should_sort_indexed_topk, AttentionDecodeDispatchOptions,
-        AttentionDecodePath, AttentionIndexedDispatchOptions, AttentionIndexedPath,
-        AttentionPrefillDispatchOptions, AttentionPrefillPath, F16PairProjectionDispatch,
-        F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath, F32ProjectionPath,
-        IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
+        select_attention_output_a_path, select_attention_prefill_path,
+        select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
+        select_indexer_score_kernel, select_indexer_topk_kernel, select_q8_matmul_path,
+        should_sort_indexed_topk, AttentionDecodeDispatchOptions, AttentionDecodePath,
+        AttentionIndexedDispatchOptions, AttentionIndexedPath, AttentionOutputADispatchOptions,
+        AttentionOutputAPath, AttentionPrefillDispatchOptions, AttentionPrefillPath,
+        F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath,
+        F32ProjectionPath, IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
         IndexerTopkDispatchOptions, IndexerTopkKernel, Q8MatmulDispatchOptions, Q8MatmulPath,
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
@@ -1464,7 +1519,7 @@ mod tests {
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
         M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE, M14_4D5_SCOPE,
-        M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE,
+        M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE,
     };
 
     #[test]
@@ -2146,6 +2201,65 @@ mod tests {
         assert!(!M14_4D8A_SCOPE.owns_attention_output_a_cublas_dispatch);
         assert!(!M14_4D8A_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4D8A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_output_cublas_scope_leaves_route_pending() {
+        assert!(M14_4D8B_SCOPE.opt_in_only);
+        assert!(M14_4D8B_SCOPE.consumes_attention_output_q8_native_surface);
+        assert!(M14_4D8B_SCOPE.owns_attention_output_a_cublas_dispatch);
+        assert!(M14_4D8B_SCOPE.owns_attention_output_a_pack_unpack_kernels);
+        assert!(M14_4D8B_SCOPE.owns_live_cublas_grouped_a_pipeline);
+        assert!(M14_4D8B_SCOPE.uses_safe_sgemm_f16_rounded_adapter);
+        assert!(!M14_4D8B_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4D8B_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_output_a_dispatch_paths_match_current_c_priority() {
+        let base = AttentionOutputADispatchOptions {
+            quality_mode: false,
+            cublas_ready: true,
+            n_tokens: 2,
+            cublas_min_tokens: 2,
+            no_cublas_attention_output_a: false,
+            expanded_f16_ready: true,
+        };
+        assert_eq!(
+            select_attention_output_a_path(base),
+            AttentionOutputAPath::CublasF16
+        );
+        for native_options in [
+            AttentionOutputADispatchOptions {
+                quality_mode: true,
+                ..base
+            },
+            AttentionOutputADispatchOptions {
+                cublas_ready: false,
+                ..base
+            },
+            AttentionOutputADispatchOptions {
+                n_tokens: 1,
+                ..base
+            },
+            AttentionOutputADispatchOptions {
+                cublas_min_tokens: 3,
+                ..base
+            },
+            AttentionOutputADispatchOptions {
+                no_cublas_attention_output_a: true,
+                ..base
+            },
+            AttentionOutputADispatchOptions {
+                expanded_f16_ready: false,
+                ..base
+            },
+        ] {
+            assert_eq!(
+                select_attention_output_a_path(native_options),
+                AttentionOutputAPath::NativeQ8
+            );
+        }
     }
 
     #[test]

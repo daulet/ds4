@@ -8164,7 +8164,7 @@ Stage split:
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d8a and split next into M14.4d8b.
+- Status: done; M14.5 is active.
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8361,7 +8361,7 @@ Stage split:
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d8a and split next into M14.4d8b.
+- Status: done through M14.4d8b.
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8584,7 +8584,7 @@ Stage split:
 
 ###### M14.4d8: Output Q8 Attention Projection Surfaces
 
-- Status: split before implementation into M14.4d8a and M14.4d8b.
+- Status: done after splitting into M14.4d8a and M14.4d8b.
 - Goal: port native Q8 output surfaces before the optional F16/cuBLAS A
   projection optimization.
 
@@ -8621,9 +8621,41 @@ Stage split:
 
 ####### M14.4d8b: CUBLAS Attention Output A Dispatch
 
-- Status: active.
+- Status: done.
 - Goal: port the optional F16/cuBLAS attention-output-A acceleration and
   branch policy before attention-family closure.
+- Oracle: current-C `attention_pack_group_heads_f16_kernel`,
+  `attention_unpack_group_low_kernel`, and the
+  `ds4_gpu_attention_output_q8_batch_tensor` cuBLAS A branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d8b/attention-output-q8-cublas-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_output_q8_cublas_smoke.py --negative-test`
+  plus live B300 cargo-oxide and cuBLAS execution.
+- Acceptance: Rust owns opt-in attention-output-A cuBLAS branch selection,
+  F16-rounded grouped-head pack/unpack layout, and live grouped-A cuBLAS
+  output through cuda-oxide's safe SGEMM adapter. The public cuda-oxide
+  wrapper does not expose current-C's `CUDA_R_16F` GemmEx entry point, so
+  exact F16 GemmEx invocation is recorded as an adapter difference rather
+  than overclaimed. Runtime graph integration, default route activation, and
+  C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust F16 pack/unpack kernels and grouped-A cuBLAS
+    pipeline with current-C-equivalent quality, readiness, minimum-token,
+    disable-flag, and expanded-weight branch policy.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 69 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    with libdevice linkage and matched packed, grouped, and unpacked output
+    on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 66-check d8b comparator,
+    retained attention checks, and unified parity passed with 149 passed, 50
+    skipped, and 0 failed.
+
+#### M14.5: Router MoE And Hyperconnection Kernels
+
+- Status: active.
+- Goal: port the remaining current-C router, routed-MoE, shared-expert, and
+  hyperconnection CUDA surfaces after attention-family closure.
 
 ## Removal Criteria for C Host Code
 

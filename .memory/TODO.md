@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d8a and split next into M14.4d8b
+- Status: done; M14.5 is active
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8478,7 +8478,7 @@
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d8a and split next into M14.4d8b
+- Status: done through M14.4d8b
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8655,7 +8655,7 @@
 
 ###### M14.4d8: Output Q8 Attention Projection Surfaces
 
-- Status: split before implementation into M14.4d8a and M14.4d8b
+- Status: done after splitting into M14.4d8a and M14.4d8b
 - Goal: port native Q8 output surfaces before the optional F16/cuBLAS A
   projection optimization.
 
@@ -8686,6 +8686,26 @@
 
 ####### M14.4d8b: CUBLAS Attention Output A Dispatch
 
-- Status: active
+- Status: done
 - Goal: port the optional F16/cuBLAS attention-output-A acceleration and
   branch policy before attention-family closure.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d8b/attention-output-q8-cublas-smoke.json`
+- Comparator:
+  `ds4-parity/check_attention_output_q8_cublas_smoke.py --negative-test`
+- Evidence: executable-local Rust F16 grouped-head packing and low-output
+  unpacking are composed with live cuda-oxide SGEMM over F16-rounded inputs
+  for the current-C optional cuBLAS A branch. B300 feature-enabled tests
+  passed with 69 tests; live cargo-oxide execution emitted portable `sm_80`
+  PTX with libdevice linkage and matched packed, grouped, and unpacked output
+  on `NVIDIA B300 SXM6 AC`. The safe cuda-oxide API exposes SGEMM rather than
+  current-C's `CUDA_R_16F` GemmEx entry point; runtime route activation and C
+  CUDA removal remain unclaimed. Local formatting, diff, library tests, the
+  66-check d8b comparator, retained attention checks, and unified parity
+  passed with 149 passed, 50 skipped, and 0 failed.
+
+#### M14.5: Router MoE And Hyperconnection Kernels
+
+- Status: active
+- Goal: port the remaining current-C router, routed-MoE, shared-expert, and
+  hyperconnection CUDA surfaces after attention-family closure.
