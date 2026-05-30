@@ -2940,6 +2940,18 @@ initialization, tensor/resource, copy, synchronization, and managed-KV
 symbols emitted from a cuda-oxide `staticlib` and executed on B300. Compute
 exports, production linker selection, and route promotion remain pending.
 
+Validate the M14.6b2a Rust CUDA tensor-fill ABI export:
+
+```sh
+python3 ds4-parity/check_cuda_abi_tensor_fill_smoke.py --negative-test
+```
+
+The fixture records the first linkable Rust compute symbol:
+`ds4_gpu_tensor_fill_f32` is implemented through CUDA's stream-ordered D32
+memset primitive, with exact float-bit behavior verified on B300. Remaining
+graph compute exports, production linker selection, and route promotion remain
+pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -225,6 +225,25 @@
 
 ## Last Evidence
 
+- M14.6b2a Rust CUDA Tensor Fill ABI Export adds the first linkable compute
+  operation to the Rust static library: `ds4_gpu_tensor_fill_f32` is
+  implemented with stream-ordered `cuda_core::sys::cuMemsetD32Async` using
+  `value.to_bits()`, avoiding executable-local embedded PTX retention while
+  preserving arbitrary float bit patterns. The B300 smoke on
+  `NVIDIA B300 SXM6 AC` passed prefix, tensor-view, managed, signed-zero,
+  negative-infinity, zero-count, bounds, and null-input checks, and `nm`
+  confirmed 17 symbols in `target/debug/libds4_cuda.a`. Local library tests
+  passed with 88 tests and B300 backend-feature tests passed with 90 tests;
+  the tensor-fill ABI checker passed with 91 checks; and the unified parity
+  report passed with 174 passes, 45 skips, and no failures. Local
+  CUDA-feature compilation remains unavailable because
+  `/usr/local/cuda/include/cuda.h` is absent. Graph compute ABI ownership,
+  production-link selection, and default route promotion remain false;
+  M14.6b2b owns that work. The required non-interactive Claude review was
+  invoked with the changed-file, oracle, comparator, and validation evidence
+  bundle, but timed out after 60 seconds without a completed result;
+  adversarial self-review added managed-tensor coverage and documented the
+  raw-driver write-bounds invariant before closure.
 - M14.6b1 Rust CUDA Resource ABI Exports adds a linkable opt-in
   `rust/ds4-cuda` static library surface with 16 exported `ds4_gpu_*`
   initialization, tensor/resource, copy, synchronization, and managed-KV

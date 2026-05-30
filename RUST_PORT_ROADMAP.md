@@ -9237,10 +9237,51 @@ Stage split:
 
 ##### M14.6b2: Rust CUDA Compute ABI Assembly
 
-- Status: active.
+- Status: active; split into M14.6b2a and M14.6b2b so the first linkable
+  compute operation is validated independently from graph-kernel ABI assembly.
 - Goal: move validated cuda-oxide kernel families into reusable modules and
   export the remaining production operation ABI needed before switching the
   Linux CUDA link away from `ds4_cuda.cu`.
+
+##### M14.6b2a: Rust CUDA Tensor Fill ABI Export
+
+- Status: done.
+- Goal: export `ds4_gpu_tensor_fill_f32` from the linkable Rust ABI with
+  current-C validation and IEEE-754 bit-fill behavior, without depending on
+  executable-local embedded PTX.
+- Fixture: `ds4-parity/baselines/backend/m14.6b2a/abi-tensor-fill-smoke.json`.
+- Comparator: `ds4-parity/check_cuda_abi_tensor_fill_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now implements `ds4_gpu_tensor_fill_f32`
+    through stream-ordered `cuda_core::sys::cuMemsetD32Async` and
+    `value.to_bits()`, preserving arbitrary float bit patterns without
+    embedding a new library-owned kernel module.
+  - On `ds4-rust-port-b300` (`NVIDIA B300 SXM6 AC`), the ABI smoke passed
+    prefix fill, tensor-view offset fill, managed fill, signed-zero bit
+    preservation, negative-infinity fill, zero-count, bounds, and null-input
+    checks; `nm` confirmed 17 exported symbols in `target/debug/libds4_cuda.a`.
+  - Local `cargo test --locked -p ds4-cuda --lib` passed with 88 tests and
+    B300 `cargo test --locked -p ds4-cuda --features cuda-oxide-backend --
+    --nocapture` passed with 90 tests.
+  - `check_cuda_abi_tensor_fill_smoke.py --negative-test` passed with 91
+    checks, and the unified parity report passed with 174 passes, 45 skips,
+    and no failures. The local CUDA-feature build is unavailable on this Mac
+    because `/usr/local/cuda/include/cuda.h` is absent; B300 is the execution
+    proof.
+  - The required non-interactive Claude review was invoked with the
+    changed-file, oracle, comparator, and validation evidence bundle, but
+    timed out after 60 seconds without a completed result; adversarial
+    self-review added managed-tensor coverage and documented the raw-driver
+    write-bounds invariant.
+  - Graph compute ABI symbols, the production linker switch, and default-route
+    promotion remain pending.
+
+##### M14.6b2b: Rust CUDA Kernel ABI Assembly
+
+- Status: active.
+- Goal: export the remaining validated graph compute operation ABI from
+  reusable Rust-owned CUDA modules before any production linker or route
+  promotion.
 
 ## Removal Criteria for C Host Code
 

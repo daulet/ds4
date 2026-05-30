@@ -9099,6 +9099,35 @@
 
 ##### M14.6b2: Rust CUDA Compute ABI Assembly
 
-- Status: active
+- Status: active; split into M14.6b2a and M14.6b2b
 - Goal: consolidate validated kernel families into reusable modules and
   export the compute ABI before any production linker or route promotion.
+
+##### M14.6b2a: Rust CUDA Tensor Fill ABI Export
+
+- Status: done
+- Goal: export `ds4_gpu_tensor_fill_f32` from the linkable Rust static
+  library without requiring embedded kernel retention in a downstream binary.
+- Fixture: `ds4-parity/baselines/backend/m14.6b2a/abi-tensor-fill-smoke.json`
+- Comparator: `ds4-parity/check_cuda_abi_tensor_fill_smoke.py --negative-test`.
+- Evidence: `rust/ds4-cuda/src/abi.rs` now implements the first compute ABI
+  symbol through stream-ordered `cuda_core::sys::cuMemsetD32Async` using the
+  supplied float's exact bits. B300 execution on `NVIDIA B300 SXM6 AC`
+  passed prefix, tensor-view, managed, signed-zero, negative-infinity,
+  zero-count, bounds, and null-input checks; `nm` confirmed 17 static-library
+  symbols; 88 local library tests and 90 B300 backend-feature tests passed;
+  the tensor-fill ABI checker passed with 91 checks; and the unified parity
+  report passed with 174 passes, 45 skips, and no failures. Local CUDA-feature
+  compilation remains unavailable because `/usr/local/cuda/include/cuda.h`
+  is absent. Graph compute ABI ownership, production linker promotion, and
+  default-route promotion remain explicitly false. The required
+  non-interactive Claude review was invoked with the changed-file, oracle,
+  comparator, and validation evidence bundle, but timed out after 60 seconds
+  without a completed result; adversarial self-review added managed-tensor
+  coverage and documented the raw-driver write-bounds invariant.
+
+##### M14.6b2b: Rust CUDA Kernel ABI Assembly
+
+- Status: active
+- Goal: export the remaining validated graph compute symbols from reusable
+  Rust-owned modules before any production linker or route promotion.

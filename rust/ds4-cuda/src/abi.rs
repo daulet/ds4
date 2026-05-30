@@ -3,7 +3,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Mutex;
 
-use cuda_core::{DeviceBuffer, ManagedBuffer};
+use cuda_core::{DeviceBuffer, IntoResult, ManagedBuffer};
 
 use crate::allocation_policy::managed_kv_decision;
 use crate::substrate::CudaOxideSubstrate;
@@ -174,6 +174,45 @@ pub unsafe extern "C" fn ds4_gpu_tensor_contents(tensor: *mut Ds4GpuTensor) -> *
             return ptr::null_mut();
         }
         tensor.device_ptr() as usize as *mut c_void
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_tensor_fill_f32(
+    tensor: *mut Ds4GpuTensor,
+    value: f32,
+    count: u64,
+) -> c_int {
+    status(|| {
+        let Some(tensor) = (unsafe { tensor_ref(tensor.cast_const()) }) else {
+            return false;
+        };
+        let Some(bytes) = count.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if bytes > tensor.bytes {
+            return false;
+        }
+        with_backend(|backend| {
+            if count == 0 {
+                return Some(true);
+            }
+            backend.context().bind_to_thread().ok()?;
+            let len = usize::try_from(count).ok()?;
+            // SAFETY: `bytes <= tensor.bytes` above bounds these D32 stores
+            // within the CUDA allocation or view owned by the active context.
+            let result = unsafe {
+                cuda_core::sys::cuMemsetD32Async(
+                    tensor.device_ptr(),
+                    value.to_bits(),
+                    len,
+                    backend.stream().cu_stream(),
+                )
+            }
+            .result();
+            Some(result.is_ok())
+        })
+        .unwrap_or(false)
     })
 }
 

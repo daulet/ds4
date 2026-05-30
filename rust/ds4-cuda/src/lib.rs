@@ -1986,6 +1986,25 @@ pub const M14_6B1_SCOPE: CudaAbiResourceScope = CudaAbiResourceScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiTensorFillScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_tensor_fill_f32: bool,
+    pub owns_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2A_SCOPE: CudaAbiTensorFillScope = CudaAbiTensorFillScope {
+    exported_abi_symbol_count: 17,
+    exported_compute_symbol_count: 1,
+    owns_tensor_fill_f32: true,
+    owns_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2025,7 +2044,7 @@ mod tests {
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
         M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE, M14_5C2F_SCOPE,
-        M14_5D_SCOPE, M14_6A_GATE, M14_6B1_SCOPE,
+        M14_5D_SCOPE, M14_6A_GATE, M14_6B1_SCOPE, M14_6B2A_SCOPE,
     };
 
     #[test]
@@ -3046,6 +3065,16 @@ mod tests {
         assert!(!M14_6B1_SCOPE.owns_compute_abi);
         assert!(!M14_6B1_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn tensor_fill_abi_scope_leaves_graph_compute_and_route_pending() {
+        assert_eq!(M14_6B2A_SCOPE.exported_abi_symbol_count, 17);
+        assert_eq!(M14_6B2A_SCOPE.exported_compute_symbol_count, 1);
+        assert!(M14_6B2A_SCOPE.owns_tensor_fill_f32);
+        assert!(!M14_6B2A_SCOPE.owns_graph_compute_abi);
+        assert!(!M14_6B2A_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2A_SCOPE.changes_default_route);
     }
 
     #[test]
