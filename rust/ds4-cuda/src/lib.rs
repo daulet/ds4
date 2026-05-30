@@ -2894,6 +2894,32 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBA_SCOPE:
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiF32SingleTokenProjectionScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_matmul_f32_single_token_tensor: bool,
+    pub owns_live_model_range_f32_projection_observation: bool,
+    pub owns_multi_token_blas_projection: bool,
+    pub owns_q8_f16_cache_hook: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE: CudaAbiF32SingleTokenProjectionScope =
+    CudaAbiF32SingleTokenProjectionScope {
+        exported_abi_symbol_count: 32,
+        exported_compute_symbol_count: 12,
+        owns_matmul_f32_single_token_tensor: true,
+        owns_live_model_range_f32_projection_observation: true,
+        owns_multi_token_blas_projection: false,
+        owns_q8_f16_cache_hook: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2952,6 +2978,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -4626,6 +4653,30 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBA_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBA_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_f32_single_token_projection_scope_leaves_blas_q8_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.exported_abi_symbol_count,
+            32
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.exported_compute_symbol_count,
+            12
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.owns_matmul_f32_single_token_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE
+                .owns_live_model_range_f32_projection_observation
+        );
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.owns_multi_token_blas_projection);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.owns_q8_f16_cache_hook);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBA_SCOPE.changes_default_route);
     }
 
     #[test]
