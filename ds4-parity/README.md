@@ -2800,6 +2800,19 @@ descriptors, partial final tiles, and negative-expert bucket-zero counts. It
 leaves tile-local projection, atomic-down/rowspan execution, Q4_K,
 hyperconnection, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2c2 Rust CUDA routed MoE tile8 row32 smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_tile8_row32_smoke.py --negative-test
+```
+
+The fixture records current-C functional default tile8 row32 expert projection
+behavior on B300: multi-tile and partial-tile IQ2-XXS/Q8_K gate/up output,
+Q2_K/Q8_K non-atomic down output, and negative-expert bucketing through tile
+metadata. It leaves shared-cache specialization, tile4,
+atomic-down/tile16/rowspan execution, Q4_K, hyperconnection, runtime route,
+and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

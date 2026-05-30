@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2c2
+- Status: active; split beginning with M14.5a through M14.5c2c3
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8842,6 +8842,25 @@
 
 ##### M14.5c2c2: Default Tile8 Row32 Projection
 
-- Status: active
+- Status: done
 - Goal: port current-C default eight-pair row32 expert-tile gate/down
   projection before atomic-down and wider-row scheduling variants.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2c2/routed-moe-tile8-row32-smoke.json`
+- Comparator: `ds4-parity/check_routed_moe_tile8_row32_smoke.py --negative-test`
+- Evidence: executable-local Rust functional tile8 row32 kernels cover
+  IQ2-XXS/Q8_K gate/up and Q2_K/Q8_K non-atomic down projection over
+  expert-tile descriptors, including multi-tile and partial-tile groups.
+  B300 feature-enabled tests passed with 78 tests; live cargo-oxide execution
+  emitted portable `sm_80` PTX through libdevice and matched outputs on
+  `NVIDIA B300 SXM6 AC`. Shared-cache specialization, tile4,
+  atomic-down/tile16/rowspan execution, Q4_K, hyperconnection, runtime route
+  activation, and C CUDA removal remain unclaimed. Local formatting, diff,
+  library tests, the M14.5c2c2 comparator, retained M14 checks, and unified
+  parity passed with 157 passed, 50 skipped, and 0 failed.
+
+##### M14.5c2c3: Tile4 Row32 Projection
+
+- Status: active
+- Goal: port optional four-pair row32 expert-tile gate/down projection before
+  atomic-down, tile16, rowspan, and shared-cache optimization boundaries.

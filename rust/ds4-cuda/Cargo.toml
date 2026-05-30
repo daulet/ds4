@@ -312,3 +312,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-routed-moe-expert-tiles-smoke"
 path = "src/bin/routed_moe_expert_tiles_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-routed-moe-tile8-row32-smoke"
+path = "src/bin/routed_moe_tile8_row32_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

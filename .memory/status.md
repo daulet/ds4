@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.5c2c2 Default Tile8 Row32 Projection
+- Active item: M14.5c2c3 Tile4 Row32 Projection
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.5c2c1 Expert-Tile Descriptor Metadata.
+- Last validated source before the active item: M14.5c2c2 Default Tile8 Row32 Projection.
+- Earlier M14.5c2c1 Expert-Tile Descriptor Metadata.
 - Earlier M14.5c2b2 Sorted-Pair P2 Quantized Projection.
 - Earlier M14.5c2b1 Batched Sorted-Pair Metadata.
 - Earlier M14.5c2a Default Single-Token Quantized Routed MoE Dispatch.
@@ -213,6 +214,20 @@
 
 ## Last Evidence
 
+- M14.5c2c2 Default Tile8 Row32 Projection adds executable-local Rust
+  cuda-oxide functional default tile8 row32 IQ2-XXS/Q8_K gate/up and
+  Q2_K/Q8_K non-atomic down kernels over validated expert-tile descriptors.
+  On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+  with 78 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+  through libdevice and matched multi-tile and partial-tile projection outputs
+  on `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.5c2c2/routed-moe-tile8-row32-smoke.json`
+  and `ds4-parity/check_routed_moe_tile8_row32_smoke.py --negative-test`.
+  Shared-cache specialization, tile4, atomic-down/tile16/rowspan execution,
+  Q4_K, hyperconnection, runtime route activation, and C CUDA removal remain
+  unclaimed. Local formatting, diff, library tests, the M14.5c2c2 comparator,
+  retained M14 checks, and unified parity passed with 157 passed, 50 skipped,
+  and 0 failed.
 - M14.5c2c1 Expert-Tile Descriptor Metadata adds executable-local Rust
   cuda-oxide expert-tile offset and descriptor kernels composed with the
   sorted-pair count surface for default eight-pair and alternate four-pair
