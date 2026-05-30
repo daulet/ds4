@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2 Direct-I/O And Residual Model-Control Policy
+- Active item: M14.6b2b2b2b2b2b2b2b Direct-I/O Residual Failure And Cache Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,27 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2a Direct-I/O Fd Cache ABI adds the public retained
+  Linux `O_DIRECT` reopen and aligned pinned-read subset under
+  `DS4_CUDA_WEIGHT_CACHE=1` with `DS4_CUDA_NO_DIRECT_IO` unset. Rust retains
+  direct-fd alignment/file-size state, consumes successful aligned reads in
+  fd-cached device ranges, and falls back to buffered fd reading when the
+  direct window cannot supply a request. The C-linked B300 consumer observes
+  fd-backed weighted RMS and device-cache reuse, but intentionally does not
+  claim to expose direct selection itself; the refreshed M14.1b2b3b1 B300
+  probe reports `direct_io_selected=true`, 4096-byte alignment, read
+  offset/size `0`/`8192`, exact direct readback, and tail buffered fallback.
+  Local library tests pass with 100 tests; B300 release-feature tests pass
+  with 102 tests, and the static library retains 29 exports. The direct-I/O
+  fd-cache checker passes with 111 checks and unified parity passes with 186
+  passed, 45 skipped, and no failures. The required non-interactive Claude
+  review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed
+  findings; self-review kept the public linked output separate from the
+  lower-level direct-read selection evidence. The generated embed object
+  still emits the executable-stack linker warning. Persistent direct-read
+  error disablement, asynchronous staging, cache-budget and source-page/
+  progress policy, residual failure/cache policy, whole-archive retention,
+  and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2b1 Buffered Fd-Backed Weight Cache ABI adds the
   deterministic public buffered fd-cache subset selected by
   `DS4_CUDA_WEIGHT_CACHE=1` and `DS4_CUDA_NO_DIRECT_IO=1`. Rust binds an fd

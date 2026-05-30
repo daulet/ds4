@@ -3114,6 +3114,21 @@ backing file is changed. Direct-I/O reopen/alignment, asynchronous staging,
 cache-budget and source-page policy, residual failure handling, whole-archive
 retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2a Rust CUDA direct-I/O fd-cache ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_direct_io_fd_cache_smoke.py --negative-test
+```
+
+The fixture permits direct I/O while selecting public fd-backed caching. The
+C-linked B300 consumer proves fd-sourced weighted output and retained cache
+reuse; because that output cannot reveal the read mechanism, the fixture
+separately cites the refreshed M14.1b2b3b1 B300 probe that observes aligned
+`O_DIRECT` selection, exact readback, and tail buffered fallback. Persistent
+direct-read error disablement, asynchronous staging, cache-budget and
+source-page policy, residual failure handling, whole-archive retention, and
+the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

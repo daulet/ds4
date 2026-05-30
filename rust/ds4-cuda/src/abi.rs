@@ -25,6 +25,10 @@ static ABI_MODEL_CONTROL: Mutex<AbiModelControl> = Mutex::new(AbiModelControl {
     model_size: 0,
     model_fd: -1,
     model_fd_host_base: 0,
+    model_file_size: 0,
+    model_direct_align: 1,
+    #[cfg(target_os = "linux")]
+    model_direct_file: None,
 });
 
 struct AbiModelRange {
@@ -38,6 +42,7 @@ struct AbiModelRange {
 enum AbiModelRangeStorage {
     DeviceCopy(DeviceBuffer<u8>),
     BufferedFdDeviceCopy(DeviceBuffer<u8>),
+    DirectIoFdDeviceCopy(DeviceBuffer<u8>),
     ReadOnlyRegistered {
         _registration: ReadOnlyRegisteredHostMemory<'static, u8>,
         requested_device_ptr: u64,
@@ -48,7 +53,8 @@ impl AbiModelRange {
     fn device_ptr(&self) -> u64 {
         match &self.storage {
             AbiModelRangeStorage::DeviceCopy(buffer)
-            | AbiModelRangeStorage::BufferedFdDeviceCopy(buffer) => buffer.cu_deviceptr(),
+            | AbiModelRangeStorage::BufferedFdDeviceCopy(buffer)
+            | AbiModelRangeStorage::DirectIoFdDeviceCopy(buffer) => buffer.cu_deviceptr(),
             AbiModelRangeStorage::ReadOnlyRegistered {
                 requested_device_ptr,
                 ..
@@ -146,6 +152,10 @@ struct AbiModelControl {
     model_size: u64,
     model_fd: c_int,
     model_fd_host_base: usize,
+    model_file_size: u64,
+    model_direct_align: u64,
+    #[cfg(target_os = "linux")]
+    model_direct_file: Option<std::fs::File>,
 }
 
 enum TensorStorage {
@@ -301,31 +311,36 @@ fn full_model_copy_selected() -> bool {
     std::env::var_os("DS4_CUDA_COPY_MODEL").is_some_and(|value| !value.is_empty())
 }
 
-fn buffered_fd_weight_cache_selected() -> bool {
+fn fd_weight_cache_selected() -> bool {
     std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_some()
-        && std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_some()
         && std::env::var_os("DS4_CUDA_NO_FD_CACHE").is_none()
         && !std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_some_and(|value| !value.is_empty())
 }
 
-fn try_upload_abi_buffered_fd_range(
+fn buffered_fd_weight_cache_selected() -> bool {
+    fd_weight_cache_selected() && std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_some()
+}
+
+fn direct_io_fd_weight_cache_selected() -> bool {
+    fd_weight_cache_selected() && std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_none()
+}
+
+fn abi_model_fd(model_map: *const c_void) -> Option<c_int> {
+    let control = ABI_MODEL_CONTROL.lock().ok()?;
+    if control.model_fd < 0
+        || (control.model_fd_host_base != 0 && control.model_fd_host_base != model_map as usize)
+    {
+        return None;
+    }
+    Some(control.model_fd)
+}
+
+fn upload_abi_buffered_fd_range(
     backend: &CudaOxideSubstrate,
-    model_map: *const c_void,
+    fd: c_int,
     offset: u64,
     bytes: u64,
 ) -> Option<DeviceBuffer<u8>> {
-    if !buffered_fd_weight_cache_selected() || bytes == 0 {
-        return None;
-    }
-    let fd = {
-        let control = ABI_MODEL_CONTROL.lock().ok()?;
-        if control.model_fd < 0
-            || (control.model_fd_host_base != 0 && control.model_fd_host_base != model_map as usize)
-        {
-            return None;
-        }
-        control.model_fd
-    };
     let bytes = usize::try_from(bytes).ok()?;
     let mut staging = backend.pinned_zeroed::<u8>(bytes).ok()?;
     let mut done = 0usize;
@@ -352,6 +367,113 @@ fn try_upload_abi_buffered_fd_range(
         done = done.checked_add(usize::try_from(result).ok()?)?;
     }
     backend.upload_pinned_u8_range(&staging, 0, bytes).ok()
+}
+
+fn try_upload_abi_buffered_fd_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    offset: u64,
+    bytes: u64,
+) -> Option<DeviceBuffer<u8>> {
+    if !buffered_fd_weight_cache_selected() || bytes == 0 {
+        return None;
+    }
+    upload_abi_buffered_fd_range(backend, abi_model_fd(model_map)?, offset, bytes)
+}
+
+#[cfg(target_os = "linux")]
+fn try_upload_abi_direct_fd_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    offset: u64,
+    bytes: u64,
+) -> Option<(DeviceBuffer<u8>, bool)> {
+    use std::os::unix::fs::FileExt;
+
+    if !direct_io_fd_weight_cache_selected() || bytes == 0 {
+        return None;
+    }
+    let fd = abi_model_fd(model_map)?;
+    let direct_device = (|| -> Option<DeviceBuffer<u8>> {
+        let control = ABI_MODEL_CONTROL.lock().ok()?;
+        let direct_file = control.model_direct_file.as_ref()?;
+        let alignment = control.model_direct_align.max(1);
+        let read_offset = offset - (offset % alignment);
+        let payload_delta = offset.checked_sub(read_offset)?;
+        let payload_end = payload_delta.checked_add(bytes)?;
+        let read_bytes = payload_end.checked_add(alignment - 1)? / alignment * alignment;
+        if control.model_file_size == 0
+            || read_offset > control.model_file_size
+            || read_bytes > control.model_file_size - read_offset
+        {
+            None
+        } else {
+            let stage_bytes = read_bytes.checked_add(alignment)?;
+            let stage_bytes = usize::try_from(stage_bytes).ok()?;
+            let mut staging = backend.pinned_zeroed::<u8>(stage_bytes).ok()?;
+            let alignment = usize::try_from(alignment).ok()?;
+            let aligned_delta = (alignment - (staging.as_ptr() as usize % alignment)) % alignment;
+            let read_bytes = usize::try_from(read_bytes).ok()?;
+            let direct_window =
+                &mut staging.as_mut_slice()[aligned_delta..aligned_delta + read_bytes];
+            direct_file.read_exact_at(direct_window, read_offset).ok()?;
+            let payload_delta = usize::try_from(payload_delta).ok()?;
+            let bytes = usize::try_from(bytes).ok()?;
+            backend
+                .upload_pinned_u8_range(&staging, aligned_delta + payload_delta, bytes)
+                .ok()
+        }
+    })();
+    direct_device.map(|device| (device, true)).or_else(|| {
+        upload_abi_buffered_fd_range(backend, fd, offset, bytes).map(|device| (device, false))
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn try_upload_abi_direct_fd_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    offset: u64,
+    bytes: u64,
+) -> Option<(DeviceBuffer<u8>, bool)> {
+    if !direct_io_fd_weight_cache_selected() || bytes == 0 {
+        return None;
+    }
+    upload_abi_buffered_fd_range(backend, abi_model_fd(model_map)?, offset, bytes)
+        .map(|device| (device, false))
+}
+
+fn configure_abi_model_fd(control: &mut AbiModelControl, fd: c_int) {
+    control.model_fd = fd;
+    control.model_file_size = 0;
+    control.model_direct_align = 1;
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+
+        control.model_direct_file = None;
+        if fd < 0 {
+            return;
+        }
+        let direct_path = format!("/proc/self/fd/{fd}");
+        if let Some(metadata) = std::fs::metadata(&direct_path)
+            .ok()
+            .filter(|metadata| metadata.len() > 0)
+        {
+            control.model_file_size = metadata.len();
+            control.model_direct_align = (metadata.blksize() as u64).max(1);
+        }
+        if std::env::var_os("DS4_CUDA_NO_DIRECT_IO").is_none() {
+            control.model_direct_file = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_DIRECT)
+                .open(direct_path)
+                .ok();
+            if control.model_direct_file.is_some() {
+                control.model_direct_align = control.model_direct_align.max(512);
+            }
+        }
+    }
 }
 
 fn try_copy_abi_model_window(
@@ -523,28 +645,40 @@ fn with_cached_abi_model_range<T>(
     // above and the asynchronous upload is synchronized before returning.
     let source = unsafe { std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes) };
     let storage =
-        match try_upload_abi_buffered_fd_range(backend, model_map, offset as u64, bytes as u64) {
-            Some(device) => AbiModelRangeStorage::BufferedFdDeviceCopy(device),
-            None => match abi_registered_source(model_map, model_size, offset as u64, bytes as u64)
-                .and_then(|(registered_source, device_offset)| {
-                    let registration = backend
-                        .register_read_only_host_range(registered_source)
-                        .ok()?;
-                    Some(AbiModelRangeStorage::ReadOnlyRegistered {
-                        requested_device_ptr: registration
-                            .cu_deviceptr()
-                            .checked_add(device_offset)?,
-                        _registration: registration,
-                    })
-                }) {
-                Some(storage) => storage,
-                None => AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?),
+        match try_upload_abi_direct_fd_range(backend, model_map, offset as u64, bytes as u64) {
+            Some((device, true)) => AbiModelRangeStorage::DirectIoFdDeviceCopy(device),
+            Some((device, false)) => AbiModelRangeStorage::BufferedFdDeviceCopy(device),
+            None => match try_upload_abi_buffered_fd_range(
+                backend,
+                model_map,
+                offset as u64,
+                bytes as u64,
+            ) {
+                Some(device) => AbiModelRangeStorage::BufferedFdDeviceCopy(device),
+                None => {
+                    match abi_registered_source(model_map, model_size, offset as u64, bytes as u64)
+                        .and_then(|(registered_source, device_offset)| {
+                            let registration = backend
+                                .register_read_only_host_range(registered_source)
+                                .ok()?;
+                            Some(AbiModelRangeStorage::ReadOnlyRegistered {
+                                requested_device_ptr: registration
+                                    .cu_deviceptr()
+                                    .checked_add(device_offset)?,
+                                _registration: registration,
+                            })
+                        }) {
+                        Some(storage) => storage,
+                        None => AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?),
+                    }
+                }
             },
         };
     backend.synchronize().ok()?;
     let ptr = match &storage {
         AbiModelRangeStorage::DeviceCopy(device)
-        | AbiModelRangeStorage::BufferedFdDeviceCopy(device) => device.cu_deviceptr(),
+        | AbiModelRangeStorage::BufferedFdDeviceCopy(device)
+        | AbiModelRangeStorage::DirectIoFdDeviceCopy(device) => device.cu_deviceptr(),
         AbiModelRangeStorage::ReadOnlyRegistered {
             requested_device_ptr,
             ..
@@ -619,7 +753,7 @@ pub extern "C" fn ds4_gpu_cleanup() {
             if let Ok(mut control) = ABI_MODEL_CONTROL.lock() {
                 control.model_map = 0;
                 control.model_size = 0;
-                control.model_fd = -1;
+                configure_abi_model_fd(&mut control, -1);
                 control.model_fd_host_base = 0;
             }
             *backend = None;
@@ -1268,7 +1402,7 @@ pub extern "C" fn ds4_gpu_set_model_fd(fd: c_int) -> c_int {
         let Ok(mut control) = ABI_MODEL_CONTROL.lock() else {
             return false;
         };
-        control.model_fd = fd;
+        configure_abi_model_fd(&mut control, fd);
         control.model_fd_host_base = control.model_map;
         true
     })

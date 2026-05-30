@@ -9645,10 +9645,10 @@ Stage split:
 
 - Status: active; split into M14.6b2b2b2b2b2b1,
   M14.6b2b2b2b2b2b2a, M14.6b2b2b2b2b2b2b1, and
-  M14.6b2b2b2b2b2b2b2 because deterministic successful chunk-selected
-  copying, whole-map registration precedence, and buffered fd caching are
-  separately testable from direct-I/O staging and residual failure/cache
-  policy.
+  M14.6b2b2b2b2b2b2b2a, and M14.6b2b2b2b2b2b2b2b because deterministic
+  successful chunk-selected copying, whole-map registration precedence,
+  buffered fd caching, and synchronous direct-I/O fd caching are separately
+  testable from residual failure/cache policy.
 - Goal: connect chunked full-model copy/failure routing, fd-backed direct-I/O
   staging, registration-disable, preload/copy selection, and remaining
   cache-policy branches to the public model-control ABI without claiming
@@ -9777,8 +9777,61 @@ Stage split:
 
 ####### M14.6b2b2b2b2b2b2b2: Direct-I/O And Residual Model-Control Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b because retained direct-fd reopen plus aligned
+  synchronous read/fallback behavior is independently testable from
+  persistent error-disable, asynchronous staging, budget, and residual
+  cache policy.
 - Goal: connect public fd-backed direct-I/O staging, asynchronous/budget
+  policy, chunk-copy failure routing, and residual model-control
+  selection/cache policy without claiming remaining graph compute or route
+  promotion.
+
+######## M14.6b2b2b2b2b2b2b2a: Direct-I/O Fd Cache ABI
+
+- Status: done.
+- Goal: connect the public retained `O_DIRECT` fd reopen, aligned pinned
+  read, and buffered fallback subset while leaving persistent direct-read
+  error disablement, asynchronous staging, budgets, residual failure/cache
+  policy, and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2a/abi-model-control-direct-io-fd-cache-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_direct_io_fd_cache_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` reopens the configured public model fd
+    through `/proc/self/fd/<fd>` with `O_DIRECT` on Linux while direct I/O
+    is permitted, retains the alignment/file-size state, performs aligned
+    pinned reads for in-file windows, and uses buffered fd reads when a
+    direct read cannot supply the request. The retained fd-cached device
+    range still precedes per-range registration and caller-map copy.
+  - The C-linked B300 consumer observes fd-backed weighted RMS and retained
+    cache reuse with `DS4_CUDA_NO_DIRECT_IO` unset. The public output does
+    not expose whether the successful fd read was direct; the refreshed
+    M14.1b2b3b1 B300 probe supplies direct-I/O evidence, reporting
+    `direct_io_selected=true`, 4096-byte alignment, aligned read
+    offset/size `0`/`8192`, exact readback, and tail buffered fallback.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 100 tests;
+    B300 `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 102 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - `check_cuda_abi_model_control_direct_io_fd_cache_smoke.py
+    --negative-test` passes with 111 checks, and unified parity passes with
+    186 passed, 45 skipped, and no failures.
+  - Persistent direct-read error disablement, asynchronous staging, cache
+    budget/source-page/progress policy, residual failure/cache policy,
+    q8/f16 hooks, remaining graph compute, whole-archive retention, route
+    promotion, and the generated `.note.GNU-stack` warning remain open.
+  - The required non-interactive Claude adversarial review was invoked with
+    the public direct-I/O fd-cache boundary, current-C oracle, comparator,
+    and B300 evidence, but returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+    without completed findings. Self-review kept the public linked output
+    separate from the lower-level direct-read selection evidence.
+
+######## M14.6b2b2b2b2b2b2b2b: Direct-I/O Residual Failure And Cache Policy
+
+- Status: active.
+- Goal: connect persistent direct-read error disablement, asynchronous/budget
   policy, chunk-copy failure routing, and residual model-control
   selection/cache policy without claiming remaining graph compute or route
   promotion.
