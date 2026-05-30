@@ -8164,7 +8164,7 @@ Stage split:
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d2 and split next into M14.4d3.
+- Status: active; done through M14.4d3 and split next into M14.4d4.
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8361,7 +8361,7 @@ Stage split:
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d2 and split next into M14.4d3.
+- Status: active; done through M14.4d3 and split next into M14.4d4.
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8428,9 +8428,42 @@ Stage split:
 
 ###### M14.4d3: Heads8 Online Attention Decode Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port optimized heads8-online decode and its dispatch selection before
   prefill, indexed, or output-Q8 attention ownership.
+- Oracle: current-C `attention_decode_mixed_heads8_online_kernel`,
+  `attention_decode_batch_launch`, `cuda_attention_score_buffer_fits`, and
+  the decode window-attention environment/quality dispatch conditions.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d3/attention-decode-heads8-online-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_decode_heads8_online_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in decode heads8-online output semantics and the
+  current-C decode online dispatch predicates for score-buffer overflow and
+  enabled multi-token window attention. Raw/mixed prefill, indexed, and
+  output-Q8 attention, runtime graph integration, default route activation,
+  and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust grouped-head online decode execution with a
+    partial final head group, batched causal-window/ring-row coverage, and
+    single-token all-compressed coverage.
+  - Added `select_attention_decode_path`, matching current-C overflow,
+    mask, head-dimension, disabled-window, forced-window, token-threshold,
+    and quality-mode selection behavior.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 60 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    with libdevice linkage and matched online decode outputs on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 64-check d3 comparator,
+    retained M14 checks, and unified parity passed with 143 passed, 50
+    skipped, and 0 failed.
+
+###### M14.4d4: Generic Raw And Mixed Attention Prefill Kernels
+
+- Status: active.
+- Goal: port generic raw and mixed prefill kernels before claiming optimized
+  static-online/CUBLAS prefill, indexed, or output-Q8 attention.
 
 ## Removal Criteria for C Host Code
 

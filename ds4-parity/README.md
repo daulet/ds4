@@ -2625,6 +2625,19 @@ batched output while leaving heads8-online dispatch,
 prefill/indexed/output-Q8 attention, runtime route, and C CUDA removal
 unclaimed.
 
+Validate the M14.4d3 Rust CUDA heads8 online attention decode smoke:
+
+```sh
+python3 ds4-parity/check_attention_decode_heads8_online_smoke.py --negative-test
+```
+
+The fixture records executable-local `attention_decode_mixed_heads8_online_kernel`
+semantics and the current-C decode dispatch predicates on B300. It proves
+grouped and partial-head-group output, single-all and batched causal-window
+behavior, ring wrap, compressed visibility, learned-sink softmax, and both
+score-buffer-overflow and window-attention selection while leaving prefill,
+indexed, output-Q8 attention, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

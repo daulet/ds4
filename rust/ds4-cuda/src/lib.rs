@@ -1184,6 +1184,69 @@ pub const M14_4D2_SCOPE: AttentionDecodeBatchMixedScope = AttentionDecodeBatchMi
     changes_default_route: false,
 };
 
+pub const DS4_CUDA_ATTENTION_SCORE_CAP: u32 = 8192;
+pub const DS4_CUDA_ATTENTION_RAW_SCORE_CAP: u32 = 256;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttentionDecodePath {
+    Generic,
+    Heads8OnlineOverflow,
+    Heads8OnlineWindow,
+    RejectScoreBuffer,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionDecodeDispatchOptions {
+    pub n_tokens: u32,
+    pub n_comp: u32,
+    pub use_comp_mask: bool,
+    pub head_dim: u32,
+    pub no_window_attention: bool,
+    pub window_attention: bool,
+    pub quality_mode: bool,
+}
+
+pub const fn select_attention_decode_path(
+    options: AttentionDecodeDispatchOptions,
+) -> AttentionDecodePath {
+    if options.n_comp > DS4_CUDA_ATTENTION_SCORE_CAP - DS4_CUDA_ATTENTION_RAW_SCORE_CAP {
+        if !options.use_comp_mask && options.head_dim == 512 && !options.no_window_attention {
+            return AttentionDecodePath::Heads8OnlineOverflow;
+        }
+        return AttentionDecodePath::RejectScoreBuffer;
+    }
+    if !options.use_comp_mask
+        && options.n_tokens > 1
+        && options.head_dim == 512
+        && !options.no_window_attention
+        && (options.window_attention || (!options.quality_mode && options.n_tokens >= 128))
+    {
+        return AttentionDecodePath::Heads8OnlineWindow;
+    }
+    AttentionDecodePath::Generic
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionDecodeHeads8OnlineScope {
+    pub opt_in_only: bool,
+    pub owns_heads8_online_decode_kernel: bool,
+    pub owns_decode_online_dispatch_policy: bool,
+    pub owns_prefill_or_indexed_online_attention: bool,
+    pub owns_output_q8_attention: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4D3_SCOPE: AttentionDecodeHeads8OnlineScope = AttentionDecodeHeads8OnlineScope {
+    opt_in_only: true,
+    owns_heads8_online_decode_kernel: true,
+    owns_decode_online_dispatch_policy: true,
+    owns_prefill_or_indexed_online_attention: false,
+    owns_output_q8_attention: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1196,9 +1259,10 @@ pub mod substrate;
 #[cfg(test)]
 mod tests {
     use super::{
-        q8_dp4a_enabled, select_f16_pair_projection_path, select_f16_projection_path,
-        select_f32_projection_path, select_indexer_score_kernel, select_indexer_topk_kernel,
-        select_q8_matmul_path, should_sort_indexed_topk, F16PairProjectionDispatch,
+        q8_dp4a_enabled, select_attention_decode_path, select_f16_pair_projection_path,
+        select_f16_projection_path, select_f32_projection_path, select_indexer_score_kernel,
+        select_indexer_topk_kernel, select_q8_matmul_path, should_sort_indexed_topk,
+        AttentionDecodeDispatchOptions, AttentionDecodePath, F16PairProjectionDispatch,
         F16PairProjectionPath, F16ProjectionDispatch, F16ProjectionPath, F32ProjectionPath,
         IndexedTopkSortOptions, IndexerScoreDispatchOptions, IndexerScoreKernel,
         IndexerTopkDispatchOptions, IndexerTopkKernel, Q8MatmulDispatchOptions, Q8MatmulPath,
@@ -1210,7 +1274,7 @@ mod tests {
         M14_2D2C4_SCOPE, M14_2D2C5_SCOPE, M14_3A_SCOPE, M14_3B1_SCOPE, M14_3B2_SCOPE,
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
-        M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE,
+        M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE,
     };
 
     #[test]
@@ -1714,6 +1778,92 @@ mod tests {
         assert!(!M14_4D2_SCOPE.owns_prefill_indexed_or_output_q8_attention);
         assert!(!M14_4D2_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4D2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_heads8_online_scope_leaves_other_attention_and_route_pending() {
+        assert!(M14_4D3_SCOPE.opt_in_only);
+        assert!(M14_4D3_SCOPE.owns_heads8_online_decode_kernel);
+        assert!(M14_4D3_SCOPE.owns_decode_online_dispatch_policy);
+        assert!(!M14_4D3_SCOPE.owns_prefill_or_indexed_online_attention);
+        assert!(!M14_4D3_SCOPE.owns_output_q8_attention);
+        assert!(!M14_4D3_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4D3_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_decode_online_dispatch_paths_match_current_c_priority() {
+        let base = AttentionDecodeDispatchOptions {
+            n_tokens: 3,
+            n_comp: 4,
+            use_comp_mask: false,
+            head_dim: 512,
+            no_window_attention: false,
+            window_attention: true,
+            quality_mode: false,
+        };
+        assert_eq!(
+            select_attention_decode_path(base),
+            AttentionDecodePath::Heads8OnlineWindow
+        );
+        assert_eq!(
+            select_attention_decode_path(AttentionDecodeDispatchOptions {
+                n_tokens: 128,
+                window_attention: false,
+                ..base
+            }),
+            AttentionDecodePath::Heads8OnlineWindow
+        );
+        assert_eq!(
+            select_attention_decode_path(AttentionDecodeDispatchOptions {
+                n_comp: 7937,
+                n_tokens: 1,
+                window_attention: false,
+                quality_mode: true,
+                ..base
+            }),
+            AttentionDecodePath::Heads8OnlineOverflow
+        );
+        assert_eq!(
+            select_attention_decode_path(AttentionDecodeDispatchOptions {
+                use_comp_mask: true,
+                ..base
+            }),
+            AttentionDecodePath::Generic
+        );
+        assert_eq!(
+            select_attention_decode_path(AttentionDecodeDispatchOptions {
+                n_comp: 7937,
+                use_comp_mask: true,
+                ..base
+            }),
+            AttentionDecodePath::RejectScoreBuffer
+        );
+        assert_eq!(
+            select_attention_decode_path(AttentionDecodeDispatchOptions {
+                no_window_attention: true,
+                ..base
+            }),
+            AttentionDecodePath::Generic
+        );
+        assert_eq!(
+            select_attention_decode_path(AttentionDecodeDispatchOptions {
+                n_tokens: 127,
+                window_attention: false,
+                quality_mode: false,
+                ..base
+            }),
+            AttentionDecodePath::Generic
+        );
+        assert_eq!(
+            select_attention_decode_path(AttentionDecodeDispatchOptions {
+                n_tokens: 128,
+                window_attention: false,
+                quality_mode: true,
+                ..base
+            }),
+            AttentionDecodePath::Generic
+        );
     }
 
     #[test]
