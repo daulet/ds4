@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5d
+- Status: done through M14.5d
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -9024,6 +9024,33 @@
 
 ##### M14.5d: Hyperconnection Split And Expansion Kernels
 
-- Status: active
+- Status: done
 - Goal: port current-C hyperconnection split, weighted-sum, expansion, and
   output-weight kernel surfaces after routed-MoE compute closure.
+- Fixture: `ds4-parity/baselines/backend/m14.5d/hyperconnection-smoke.json`
+- Comparator: `ds4-parity/check_hyperconnection_smoke.py --negative-test`.
+- Evidence: added executable-local Rust hyperconnection split, weighted-sum,
+  expansion, fused split/reduction, fused normalization, and output-weight
+  kernels. Live B300 cargo-oxide execution found six kernels and eight device
+  functions, emitted portable `sm_80` PTX through libdevice, linked a
+  `239188`-byte LTOIR container, and matched deterministic split, direct and
+  split-stride weighted sum, add/plain expansion, fused normalized output,
+  and output HC-weight results on `NVIDIA B300 SXM6 AC`. B300 feature tests
+  passed with 87 tests. The local CUDA-feature build is blocked because
+  `/usr/local/cuda/include/cuda.h` is absent on this Mac. M14.5 operation
+  families are complete on the opt-in Rust path; runtime route activation and
+  C CUDA removal remain unclaimed. Local formatting, diff and library tests,
+  the 77-check M14.5d comparator, retained M14.5 comparators, and unified
+  parity passed with 171 passed, 45 skipped, and 0 failed.
+
+#### M14.6: CUDA Route Promotion And C CUDA Removal Gate
+
+- Status: active
+- Goal: determine whether all validated Rust CUDA operation families can be
+  integrated into the default runtime route and whether `ds4_cuda.cu`
+  linkage can be removed.
+- Oracle: the M14.0 inventory, all M14 validation artifacts, and retained
+  current-C end-to-end/quality/benchmark gates.
+- Acceptance: only promote the default route or remove C CUDA after exported
+  API coverage and same-B300 end-to-end comparisons pass; otherwise record
+  the precise blocker and retain the C route.

@@ -1,0 +1,94 @@
+{
+  "schema": "ds4.hyperconnection_smoke.v1",
+  "milestone": "M14.5d",
+  "status": "b300-pass",
+  "id": "m14.5d-hyperconnection-split-and-expansion-kernels",
+  "goal": "Prove opt-in Rust cuda-oxide hyperconnection split, weighted-sum, expansion, fused normalization, and output-weight kernels as the final M14.5 operation-family slice.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "485bdd86fc1c900ad15ebd421b3b187619fe0903",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] hyperconnection split, weighted-sum, expansion, fused normalization, and output-weight kernels"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "hc_split_sinkhorn_kernel four-stream pre/post/comb split with Sinkhorn normalization",
+      "hc_weighted_sum_kernel direct and split-stride weighted residual reductions",
+      "hc_expand_kernel plain and optional block-add expansion from post and combination weights",
+      "hc_split_weighted_sum_fused_kernel and hc_split_weighted_sum_norm_fused_kernel synchronized fused paths",
+      "output_hc_weights_kernel sigmoid output weighting"
+    ],
+    "excluded_behavior": [
+      "runtime graph integration, default route activation, and C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "executable-local hyperconnection Sinkhorn split and output-weight kernel proof",
+      "executable-local direct, split-stride, fused, and fused-normalized weighted residual reduction proof",
+      "executable-local plain and optional block-add hyperconnection expansion proof"
+    ],
+    "not_claimed_in_this_stage": [
+      "shared-expert wrapper or runtime graph integration",
+      "default CUDA route activation or C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "owns_hc_split_sinkhorn_kernel": true,
+    "owns_hc_weighted_sum_kernel": true,
+    "owns_hc_expand_kernel": true,
+    "owns_hc_split_weighted_sum_fused_kernel": true,
+    "owns_hc_split_weighted_sum_norm_fused_kernel": true,
+    "owns_output_hc_weights_kernel": true,
+    "owns_shared_expert_wrapper_or_runtime_graph": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 87,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-hyperconnection-smoke",
+    "backend_selected_target": "sm_80",
+    "kernel_count": 6,
+    "device_function_count": 8,
+    "ltoir_bytes": 239188,
+    "uses_libdevice_link_path": true,
+    "stdout": {
+      "milestone": "M14.5d",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "sinkhorn_split_matches": true,
+      "direct_weighted_sum_matches": true,
+      "split_weighted_sum_matches": true,
+      "expand_add_matches": true,
+      "expand_plain_matches": true,
+      "fused_split_weighted_sum_matches": true,
+      "fused_split_weighted_sum_norm_matches": true,
+      "output_hc_weights_matches": true,
+      "invalid_shape_rejected": true,
+      "uses_thread_block_sync": true,
+      "uses_libdevice_link_path": true,
+      "owns_hc_split_sinkhorn_kernel": true,
+      "owns_hc_weighted_sum_kernel": true,
+      "owns_hc_expand_kernel": true,
+      "owns_hc_split_weighted_sum_fused_kernel": true,
+      "owns_hc_split_weighted_sum_norm_fused_kernel": true,
+      "owns_output_hc_weights_kernel": true,
+      "owns_shared_expert_wrapper_or_runtime_graph": false,
+      "changes_default_route": false
+    }
+  },
+  "local_constraint": {
+    "command": "cargo check --locked -p ds4-cuda --features cuda-oxide-kernels --bin ds4-cuda-hyperconnection-smoke",
+    "result": "blocked_missing_cuda_headers",
+    "missing_path": "/usr/local/cuda/include/cuda.h"
+  },
+  "next_stage": "M14.6 CUDA Route Promotion And C CUDA Removal Gate"
+}

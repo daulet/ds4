@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5d.
+- Status: done through M14.5d.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -9120,10 +9120,53 @@ Stage split:
 
 ##### M14.5d: Hyperconnection Split And Expansion Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port the remaining current-C hyperconnection split, weighted-sum,
   expansion, and output-weight kernel surfaces after routed-MoE compute
   closure.
+- Oracle: current-C `hc_split_sinkhorn_kernel`, `hc_weighted_sum_kernel`,
+  `hc_expand_kernel`, `hc_split_weighted_sum_fused_kernel`,
+  `hc_split_weighted_sum_norm_fused_kernel`, and
+  `output_hc_weights_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5d/hyperconnection-smoke.json`.
+- Comparator: `ds4-parity/check_hyperconnection_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns the opt-in M14.5 hyperconnection kernel family,
+  including synchronized fused split/reduction/normalization behavior and
+  plain/add expansion. Runtime graph integration, default-route activation,
+  and C CUDA removal remain pending in M14.6.
+- Evidence:
+  - Added executable-local Rust hyperconnection split, weighted-sum,
+    expansion, fused split/reduction, fused normalization, and output-weight
+    kernels with deterministic host reference calculations.
+  - Live B300 cargo-oxide execution found six kernels and eight total device
+    functions, emitted portable `sm_80` PTX through libdevice, linked a
+    `239188`-byte LTOIR container, and matched all split, reduction,
+    expansion, normalization, and output-weight outputs on
+    `NVIDIA B300 SXM6 AC`.
+  - B300 feature tests passed with 87 tests. The local CUDA-feature build is
+    unavailable on this Mac because `/usr/local/cuda/include/cuda.h` is
+    absent; B300 is the execution proof.
+  - M14.5 is now complete as an opt-in operation-family port. Default route
+    promotion and `ds4_cuda.cu` removal are not claimed.
+  - Local formatting, diff and library tests, the 77-check M14.5d
+    comparator, retained M14.5 comparators, and unified parity passed with
+    171 passed, 45 skipped, and 0 failed.
+
+#### M14.6: CUDA Route Promotion And C CUDA Removal Gate
+
+- Status: active.
+- Goal: determine whether the Rust CUDA backend can replace the current-C
+  default CUDA path now that all assigned operation families have opt-in Rust
+  execution proofs.
+- Oracle: all M14 fixtures, the M14.0 ownership inventory, and retained
+  current-C official-vector, long-context, tool/server, and benchmark gates.
+- Comparator: same-B300 end-to-end Rust CUDA route versus retained current-C
+  route, including required quality and throughput gates.
+- Acceptance: promote the Rust CUDA default route and remove `ds4_cuda.cu`
+  linkage only if exported-function coverage and end-to-end gates pass;
+  otherwise record the exact blocker and retain current C.
 
 ## Removal Criteria for C Host Code
 

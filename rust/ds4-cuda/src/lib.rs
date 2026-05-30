@@ -1915,6 +1915,31 @@ pub const M14_5C2F_SCOPE: RoutedMoeQwarpFallbackScope = RoutedMoeQwarpFallbackSc
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HyperconnectionScope {
+    pub opt_in_only: bool,
+    pub owns_hc_split_sinkhorn_kernel: bool,
+    pub owns_hc_weighted_sum_kernel: bool,
+    pub owns_hc_expand_kernel: bool,
+    pub owns_hc_split_weighted_sum_fused_kernel: bool,
+    pub owns_hc_split_weighted_sum_norm_fused_kernel: bool,
+    pub owns_output_hc_weights_kernel: bool,
+    pub owns_shared_expert_wrapper_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5D_SCOPE: HyperconnectionScope = HyperconnectionScope {
+    opt_in_only: true,
+    owns_hc_split_sinkhorn_kernel: true,
+    owns_hc_weighted_sum_kernel: true,
+    owns_hc_expand_kernel: true,
+    owns_hc_split_weighted_sum_fused_kernel: true,
+    owns_hc_split_weighted_sum_norm_fused_kernel: true,
+    owns_output_hc_weights_kernel: true,
+    owns_shared_expert_wrapper_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1951,6 +1976,7 @@ mod tests {
         M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE, M14_5C2B2_SCOPE,
         M14_5C2C1_SCOPE, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE, M14_5C2C5_SCOPE,
         M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2D_SCOPE, M14_5C2E_SCOPE, M14_5C2F_SCOPE,
+        M14_5D_SCOPE,
     };
 
     #[test]
@@ -2934,6 +2960,19 @@ mod tests {
         assert!(M14_5C2F_SCOPE.uses_moe_sum_surface);
         assert!(!M14_5C2F_SCOPE.owns_hyperconnection_or_runtime_graph);
         assert!(!M14_5C2F_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn hyperconnection_scope_leaves_shared_wrapper_and_route_pending() {
+        assert!(M14_5D_SCOPE.opt_in_only);
+        assert!(M14_5D_SCOPE.owns_hc_split_sinkhorn_kernel);
+        assert!(M14_5D_SCOPE.owns_hc_weighted_sum_kernel);
+        assert!(M14_5D_SCOPE.owns_hc_expand_kernel);
+        assert!(M14_5D_SCOPE.owns_hc_split_weighted_sum_fused_kernel);
+        assert!(M14_5D_SCOPE.owns_hc_split_weighted_sum_norm_fused_kernel);
+        assert!(M14_5D_SCOPE.owns_output_hc_weights_kernel);
+        assert!(!M14_5D_SCOPE.owns_shared_expert_wrapper_or_runtime_graph);
+        assert!(!M14_5D_SCOPE.changes_default_route);
     }
 
     #[test]

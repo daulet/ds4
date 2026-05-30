@@ -2906,6 +2906,18 @@ single-token no-decode-LUT generic projection and batched
 no-expert-tiles/no-P2 sorted projection. It leaves hyperconnection, runtime
 route, and C CUDA removal unclaimed.
 
+Validate the M14.5d Rust CUDA hyperconnection smoke:
+
+```sh
+python3 ds4-parity/check_hyperconnection_smoke.py --negative-test
+```
+
+The fixture records current-C hyperconnection behavior on B300: Sinkhorn
+split, direct and split-stride residual reduction, plain/add expansion,
+fused split-plus-normalization, and output weights. It closes M14.5
+operation-family ownership while leaving default-route promotion and C CUDA
+removal to M14.6.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
