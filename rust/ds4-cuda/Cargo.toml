@@ -1,0 +1,20 @@
+[package]
+name = "ds4-cuda"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200", optional = true }
+
+[features]
+default = []
+cuda-oxide-backend = ["dep:cuda-core"]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ds4-cuda-substrate-smoke"
+path = "src/bin/substrate_smoke.rs"
+required-features = ["cuda-oxide-backend"]

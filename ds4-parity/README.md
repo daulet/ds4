@@ -2041,6 +2041,18 @@ CUDA kernel symbol to an M14 Rust ownership stage. It records the inspected
 current CUDA backend as the oracle and blocking default-route promotion or
 `ds4_cuda.cu` removal until M14.6 closure.
 
+Validate the M14.1a opt-in `cuda-oxide` host-substrate B300 smoke:
+
+```sh
+python3 ds4-parity/check_cuda_oxide_substrate_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-substrate-smoke`: Rust-owned CUDA context/stream setup, device
+transfer/readback, zeroed allocation/readback, and managed-buffer lifetime. It
+does not claim DS4 compute-kernel ownership, runtime route activation, or CUDA
+source removal.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

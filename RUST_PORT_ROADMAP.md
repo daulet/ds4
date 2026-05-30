@@ -6637,6 +6637,88 @@ Stage split:
     extraction, one-stage assignment, source-hash refresh behavior, and
     historical-checker compatibility with no material finding.
 
+#### M14.1: cuda-oxide Substrate And Tensor Residency
+
+- Status: split before implementation into M14.1a through M14.1c.
+- Goal: replace the CUDA resource/lifetime boundary with a Rust-owned
+  `cuda-oxide` path before any DS4 compute kernel consumes it.
+- Oracle: current `ds4_cuda.cu` tensor/resource lifetime and model-residency
+  behavior plus the M14.0 assigned ownership list.
+- Comparator: stage-specific B300 executable smokes and tensor/resource
+  fixtures; no graph route changes until this stage closes.
+- Acceptance: each substage is opt-in and proves concrete Rust-owned CUDA
+  behavior while `ds4_cuda.cu` remains the default and comparison oracle.
+- Drift policy: if M14.0 source hashes or assigned resource exports change,
+  refresh M14.0 before continuing this split.
+
+##### M14.1a: Host Substrate Buffer Roundtrip
+
+- Status: complete.
+- Goal: add a feature-gated Rust CUDA crate pinned to the verified
+  `cuda-oxide` revision and prove context/stream ownership plus device and
+  managed-buffer roundtrip on B300.
+- Oracle: `ds4_gpu_init`, tensor allocation/write/read, synchronization, and
+  managed allocation behavior in current `ds4_cuda.cu`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1a/cuda-oxide-substrate-smoke.json`.
+- Comparator: `ds4-parity/check_cuda_oxide_substrate_smoke.py
+  --negative-test` plus an executable Rust smoke binary on B300.
+- Acceptance: an opt-in `cuda-oxide-backend` feature uses the pinned fork,
+  allocates/transfers CUDA device data and owns a managed buffer through Rust,
+  and default graph/runtime routing remains unchanged.
+- Drift policy: CUDA/toolchain/substrate output drift requires a new B300
+  capture; this stage does not claim arbitrary fill, model cache, kernel, or
+  route ownership.
+- Evidence:
+  - Added the feature-gated `rust/ds4-cuda` crate pinned to `cuda-oxide`
+    revision `0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200`, with a
+    Rust-owned `CudaContext`, `CudaStream`, `DeviceBuffer`, and
+    `ManagedBuffer` substrate surface.
+  - Added
+    `ds4-parity/baselines/backend/m14.1a/cuda-oxide-substrate-smoke.json` and
+    `ds4-parity/check_cuda_oxide_substrate_smoke.py --negative-test`.
+  - On B300 pod `ds4-rust-port-b300` at node `c1v17-b300n1-nic1`, after
+    provisioning pod-local `nightly-2026-04-03` plus `libclang-dev`, the
+    feature-enabled Rust smoke executed on `NVIDIA B300 SXM6 AC` and passed
+    device roundtrip, zeroed-buffer roundtrip, and managed-buffer lifetime
+    checks while reporting no kernel or route ownership.
+  - Validation passed: `cargo test --workspace`, `cargo fmt --all -- --check`,
+    `python3 ds4-parity/check_cuda_oxide_substrate_smoke.py --negative-test`
+    (53 checks), `python3 ds4-parity/check_cuda_rust_ownership_inventory.py
+    --negative-test` (124 checks), `git diff --check`, and `python3
+    ds4-parity/run_parity_report.py --skip-local-oracles` (96 passed, 50
+    skipped, 0 failed).
+  - Non-interactive Claude review could not run because the local CLI reported
+    `Not logged in`; adversarial self-review found no material issue in the
+    opt-in feature boundary, immutable dependency revision, limited B300
+    ownership claim, or retained current-C oracle/default route. LLVM 21
+    remains a prerequisite for later cuda-oxide kernel-compilation stages,
+    not for this host-substrate smoke.
+
+##### M14.1b: Model Residency And Command Lifetime
+
+- Status: active.
+- Goal: port model-map registration/cache/prefetch, command
+  synchronization, quality/memory-report policy, and tensor fill support to
+  the Rust CUDA substrate.
+- Oracle: current-C memory report and model-backed resource smokes on B300.
+- Comparator: model residency/cache and command-lifetime fixtures with
+  current-C/Rust output and allocation-policy comparison.
+- Acceptance: all M14.1 assigned exports are represented by Rust-owned
+  behavior or a justified fail-closed unsupported path.
+- Drift policy: policy changes require explicit memory/quality oracle refresh.
+
+##### M14.1c: Substrate Route Closure Gate
+
+- Status: planned.
+- Goal: close resource ownership and expose the Rust CUDA substrate only to
+  the following kernel stages, without promoting the default runtime route.
+- Oracle: M14.1a and M14.1b artifacts plus M14.0 claim policy.
+- Comparator: closure matrix and B300 regression rerun contract.
+- Acceptance: M14.2 may consume the Rust substrate; CUDA C removal and
+  default-route promotion remain rejected.
+- Drift policy: retained current-C CUDA oracles remain required through M14.6.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

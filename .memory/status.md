@@ -3,7 +3,10 @@
 - Date: 2026-05-25 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1 cuda-oxide Substrate And Tensor Residency
+- Active item: M14.1b Model Residency And Command Lifetime
+- M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
+  M14.1c before implementation; the active cut proves only feature-gated
+  context/stream and buffer ownership.
 - Last validated source before the active item: M14.0 CUDA Rust Ownership Inventory And Adoption Contract.
 - Earlier M14.0 CUDA Rust Ownership Inventory And Adoption Contract.
 - Earlier post-M13 roadmap decision.
@@ -104,6 +107,30 @@
 
 ## Last Evidence
 
+- M14.1a Host Substrate Buffer Roundtrip adds the opt-in `rust/ds4-cuda`
+  crate, pinned `cuda-core` dependency from `cuda-oxide` revision
+  `0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200`, executable
+  `ds4-cuda-substrate-smoke`, fixture
+  `ds4-parity/baselines/backend/m14.1a/cuda-oxide-substrate-smoke.json`, and
+  checker `ds4-parity/check_cuda_oxide_substrate_smoke.py --negative-test`.
+  The B300 pod was confirmed running on node `c1v17-b300n1-nic1`; its
+  pod-local build required explicit `CARGO_HOME=/tmp/cargo`,
+  `RUSTUP_HOME=/tmp/rustup`, `nightly-2026-04-03`, and installed
+  `libclang-dev`. The feature-enabled smoke then executed on
+  `NVIDIA B300 SXM6 AC`, passing device roundtrip, zeroed-buffer roundtrip,
+  and managed-buffer lifetime checks while reporting
+  `owns_ds4_kernels=false` and `changes_default_route=false`. Validation
+  passed: `cargo test --workspace`, `cargo fmt --all -- --check`, `python3
+  ds4-parity/check_cuda_oxide_substrate_smoke.py --negative-test` (53 checks),
+  `python3 ds4-parity/check_cuda_rust_ownership_inventory.py --negative-test`
+  (124 checks), `git diff --check`, and `python3
+  ds4-parity/run_parity_report.py --skip-local-oracles` (96 passed, 50
+  skipped, 0 failed). Non-interactive Claude review could not run because the
+  local CLI reported `Not logged in`; adversarial self-review found no
+  material issue in the opt-in feature boundary, immutable dependency
+  revision, limited B300 ownership claim, or retained current-C
+  oracle/default route. LLVM 21 remains a prerequisite for later cuda-oxide
+  kernel-compilation stages, not for this host-substrate smoke.
 - M14.0 adds
   `ds4-parity/baselines/backend/m14.0/cuda-rust-ownership-inventory.json` and
   `ds4-parity/check_cuda_rust_ownership_inventory.py --negative-test`. The

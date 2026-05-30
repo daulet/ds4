@@ -7194,7 +7194,7 @@
 
 #### M14.1: cuda-oxide Substrate And Tensor Residency
 
-- Status: active
+- Status: split before implementation into M14.1a through M14.1c.
 - Goal: introduce an opt-in Rust CUDA substrate path backed by `cuda-oxide`
   for context/stream ownership, tensor allocation/copy/fill, synchronization,
   model-map residency/cache, and memory reporting.
@@ -7209,3 +7209,55 @@
   current default route remains unchanged.
 - Owner path: Rust CUDA backend modules, Cargo/build integration,
   `ds4-parity/baselines/backend/m14.1/`, `.memory/`.
+
+##### M14.1a: Host Substrate Buffer Roundtrip
+
+- Status: done
+- Goal: add a feature-gated Rust CUDA crate pinned to the verified
+  `cuda-oxide` fork revision and prove context/stream ownership, device
+  transfer, and managed-buffer lifetime on B300.
+- Source evidence needed: M14.0 inventory, `cuda-core` context/stream,
+  `DeviceBuffer`, and `ManagedBuffer` APIs, and the live B300 CUDA/toolchain
+  availability check.
+- Oracle: current-C initialization, allocation/write/read/synchronize, and
+  managed-allocation behavior.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1a/cuda-oxide-substrate-smoke.json`.
+- Comparator: `ds4-parity/check_cuda_oxide_substrate_smoke.py
+  --negative-test` plus B300 execution of the Rust smoke binary.
+- Validation needed: local default-feature workspace tests remain buildable;
+  feature-enabled CUDA build/run succeeds on B300 or records the exact
+  toolchain blocker; routing remains unchanged.
+- Owner path: `rust/ds4-cuda/`, workspace Cargo files, `ds4-parity/`,
+  `.memory/`.
+- Evidence: feature-gated `rust/ds4-cuda` pins
+  `cuda-oxide` revision `0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200`;
+  B300 execution on `NVIDIA B300 SXM6 AC` passed device roundtrip,
+  zeroed-buffer roundtrip, and managed-buffer lifetime checks without claiming
+  kernel or route ownership. Local workspace tests, the 53-check M14.1a
+  checker, the 124-check M14.0 inventory checker, and the unified report (96
+  passed, 50 skipped, 0 failed) passed. Non-interactive Claude review was
+  blocked by missing local CLI login; adversarial self-review found no
+  material feature-boundary, dependency-revision, evidence-scope, or route
+  ownership issue.
+
+##### M14.1b: Model Residency And Command Lifetime
+
+- Status: active
+- Goal: move model map/cache/prefetch, command synchronization, tensor fill,
+  quality mode, and memory reporting ownership onto the Rust substrate.
+- Oracle: current-C model-backed B300 resource behavior.
+- Comparator: resource and memory-policy fixture bundle.
+- Validation needed: B300 model-backed comparison and no default-route change.
+- Owner path: Rust CUDA substrate and M14.1 artifacts.
+
+##### M14.1c: Substrate Route Closure Gate
+
+- Status: planned
+- Goal: close M14.1 so M14.2 kernels can depend on Rust-owned resource
+  behavior while keeping C CUDA as the retained oracle.
+- Oracle: M14.0 and M14.1a/M14.1b artifacts.
+- Comparator: closure matrix checker and B300 rerun contract.
+- Validation needed: no unassigned M14.1 operations and no default-route or
+  removal overclaim.
+- Owner path: M14.1 artifacts and route policy.
