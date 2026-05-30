@@ -1216,6 +1216,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.4d6 cuda-oxide generic indexed mixed attention smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_attention_indexed_generic_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

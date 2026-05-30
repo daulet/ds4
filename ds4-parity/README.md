@@ -2663,6 +2663,19 @@ proves static heads8-online output, raw cuBLAS prefill output, masked mixed
 cuBLAS prefill output, and current-C branch priority while leaving indexed
 and output-Q8 attention, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.4d6 Rust CUDA generic indexed mixed attention smoke:
+
+```sh
+python3 ds4-parity/check_attention_indexed_generic_smoke.py --negative-test
+```
+
+The fixture records executable-local `attention_indexed_mixed_kernel`
+semantics on B300. It proves ordered and duplicate top-k row handling,
+invalid/out-of-visible filtering, ratio-zero all-compressed visibility,
+causal wrapped raw rows, and learned-sink softmax while leaving indexed
+sort/heads8 dispatch, output-Q8 attention, runtime route, and C CUDA removal
+unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

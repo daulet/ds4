@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d5 and split next into M14.4d6
+- Status: active; done through M14.4d6 and split next into M14.4d7
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8478,7 +8478,7 @@
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d5 and split next into M14.4d6
+- Status: active; done through M14.4d6 and split next into M14.4d7
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8608,6 +8608,29 @@
 
 ###### M14.4d6: Generic Indexed Mixed Attention Surface
 
-- Status: active
+- Status: done
 - Goal: port the generic indexed mixed-attention surface before optimized
   indexed heads8/sort dispatch or output-Q8 attention ownership.
+- Oracle: current-C `attention_indexed_mixed_kernel` and
+  `ds4_gpu_attention_indexed_mixed_batch_heads_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d6/attention-indexed-generic-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_indexed_generic_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust generic indexed mixed attention
+  execution covering ordered/duplicate top-k rows, invalid/out-of-visible
+  filtering, `ratio == 0` all-compressed visibility, causal raw windows,
+  raw-ring wrapping, and learned-sink softmax. B300 feature-enabled tests
+  passed with 64 tests; live cargo-oxide execution emitted portable `sm_80`
+  PTX with libdevice linkage and matched output on `NVIDIA B300 SXM6 AC`.
+  Indexed sort/heads8 dispatch, output-Q8 attention, runtime route activation,
+  and C CUDA removal remain unclaimed. Local formatting, diff, library tests,
+  the 64-check d6 comparator, retained attention checks, and unified parity
+  passed with 146 passed, 50 skipped, and 0 failed.
+
+###### M14.4d7: Optimized Indexed Sort And Heads8 Attention Kernels
+
+- Status: active
+- Goal: port indexed top-k sorting and optimized heads8 dispatch before
+  output-Q8 attention ownership.

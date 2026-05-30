@@ -1333,6 +1333,29 @@ pub const M14_4D5_SCOPE: AttentionPrefillOptimizedScope = AttentionPrefillOptimi
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionIndexedGenericScope {
+    pub opt_in_only: bool,
+    pub owns_attention_indexed_mixed_surface: bool,
+    pub owns_generic_indexed_kernel: bool,
+    pub owns_topk_filter_and_order_semantics: bool,
+    pub owns_indexed_sort_or_heads8_dispatch: bool,
+    pub owns_output_q8_attention: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4D6_SCOPE: AttentionIndexedGenericScope = AttentionIndexedGenericScope {
+    opt_in_only: true,
+    owns_attention_indexed_mixed_surface: true,
+    owns_generic_indexed_kernel: true,
+    owns_topk_filter_and_order_semantics: true,
+    owns_indexed_sort_or_heads8_dispatch: false,
+    owns_output_q8_attention: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1362,6 +1385,7 @@ mod tests {
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
         M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE, M14_4D5_SCOPE,
+        M14_4D6_SCOPE,
     };
 
     #[test]
@@ -1975,6 +1999,18 @@ mod tests {
         assert!(!M14_4D5_SCOPE.owns_indexed_or_output_q8_attention);
         assert!(!M14_4D5_SCOPE.owns_runtime_graph_integration);
         assert!(!M14_4D5_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn attention_generic_indexed_scope_leaves_optimized_output_and_route_pending() {
+        assert!(M14_4D6_SCOPE.opt_in_only);
+        assert!(M14_4D6_SCOPE.owns_attention_indexed_mixed_surface);
+        assert!(M14_4D6_SCOPE.owns_generic_indexed_kernel);
+        assert!(M14_4D6_SCOPE.owns_topk_filter_and_order_semantics);
+        assert!(!M14_4D6_SCOPE.owns_indexed_sort_or_heads8_dispatch);
+        assert!(!M14_4D6_SCOPE.owns_output_q8_attention);
+        assert!(!M14_4D6_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4D6_SCOPE.changes_default_route);
     }
 
     #[test]
