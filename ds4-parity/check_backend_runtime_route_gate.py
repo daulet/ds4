@@ -390,7 +390,8 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
         "Active item: M12.6 Backend Replacement Closure And Removal Decision" in texts["status"]
         or "Active item: post-M12 roadmap decision" in texts["status"]
         or "Active item: M13" in texts["status"]
-        or "Active item: post-M13 roadmap decision" in texts["status"],
+        or "Active item: post-M13 roadmap decision" in texts["status"]
+        or "Active item: M14" in texts["status"],
         "status active item missing",
     )
     report.check("check_backend_replacement_closure.py" in texts["report"], "M12.6 report checker missing")

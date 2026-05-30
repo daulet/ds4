@@ -597,7 +597,11 @@ def validate_static_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check("#### M13.5: Embedding/Indexer Route Gate And Closure" in texts["todo"], "TODO M13.5 missing")
     report.check("expanded-route-closure.json" in texts["todo"], "TODO closure artifact missing")
     report.check("Earlier M13.5 Embedding/Indexer Route Gate And Closure" in texts["status"], "status M13.5 previous item missing")
-    report.check("Active item: post-M13 roadmap decision" in texts["status"], "post-M13 active item missing")
+    report.check(
+        "Active item: post-M13 roadmap decision" in texts["status"]
+        or "Earlier post-M13 roadmap decision." in texts["status"],
+        "post-M13 status marker missing",
+    )
 
 
 def run_negative_tests(

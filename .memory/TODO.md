@@ -7155,3 +7155,57 @@
     --negative-test` (279 checks), and `python3
     ds4-parity/run_parity_report.py --skip-local-oracles` (94 passed, 50
     skipped, 0 failed).
+
+### M14: Rust CUDA Ownership Via cuda-oxide
+
+- Status: split before implementation into M14.0 through M14.6.
+- Goal: replace all resource management and kernel logic currently owned by
+  `ds4_cuda.cu` with Rust code using the verified `cuda-oxide` substrate.
+- Oracle: current-C CUDA execution plus the existing M10 through M13 parity
+  artifacts.
+- Comparator: source-hashed ownership inventory followed by B300 stage
+  comparators and end-to-end closure gates.
+- Acceptance: every CUDA export and unique CUDA kernel is assigned to an
+  executable Rust-ownership stage; no route promotion or C CUDA removal occurs
+  until all stages close.
+- Drift policy: refresh M14.0 whenever the CUDA/FFI/build ownership surface or
+  pinned `cuda-oxide` source revision changes.
+
+#### M14.0: CUDA Rust Ownership Inventory And Adoption Contract
+
+- Status: done
+- Goal: freeze the complete CUDA-to-Rust ownership surface before CUDA runtime
+  implementation changes.
+- Source evidence needed: `ds4_cuda.cu`, `ds4_gpu.h`,
+  `rust/ds4-gpu-sys/src/lib.rs`, `rust/ds4-gpu/build.rs`, and verified
+  `cuda-oxide` source at
+  `0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200`.
+- Oracle: the current exported CUDA and kernel symbol sets plus the current
+  Rust FFI/CUDA build wiring.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.0/cuda-rust-ownership-inventory.json`.
+- Comparator: `ds4-parity/check_cuda_rust_ownership_inventory.py
+  --negative-test`.
+- Validation needed: the checker accepts the inventory, rejects missing
+  ownership assignments and removal overclaims, and the unified report accepts
+  the new comparator.
+- Owner path: `RUST_PORT_ROADMAP.md`, `.memory/`,
+  `ds4-parity/baselines/backend/m14.0/`, `ds4-parity/`.
+
+#### M14.1: cuda-oxide Substrate And Tensor Residency
+
+- Status: active
+- Goal: introduce an opt-in Rust CUDA substrate path backed by `cuda-oxide`
+  for context/stream ownership, tensor allocation/copy/fill, synchronization,
+  model-map residency/cache, and memory reporting.
+- Source evidence needed: M14.0 ownership inventory, current
+  `ds4_cuda.cu` lifecycle/cache implementation, `rust/ds4-gpu` facade, and
+  `cuda-oxide` `cuda-core` residency/launch/BLAS contracts.
+- Oracle: current-C CUDA tensor/resource behavior on B300.
+- Comparator: tensor allocation/copy/read-write and model residency smoke
+  fixtures executed through both current-C and opt-in Rust CUDA paths.
+- Validation needed: Rust CUDA feature compiles on B300 with the pinned
+  `cuda-oxide` revision, the opt-in substrate fixture compares cleanly, and
+  current default route remains unchanged.
+- Owner path: Rust CUDA backend modules, Cargo/build integration,
+  `ds4-parity/baselines/backend/m14.1/`, `.memory/`.

@@ -6542,6 +6542,101 @@ Drift policy:
     ds4-parity/run_parity_report.py --skip-local-oracles` (94 passed, 50
     skipped, 0 failed).
 
+## Milestone 14: Rust CUDA Ownership Via cuda-oxide
+
+Status: split before implementation into M14.0 through M14.6. M14.0 is
+complete; M14.1 is the active implementation stage.
+
+The post-M13 decision deferred further CUDA scope until a new oracle-backed
+roadmap existed. The new scope is complete CUDA ownership transfer: replace
+`ds4_cuda.cu` with Rust CUDA resource management and kernels implemented using
+the verified `cuda-oxide` substrate, while retaining current-C CUDA execution
+as the comparison oracle until the removal gate passes.
+
+Source boundary:
+
+- `ds4_gpu.h` declares 81 public GPU ABI functions and
+  `rust/ds4-gpu-sys/src/lib.rs` mirrors all 81 through FFI.
+- `ds4_cuda.cu` still implements that ABI, exports two additional internal
+  helpers, and contains 113 unique CUDA kernel symbols.
+- `rust/ds4-gpu/build.rs` still compiles `ds4_cuda.cu` for Linux CUDA builds
+  and links `cudart` and `cublas`; existing Rust replacement slices therefore
+  do not yet constitute Rust CUDA kernel ownership.
+- `cuda-oxide` `main` at
+  `0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200` provides Rust CUDA
+  compilation/launch, resource and residency wrappers, cuBLAS wrappers,
+  low-precision types, and deterministic selection primitives. It is a
+  substrate for this rewrite, not evidence that DS4-specific kernels are
+  already ported.
+
+Oracle:
+
+- Current `ds4_cuda.cu` output and lifetime behavior, with M10 through M13
+  graph, quality, route, and benchmark artifacts retained through removal.
+
+Comparator:
+
+- A source-hashed ownership inventory for all CUDA exports and kernel symbols,
+  followed by stage-specific B300 tensor and end-to-end comparisons.
+
+Acceptance:
+
+- Every CUDA export and kernel has exactly one Rust-ownership stage.
+- Each ownership stage must prove its assigned execution on B300 before the
+  next stage can depend on it.
+- Default CUDA route promotion and removal of `ds4_cuda.cu` remain forbidden
+  until M14.6 passes all end-to-end gates.
+
+Drift policy:
+
+- Any change in `ds4_cuda.cu`, `ds4_gpu.h`, the Rust GPU FFI/build wiring, or
+  the assigned CUDA export/kernel sets requires refreshing M14.0 before
+  claiming further ownership.
+- Any numeric or performance drift requires a same-B300 current-C comparison
+  with explicit tolerance or performance rationale.
+
+Stage split:
+
+- M14.0: CUDA Rust Ownership Inventory And Adoption Contract.
+- M14.1: cuda-oxide Substrate And Tensor Residency.
+- M14.2: Embedding Indexer And Elementwise Kernels.
+- M14.3: Dense Projection Quantization And Norm Kernels.
+- M14.4: RoPE KV Compressor And Attention Kernels.
+- M14.5: Router MoE And Hyperconnection Kernels.
+- M14.6: CUDA Route Promotion And C CUDA Removal Gate.
+
+#### M14.0: CUDA Rust Ownership Inventory And Adoption Contract
+
+- Status: complete.
+- Goal: freeze the complete CUDA-to-Rust ownership surface and map it onto
+  executable `cuda-oxide` adoption stages before changing CUDA runtime
+  ownership.
+- Oracle: current `ds4_cuda.cu`, `ds4_gpu.h`, Rust FFI/build wiring, and
+  inspected `cuda-oxide` `main` revision.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.0/cuda-rust-ownership-inventory.json`.
+- Comparator: `ds4-parity/check_cuda_rust_ownership_inventory.py
+  --negative-test`.
+- Acceptance: all 83 CUDA-exported functions and all 113 unique CUDA kernel
+  symbols are assigned exactly once; the current Rust FFI/CUDA build boundary
+  is recorded; removal and default-route claims remain false; M14.1 is
+  selected as the first implementation stage.
+- Drift policy: source hash, exported symbol, kernel symbol, or cuda-oxide
+  revision drift requires an explicit inventory refresh before continuing.
+- Evidence:
+  - Added the M14.0 inventory fixture and checker.
+  - The inventory records the verified `cuda-oxide` revision and its Rust
+    resource, launch, BLAS, low-precision, and selection capability evidence.
+  - `python3 ds4-parity/check_cuda_rust_ownership_inventory.py
+    --negative-test` passed with 124 checks.
+  - Python syntax, JSON formatting, `git diff --check`, the post-M13 decision
+    checker, and `python3 ds4-parity/run_parity_report.py
+    --skip-local-oracles` passed with 95 passed, 50 skipped, 0 failed.
+  - Non-interactive Claude review was unavailable because the local CLI
+    reported `Not logged in`; adversarial self-review checked symbol
+    extraction, one-stage assignment, source-hash refresh behavior, and
+    historical-checker compatibility with no material finding.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

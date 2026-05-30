@@ -249,10 +249,6 @@ def validate_static_wiring(report: Report, decision: dict[str, Any], texts: dict
     report.check("check_post_m13_roadmap_decision.py" in texts["readme"], "README checker path missing")
     report.check("Post-M13 roadmap decision" in texts["report"], "unified report post-M13 item missing")
     report.check("check_post_m13_roadmap_decision.py" in texts["report"], "report checker path missing")
-    report.check(
-        "Active item: post-M13 roadmap decision complete" in texts["status"],
-        "status post-M13 completion marker missing",
-    )
     report.check("Earlier post-M13 roadmap decision." in texts["status"], "status previous post-M13 marker missing")
     report.check("Active debugging ledger: none" in texts["status"], "debugging ledger not closed")
     report.check("Use `.memory/lessons.md`" in texts["protocol"], "protocol lessons rule missing")

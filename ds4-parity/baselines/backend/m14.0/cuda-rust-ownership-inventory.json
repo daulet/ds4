@@ -1,0 +1,400 @@
+{
+  "schema": "ds4.cuda_rust_ownership_inventory.v1",
+  "milestone": "M14.0",
+  "status": "scope-and-adoption-contract",
+  "id": "m14.0-cuda-rust-ownership-inventory",
+  "goal": "Port all DS4 CUDA logic from ds4_cuda.cu to Rust using cuda-oxide while retaining current CUDA behavior as the comparison oracle until each stage closes.",
+  "source_snapshot": {
+    "ds4_files": {
+      "ds4_cuda.cu": "d819ff2ad0945b58057b1b0ff95f1d17550f0e12fd639b3e20dbfddd8431c0c7",
+      "ds4_gpu.h": "317349630b134b86cdb7cd293f267357b969f5899bb6c55bce7cc7aab9187554",
+      "rust/ds4-gpu-sys/src/lib.rs": "4ba693fa05f4f5d13759d94705ca84cb2c4975754b95134651f566cd0df512a1",
+      "rust/ds4-gpu/build.rs": "ba411f880038856702541185790994cf888e1c3cf54ac42a57a5319fc8f94ee7"
+    },
+    "counts": {
+      "public_header_functions": 81,
+      "cuda_exported_functions": 83,
+      "rust_ffi_functions": 81,
+      "unique_cuda_kernels": 113
+    },
+    "cuda_only_exported_helpers": [
+      "ds4_gpu_head_rms_norm_rope_tail_tensor",
+      "ds4_gpu_matmul_q8_0_pair_tensor"
+    ],
+    "current_ownership": {
+      "linux_cuda_build": "rust/ds4-gpu/build.rs compiles ds4_cuda.cu and links cudart and cublas",
+      "rust_ffi_surface": "rust/ds4-gpu-sys/src/lib.rs mirrors all 81 ds4_gpu.h functions",
+      "replacement_state": "No DS4 CUDA kernel or CUDA resource lifetime is yet owned by cuda-oxide Rust code"
+    }
+  },
+  "cuda_oxide_snapshot": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "revision": "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200",
+    "ref": "main",
+    "verified_local_head_matches_remote_main": true,
+    "inspected_capabilities": [
+      {
+        "capability": "rust_kernel_codegen_and_launch",
+        "evidence": [
+          "README.md",
+          "crates/cuda-device/README.md",
+          "crates/cuda-core/src/launch.rs"
+        ],
+        "used_by_stages": [
+          "M14.2",
+          "M14.3",
+          "M14.4",
+          "M14.5"
+        ]
+      },
+      {
+        "capability": "device_memory_stream_event_and_residency_raii",
+        "evidence": [
+          "crates/cuda-core/README.md",
+          "crates/cuda-core/src/device_buffer.rs",
+          "crates/cuda-core/src/residency.rs"
+        ],
+        "used_by_stages": [
+          "M14.1"
+        ]
+      },
+      {
+        "capability": "cublas_sgemm_and_strided_batched_sgemm",
+        "evidence": [
+          "crates/cuda-core/README.md",
+          "crates/cuda-core/src/blas.rs"
+        ],
+        "used_by_stages": [
+          "M14.3",
+          "M14.4"
+        ]
+      },
+      {
+        "capability": "low_precision_storage_and_deterministic_topk_primitives",
+        "evidence": [
+          "crates/cuda-device/README.md",
+          "crates/cuda-lowp/src/lib.rs",
+          "crates/cuda-device/src/selection.rs"
+        ],
+        "used_by_stages": [
+          "M14.2",
+          "M14.3",
+          "M14.4",
+          "M14.5"
+        ]
+      }
+    ],
+    "adoption_constraints": [
+      "cuda-oxide describes itself as experimental alpha software, so DS4 retains current-C CUDA oracles until stage-specific parity is proven.",
+      "cuda-oxide provides substrate capabilities rather than DS4-specific kernels; each operation and resource lifetime below still requires implementation and comparison.",
+      "CUDA code generation and execution validation must run on the recorded B300 CUDA environment with the required cuda-oxide Rust, LLVM, Clang, and CUDA toolchain available."
+    ]
+  },
+  "stages": [
+    {
+      "stage": "M14.1",
+      "title": "cuda-oxide Substrate And Tensor Residency",
+      "goal": "Introduce the feature-gated cuda-oxide Rust CUDA context, streams, device/residency buffers, command synchronization, model-map caching ownership, and memory-report contract.",
+      "oracle": "Current ds4_cuda.cu resource lifetime, tensor transfer, and model caching paths.",
+      "comparator": "Tensor allocation/copy/read-write fixtures plus B300 model-map and memory-report smoke.",
+      "acceptance": "Rust owns this resource/lifetime surface on an opt-in route and current-C remains default until downstream operation stages close."
+    },
+    {
+      "stage": "M14.2",
+      "title": "Embedding Indexer And Elementwise Kernels",
+      "goal": "Move embedding, indexer/top-k, repeat, swiglu, add, and directional-steering kernels into Rust cuda-oxide modules.",
+      "oracle": "M13 fixture and route artifacts plus current-C tensor dumps.",
+      "comparator": "M13 operation fixtures extended to execute Rust-owned kernel output on B300.",
+      "acceptance": "Every assigned operation runs through Rust CUDA kernels with documented numeric tolerances and no default-route promotion."
+    },
+    {
+      "stage": "M14.3",
+      "title": "Dense Projection Quantization And Norm Kernels",
+      "goal": "Move dense matmul, q8 paths, fused projection helpers, and normalization kernels plus required BLAS calls into Rust.",
+      "oracle": "Current-C intermediate tensor and graph checkpoint fixtures.",
+      "comparator": "Operation-level tensor comparators followed by official-vector and short-decode replay.",
+      "acceptance": "All assigned operations are Rust-owned and preserve current output/tolerance and quality-mode BLAS decisions."
+    },
+    {
+      "stage": "M14.4",
+      "title": "RoPE KV Compressor And Attention Kernels",
+      "goal": "Move RoPE, FP8/raw KV storage, compressed-cache updates, and raw/mixed/indexed attention kernels into Rust.",
+      "oracle": "Current-C prefill, decode, long-indexed-attention, and KV/session artifacts.",
+      "comparator": "B300 tensor and long-context continuation comparisons including cache restore behavior.",
+      "acceptance": "Rust-owned attention/cache execution passes long-context and KV parity while the C backend remains an oracle."
+    },
+    {
+      "stage": "M14.5",
+      "title": "Router MoE And Hyperconnection Kernels",
+      "goal": "Move router selection, routed MoE, and hyperconnection reduction/expansion kernels into Rust.",
+      "oracle": "Current-C graph checkpoints, tool/server quality, and benchmark artifacts.",
+      "comparator": "B300 full-graph output, quality, and same-session throughput comparisons.",
+      "acceptance": "The final CUDA operation family is Rust-owned without behavior or measured performance overclaim."
+    },
+    {
+      "stage": "M14.6",
+      "title": "CUDA Route Promotion And C CUDA Removal Gate",
+      "goal": "Promote the Rust CUDA backend only after all M14 operation and resource ownership stages close, then remove ds4_cuda.cu linkage if the removal criteria pass.",
+      "oracle": "All M14 artifacts plus official-vector, long-context, tool/server, and benchmark closure gates.",
+      "comparator": "End-to-end Rust CUDA route versus retained current-C CUDA baseline on the same B300 session.",
+      "acceptance": "Default-route promotion and ds4_cuda.cu removal are rejected unless all assigned exported functions and kernels are Rust-owned and end-to-end gates pass."
+    }
+  ],
+  "abi_families": [
+    {
+      "stage": "M14.1",
+      "symbols": [
+        "ds4_gpu_init",
+        "ds4_gpu_cleanup",
+        "ds4_gpu_tensor_alloc",
+        "ds4_gpu_tensor_alloc_managed",
+        "ds4_gpu_tensor_view",
+        "ds4_gpu_tensor_free",
+        "ds4_gpu_tensor_bytes",
+        "ds4_gpu_tensor_contents",
+        "ds4_gpu_tensor_fill_f32",
+        "ds4_gpu_tensor_write",
+        "ds4_gpu_tensor_read",
+        "ds4_gpu_tensor_copy",
+        "ds4_gpu_begin_commands",
+        "ds4_gpu_flush_commands",
+        "ds4_gpu_end_commands",
+        "ds4_gpu_synchronize",
+        "ds4_gpu_set_model_map",
+        "ds4_gpu_set_model_fd",
+        "ds4_gpu_set_model_map_range",
+        "ds4_gpu_cache_model_range",
+        "ds4_gpu_cache_q8_f16_range",
+        "ds4_gpu_should_use_managed_kv_cache",
+        "ds4_gpu_set_quality",
+        "ds4_gpu_print_memory_report"
+      ]
+    },
+    {
+      "stage": "M14.2",
+      "symbols": [
+        "ds4_gpu_embed_token_hc_tensor",
+        "ds4_gpu_embed_tokens_hc_tensor",
+        "ds4_gpu_indexer_score_one_tensor",
+        "ds4_gpu_indexer_scores_prefill_tensor",
+        "ds4_gpu_indexer_scores_decode_batch_tensor",
+        "ds4_gpu_indexer_topk_tensor",
+        "ds4_gpu_dsv4_topk_mask_tensor",
+        "ds4_gpu_repeat_hc_tensor",
+        "ds4_gpu_swiglu_tensor",
+        "ds4_gpu_add_tensor",
+        "ds4_gpu_directional_steering_project_tensor"
+      ]
+    },
+    {
+      "stage": "M14.3",
+      "symbols": [
+        "ds4_gpu_matmul_q8_0_tensor",
+        "ds4_gpu_matmul_q8_0_pair_tensor",
+        "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
+        "ds4_gpu_matmul_f16_tensor",
+        "ds4_gpu_matmul_f16_pair_tensor",
+        "ds4_gpu_matmul_f32_tensor",
+        "ds4_gpu_rms_norm_plain_tensor",
+        "ds4_gpu_rms_norm_plain_rows_tensor",
+        "ds4_gpu_rms_norm_weight_tensor",
+        "ds4_gpu_rms_norm_weight_rows_tensor",
+        "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
+        "ds4_gpu_head_rms_norm_tensor",
+        "ds4_gpu_head_rms_norm_rope_tail_tensor",
+        "ds4_gpu_shared_down_hc_expand_q8_0_tensor",
+        "ds4_gpu_matmul_q8_0_hc_expand_tensor"
+      ]
+    },
+    {
+      "stage": "M14.4",
+      "symbols": [
+        "ds4_gpu_dsv4_fp8_kv_quantize_tensor",
+        "ds4_gpu_dsv4_indexer_qat_tensor",
+        "ds4_gpu_rope_tail_tensor",
+        "ds4_gpu_kv_fp8_store_raw_tensor",
+        "ds4_gpu_store_raw_kv_tensor",
+        "ds4_gpu_store_raw_kv_batch_tensor",
+        "ds4_gpu_compressor_store_batch_tensor",
+        "ds4_gpu_compressor_update_tensor",
+        "ds4_gpu_compressor_prefill_tensor",
+        "ds4_gpu_compressor_prefill_ratio4_replay_tensor",
+        "ds4_gpu_compressor_prefill_state_ratio4_tensor",
+        "ds4_gpu_attention_decode_heads_tensor",
+        "ds4_gpu_attention_prefill_raw_heads_tensor",
+        "ds4_gpu_attention_decode_raw_batch_heads_tensor",
+        "ds4_gpu_attention_decode_mixed_batch_heads_tensor",
+        "ds4_gpu_attention_indexed_mixed_batch_heads_tensor",
+        "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
+        "ds4_gpu_attention_prefill_masked_mixed_heads_tensor",
+        "ds4_gpu_attention_output_q8_batch_tensor",
+        "ds4_gpu_attention_output_low_q8_tensor"
+      ]
+    },
+    {
+      "stage": "M14.5",
+      "symbols": [
+        "ds4_gpu_router_select_tensor",
+        "ds4_gpu_router_select_batch_tensor",
+        "ds4_gpu_routed_moe_one_tensor",
+        "ds4_gpu_routed_moe_batch_tensor",
+        "ds4_gpu_hc_split_sinkhorn_tensor",
+        "ds4_gpu_hc_weighted_sum_tensor",
+        "ds4_gpu_hc_weighted_sum_split_tensor",
+        "ds4_gpu_hc_split_weighted_sum_tensor",
+        "ds4_gpu_hc_split_weighted_sum_norm_tensor",
+        "ds4_gpu_output_hc_weights_tensor",
+        "ds4_gpu_hc_expand_tensor",
+        "ds4_gpu_hc_expand_split_tensor",
+        "ds4_gpu_hc_expand_add_split_tensor"
+      ]
+    }
+  ],
+  "kernel_families": [
+    {
+      "stage": "M14.1",
+      "symbols": [
+        "dequant_q8_0_to_f16_kernel",
+        "dequant_q8_0_to_f32_kernel",
+        "fill_f32_kernel"
+      ]
+    },
+    {
+      "stage": "M14.2",
+      "symbols": [
+        "embed_token_hc_kernel",
+        "embed_tokens_hc_kernel",
+        "repeat_hc_kernel",
+        "swiglu_kernel",
+        "add_kernel",
+        "directional_steering_project_kernel",
+        "zero_kernel",
+        "indexer_scores_kernel",
+        "indexer_score_one_direct_kernel",
+        "indexer_scores_wmma_kernel",
+        "indexer_scores_wmma32_kernel",
+        "indexer_scores_wmma64_kernel",
+        "indexer_scores_wmma128_kernel",
+        "indexer_topk_kernel",
+        "indexer_topk_8192_cub_kernel",
+        "indexer_topk_1024_kernel",
+        "indexer_topk_pow2_kernel",
+        "indexer_topk_pow2_u16_kernel",
+        "indexer_topk_chunk_pow2_kernel",
+        "indexer_topk_merge_pow2_kernel",
+        "indexer_topk_tree_merge_pow2_kernel",
+        "indexed_topk_sort_512_asc_kernel",
+        "topk_mask_kernel"
+      ]
+    },
+    {
+      "stage": "M14.3",
+      "symbols": [
+        "matmul_f16_kernel",
+        "matmul_f16_serial_kernel",
+        "matmul_f16_ordered_chunks_kernel",
+        "matmul_f16_pair_ordered_chunks_kernel",
+        "matmul_f32_kernel",
+        "f32_to_f16_kernel",
+        "matmul_q8_0_kernel",
+        "quantize_q8_0_f32_kernel",
+        "matmul_q8_0_preq_kernel",
+        "matmul_q8_0_preq_warp8_kernel",
+        "matmul_q8_0_pair_preq_warp8_kernel",
+        "matmul_q8_0_hc_expand_preq_warp8_kernel",
+        "matmul_q8_0_preq_batch_warp8_kernel",
+        "grouped_q8_0_a_preq_warp8_kernel",
+        "rms_norm_plain_kernel",
+        "rms_norm_weight_kernel",
+        "dsv4_qkv_rms_norm_rows_kernel",
+        "head_rms_norm_kernel",
+        "head_rms_norm_rope_tail_kernel"
+      ]
+    },
+    {
+      "stage": "M14.4",
+      "symbols": [
+        "rope_tail_kernel",
+        "fp8_kv_quantize_kernel",
+        "indexer_hadamard_fp4_kernel",
+        "store_raw_kv_batch_kernel",
+        "attention_prefill_raw_kernel",
+        "attention_prefill_mixed_kernel",
+        "attention_prefill_raw_softmax_kernel",
+        "attention_prefill_mixed_softmax_kernel",
+        "attention_prefill_pack_mixed_kv_kernel",
+        "attention_prefill_unpack_heads_kernel",
+        "attention_pack_group_heads_f16_kernel",
+        "attention_unpack_group_low_kernel",
+        "attention_decode_mixed_kernel",
+        "attention_indexed_mixed_kernel",
+        "attention_indexed_mixed_heads8_rb4_kernel",
+        "attention_indexed_mixed_heads8_online_kernel",
+        "attention_static_mixed_heads8_online_kernel",
+        "attention_decode_mixed_heads8_online_kernel",
+        "compressor_store_kernel",
+        "compressor_set_rows_kernel",
+        "compressor_prefill_pool_kernel",
+        "compressor_update_pool_kernel",
+        "compressor_shift_ratio4_kernel"
+      ]
+    },
+    {
+      "stage": "M14.5",
+      "symbols": [
+        "hc_split_sinkhorn_kernel",
+        "hc_weighted_sum_kernel",
+        "hc_expand_kernel",
+        "hc_split_weighted_sum_fused_kernel",
+        "hc_split_weighted_sum_norm_fused_kernel",
+        "output_hc_weights_kernel",
+        "router_select_kernel",
+        "router_select_parallel_kernel",
+        "router_select_warp_topk_kernel",
+        "q8_K_quantize_kernel",
+        "moe_gate_up_mid_kernel",
+        "moe_gate_up_mid_warp8_kernel",
+        "moe_gate_up_mid_hwarp16_kernel",
+        "moe_gate_up_mid_qwarp32_kernel",
+        "moe_gate_up_mid_decode_lut_qwarp32_kernel",
+        "moe_count_sorted_pairs_kernel",
+        "moe_prefix_sorted_pairs_kernel",
+        "moe_scatter_sorted_pairs_kernel",
+        "moe_build_expert_tile_offsets_kernel",
+        "moe_build_expert_tiles_kernel",
+        "moe_gate_up_mid_sorted_qwarp32_kernel",
+        "moe_gate_up_mid_expert_tile8_kernel",
+        "moe_gate_up_mid_expert_tile4_row32_kernel",
+        "moe_gate_up_mid_expert_tile8_row32_kernel",
+        "moe_gate_up_mid_expert_tile8_row2048_kernel",
+        "moe_gate_up_mid_expert_tile8_rowspan_kernel",
+        "moe_gate_up_mid_sorted_p2_qwarp32_kernel",
+        "moe_down_kernel",
+        "moe_down_warp8_kernel",
+        "moe_down_hwarp16_kernel",
+        "moe_down_qwarp32_kernel",
+        "moe_gate_up_mid_decode_q4K_qwarp32_kernel",
+        "moe_down_sum6_qwarp32_kernel",
+        "moe_down_q4K_sum6_qwarp32_kernel",
+        "moe_down_sorted_qwarp32_kernel",
+        "moe_down_expert_tile8_kernel",
+        "moe_down_expert_tile4_row32_kernel",
+        "moe_down_expert_tile8_row32_kernel",
+        "moe_down_expert_tile16_row32_kernel",
+        "moe_down_expert_tile16_row2048_kernel",
+        "moe_down_expert_tile16_rowspan_kernel",
+        "moe_down_sorted_p2_qwarp32_kernel",
+        "moe_sum_kernel",
+        "moe_gate_up_mid_f32_kernel",
+        "moe_down_f32_kernel"
+      ]
+    }
+  ],
+  "claim_policy": {
+    "rust_cuda_operation_ownership_active": false,
+    "rust_cuda_default_route_active": false,
+    "ds4_cuda_removal_allowed": false,
+    "current_c_cuda_retained_as_oracle": true,
+    "next_stage": "M14.1 cuda-oxide Substrate And Tensor Residency"
+  }
+}

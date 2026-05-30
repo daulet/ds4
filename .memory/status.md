@@ -3,8 +3,9 @@
 - Date: 2026-05-25 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: post-M13 roadmap decision complete; no active implementation item
-- Last validated source before the active item: post-M13 roadmap decision.
+- Active item: M14.1 cuda-oxide Substrate And Tensor Residency
+- Last validated source before the active item: M14.0 CUDA Rust Ownership Inventory And Adoption Contract.
+- Earlier M14.0 CUDA Rust Ownership Inventory And Adoption Contract.
 - Earlier post-M13 roadmap decision.
 - Earlier M13.5 Embedding/Indexer Route Gate And Closure.
 - Earlier M13.4 Batch Indexer Fixture Gap Closure.
@@ -103,6 +104,23 @@
 
 ## Last Evidence
 
+- M14.0 adds
+  `ds4-parity/baselines/backend/m14.0/cuda-rust-ownership-inventory.json` and
+  `ds4-parity/check_cuda_rust_ownership_inventory.py --negative-test`. The
+  inventory records 81 public CUDA ABI functions mirrored by Rust FFI, two
+  additional CUDA-only exported helpers, 113 unique CUDA kernel symbols, and
+  the verified `cuda-oxide` `main` revision
+  `0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200`. All functions and kernels are
+  assigned to M14.1 through M14.5; default-route promotion and
+  `ds4_cuda.cu` removal remain blocked until M14.6. Validation passed:
+  `python3 ds4-parity/check_cuda_rust_ownership_inventory.py --negative-test`
+  (124 checks), `python3 ds4-parity/check_post_m13_roadmap_decision.py
+  --negative-test` (99 checks), and `python3 ds4-parity/run_parity_report.py
+  --skip-local-oracles` (95 passed, 50 skipped, 0 failed). Non-interactive
+  Claude review could not run because the local CLI reported `Not logged in`;
+  adversarial self-review found no material issue in the inventory extraction,
+  unique stage assignment, source-hash drift guard, or successor-status
+  compatibility changes.
 - Post-M13 roadmap decision adds
   `ds4-parity/baselines/roadmap/post-m13/post-m13-roadmap-decision.json` and
   `ds4-parity/check_post_m13_roadmap_decision.py --negative-test`. It records

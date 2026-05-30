@@ -34,6 +34,7 @@ ACCEPTED_ACTIVE_ITEMS = [
     "Active item: post-M12 roadmap decision",
     "Active item: M13",
     "Active item: post-M13 roadmap decision",
+    "Active item: M14",
 ]
 EXPECTED_FAMILIES = [
     "backend_lifecycle",

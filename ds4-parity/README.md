@@ -2025,6 +2025,22 @@ stderr bytes, exit status, and parsed token IDs for every M8.4 case. The Rust
 diagnostic writer intentionally prints raw tokenizer table text, matching
 current C `dump_tokens_fp`, rather than decoded token bytes.
 
+## CUDA Rust Ownership
+
+Validate the M14.0 complete CUDA ownership inventory and `cuda-oxide` adoption
+contract:
+
+```sh
+python3 ds4-parity/check_cuda_rust_ownership_inventory.py --negative-test
+```
+
+The inventory source-hashes the current CUDA ABI, Rust FFI/build boundary, and
+CUDA implementation; it assigns every exported CUDA function and every unique
+CUDA kernel symbol to an M14 Rust ownership stage. It records the inspected
+`cuda-oxide` revision and capability evidence, while explicitly keeping the
+current CUDA backend as the oracle and blocking default-route promotion or
+`ds4_cuda.cu` removal until M14.6 closure.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
