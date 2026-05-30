@@ -8313,7 +8313,7 @@
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4d7 and split next into M14.4d8
+- Status: active; done through M14.4d8a and split next into M14.4d8b
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8478,7 +8478,7 @@
 
 ##### M14.4d: Attention Kernels
 
-- Status: active; done through M14.4d7 and split next into M14.4d8
+- Status: active; done through M14.4d8a and split next into M14.4d8b
 - Goal: port current-C attention decode, prefill, indexed, and output-Q8
   device behavior after compressor surfaces are proved.
 
@@ -8655,6 +8655,37 @@
 
 ###### M14.4d8: Output Q8 Attention Projection Surfaces
 
+- Status: split before implementation into M14.4d8a and M14.4d8b
+- Goal: port native Q8 output surfaces before the optional F16/cuBLAS A
+  projection optimization.
+
+####### M14.4d8a: Native Q8 Attention Output Projection Surfaces
+
+- Status: done
+- Goal: port native-Q8 low-output and batched two-stage output projection
+  behavior before claiming the optional cuBLAS A path.
+- Oracle: current-C `quantize_q8_0_f32_kernel`,
+  `grouped_q8_0_a_preq_warp8_kernel`,
+  `matmul_q8_0_preq_batch_warp8_kernel`,
+  `ds4_gpu_attention_output_low_q8_tensor`, and
+  `ds4_gpu_attention_output_q8_batch_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4d8a/attention-output-q8-native-smoke.json`.
+- Comparator:
+  `ds4-parity/check_attention_output_q8_native_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: added executable-local Rust grouped A and B output projection
+  orchestration over Q8 prequantized inputs, covering single low output,
+  batched low/output, and partial blocks. B300 feature-enabled tests passed
+  with 67 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+  with libdevice linkage and matched native Q8 output on
+  `NVIDIA B300 SXM6 AC`. F16/cuBLAS A dispatch, runtime route activation,
+  and C CUDA removal remain unclaimed. Local formatting, diff, library tests,
+  the 63-check d8a comparator, retained attention checks, and unified parity
+  passed with 148 passed, 50 skipped, and 0 failed.
+
+####### M14.4d8b: CUBLAS Attention Output A Dispatch
+
 - Status: active
-- Goal: port attention output Q8 batch and low-rank projection surfaces
-  before attention-family closure.
+- Goal: port the optional F16/cuBLAS attention-output-A acceleration and
+  branch policy before attention-family closure.

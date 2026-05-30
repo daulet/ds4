@@ -2688,6 +2688,19 @@ with `attention_indexed_mixed_heads8_online_kernel` and execution of
 and filtered/duplicate rb4 output plus current-C dispatch priority while
 leaving output-Q8 attention, runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.4d8a Rust CUDA native output-Q8 attention smoke:
+
+```sh
+python3 ds4-parity/check_attention_output_q8_native_smoke.py --negative-test
+```
+
+The fixture records native Q8 execution for
+`ds4_gpu_attention_output_low_q8_tensor` and
+`ds4_gpu_attention_output_q8_batch_tensor` on B300. It proves low-only and
+batched two-stage grouped-output projections with partial Q8 blocks while
+leaving optional F16/cuBLAS A dispatch, runtime route, and C CUDA removal
+unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

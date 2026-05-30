@@ -1413,6 +1413,27 @@ pub const M14_4D7_SCOPE: AttentionIndexedOptimizedScope = AttentionIndexedOptimi
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionOutputQ8NativeScope {
+    pub opt_in_only: bool,
+    pub consumes_q8_conversion_and_matmul_kernels: bool,
+    pub owns_attention_output_low_q8_surface: bool,
+    pub owns_attention_output_q8_batch_native_surface: bool,
+    pub owns_attention_output_a_cublas_dispatch: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_4D8A_SCOPE: AttentionOutputQ8NativeScope = AttentionOutputQ8NativeScope {
+    opt_in_only: true,
+    consumes_q8_conversion_and_matmul_kernels: true,
+    owns_attention_output_low_q8_surface: true,
+    owns_attention_output_q8_batch_native_surface: true,
+    owns_attention_output_a_cublas_dispatch: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1443,7 +1464,7 @@ mod tests {
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
         M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE, M14_4D5_SCOPE,
-        M14_4D6_SCOPE, M14_4D7_SCOPE,
+        M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE,
     };
 
     #[test]
@@ -2114,6 +2135,17 @@ mod tests {
             select_attention_indexed_path(AttentionIndexedDispatchOptions { top_k: 513, ..base }),
             AttentionIndexedPath::Generic
         );
+    }
+
+    #[test]
+    fn attention_output_q8_native_scope_leaves_cublas_and_route_pending() {
+        assert!(M14_4D8A_SCOPE.opt_in_only);
+        assert!(M14_4D8A_SCOPE.consumes_q8_conversion_and_matmul_kernels);
+        assert!(M14_4D8A_SCOPE.owns_attention_output_low_q8_surface);
+        assert!(M14_4D8A_SCOPE.owns_attention_output_q8_batch_native_surface);
+        assert!(!M14_4D8A_SCOPE.owns_attention_output_a_cublas_dispatch);
+        assert!(!M14_4D8A_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_4D8A_SCOPE.changes_default_route);
     }
 
     #[test]
