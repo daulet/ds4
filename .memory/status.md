@@ -3,7 +3,22 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba: Public Hyperconnection Split Sinkhorn ABI
+  is validated. Rust exports `ds4_gpu_hc_split_sinkhorn_tensor` through an
+  embedded split-Sinkhorn kernel with private four-stream transform math,
+  resolving scale/base inputs through cached model ranges while retaining
+  current-C row flooring. A C-linked B300 witness proves two-row output,
+  shorter-output row flooring, alternate parameter ranges, and invalid-input
+  rejection. Local tests pass with 131 tests; B300 feature tests pass with
+  138 tests; the static library exposes 45 symbols; all 41 preceding linked
+  ABI consumers pass against the rebuilt archive with the known
+  executable-stack warning. All 45 CUDA ABI comparators pass, and the unified
+  report passes with 217 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review attempts
+  each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Fused split-weighted
+  reductions, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbba: Public Hyperconnection Weighted Sum ABI
   is validated. Rust exports `ds4_gpu_hc_weighted_sum_tensor` and
   `ds4_gpu_hc_weighted_sum_split_tensor` through a stride-aware embedded

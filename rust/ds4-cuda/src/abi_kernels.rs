@@ -40,6 +40,139 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_hc_split_sinkhorn_kernel(
+        n_rows: u32,
+        sinkhorn_iters: u32,
+        eps: f32,
+        mix: &[f32],
+        scale: &[f32],
+        base: &[f32],
+        mut split: DisjointSlice<f32>,
+    ) {
+        let row = thread::index_1d().get();
+        if row < n_rows as usize {
+            abi_hc4_split_one(row, sinkhorn_iters, eps, mix, scale, base, &mut split);
+        }
+    }
+
+    fn abi_hc4_split_one(
+        row: usize,
+        sinkhorn_iters: u32,
+        eps: f32,
+        mix: &[f32],
+        scale: &[f32],
+        base: &[f32],
+        split: &mut DisjointSlice<f32>,
+    ) {
+        const N_HC: usize = 4;
+        const MIX_HC: usize = 24;
+
+        let input = row * MIX_HC;
+        let mut hc = 0_usize;
+        while hc < N_HC {
+            let pre = mix[input + hc] * scale[0] + base[hc];
+            let post = mix[input + N_HC + hc] * scale[1] + base[N_HC + hc];
+            unsafe {
+                *split.get_unchecked_mut(input + hc) = 1.0 / (1.0 + (-pre).exp()) + eps;
+                *split.get_unchecked_mut(input + N_HC + hc) = 2.0 / (1.0 + (-post).exp());
+            }
+            hc += 1;
+        }
+        let mut combinations = [0.0_f32; 16];
+        let mut source = 0_usize;
+        while source < N_HC {
+            let first =
+                mix[input + 2 * N_HC + source * N_HC] * scale[2] + base[2 * N_HC + source * N_HC];
+            let mut maximum = first;
+            let mut destination = 0_usize;
+            while destination < N_HC {
+                let index = source * N_HC + destination;
+                let value = mix[input + 2 * N_HC + index] * scale[2] + base[2 * N_HC + index];
+                combinations[index] = value;
+                if value > maximum {
+                    maximum = value;
+                }
+                destination += 1;
+            }
+            let mut sum = 0.0_f32;
+            destination = 0;
+            while destination < N_HC {
+                let index = source * N_HC + destination;
+                let value = (combinations[index] - maximum).exp();
+                combinations[index] = value;
+                sum += value;
+                destination += 1;
+            }
+            destination = 0;
+            while destination < N_HC {
+                let index = source * N_HC + destination;
+                combinations[index] = combinations[index] / sum + eps;
+                destination += 1;
+            }
+            source += 1;
+        }
+        let mut column = 0_usize;
+        while column < N_HC {
+            let mut sum = eps;
+            let mut row_index = 0_usize;
+            while row_index < N_HC {
+                sum += combinations[row_index * N_HC + column];
+                row_index += 1;
+            }
+            row_index = 0;
+            while row_index < N_HC {
+                let index = row_index * N_HC + column;
+                combinations[index] /= sum;
+                row_index += 1;
+            }
+            column += 1;
+        }
+        let mut iteration = 1_u32;
+        while iteration < sinkhorn_iters {
+            source = 0;
+            while source < N_HC {
+                let mut sum = eps;
+                column = 0;
+                while column < N_HC {
+                    sum += combinations[source * N_HC + column];
+                    column += 1;
+                }
+                column = 0;
+                while column < N_HC {
+                    let index = source * N_HC + column;
+                    combinations[index] /= sum;
+                    column += 1;
+                }
+                source += 1;
+            }
+            column = 0;
+            while column < N_HC {
+                let mut sum = eps;
+                let mut row_index = 0_usize;
+                while row_index < N_HC {
+                    sum += combinations[row_index * N_HC + column];
+                    row_index += 1;
+                }
+                row_index = 0;
+                while row_index < N_HC {
+                    let index = row_index * N_HC + column;
+                    combinations[index] /= sum;
+                    row_index += 1;
+                }
+                column += 1;
+            }
+            iteration += 1;
+        }
+        let mut index = 0_usize;
+        while index < 16 {
+            unsafe {
+                *split.get_unchecked_mut(input + 2 * N_HC + index) = combinations[index];
+            }
+            index += 1;
+        }
+    }
+
+    #[kernel]
     pub fn abi_hc_weighted_sum_kernel(
         n_embd: u32,
         n_hc: u32,
@@ -1003,6 +1136,7 @@ mod kernels {
 pub(crate) struct AbiKernelModule {
     add_kernel: CudaFunction,
     repeat_hc_kernel: CudaFunction,
+    hc_split_sinkhorn_kernel: CudaFunction,
     hc_weighted_sum_kernel: CudaFunction,
     hc_expand_kernel: CudaFunction,
     directional_steering_project_kernel: CudaFunction,
@@ -1034,6 +1168,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             repeat_hc_kernel: module
                 .load_function("abi_repeat_hc_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            hc_split_sinkhorn_kernel: module
+                .load_function("abi_hc_split_sinkhorn_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             hc_weighted_sum_kernel: module
                 .load_function("abi_hc_weighted_sum_kernel")
@@ -1171,6 +1308,61 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.repeat_hc_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn hc_split_sinkhorn_tensor(
+        &self,
+        stream: &CudaStream,
+        split_ptr: u64,
+        mix_ptr: u64,
+        scale_ptr: u64,
+        base_ptr: u64,
+        n_rows: u32,
+        sinkhorn_iters: u32,
+        eps: f32,
+    ) -> bool {
+        let Some(config) = launch_config(u64::from(n_rows)) else {
+            return false;
+        };
+        let split_len = u64::from(n_rows) * 24;
+        let mut n_rows = n_rows;
+        let mut sinkhorn_iters = sinkhorn_iters;
+        let mut eps = eps;
+        let mut mix_ptr = mix_ptr;
+        let mut mix_len = split_len;
+        let mut scale_ptr = scale_ptr;
+        let mut scale_len = 3_u64;
+        let mut base_ptr = base_ptr;
+        let mut base_len = 24_u64;
+        let mut split_ptr = split_ptr;
+        let mut split_len = split_len;
+        let mut params = [
+            (&mut n_rows as *mut u32).cast::<c_void>(),
+            (&mut sinkhorn_iters as *mut u32).cast::<c_void>(),
+            (&mut eps as *mut f32).cast::<c_void>(),
+            (&mut mix_ptr as *mut u64).cast::<c_void>(),
+            (&mut mix_len as *mut u64).cast::<c_void>(),
+            (&mut scale_ptr as *mut u64).cast::<c_void>(),
+            (&mut scale_len as *mut u64).cast::<c_void>(),
+            (&mut base_ptr as *mut u64).cast::<c_void>(),
+            (&mut base_len as *mut u64).cast::<c_void>(),
+            (&mut split_ptr as *mut u64).cast::<c_void>(),
+            (&mut split_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI layer validates row spans and both cached model
+        // parameter ranges before the asynchronous kernel launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.hc_split_sinkhorn_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

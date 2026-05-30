@@ -1,0 +1,67 @@
+{
+  "schema": "ds4.cuda_abi_hc_split_sinkhorn_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-hc-split-sinkhorn-abi",
+  "goal": "Rust-own the public hyperconnection split-Sinkhorn wrapper and its four-branch transform without claiming fused reductions or route promotion.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbol": "ds4_gpu_hc_split_sinkhorn_tensor",
+    "semantics": [
+      "n_hc is fixed at four and each row transforms a 24-float HC mixer into pre, post, and combination weights",
+      "three scale floats and 24 base floats are read from model-backed parameter ranges",
+      "valid row count remains the shorter full-row count of mix and output tensors as in current C"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba/abi_hc_split_sinkhorn_link_smoke.c",
+    "kernel_entry": "abi_hc_split_sinkhorn_kernel",
+    "parameter_path": "with_cached_abi_model_range resolves both scale and base model spans before launch",
+    "remaining_compute_boundary": "fused split weighted reductions, remaining graph compute, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 45,
+    "exported_compute_symbol_count": 22,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "owns_hc_split_sinkhorn_tensor": true,
+    "owns_hc4_split_math": true,
+    "owns_fused_hc_reductions": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 131,
+    "feature_release_test_count": 138,
+    "staticlib_export_count": 45,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "sinkhorn_split_output_matches": true,
+      "shorter_output_row_floor_matches": true,
+      "alternate_parameter_range_matches": true,
+      "short_mix_rejected": true,
+      "invalid_model_range_rejected": true,
+      "invalid_hc_count_rejected": true,
+      "embedded_hc_split_sinkhorn_kernel_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 41,
+      "predecessor_relink_executable_stack_warning_count": 41
+    }
+  },
+  "integration_risks": [
+    "fused split weighted reductions continue to own synchronization and downstream output behavior separately from this split-only wrapper",
+    "remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

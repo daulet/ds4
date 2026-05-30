@@ -1744,6 +1744,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba Rust CUDA public hyperconnection split-Sinkhorn ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_hc_split_sinkhorn_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -3576,6 +3576,20 @@ Sinkhorn, fused reductions, remaining graph compute, whole-archive retention
 policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba Rust CUDA
+public hyperconnection split-Sinkhorn ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_hc_split_sinkhorn_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes two-row split-Sinkhorn generation through
+the embedded Rust kernel, validates alternate cached model parameter ranges
+and shorter-output row flooring, then checks invalid model and HC inputs.
+Fused split-weighted reductions, remaining graph compute, whole-archive
+retention policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

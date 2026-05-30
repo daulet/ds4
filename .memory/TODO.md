@@ -10651,6 +10651,42 @@
 
 ###################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbb because public
+  split-Sinkhorn generation is a bounded model-backed ABI leaf independently
+  from fused split-weighted reductions.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+####################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba: Public Hyperconnection Split Sinkhorn ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_hc_split_sinkhorn_tensor` through its four-branch
+  mixer transform and model-backed scale/base inputs without claiming fused
+  reductions or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbba/abi-hc-split-sinkhorn-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_hc_split_sinkhorn_smoke.py --negative-test`.
+- Evidence: Rust exports the split-Sinkhorn wrapper through
+  `abi_hc_split_sinkhorn_kernel` and private `abi_hc4_split_one` math,
+  resolving scale/base parameters through cached model ranges while retaining
+  current-C full-row flooring. A C-linked B300 witness proves two-row output,
+  shorter-output flooring, alternate parameter ranges, and invalid-input
+  rejection. Local tests pass with 131 tests; B300 feature tests pass with
+  138 tests; the static library exposes 45 symbols; all 41 preceding linked
+  ABI consumers pass against the rebuilt archive with the known embedded
+  object executable-stack warning. All 45 CUDA ABI comparators pass, and the
+  unified parity report passes with 217 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review attempts
+  each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Fused split-weighted
+  reductions, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain
+  pending.
+
+####################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before
