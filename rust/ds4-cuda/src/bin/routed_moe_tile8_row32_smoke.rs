@@ -5,12 +5,12 @@ use std::fmt;
 use cuda_core::{DeviceBuffer, DriverError, LaunchConfig};
 use cuda_device::{
     atomic::{AtomicOrdering, DeviceAtomicF32},
-    cuda_module, kernel, thread, warp, DisjointSlice,
+    cuda_module, kernel, thread, warp, DisjointSlice, SharedArray,
 };
 use cuda_host::ltoir;
 use ds4_cuda::{
     substrate::CudaOxideSubstrate, M14_5C2C2_SCOPE, M14_5C2C3_SCOPE, M14_5C2C4_SCOPE,
-    M14_5C2C5_SCOPE, M14_5C2C6_SCOPE, M14_5C2C7_SCOPE,
+    M14_5C2C5_SCOPE, M14_5C2C6_SCOPE, M14_5C2C7_SCOPE, M14_5C2E_SCOPE,
 };
 
 const QK_K: usize = 256;
@@ -24,6 +24,8 @@ const PAIR_COUNT: u32 = N_TOKENS * N_ROUTED;
 const EXPERT_MID_DIM: u32 = QK_K as u32;
 const OUT_DIM: u32 = 35;
 const CLAMP: f32 = 0.01;
+const CACHED_GATE_MAX_BLOCKS: usize = 16;
+const CACHED_DOWN_MAX_BLOCKS: usize = 8;
 
 const IQ2_GRIDS: [u64; 4] = [
     0x0808_0808_0808_0808,
@@ -402,6 +404,152 @@ mod kernels {
         }
     }
 
+    #[allow(static_mut_refs)]
+    #[kernel]
+    pub fn moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        row_span: u32,
+        clamp: f32,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq_scales: &[f32],
+        xq_values: &[i8],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        route_weights: &[f32],
+        iq2_grids: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        static mut SXQ_SCALES: SharedArray<f32, { 8 * CACHED_GATE_MAX_BLOCKS }> =
+            SharedArray::UNINIT;
+        static mut SXQ_VALUES: SharedArray<i8, { 8 * CACHED_GATE_MAX_BLOCKS * QK_K }> =
+            SharedArray::UNINIT;
+        static mut S_IQ2_GRIDS: SharedArray<u64, { IQ2_GRIDS.len() }> = SharedArray::UNINIT;
+        static mut S_IQ2_SIGNS: SharedArray<u8, { IQ2_SIGNS.len() }> = SharedArray::UNINIT;
+
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] || xq_blocks as usize > CACHED_GATE_MAX_BLOCKS {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        let mut np = 0_u32;
+        while np < 8 && local_start + np < counts[expert as usize] {
+            np += 1;
+        }
+        let thread_index = thread::threadIdx_x() as usize;
+        let staged_blocks = np as usize * xq_blocks as usize;
+        let mut staged_value = thread_index;
+        while staged_value < staged_blocks * QK_K {
+            let staged_block = staged_value / QK_K;
+            let value_index = staged_value - staged_block * QK_K;
+            let entry = staged_block / xq_blocks as usize;
+            let block = staged_block - entry * xq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let token = pair / n_expert;
+            let input_block = token as usize * xq_blocks as usize + block;
+            unsafe {
+                SXQ_VALUES[staged_block * QK_K + value_index] =
+                    xq_values[input_block * QK_K + value_index];
+            }
+            staged_value += THREADS as usize;
+        }
+        if thread_index < staged_blocks {
+            let entry = thread_index / xq_blocks as usize;
+            let block = thread_index - entry * xq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let token = pair / n_expert;
+            unsafe {
+                SXQ_SCALES[thread_index] = xq_scales[token as usize * xq_blocks as usize + block];
+            }
+        }
+        if thread_index < IQ2_GRIDS.len() {
+            unsafe {
+                S_IQ2_GRIDS[thread_index] = iq2_grids[thread_index];
+            }
+        }
+        if thread_index < IQ2_SIGNS.len() {
+            unsafe {
+                S_IQ2_SIGNS[thread_index] = iq2_signs[thread_index];
+            }
+        }
+        thread::sync_threads();
+        let mut row_offset = 0_u32;
+        while row_offset < row_span {
+            let row = thread::blockIdx_x() * row_span + row_lane + row_offset;
+            if row < expert_mid_dim {
+                let row_blocks = ((expert * expert_mid_dim + row) * xq_blocks) as usize;
+                let mut entry = 0_u32;
+                while entry < np {
+                    let pair =
+                        sorted_pairs[(offsets[expert as usize] + local_start + entry) as usize];
+                    let mut gate = 0.0_f32;
+                    let mut up = 0.0_f32;
+                    let mut block = lane;
+                    while block < xq_blocks {
+                        let staged_block = entry as usize * xq_blocks as usize + block as usize;
+                        gate += dev_dot_iq2_xxs_q8_k_cached_block(
+                            gate_weights,
+                            row_blocks + block as usize,
+                            unsafe { SXQ_SCALES[staged_block] },
+                            unsafe { SXQ_VALUES.as_ptr() },
+                            staged_block * QK_K,
+                            unsafe { S_IQ2_GRIDS.as_ptr() },
+                            unsafe { S_IQ2_SIGNS.as_ptr() },
+                        );
+                        up += dev_dot_iq2_xxs_q8_k_cached_block(
+                            up_weights,
+                            row_blocks + block as usize,
+                            unsafe { SXQ_SCALES[staged_block] },
+                            unsafe { SXQ_VALUES.as_ptr() },
+                            staged_block * QK_K,
+                            unsafe { S_IQ2_GRIDS.as_ptr() },
+                            unsafe { S_IQ2_SIGNS.as_ptr() },
+                        );
+                        block += 8;
+                    }
+                    gate = quarter_warp_sum_f32(gate);
+                    up = quarter_warp_sum_f32(up);
+                    if lane == 0 {
+                        if clamp > 1.0e-6 {
+                            if gate > clamp {
+                                gate = clamp;
+                            }
+                            if up > clamp {
+                                up = clamp;
+                            }
+                            if up < -clamp {
+                                up = -clamp;
+                            }
+                        }
+                        let offset = (pair * expert_mid_dim + row) as usize;
+                        unsafe {
+                            *gate_out.get_unchecked_mut(offset) = gate;
+                            *up_out.get_unchecked_mut(offset) = up;
+                            *mid_out.get_unchecked_mut(offset) =
+                                (gate / (1.0 + (-gate).exp())) * up * route_weights[pair as usize];
+                        }
+                    }
+                    entry += 1;
+                }
+            }
+            row_offset += 32;
+        }
+    }
+
     #[kernel]
     pub fn moe_down_expert_tile8_row32_kernel(
         midq_blocks: u32,
@@ -604,6 +752,128 @@ mod kernels {
         }
     }
 
+    #[allow(static_mut_refs)]
+    #[kernel]
+    pub fn moe_down_expert_tile16_rowspan_cached_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        row_span: u32,
+        down_weights: &[u8],
+        midq_scales: &[f32],
+        midq_values: &[i8],
+        midq_bsums: &[i32],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        atomic_out: &[f32],
+    ) {
+        static mut SXQ_SCALES: SharedArray<f32, { 16 * CACHED_DOWN_MAX_BLOCKS }> =
+            SharedArray::UNINIT;
+        static mut SXQ_VALUES: SharedArray<i8, { 16 * CACHED_DOWN_MAX_BLOCKS * QK_K }> =
+            SharedArray::UNINIT;
+        static mut SXQ_BSUMS: SharedArray<i32, { 16 * CACHED_DOWN_MAX_BLOCKS * 16 }> =
+            SharedArray::UNINIT;
+
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] || midq_blocks as usize > CACHED_DOWN_MAX_BLOCKS {
+            return;
+        }
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        if local_start & 8 != 0 {
+            return;
+        }
+        let mut np = 0_u32;
+        while np < 16 && local_start + np < counts[expert as usize] {
+            np += 1;
+        }
+        let thread_index = thread::threadIdx_x() as usize;
+        let staged_blocks = np as usize * midq_blocks as usize;
+        let mut staged_value = thread_index;
+        while staged_value < staged_blocks * QK_K {
+            let staged_block = staged_value / QK_K;
+            let value_index = staged_value - staged_block * QK_K;
+            let entry = staged_block / midq_blocks as usize;
+            let block = staged_block - entry * midq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let input_block = pair as usize * midq_blocks as usize + block;
+            unsafe {
+                SXQ_VALUES[staged_block * QK_K + value_index] =
+                    midq_values[input_block * QK_K + value_index];
+            }
+            staged_value += THREADS as usize;
+        }
+        if thread_index < staged_blocks {
+            let entry = thread_index / midq_blocks as usize;
+            let block = thread_index - entry * midq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let input_block = pair as usize * midq_blocks as usize + block;
+            unsafe {
+                SXQ_SCALES[thread_index] = midq_scales[input_block];
+            }
+        }
+        let mut staged_sum = thread_index;
+        while staged_sum < staged_blocks * 16 {
+            let staged_block = staged_sum / 16;
+            let sum_index = staged_sum - staged_block * 16;
+            let entry = staged_block / midq_blocks as usize;
+            let block = staged_block - entry * midq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let input_block = pair as usize * midq_blocks as usize + block;
+            unsafe {
+                SXQ_BSUMS[staged_block * 16 + sum_index] = midq_bsums[input_block * 16 + sum_index];
+            }
+            staged_sum += THREADS as usize;
+        }
+        thread::sync_threads();
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let mut row_offset = 0_u32;
+        while row_offset < row_span {
+            let row = thread::blockIdx_x() * row_span + row_lane + row_offset;
+            if row < out_dim {
+                let row_blocks = ((expert * out_dim + row) * midq_blocks) as usize;
+                let mut entry = 0_u32;
+                while entry < np {
+                    let pair =
+                        sorted_pairs[(offsets[expert as usize] + local_start + entry) as usize];
+                    let mut accumulator = 0.0_f32;
+                    let mut block = lane;
+                    while block < midq_blocks {
+                        let staged_block = entry as usize * midq_blocks as usize + block as usize;
+                        accumulator += dev_dot_q2_k_q8_k_cached_block(
+                            down_weights,
+                            row_blocks + block as usize,
+                            unsafe { SXQ_SCALES[staged_block] },
+                            unsafe { SXQ_VALUES.as_ptr() },
+                            unsafe { SXQ_BSUMS.as_ptr() },
+                            staged_block,
+                        );
+                        block += 8;
+                    }
+                    accumulator = quarter_warp_sum_f32(accumulator);
+                    if lane == 0 {
+                        let token = pair / n_expert;
+                        let offset = (token * out_dim + row) as usize;
+                        let output = unsafe {
+                            &*(atomic_out.as_ptr().add(offset) as *const DeviceAtomicF32)
+                        };
+                        output.fetch_add(accumulator, AtomicOrdering::Relaxed);
+                    }
+                    entry += 1;
+                }
+            }
+            row_offset += 32;
+        }
+    }
+
     fn dev_dot_iq2_xxs_q8_k_block(
         packed: &[u8],
         block: usize,
@@ -644,6 +914,49 @@ mod kernels {
             ib32 += 1;
         }
         0.125 * weight_scale * q8_scales[q8_block] * block_sum as f32
+    }
+
+    fn dev_dot_iq2_xxs_q8_k_cached_block(
+        packed: &[u8],
+        block: usize,
+        q8_scale: f32,
+        q8_values: *const i8,
+        q8_base: usize,
+        iq2_grids: *const u64,
+        iq2_signs: *const u8,
+    ) -> f32 {
+        let base = block * IQ2_BLOCK_BYTES;
+        let weight_scale = f16::from_bits(load_u16(packed, base)) as f32;
+        let mut block_sum = 0_i32;
+        let mut ib32 = 0_usize;
+        while ib32 < QK_K / 32 {
+            let q2 = base + 2 + ib32 * 8;
+            let aux_g = load_u16(packed, q2) as u32 | ((load_u16(packed, q2 + 2) as u32) << 16);
+            let aux_s = load_u16(packed, q2 + 4) as u32 | ((load_u16(packed, q2 + 6) as u32) << 16);
+            let multiplier = (2 * (aux_s >> 28) + 1) as i32;
+            let mut subtotal = 0_i32;
+            let mut group = 0_u32;
+            while group < 4 {
+                let grid = unsafe { *iq2_grids.add(((aux_g >> (8 * group)) & 0xff) as usize) };
+                let signs = unsafe { *iq2_signs.add(((aux_s >> (7 * group)) & 127) as usize) };
+                let mut lane = 0_u32;
+                while lane < 8 {
+                    let mut value = ((grid >> (8 * lane)) & 0xff) as i32;
+                    if signs & (1_u8 << lane) != 0 {
+                        value = -value;
+                    }
+                    subtotal += value
+                        * unsafe {
+                            *q8_values.add(q8_base + ib32 * 32 + group as usize * 8 + lane as usize)
+                        } as i32;
+                    lane += 1;
+                }
+                group += 1;
+            }
+            block_sum += subtotal * multiplier;
+            ib32 += 1;
+        }
+        0.125 * weight_scale * q8_scale * block_sum as f32
     }
 
     fn dev_dot_q2_k_q8_k_block(
@@ -696,6 +1009,58 @@ mod kernels {
         q8_scales[q8_block] * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
     }
 
+    fn dev_dot_q2_k_q8_k_cached_block(
+        packed: &[u8],
+        block: usize,
+        q8_scale: f32,
+        q8_values: *const i8,
+        q8_bsums: *const i32,
+        q8_block: usize,
+    ) -> f32 {
+        let base = block * Q2_BLOCK_BYTES;
+        let weight_scale = f16::from_bits(load_u16(packed, base + 80)) as f32;
+        let weight_min = f16::from_bits(load_u16(packed, base + 82)) as f32;
+        let q_base = q8_block * QK_K;
+        let bsum_base = q8_block * 16;
+        let mut min_sum = 0_i32;
+        let mut scale = 0_usize;
+        while scale < 16 {
+            min_sum +=
+                unsafe { *q8_bsums.add(bsum_base + scale) } * (packed[base + scale] >> 4) as i32;
+            scale += 1;
+        }
+        let mut quant_sum = 0_i32;
+        let mut index = 0_usize;
+        let mut chunk = 0_usize;
+        while chunk < 2 {
+            let mut shift = 0_u32;
+            let mut group = 0_usize;
+            while group < 4 {
+                let first_scale = (packed[base + index] & 0x0f) as i32;
+                index += 1;
+                let second_scale = (packed[base + index] & 0x0f) as i32;
+                index += 1;
+                let q = base + 16 + chunk * 32;
+                let q8 = q_base + chunk * 128 + group * 32;
+                let mut lane = 0_usize;
+                let mut first = 0_i32;
+                let mut second = 0_i32;
+                while lane < 16 {
+                    first += ((packed[q + lane] >> shift) & 3) as i32
+                        * unsafe { *q8_values.add(q8 + lane) } as i32;
+                    second += ((packed[q + 16 + lane] >> shift) & 3) as i32
+                        * unsafe { *q8_values.add(q8 + 16 + lane) } as i32;
+                    lane += 1;
+                }
+                quant_sum += first_scale * first + second_scale * second;
+                shift += 2;
+                group += 1;
+            }
+            chunk += 1;
+        }
+        q8_scale * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
+    }
+
     fn quarter_warp_sum_f32(mut value: f32) -> f32 {
         let mut offset = 4_u32;
         while offset > 0 {
@@ -716,9 +1081,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tile16 = std::env::var_os("DS4_CUDA_MOE_DOWN_TILE16").is_some();
     let gate_rowspan = std::env::var_os("DS4_CUDA_MOE_GATE_ROWSPAN").is_some();
     let down_rowspan = std::env::var_os("DS4_CUDA_MOE_DOWN_ROWSPAN").is_some();
+    let shared_cache = std::env::var_os("DS4_CUDA_MOE_SHARED_CACHE").is_some();
     assert!(!tile16 || (atomic_down && !tile4));
-    assert!(!gate_rowspan || (!tile4 && !atomic_down && !tile16));
-    assert!(!down_rowspan || (atomic_down && tile16 && !tile4 && !gate_rowspan));
+    assert!(!gate_rowspan || (!tile4 && ((!atomic_down && !tile16) || shared_cache)));
+    assert!(!down_rowspan || (atomic_down && tile16 && !tile4 && (!gate_rowspan || shared_cache)));
+    assert!(!shared_cache || (!tile4 && gate_rowspan && atomic_down && tile16 && down_rowspan));
     let substrate = CudaOxideSubstrate::open(0)?;
     let raw_module = ltoir::load_kernel_module(
         substrate.context(),
@@ -776,6 +1143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &route_values,
             tile4,
             row_span,
+            shared_cache,
         )?;
         substrate.flush_commands()?;
         assert_close(&substrate.download(&actual_gate.gate)?, &expected_gate.gate);
@@ -801,6 +1169,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             atomic_down,
             tile16,
             row_span,
+            shared_cache,
         )?;
         substrate.end_commands()?;
         if atomic_down {
@@ -824,6 +1193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             true,
             false,
             None,
+            false,
         )?;
         substrate.end_commands()?;
         assert_close(
@@ -846,12 +1216,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tile4,
             atomic_down,
             tile16,
-            if down_rowspan { Some(512) } else { None }
+            if down_rowspan { Some(512) } else { None },
+            shared_cache,
         ),
         Err(TileProjectionError::InvalidShape)
     ));
 
-    if down_rowspan {
+    if shared_cache {
+        println!(
+            "{{\"milestone\":\"M14.5c2e\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"gate_shared_row512_matches\":true,\"gate_shared_row1024_matches\":true,\"gate_shared_row2048_matches\":true,\"down_shared_row512_matches\":true,\"down_shared_row1024_matches\":true,\"down_shared_row2048_matches\":true,\"shared_q8_input_staging_matches\":true,\"shared_iq2_lut_staging_matches\":true,\"shared_q2_bsum_staging_matches\":true,\"tile8_and_tile16_metadata_retained\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_thread_block_sync\":true,\"uses_device_atomic_f32_fetch_add\":true,\"uses_libdevice_link_path\":true,\"consumes_rowspan_projection_surface\":{},\"owns_shared_cache_specialization\":{},\"owns_gate_and_down_cached_rowspan_dispatch\":{},\"owns_hyperconnection_or_runtime_graph\":{},\"changes_default_route\":{}}}",
+            substrate.device_name()?,
+            M14_5C2E_SCOPE.consumes_rowspan_projection_surface,
+            M14_5C2E_SCOPE.owns_shared_cache_specialization,
+            M14_5C2E_SCOPE.owns_gate_and_down_cached_rowspan_dispatch,
+            M14_5C2E_SCOPE.owns_hyperconnection_or_runtime_graph,
+            M14_5C2E_SCOPE.changes_default_route,
+        );
+    } else if down_rowspan {
         println!(
             "{{\"milestone\":\"M14.5c2c7\",\"device_name\":{:?},\"rust_kernel_toolchain\":true,\"down_row512_matches\":true,\"down_row1024_matches\":true,\"down_row2048_matches\":true,\"partial_row_span_matches\":true,\"tile16_descriptor_metadata_retained\":true,\"token_indexed_accumulation_matches\":true,\"device_zero_before_atomic_matches\":true,\"negative_expert_bucket_zero_matches\":true,\"invalid_shape_rejected\":true,\"uses_device_atomic_f32_fetch_add\":true,\"consumes_tile16_row32_atomic_surface\":{},\"owns_moe_down_expert_tile16_rowspan_kernel\":{},\"owns_down_row512_row1024_and_row2048_atomic_dispatch\":{},\"owns_shared_cache_specialization\":{},\"owns_q4_k_or_runtime_graph\":{},\"changes_default_route\":{}}}",
             substrate.device_name()?,
@@ -967,6 +1348,7 @@ fn run_gate_up_mid(
     route_values: &[f32],
     tile4: bool,
     row_span: Option<u32>,
+    shared_cache: bool,
 ) -> Result<GateOutput, TileProjectionError> {
     validate_metadata(metadata)?;
     let gate_weights = substrate.upload(gate_values)?;
@@ -986,35 +1368,67 @@ fn run_gate_up_mid(
     let mut up = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
     let mut mid = substrate.zeroed::<f32>((PAIR_COUNT * EXPERT_MID_DIM) as usize)?;
     if let Some(row_span) = row_span {
-        module.moe_gate_up_mid_expert_tile8_rowspan_kernel(
-            substrate.stream(),
-            LaunchConfig {
-                grid_dim: (EXPERT_MID_DIM.div_ceil(row_span), metadata.tile_total[0], 1),
-                block_dim: (THREADS, 1, 1),
-                shared_mem_bytes: 0,
-            },
-            1,
-            EXPERT_MID_DIM,
-            N_ROUTED,
-            row_span,
-            CLAMP,
-            &gate_weights,
-            &up_weights,
-            &scales,
-            &values,
-            &sorted_pairs,
-            &offsets,
-            &counts,
-            &tile_total,
-            &tile_experts,
-            &tile_starts,
-            &route_weights,
-            &grids,
-            &signs,
-            &mut gate,
-            &mut up,
-            &mut mid,
-        )?;
+        if shared_cache {
+            module.moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(
+                substrate.stream(),
+                LaunchConfig {
+                    grid_dim: (EXPERT_MID_DIM.div_ceil(row_span), metadata.tile_total[0], 1),
+                    block_dim: (THREADS, 1, 1),
+                    shared_mem_bytes: 0,
+                },
+                1,
+                EXPERT_MID_DIM,
+                N_ROUTED,
+                row_span,
+                CLAMP,
+                &gate_weights,
+                &up_weights,
+                &scales,
+                &values,
+                &sorted_pairs,
+                &offsets,
+                &counts,
+                &tile_total,
+                &tile_experts,
+                &tile_starts,
+                &route_weights,
+                &grids,
+                &signs,
+                &mut gate,
+                &mut up,
+                &mut mid,
+            )?;
+        } else {
+            module.moe_gate_up_mid_expert_tile8_rowspan_kernel(
+                substrate.stream(),
+                LaunchConfig {
+                    grid_dim: (EXPERT_MID_DIM.div_ceil(row_span), metadata.tile_total[0], 1),
+                    block_dim: (THREADS, 1, 1),
+                    shared_mem_bytes: 0,
+                },
+                1,
+                EXPERT_MID_DIM,
+                N_ROUTED,
+                row_span,
+                CLAMP,
+                &gate_weights,
+                &up_weights,
+                &scales,
+                &values,
+                &sorted_pairs,
+                &offsets,
+                &counts,
+                &tile_total,
+                &tile_experts,
+                &tile_starts,
+                &route_weights,
+                &grids,
+                &signs,
+                &mut gate,
+                &mut up,
+                &mut mid,
+            )?;
+        }
     } else if tile4 {
         module.moe_gate_up_mid_expert_tile4_row32_kernel(
             substrate.stream(),
@@ -1087,6 +1501,7 @@ fn run_down(
     atomic_mode: bool,
     tile16: bool,
     row_span: Option<u32>,
+    shared_cache: bool,
 ) -> Result<DeviceBuffer<f32>, TileProjectionError> {
     validate_metadata(metadata)?;
     let down_weights = substrate.upload(down_values)?;
@@ -1114,29 +1529,55 @@ fn run_down(
         )?;
     }
     if let Some(row_span) = row_span {
-        module.moe_down_expert_tile16_rowspan_kernel(
-            substrate.stream(),
-            LaunchConfig {
-                grid_dim: (OUT_DIM.div_ceil(row_span), metadata.tile_total[0], 1),
-                block_dim: (THREADS, 1, 1),
-                shared_mem_bytes: 0,
-            },
-            1,
-            OUT_DIM,
-            N_ROUTED,
-            row_span,
-            &down_weights,
-            &scales,
-            &values,
-            &bsums,
-            &sorted_pairs,
-            &offsets,
-            &counts,
-            &tile_total,
-            &tile_experts,
-            &tile_starts,
-            &atomic_output,
-        )?;
+        if shared_cache {
+            module.moe_down_expert_tile16_rowspan_cached_kernel(
+                substrate.stream(),
+                LaunchConfig {
+                    grid_dim: (OUT_DIM.div_ceil(row_span), metadata.tile_total[0], 1),
+                    block_dim: (THREADS, 1, 1),
+                    shared_mem_bytes: 0,
+                },
+                1,
+                OUT_DIM,
+                N_ROUTED,
+                row_span,
+                &down_weights,
+                &scales,
+                &values,
+                &bsums,
+                &sorted_pairs,
+                &offsets,
+                &counts,
+                &tile_total,
+                &tile_experts,
+                &tile_starts,
+                &atomic_output,
+            )?;
+        } else {
+            module.moe_down_expert_tile16_rowspan_kernel(
+                substrate.stream(),
+                LaunchConfig {
+                    grid_dim: (OUT_DIM.div_ceil(row_span), metadata.tile_total[0], 1),
+                    block_dim: (THREADS, 1, 1),
+                    shared_mem_bytes: 0,
+                },
+                1,
+                OUT_DIM,
+                N_ROUTED,
+                row_span,
+                &down_weights,
+                &scales,
+                &values,
+                &bsums,
+                &sorted_pairs,
+                &offsets,
+                &counts,
+                &tile_total,
+                &tile_experts,
+                &tile_starts,
+                &atomic_output,
+            )?;
+        }
     } else if tile16 {
         module.moe_down_expert_tile16_row32_kernel(
             substrate.stream(),

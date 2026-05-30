@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.5c2c4 Rust CUDA routed MoE atomic-down smoke."""
+"""Validate the M14.5c2e Rust CUDA routed MoE shared-cache smoke."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.5c2c4/routed-moe-atomic-down-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.5c2e/routed-moe-shared-cache-smoke.json"
 CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
@@ -27,13 +27,13 @@ REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
 EXPECTED_OWNED = [
-    "executable-local zero_kernel initialization for atomic routed-MoE output",
-    "DeviceAtomicF32 token-indexed accumulation for tile8 and tile4 row32 down kernels",
-    "DS4_CUDA_MOE_ATOMIC_DOWN row32 dispatch semantics over expert-tile metadata",
+    "executable-local shared-memory gate/up row-span projection proof",
+    "executable-local shared-memory tile16 atomic down row-span projection proof",
+    "synchronized Q8 input, IQ2 lookup/sign, and Q2 block-sum staging behavior",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "tile16 or rowspan scheduling and shared-cache specialization",
-    "Q4_K, hyperconnection, runtime graph integration, default CUDA route, or C CUDA removal",
+    "generic and sorted qwarp quantized routed-MoE fallback paths",
+    "hyperconnection, runtime graph integration, default CUDA route, or C CUDA removal",
 ]
 
 
@@ -72,7 +72,7 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.5c2c4 routed MoE atomic-down smoke: {status} ({report.checks} checks)")
+    print(f"M14.5c2e routed MoE shared-cache smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
@@ -85,8 +85,8 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.routed_moe_atomic_down_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.5c2c4", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.routed_moe_shared_cache_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.5c2e", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "revision drift")
@@ -103,12 +103,13 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
     for marker in [
-        "const uint32_t use_atomic_down = use_expert_tiles &&",
-        'getenv("DS4_CUDA_MOE_ATOMIC_DOWN") != NULL',
-        "zero_kernel<<<(n + 255u) / 256u, 256>>>((float *)out->ptr, n);",
-        "moe_down_expert_tile8_row32_kernel<<<tgrid, 256>>>",
-        "moe_down_expert_tile4_row32_kernel<<<tgrid, 256>>>",
-        "atomicAdd(down_out + (uint64_t)tok * out_dim + row, acc[p]);",
+        "__global__ static void moe_gate_up_mid_expert_tile8_rowspan_kernel(",
+        "__global__ static void moe_down_expert_tile16_rowspan_kernel(",
+        "__shared__ cuda_block_q8_K sxq[8][16];",
+        "__shared__ uint64_t s_iq2_grid[256];",
+        "__shared__ uint8_t s_iq2_signs[128];",
+        "__shared__ cuda_block_q8_K sxq[16][8];",
+        "__syncthreads();",
     ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
 
@@ -119,24 +120,19 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim drift")
     for key, expected in [
         ("opt_in_only", True),
-        ("consumes_tile_row32_projection_surface", True),
-        ("owns_device_atomic_f32_fetch_add", True),
-        ("owns_zero_kernel_for_atomic_down", True),
-        ("owns_tile4_and_tile8_row32_atomic_down_dispatch", True),
-        ("owns_tile16_or_rowspan_dispatch", False),
-        ("owns_shared_cache_specialization", False),
-        ("owns_q4_k_or_runtime_graph", False),
+        ("consumes_rowspan_projection_surface", True),
+        ("owns_shared_cache_specialization", True),
+        ("owns_gate_and_down_cached_rowspan_dispatch", True),
+        ("owns_hyperconnection_or_runtime_graph", False),
         ("changes_default_route", False),
         ("retains_current_c_cuda_oracle", True),
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_5C2C4_SCOPE",
-        "owns_device_atomic_f32_fetch_add: true",
-        "owns_zero_kernel_for_atomic_down: true",
-        "owns_tile4_and_tile8_row32_atomic_down_dispatch: true",
-        "owns_tile16_or_rowspan_dispatch: false",
-        "owns_shared_cache_specialization: false",
+        "pub const M14_5C2E_SCOPE",
+        "owns_shared_cache_specialization: true",
+        "owns_gate_and_down_cached_rowspan_dispatch: true",
+        "owns_hyperconnection_or_runtime_graph: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -147,52 +143,67 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("kube_context") == "hou2-prod1", "B300 context drift")
     report.check(execution.get("pod") == "ds4-rust-port-b300", "B300 pod drift")
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
-    report.check(execution.get("test_count") == 80, "feature test count drift")
+    report.check(execution.get("test_count") == 85, "feature test count drift")
     report.check(execution.get("backend_selected_target") == "sm_80", "target drift")
+    report.check(execution.get("uses_libdevice_link_path") is True, "libdevice proof missing")
     command = execution.get("command", "")
-    report.check("DS4_CUDA_MOE_ATOMIC_DOWN=1" in command, "atomic selector missing")
-    report.check("--features cuda-oxide-kernels" in command, "kernel command missing")
-    report.check("--bin ds4-cuda-routed-moe-tile8-row32-smoke" in command, "smoke command missing")
+    for selector in [
+        "DS4_CUDA_MOE_GATE_ROWSPAN=1",
+        "DS4_CUDA_MOE_ATOMIC_DOWN=1",
+        "DS4_CUDA_MOE_DOWN_TILE16=1",
+        "DS4_CUDA_MOE_DOWN_ROWSPAN=1",
+        "DS4_CUDA_MOE_SHARED_CACHE=1",
+    ]:
+        report.check(selector in command, f"selector missing: {selector}")
     expected = {
-        "milestone": "M14.5c2c4",
+        "milestone": "M14.5c2e",
         "device_name": "NVIDIA B300 SXM6 AC",
         "rust_kernel_toolchain": True,
-        "tile8_atomic_down_matches": True,
-        "tile4_atomic_down_matches": True,
-        "token_indexed_accumulation_matches": True,
-        "device_zero_before_atomic_matches": True,
+        "gate_shared_row512_matches": True,
+        "gate_shared_row1024_matches": True,
+        "gate_shared_row2048_matches": True,
+        "down_shared_row512_matches": True,
+        "down_shared_row1024_matches": True,
+        "down_shared_row2048_matches": True,
+        "shared_q8_input_staging_matches": True,
+        "shared_iq2_lut_staging_matches": True,
+        "shared_q2_bsum_staging_matches": True,
+        "tile8_and_tile16_metadata_retained": True,
         "negative_expert_bucket_zero_matches": True,
         "invalid_shape_rejected": True,
+        "uses_thread_block_sync": True,
         "uses_device_atomic_f32_fetch_add": True,
-        "consumes_tile_row32_projection_surface": True,
-        "owns_zero_kernel_for_atomic_down": True,
-        "owns_tile4_and_tile8_row32_atomic_down_dispatch": True,
-        "owns_tile16_or_rowspan_dispatch": False,
-        "owns_shared_cache_specialization": False,
-        "owns_q4_k_or_runtime_graph": False,
+        "uses_libdevice_link_path": True,
+        "consumes_rowspan_projection_surface": True,
+        "owns_shared_cache_specialization": True,
+        "owns_gate_and_down_cached_rowspan_dispatch": True,
+        "owns_hyperconnection_or_runtime_graph": False,
         "changes_default_route": False,
     }
     report.check(require_dict(report, execution.get("stdout"), "stdout") == expected, "stdout drift")
     for marker in [
-        "pub fn zero_kernel",
-        "DeviceAtomicF32",
-        "output.fetch_add(accumulator, AtomicOrdering::Relaxed)",
-        'std::env::var_os("DS4_CUDA_MOE_ATOMIC_DOWN")',
-        "expected_atomic_down",
-        "owns_zero_kernel_for_atomic_down",
+        "pub fn moe_gate_up_mid_expert_tile8_rowspan_cached_kernel",
+        "pub fn moe_down_expert_tile16_rowspan_cached_kernel",
+        "SharedArray<f32, { 8 * CACHED_GATE_MAX_BLOCKS }>",
+        "SharedArray<i32, { 16 * CACHED_DOWN_MAX_BLOCKS * 16 }>",
+        "thread::sync_threads();",
+        'std::env::var_os("DS4_CUDA_MOE_SHARED_CACHE")',
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture = "ds4-parity/baselines/backend/m14.5c2c4/routed-moe-atomic-down-smoke.json"
-    checker = "check_routed_moe_atomic_down_smoke.py"
-    item = "M14.5c2c4: Atomic Expert-Tile Down Output"
+    fixture = "ds4-parity/baselines/backend/m14.5c2e/routed-moe-shared-cache-smoke.json"
+    checker = "check_routed_moe_shared_cache_smoke.py"
+    item = "M14.5c2e: Shared-Cache Expert-Tile Projection"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE" in texts["status"], "next active missing")
+    report.check(
+        "Active item: M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE" in texts["status"],
+        "next active missing",
+    )
     report.check(item.replace(":", "") in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report wiring missing")
@@ -200,9 +211,9 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("tile8 atomic absent", lambda value: value["b300_execution"]["stdout"].update({"tile8_atomic_down_matches": False})),
-        ("tile4 atomic absent", lambda value: value["b300_execution"]["stdout"].update({"tile4_atomic_down_matches": False})),
-        ("tile16 overclaim", lambda value: value["ownership"].update({"owns_tile16_or_rowspan_dispatch": True})),
+        ("gate cache absent", lambda value: value["b300_execution"]["stdout"].update({"gate_shared_row2048_matches": False})),
+        ("down cache absent", lambda value: value["b300_execution"]["stdout"].update({"down_shared_row2048_matches": False})),
+        ("runtime overclaim", lambda value: value["ownership"].update({"owns_hyperconnection_or_runtime_graph": True})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)

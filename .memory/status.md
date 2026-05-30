@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.5c2e Shared-Cache Expert-Tile Projection
+- Active item: M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.5c2d Single-Token Q4_K Routed MoE.
+- Last validated source before the active item: M14.5c2e Shared-Cache Expert-Tile Projection.
+- Earlier M14.5c2d Single-Token Q4_K Routed MoE.
 - Earlier M14.5c2c7 Down Tile16 Rowspan Projection.
 - Earlier M14.5c2c6 Gate Tile8 Rowspan Projection.
 - Earlier M14.5c2c5 Tile16 Row32 Atomic Down.
@@ -220,6 +221,21 @@
 
 ## Last Evidence
 
+- M14.5c2e Shared-Cache Expert-Tile Projection adds opt-in
+  `DS4_CUDA_MOE_SHARED_CACHE=1` cached gate/up and tile16 atomic-down
+  row-span kernels in the existing executable-local Rust smoke binary. The
+  kernels stage Q8 data, fixture IQ2 lookup/sign entries, and Q2 block sums
+  in synchronized `SharedArray` storage. On B300 pod `ds4-rust-port-b300`,
+  feature-enabled `ds4-cuda` tests passed with 85 tests; live cargo-oxide
+  execution found ten kernels, emitted portable `sm_80` PTX through
+  libdevice, and matched row512, row1024, and row2048 gate/down output on
+  `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.5c2e/routed-moe-shared-cache-smoke.json`
+  and `ds4-parity/check_routed_moe_shared_cache_smoke.py --negative-test`.
+  Generic/sorted qwarp fallback projection, hyperconnection, runtime route
+  activation, and C CUDA removal remain unclaimed. Local formatting, diff
+  and library tests, the M14.5c2e comparator, retained selector checks, and
+  unified parity passed with 169 passed, 45 skipped, and 0 failed.
 - M14.5c2d Single-Token Q4_K Routed MoE adds an opt-in
   `DS4_CUDA_MOE_Q4_K=1` route in the existing executable-local Rust
   quantized single-token smoke binary, implementing packed Q4_K/Q8_K

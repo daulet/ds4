@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2e
+- Status: active; split beginning with M14.5a through M14.5c2f
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8979,6 +8979,29 @@
 
 ##### M14.5c2e: Shared-Cache Expert-Tile Projection
 
-- Status: active
+- Status: done
 - Goal: port current-C expert-tile shared-memory staging for Q8 input blocks
   and IQ2 lookup/sign tables before beginning hyperconnection kernels.
+- Evidence:
+  - Added opt-in `DS4_CUDA_MOE_SHARED_CACHE=1` cached row-span gate/up and
+    tile16 atomic-down kernels in
+    `rust/ds4-cuda/src/bin/routed_moe_tile8_row32_smoke.rs`, with
+    synchronized `SharedArray` staging of Q8 values, fixture IQ2 tables, and
+    Q2 block sums.
+  - Captured B300 evidence in
+    `ds4-parity/baselines/backend/m14.5c2e/routed-moe-shared-cache-smoke.json`
+    with comparator
+    `ds4-parity/check_routed_moe_shared_cache_smoke.py --negative-test`.
+  - Live B300 execution emitted portable `sm_80` PTX through libdevice,
+    matched row512/row1024/row2048 gate and down outputs, and passed feature
+    tests with 85 tests. Generic/sorted qwarp fallback projection,
+    hyperconnection, runtime route activation, and C CUDA removal remain
+    unclaimed. Local formatting, diff and library tests, the M14.5c2e
+    comparator, retained selector checks, and unified parity passed with 169
+    passed, 45 skipped, and 0 failed.
+
+##### M14.5c2f: Generic And Sorted Qwarp Quantized Routed MoE
+
+- Status: active
+- Goal: port current-C quantized fallback projections selected when
+  decode-LUT or sorted-P2/expert-tile scheduling is disabled.

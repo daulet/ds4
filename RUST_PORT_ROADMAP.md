@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2e.
+- Status: active; split beginning with M14.5a through M14.5c2f.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -9061,10 +9061,36 @@ Stage split:
 
 ##### M14.5c2e: Shared-Cache Expert-Tile Projection
 
-- Status: active.
+- Status: done.
 - Goal: port the current-C expert-tile gate/down specialization that stages
   Q8 blocks and IQ2 lookup tables in shared memory before starting
   hyperconnection kernels.
+- Evidence:
+  - Added opt-in `DS4_CUDA_MOE_SHARED_CACHE=1` cached row-span kernels in the
+    existing expert-tile smoke binary, composed with gate-rowspan and tile16
+    atomic-down selectors.
+  - The Rust kernels stage Q8 scale/value data, fixture IQ2 lookup/sign data,
+    and Q2 block sums in `SharedArray` storage with block synchronization
+    before dot products.
+  - The fixture and comparator are
+    `ds4-parity/baselines/backend/m14.5c2e/routed-moe-shared-cache-smoke.json`
+    and `ds4-parity/check_routed_moe_shared_cache_smoke.py --negative-test`.
+  - B300 feature tests passed with 85 tests; live cargo-oxide execution found
+    ten kernels, emitted portable `sm_80` PTX through libdevice, and matched
+    shared-cache gate/down output for row spans `512`, `1024`, and `2048` on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff and library tests, the M14.5c2e comparator, the
+    retained selector checks, and unified parity passed with 169 passed, 45
+    skipped, and 0 failed.
+  - Generic/sorted qwarp fallback projection, hyperconnection, runtime graph
+    integration, default route activation, and C CUDA removal remain
+    unclaimed.
+
+##### M14.5c2f: Generic And Sorted Qwarp Quantized Routed MoE
+
+- Status: active.
+- Goal: port the selectable current-C quantized fallback projections used
+  when decode-LUT or sorted-P2/expert-tile scheduling is disabled.
 
 ## Removal Criteria for C Host Code
 

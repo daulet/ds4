@@ -1,0 +1,83 @@
+{
+  "schema": "ds4.routed_moe_shared_cache_smoke.v1",
+  "milestone": "M14.5c2e",
+  "status": "b300-pass",
+  "id": "m14.5c2e-routed-moe-shared-cache",
+  "goal": "Prove opt-in Rust cuda-oxide shared-memory expert-tile row-span projection for routed MoE gate/up and atomic down output.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "485bdd86fc1c900ad15ebd421b3b187619fe0903",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] shared-cache routed MoE rowspan kernels"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "moe_gate_up_mid_expert_tile8_rowspan_kernel shared Q8 and IQ2 LUT/sign staging",
+      "moe_down_expert_tile16_rowspan_kernel shared Q8 staging for atomic down output",
+      "row512, row1024, and row2048 functional output equivalence after synchronized staging"
+    ],
+    "excluded_behavior": [
+      "generic and sorted qwarp quantized routed-MoE fallback paths",
+      "hyperconnection, runtime graph integration, default route activation, and C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "executable-local shared-memory gate/up row-span projection proof",
+      "executable-local shared-memory tile16 atomic down row-span projection proof",
+      "synchronized Q8 input, IQ2 lookup/sign, and Q2 block-sum staging behavior"
+    ],
+    "not_claimed_in_this_stage": [
+      "generic and sorted qwarp quantized routed-MoE fallback paths",
+      "hyperconnection, runtime graph integration, default CUDA route, or C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "consumes_rowspan_projection_surface": true,
+    "owns_shared_cache_specialization": true,
+    "owns_gate_and_down_cached_rowspan_dispatch": true,
+    "owns_hyperconnection_or_runtime_graph": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 85,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 DS4_CUDA_MOE_GATE_ROWSPAN=1 DS4_CUDA_MOE_ATOMIC_DOWN=1 DS4_CUDA_MOE_DOWN_TILE16=1 DS4_CUDA_MOE_DOWN_ROWSPAN=1 DS4_CUDA_MOE_SHARED_CACHE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-routed-moe-tile8-row32-smoke",
+    "backend_selected_target": "sm_80",
+    "uses_libdevice_link_path": true,
+    "stdout": {
+      "milestone": "M14.5c2e",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "gate_shared_row512_matches": true,
+      "gate_shared_row1024_matches": true,
+      "gate_shared_row2048_matches": true,
+      "down_shared_row512_matches": true,
+      "down_shared_row1024_matches": true,
+      "down_shared_row2048_matches": true,
+      "shared_q8_input_staging_matches": true,
+      "shared_iq2_lut_staging_matches": true,
+      "shared_q2_bsum_staging_matches": true,
+      "tile8_and_tile16_metadata_retained": true,
+      "negative_expert_bucket_zero_matches": true,
+      "invalid_shape_rejected": true,
+      "uses_thread_block_sync": true,
+      "uses_device_atomic_f32_fetch_add": true,
+      "uses_libdevice_link_path": true,
+      "consumes_rowspan_projection_surface": true,
+      "owns_shared_cache_specialization": true,
+      "owns_gate_and_down_cached_rowspan_dispatch": true,
+      "owns_hyperconnection_or_runtime_graph": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.5c2f Generic And Sorted Qwarp Quantized Routed MoE"
+}

@@ -2884,6 +2884,17 @@ Q4_K/Q8_K gate/up and direct six-expert down output with optional auxiliary
 writes. It leaves shared-cache expert-tile specialization, hyperconnection,
 runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2e Rust CUDA routed MoE shared-cache smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_shared_cache_smoke.py --negative-test
+```
+
+The fixture records current-C expert-tile shared-memory behavior on B300:
+synchronized cached Q8/IQ2/Q2 inputs and row512, row1024, and row2048
+gate/down output equivalence. It leaves generic/sorted qwarp fallback
+projection, hyperconnection, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
