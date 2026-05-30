@@ -3326,6 +3326,21 @@ device-copy fallback rather than retrying a buffered fd upload. Staged
 allocation, fd-read, event, and final synchronization failure observations,
 whole-archive retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba Rust CUDA public fd stage
+pool reuse ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_stage_pool_reuse_smoke.py --negative-test
+```
+
+The fixture selects buffered fd caching from a C-linked B300 consumer,
+creates one four-slot pinned stage pool, then arms `cuMemAllocHost_v2`
+failure before a second disjoint range. File-backed weighted output from the
+second range proves the sufficient stage pool is reused without another
+pinned allocation or registration fallback. Initial allocation and
+pool-growth failure, fd-read, event, and final synchronization observations,
+whole-archive retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

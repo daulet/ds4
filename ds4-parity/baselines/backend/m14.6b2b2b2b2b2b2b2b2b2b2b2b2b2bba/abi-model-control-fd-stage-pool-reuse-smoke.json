@@ -1,0 +1,80 @@
+{
+  "schema": "ds4.cuda_abi_model_control_fd_stage_pool_reuse_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba",
+  "status": "b300-pass-staticlib-fd-stage-pool-reuse-abi",
+  "goal": "Rust-own the current-C retained public fd staging-pool lifetime so a second cached range reuses the existing four pinned stage slots instead of allocating a fresh pool.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "cuda_model_stage_pool_alloc",
+      "cuda_model_range_ptr_from_fd",
+      "ds4_gpu_cleanup"
+    ],
+    "semantics": [
+      "current C keeps four g_model_stage_raw slots and their event handles after a successful fd upload",
+      "cuda_model_stage_pool_alloc immediately reuses an existing pool whenever g_model_stage_bytes is sufficient",
+      "ds4_gpu_cleanup destroys the retained staging pool, while model-map replacement leaves it available for later fd ranges"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba/abi_model_control_fd_stage_pool_reuse_link_smoke.c",
+    "selection_path": "upload_abi_async_fd_range_into retains a Linux-only four-slot pinned stage pool independently from model arenas, replaces it only when a larger stage buffer is required, and releases it during public cleanup",
+    "live_boundary": "the linked consumer caches one buffered-fd range, arms cuMemAllocHost_v2 failure before caching a second disjoint range, and requires the second range to use fd bytes without triggering another pinned allocation or registration fallback",
+    "remaining_policy_boundary": "the pool-lifetime slice does not separately force initial staging allocation failure, growth replacement failure, fd read, event, final synchronization, q8/f16, graph-compute, or route-promotion boundaries"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_retained_four_slot_fd_stage_pool": true,
+    "owns_stage_pool_cleanup_boundary": true,
+    "owns_live_second_range_reuse_observation": true,
+    "owns_live_armed_second_allocation_suppression_observation": true,
+    "owns_remaining_failure_selection": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 114,
+    "feature_release_test_count": 121,
+    "forced_boundary": {
+      "interposed_symbol": "cuMemAllocHost_v2",
+      "armed_second_range_allocation_error": 2,
+      "registration_failure_error": 801
+    },
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "buffered_fd_selection_active": true,
+      "four_slot_stage_pool_created_once": true,
+      "second_range_reuses_stage_pool": true,
+      "armed_second_allocation_failure_not_triggered": true,
+      "fd_bytes_win_after_pool_reuse": true,
+      "cached_ranges_retain_original_fd_bytes": true,
+      "registration_fallback_not_entered_for_second_range": true,
+      "weighted_outputs_match": true,
+      "embedded_libdevice_module_loaded": true,
+      "staticlib_export_count_unchanged": true,
+      "fd_upload_failure_continuation_regression_passed": true,
+      "fd_arena_failure_regression_passed": true,
+      "fd_budget_cache_result_regression_passed": true,
+      "default_fd_regression_passed": true,
+      "direct_io_async_staging_regression_passed": true,
+      "registration_disable_regression_passed": true
+    }
+  },
+  "integration_risks": [
+    "the live linked consumer arms the cuda-oxide pinned-allocation symbol cuMemAllocHost_v2 only after the first public fd range establishes the retained pool and proves that reuse avoids the armed failure",
+    "initial staging allocation failure, larger-pool replacement failure, fd read, event, and final stream-synchronization failure routes remain separate observations",
+    "q8/f16 hooks, production linker selection, remaining graph compute exports, and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb Remaining Residual Failure Selection Policy"
+}

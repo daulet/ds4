@@ -10452,6 +10452,50 @@ Stage split:
 
 ##################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb because the public Rust fd path must
+  retain the four-slot staging pool across cached ranges before remaining
+  failure observations can be isolated.
+- Goal: connect remaining model-control failure selection without claiming
+  remaining graph compute or route promotion.
+
+###################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba: Public Fd Stage Pool Reuse ABI
+
+- Status: done.
+- Goal: preserve current-C public fd stage-pool lifetime so successful range
+  uploads retain and reuse four pinned staging slots until cleanup.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba/abi-model-control-fd-stage-pool-reuse-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_stage_pool_reuse_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now owns a Linux-only public stage pool
+    independently from fd arenas, keeps sufficient slots across later range
+    uploads and model-map replacement, and releases them during public
+    cleanup.
+  - A C-linked B300 consumer selects buffered fd caching, establishes one
+    four-slot pool, then arms `cuMemAllocHost_v2` failure before caching a
+    second disjoint range. File-backed output from the second range proves
+    no fresh stage allocation or registration fallback occurs after reuse.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 114 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 121 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - Fd-upload failure continuation, fd-arena failure, fd-budget cache-result,
+    default-fd, direct-I/O asynchronous-staging, and registration-disable
+    C-linked B300 consumers pass against the rebuilt archive.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_fd_stage_pool_reuse_smoke.py
+    --negative-test` passes with 105 checks, and the default unified parity
+    report passes with 200 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Initial stage allocation and pool-growth failure, fd-read, event, and
+    final synchronization observations remain separate; route promotion and
+    the generated `.note.GNU-stack` warning remain open.
+
+###################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb: Remaining Residual Failure Selection Policy
+
 - Status: active.
 - Goal: connect remaining model-control failure selection without claiming
   remaining graph compute or route promotion.

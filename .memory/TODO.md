@@ -10005,6 +10005,42 @@
 
 ##################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb because the public Rust fd path must
+  retain the four-slot staging pool across cached ranges before remaining
+  failure observations can be isolated.
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.
+
+###################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba: Public Fd Stage Pool Reuse ABI
+
+- Status: done
+- Goal: preserve current-C public fd stage-pool lifetime so successful range
+  uploads retain and reuse four pinned staging slots until cleanup.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba/abi-model-control-fd-stage-pool-reuse-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_stage_pool_reuse_smoke.py --negative-test`.
+- Evidence: Rust now keeps a Linux-only public fd staging pool independently
+  from device arenas, reuses sufficient slots for later range uploads and
+  model-map replacement, and releases it at public cleanup. A C-linked B300
+  consumer selects buffered fd caching, establishes one four-slot pool, arms
+  `cuMemAllocHost_v2` failure before a second disjoint range, and proves
+  file-backed weighted output without another allocation or registration
+  fallback. Local tests pass with 114 tests, B300 release-feature tests pass
+  with 121 tests, and the static library retains 29 exports. Fd-upload
+  failure continuation, fd-arena failure, fd-budget cache-result, default-fd,
+  direct-I/O asynchronous-staging, and registration-disable linked consumers
+  pass against the rebuilt archive. The focused comparator passes with 105
+  checks, and the default unified parity report passes with 200
+  passed, 45 skipped, and 0 failed. The required non-interactive Claude
+  review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed
+  findings. Initial stage allocation and pool-growth failure, fd-read,
+  event, and final synchronization observations, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+###################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb: Remaining Residual Failure Selection Policy
+
 - Status: active
 - Goal: connect remaining model-control failure selection without claiming
   graph compute closure or route promotion.

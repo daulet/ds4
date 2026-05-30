@@ -30,6 +30,11 @@ static ABI_MODEL_ARENAS: Mutex<AbiModelArenaState> = Mutex::new(AbiModelArenaSta
         tty: false,
     },
 });
+#[cfg(target_os = "linux")]
+static ABI_MODEL_STAGE_POOL: Mutex<AbiModelStagePool> = Mutex::new(AbiModelStagePool {
+    slots: Vec::new(),
+    stage_bytes: 0,
+});
 static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::new(None);
 static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
 static ABI_REGISTERED_MODEL: Mutex<Option<AbiRegisteredModel>> = Mutex::new(None);
@@ -66,6 +71,18 @@ struct AbiModelArenaState {
     range_bytes: u64,
     cache_full: bool,
     progress: AbiModelLoadProgress,
+}
+
+#[cfg(target_os = "linux")]
+struct AbiModelStageSlot {
+    staging: PinnedHostBuffer<u8>,
+    event: Option<CudaEvent>,
+}
+
+#[cfg(target_os = "linux")]
+struct AbiModelStagePool {
+    slots: Vec<AbiModelStageSlot>,
+    stage_bytes: usize,
 }
 
 #[cfg(target_os = "linux")]
@@ -823,11 +840,20 @@ fn upload_abi_async_fd_range_into(
     let alignment = ABI_MODEL_CONTROL.lock().ok()?.model_direct_align.max(1);
     let alignment = usize::try_from(alignment).ok()?;
     let stage_bytes = chunk_bytes.checked_add(alignment.checked_mul(2)?)?;
-    let mut staging = Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS);
-    let mut events: Vec<Option<CudaEvent>> = Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS);
-    for _ in 0..ABI_DIRECT_FD_STAGE_SLOTS {
-        staging.push(backend.pinned_zeroed::<u8>(stage_bytes).ok()?);
-        events.push(None);
+    let mut stage_pool = ABI_MODEL_STAGE_POOL.lock().ok()?;
+    if stage_pool.stage_bytes < stage_bytes {
+        if !stage_pool.slots.is_empty() {
+            backend.synchronize().ok()?;
+        }
+        stage_pool.slots.clear();
+        stage_pool.stage_bytes = 0;
+        for _ in 0..ABI_DIRECT_FD_STAGE_SLOTS {
+            stage_pool.slots.push(AbiModelStageSlot {
+                staging: backend.pinned_zeroed::<u8>(stage_bytes).ok()?,
+                event: None,
+            });
+        }
+        stage_pool.stage_bytes = stage_bytes;
     }
     let upload_result = (|| -> Option<bool> {
         let mut copied = 0usize;
@@ -836,14 +862,15 @@ fn upload_abi_async_fd_range_into(
         while copied < bytes {
             let this_chunk = (bytes - copied).min(chunk_bytes);
             let slot = chunk_index % ABI_DIRECT_FD_STAGE_SLOTS;
-            if let Some(event) = events[slot].take() {
+            let stage_slot = stage_pool.slots.get_mut(slot)?;
+            if let Some(event) = stage_slot.event.take() {
                 event.synchronize().ok()?;
             }
             let file_offset = offset.checked_add(u64::try_from(copied).ok()?)?;
             let (payload_offset, direct) = if use_direct_io {
                 read_abi_direct_or_buffered_fd_stage(
                     fd,
-                    &mut staging[slot],
+                    &mut stage_slot.staging,
                     file_offset,
                     this_chunk,
                 )?
@@ -851,7 +878,7 @@ fn upload_abi_async_fd_range_into(
                 read_abi_buffered_fd_into(
                     fd,
                     file_offset,
-                    &mut staging[slot].as_mut_slice()[..this_chunk],
+                    &mut stage_slot.staging.as_mut_slice()[..this_chunk],
                 )?;
                 (0, false)
             };
@@ -860,13 +887,13 @@ fn upload_abi_async_fd_range_into(
                     .enqueue_pinned_u8_range_async(
                         device,
                         device_offset.checked_add(copied)?,
-                        &staging[slot],
+                        &stage_slot.staging,
                         payload_offset,
                         this_chunk,
                     )
                     .ok()?;
             }
-            events[slot] = Some(backend.record_event().ok()?);
+            stage_slot.event = Some(backend.record_event().ok()?);
             let this_chunk = u64::try_from(this_chunk).ok()?;
             abi_model_drop_file_pages(fd, file_offset, this_chunk)?;
             abi_model_discard_source_pages(model_map, model_size, file_offset, this_chunk)?;
@@ -881,6 +908,11 @@ fn upload_abi_async_fd_range_into(
         Some(used_direct)
     })();
     let synchronize_ok = backend.synchronize().is_ok();
+    if synchronize_ok {
+        for slot in &mut stage_pool.slots {
+            slot.event = None;
+        }
+    }
     let used_direct = upload_result?;
     if !synchronize_ok {
         return None;
@@ -1411,6 +1443,11 @@ pub extern "C" fn ds4_gpu_cleanup() {
                 model_arenas.range_bytes = 0;
                 model_arenas.cache_full = false;
                 model_arenas.progress.reset();
+            }
+            #[cfg(target_os = "linux")]
+            if let Ok(mut stage_pool) = ABI_MODEL_STAGE_POOL.lock() {
+                stage_pool.slots.clear();
+                stage_pool.stage_bytes = 0;
             }
             if let Ok(mut pageable_range) = ABI_PAGEABLE_MODEL_RANGE.lock() {
                 *pageable_range = None;

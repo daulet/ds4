@@ -148,10 +148,10 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         "    )? {",
         "let (payload_offset, direct) = if use_direct_io",
         "read_abi_buffered_fd_into(",
-        "Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS)",
+        "let mut stage_pool = ABI_MODEL_STAGE_POOL.lock().ok()?;",
         "event.synchronize().ok()?;",
         "enqueue_pinned_u8_range_async(",
-        "events[slot] = Some(backend.record_event().ok()?);",
+        "stage_slot.event = Some(backend.record_event().ok()?);",
     ]:
         report.check(marker in texts["abi"], f"Rust buffered async marker missing: {marker}")
     for marker in [
@@ -250,7 +250,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb Remaining Residual Failure Selection Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb Remaining Residual Failure Selection Policy" in texts["status"],
         "active item missing",
     )
     report.check("M14.6b2b2b2b2b2b2b2b2b1 Public Buffered Fd Async Staging ABI" in texts["status"], "status evidence missing")

@@ -137,11 +137,11 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         "const ABI_DIRECT_FD_STAGE_SLOTS: usize = 4;",
         "fn abi_model_copy_chunk_bytes_from_value(",
         "fn read_abi_direct_or_buffered_fd_stage(",
-        "Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS)",
+        "let mut stage_pool = ABI_MODEL_STAGE_POOL.lock().ok()?;",
         "let slot = chunk_index % ABI_DIRECT_FD_STAGE_SLOTS;",
         "event.synchronize().ok()?;",
         "enqueue_pinned_u8_range_async(",
-        "events[slot] = Some(backend.record_event().ok()?);",
+        "stage_slot.event = Some(backend.record_event().ok()?);",
         "let synchronize_ok = backend.synchronize().is_ok();",
         "fn public_direct_io_async_chunk_override_matches_current_c_clamp()",
     ]:
@@ -235,7 +235,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bb Remaining Residual Failure Selection Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbb Remaining Residual Failure Selection Policy" in texts["status"],
         "active item missing",
     )
     report.check("M14.6b2b2b2b2b2b2b2b2a Public Direct-I/O Async Staging ABI" in texts["status"], "status evidence missing")
