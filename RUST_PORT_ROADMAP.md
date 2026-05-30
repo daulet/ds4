@@ -7233,7 +7233,9 @@ Stage split:
   split into M14.2b1 and M14.2b2 after B300 exposed an independent
   libdevice/NVVM blocker for SwiGLU; M14.2d split into M14.2d1 and M14.2d2
   because scalar selection and optimized dispatch have distinct ownership
-  claims.
+  claims; M14.2d2 split into M14.2d2a through M14.2d2c because direct-one
+  warp reduction, tensor-core scoring, and specialized top-k selection use
+  separate cuda-oxide surfaces.
 - Goal: port the M14.2 operation family through bounded Rust CUDA kernel
   slices while retaining current-C oracles and the opt-in-only route.
 - Stage split:
@@ -7242,7 +7244,9 @@ Stage split:
   - M14.2b2: SwiGLU Libdevice Path.
   - M14.2c: Embedding Kernel Pair.
   - M14.2d1: Scalar Indexer Selection Kernels.
-  - M14.2d2: Optimized Indexer And Top-K Dispatch.
+  - M14.2d2a: Direct-One Indexer Score Kernel.
+  - M14.2d2b: Tensor-Core Indexer Score Kernels.
+  - M14.2d2c: Specialized Top-K Kernels.
   - M14.2e: M14.2 Kernel Closure Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
@@ -7430,11 +7434,57 @@ Stage split:
 
 ##### M14.2d2: Optimized Indexer And Top-K Dispatch
 
-- Status: active.
+- Status: split before implementation into M14.2d2a through M14.2d2c.
 - Goal: port or explicitly close ownership of current-C direct/WMMA score
   selection and specialized top-k dispatch after scalar fallback is proven.
 - Oracle: current-C direct-one and WMMA score kernels plus specialized
   power-of-two, CUB, chunked, merged, and tree top-k launch branches.
+
+##### M14.2d2a: Direct-One Indexer Score Kernel
+
+- Status: done.
+- Goal: port current-C's fixed-shape direct-one score kernel with the same
+  four-warp shuffle reduction before tensor-core or specialized top-k work.
+- Oracle: current-C `indexer_score_one_direct_kernel` and the
+  `n_tokens == 1`, `head_dim == 128`, `n_head == 64` launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2a/indexer-direct-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_direct_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Acceptance: Rust owns only the direct-one fixed-shape kernel and its
+  host-side bounds validation; WMMA score branches, specialized top-k
+  dispatch, route activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `indexer_score_one_direct_kernel` with
+    current-C-shaped 128-thread geometry, four-warps-per-head-group
+    reduction, `warp::shuffle_down_f32` accumulation, positive-score
+    weighting, and causal negative-infinity masking.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 27 tests and live cargo-oxide execution lowered the warp shuffle,
+    emitted portable `sm_80` PTX, and proved direct output, causal masking,
+    NaN/negative clamp behavior, and invalid-shape rejection on
+    `NVIDIA B300 SXM6 AC`.
+  - Local workspace tests, formatter/diff checks, the 66-check direct
+    indexer comparator, and unified parity passed with 119 passed, 45
+    skipped, and 0 failed. Non-interactive Claude review produced no
+    completed result before its timeout; adversarial self-review confirmed
+    lane/head grouping, shuffle-down reduction, explicit NaN clamp handling,
+    and the WMMA/top-k non-claims.
+  - This stage remains opt-in; it does not claim WMMA scoring, specialized
+    top-k dispatch, runtime route, or C CUDA removal ownership.
+
+##### M14.2d2b: Tensor-Core Indexer Score Kernels
+
+- Status: active.
+- Goal: port the 16/32/64/128-component WMMA score branches through
+  cuda-oxide's warp-scoped MMA surface.
+
+##### M14.2d2c: Specialized Top-K Kernels
+
+- Status: pending.
+- Goal: port the shared-memory, CUB-equivalent, chunked, merge, tree-merge,
+  and indexed ascending-sort top-k kernels.
 
 ## Removal Criteria for C Host Code
 

@@ -102,3 +102,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-indexer-scalar-smoke"
 path = "src/bin/indexer_scalar_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-indexer-direct-smoke"
+path = "src/bin/indexer_direct_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

@@ -7589,11 +7589,15 @@
 
 - Status: split before implementation into M14.2a through M14.2e; M14.2b is
   further split after B300 exposed a separate libdevice/NVVM SwiGLU blocker;
-  M14.2d is split into scalar fallback proof and optimized dispatch ownership.
+  M14.2d is split into scalar fallback proof and optimized dispatch ownership;
+  M14.2d2 is split into direct-one, tensor-core score, and specialized top-k
+  slices.
 - Stage split: M14.2a Add And Repeat Elementwise Kernels; M14.2b1
   Directional Steering Projection Kernel; M14.2b2 SwiGLU Libdevice Path;
   M14.2c Embedding Kernel Pair; M14.2d1 Scalar Indexer Selection Kernels;
-  M14.2d2 Optimized Indexer And Top-K Dispatch; M14.2e Kernel Closure Gate.
+  M14.2d2a Direct-One Indexer Score Kernel; M14.2d2b Tensor-Core Indexer
+  Score Kernels; M14.2d2c Specialized Top-K Kernels; M14.2e Kernel Closure
+  Gate.
 
 ##### M14.2a: Add And Repeat Elementwise Kernels
 
@@ -7725,8 +7729,46 @@
 
 ##### M14.2d2: Optimized Indexer And Top-K Dispatch
 
-- Status: active
+- Status: split before implementation into M14.2d2a through M14.2d2c
 - Goal: port or explicitly close current-C direct/WMMA score and specialized
   top-k dispatch ownership after scalar fallback proof.
 - Oracle: direct-one and WMMA score kernels plus power-of-two, CUB, chunked,
   merged, and tree top-k launch branches.
+
+##### M14.2d2a: Direct-One Indexer Score Kernel
+
+- Status: done
+- Goal: port current-C's fixed-shape direct-one score kernel with its
+  four-warp shuffle reduction before tensor-core and top-k work.
+- Oracle: `indexer_score_one_direct_kernel` and its fixed-shape launch branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2d2a/indexer-direct-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_indexer_direct_kernel_smoke.py --negative-test` plus live
+  B300 cargo-oxide execution.
+- Evidence: added executable-local Rust `indexer_score_one_direct_kernel`
+  using 128-thread geometry, four-warp `warp::shuffle_down_f32` reduction,
+  positive-score weighting, causal masking, and host bounds rejection. B300
+  feature-enabled `ds4-cuda` tests passed with 27 tests and live cargo-oxide
+  execution emitted portable `sm_80` PTX and proved direct output, causal
+  masking, NaN/negative clamp behavior, and invalid-shape rejection on
+  `NVIDIA B300 SXM6 AC`. WMMA score dispatch, specialized top-k dispatch,
+  route activation, and C CUDA removal remain unclaimed. Local
+  formatter/diff checks, workspace tests, the 66-check direct indexer
+  comparator, and unified parity passed with 119 passed, 45 skipped, and 0
+  failed. Non-interactive Claude review produced no completed result before
+  its timeout; adversarial self-review confirmed the fixed lane/head
+  grouping, shuffle-down reduction, explicit NaN clamp, and non-claims.
+- Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.
+
+##### M14.2d2b: Tensor-Core Indexer Score Kernels
+
+- Status: active
+- Goal: port the 16/32/64/128-component WMMA score branches through
+  cuda-oxide warp-scoped MMA.
+
+##### M14.2d2c: Specialized Top-K Kernels
+
+- Status: pending
+- Goal: port specialized top-k sort, chunk, merge, tree, and indexed-sort
+  kernels.

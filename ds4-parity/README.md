@@ -2274,6 +2274,18 @@ scalar fallback scoring, causal masking, stable scalar top-k tie ordering,
 and top-k mask output while leaving direct/WMMA score dispatch, specialized
 top-k dispatch, runtime route, and C CUDA removal pending.
 
+Validate the M14.2d2a Rust CUDA direct-one indexer score kernel smoke:
+
+```sh
+python3 ds4-parity/check_indexer_direct_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `indexer_score_one_direct_kernel`
+execution on B300 through the same four-warp shuffle-down reduction shape as
+current C. It proves direct scoring, causal masking, and NaN/negative clamp
+behavior while leaving tensor-core scoring, specialized top-k dispatch,
+runtime route, and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

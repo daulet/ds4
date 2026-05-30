@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2d2 Optimized Indexer And Top-K Dispatch
+- Active item: M14.2d2b Tensor-Core Indexer Score Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -25,7 +25,11 @@
   exposing a separate libdevice/NVVM executable blocker for SwiGLU. M14.2d
   is further split into M14.2d1 and M14.2d2 because scalar fallback
   selection and optimized dispatch have distinct ownership boundaries.
-- Last validated source before the active item: M14.2d1 Scalar Indexer Selection Kernels.
+  M14.2d2 is further split into M14.2d2a through M14.2d2c because direct-one
+  warp reduction, tensor-core score kernels, and specialized top-k kernels
+  depend on distinct cuda-oxide primitives.
+- Last validated source before the active item: M14.2d2a Direct-One Indexer Score Kernel.
+- Earlier M14.2d1 Scalar Indexer Selection Kernels.
 - Earlier M14.2c Embedding Kernel Pair.
 - Earlier M14.2b2 SwiGLU Libdevice Path.
 - Earlier M14.2b1 Directional Steering Projection Kernel.
@@ -142,6 +146,24 @@
 
 ## Last Evidence
 
+- M14.2d2a Direct-One Indexer Score Kernel adds executable-local Rust
+  cuda-oxide `indexer_score_one_direct_kernel` with current-C-shaped
+  128-thread geometry, four-warp `warp::shuffle_down_f32` reduction,
+  positive-score weighting, and causal negative-infinity masking. On B300
+  pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 27
+  tests and live cargo-oxide execution lowered the warp shuffle, emitted
+  portable `sm_80` PTX, and proved direct output, causal masking,
+  NaN/negative clamp behavior, and invalid-shape rejection on
+  `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.2d2a/indexer-direct-kernel-smoke.json`
+  and `ds4-parity/check_indexer_direct_kernel_smoke.py --negative-test`.
+  WMMA score dispatch, specialized top-k dispatch, runtime route activation,
+  and C CUDA removal remain unclaimed. Local formatter/diff checks, workspace
+  tests, the 66-check direct indexer comparator, and unified parity passed
+  with 119 passed, 45 skipped, and 0 failed. Non-interactive Claude review
+  produced no completed result before its timeout; adversarial self-review
+  confirmed fixed lane/head grouping, shuffle-down reduction, explicit NaN
+  clamp behavior, and the WMMA/top-k non-claims.
 - M14.2d1 Scalar Indexer Selection Kernels adds executable-local Rust
   cuda-oxide `indexer_scores_kernel`, `indexer_topk_kernel`, and
   `topk_mask_kernel` paths matching current-C scalar fallback reduction,
