@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.1b2b3b2 Rust-owned asynchronous staging policy smoke."""
+"""Validate the M14.1b2c Rust-owned model-map cache closure smoke."""
 
 from __future__ import annotations
 
@@ -13,11 +13,10 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.1b2c/model-map-closure-smoke.json"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 MODEL_MAP = ROOT / "rust/ds4-cuda/src/model_map.rs"
-SUBSTRATE = ROOT / "rust/ds4-cuda/src/substrate.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/model_async_staging_smoke.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/model_map_closure_smoke.rs"
 CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -29,15 +28,14 @@ REVISION = "361300ea643688eea87eaa215d9a62a5e74a30e6"
 MODEL_SHA256 = "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
 MODEL_SIZE = 86720111488
 EXPECTED_RUST_OWNED = [
-    "four-slot CUDA-event-guarded pinned staging reuse for multi-chunk uploads",
-    "persistent direct-I/O disable-after-selected-error policy matching current-C errno classes",
-    "device arena suballocation and byte-budget admission or fallback",
-    "exact CUDA readback for admitted staged ranges",
+    "contained cached-range reuse and interior CUDA readback",
+    "Linux POSIX source-page discard advisory call policy after staged chunks",
+    "explicit non-TTY model-load progress emission and suppression policy",
+    "RAII cache lifetime and new-cache reset state",
 ]
 EXPECTED_NOT_CLAIMED = [
-    "live induction of direct-I/O error disable branch on B300",
-    "file or mmap source-page discard advice",
-    "model-load progress reporting",
+    "physical eviction of source pages after advisory calls",
+    "default runtime environment or terminal-mode selection wiring",
     "model-range consumption by DS4 compute kernels",
     "runtime graph or default CUDA route",
 ]
@@ -64,7 +62,6 @@ def main(argv: Iterable[str]) -> int:
     texts = {
         "lib": CRATE_LIB.read_text(encoding="utf-8"),
         "model_map": MODEL_MAP.read_text(encoding="utf-8"),
-        "substrate": SUBSTRATE.read_text(encoding="utf-8"),
         "smoke": SMOKE.read_text(encoding="utf-8"),
         "cuda": CUDA_SOURCE.read_text(encoding="utf-8"),
         "roadmap": ROADMAP.read_text(encoding="utf-8"),
@@ -88,8 +85,8 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.model_async_staging_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.1b2b3b2", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.model_map_closure_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.1b2c", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("revision") == REVISION, "cuda-oxide revision drift")
@@ -105,16 +102,14 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
     for marker in [
-        "cuda_model_stage_pool_alloc",
-        "g_model_stage_event",
-        "cudaEventSynchronize",
-        "cudaEventRecord",
-        "cuda_model_stage_read",
-        "g_model_direct_fd = -1",
-        "cuda_model_arena_alloc",
-        "cuda_model_cache_limit_bytes",
-        "g_model_range_bytes",
-        "cuda_model_range_ptr_from_fd",
+        "cuda_model_range_ptr",
+        "g_model_range_by_offset",
+        "cuda_model_drop_file_pages",
+        "POSIX_FADV_DONTNEED",
+        "cuda_model_discard_source_pages",
+        "POSIX_MADV_DONTNEED",
+        "cuda_model_load_progress_note",
+        "cuda_model_range_release_all",
     ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
 
@@ -125,13 +120,10 @@ def validate_model_range(report: Report, fixture: dict[str, Any]) -> None:
     report.check(model.get("sha256") == MODEL_SHA256, "model hash drift")
     report.check(model.get("model_size") == MODEL_SIZE, "model size drift")
     for key, expected in [
-        ("copy_chunk_bytes", 4096),
-        ("first_range_offset", 13),
-        ("first_range_bytes", 24576),
-        ("second_range_offset", 24589),
-        ("second_range_bytes", 4096),
-        ("rejected_range_offset", 28685),
-        ("rejected_range_bytes", 1),
+        ("cached_offset", 13),
+        ("cached_bytes", 8192),
+        ("contained_offset", 4116),
+        ("contained_bytes", 257),
     ]:
         report.check(model.get(key) == expected, f"model range drift: {key}")
     identity = require_dict(report, model.get("identity_verification"), "identity_verification")
@@ -145,44 +137,38 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim scope drift")
     for key, expected in [
         ("opt_in_only", True),
-        ("owns_four_slot_event_ring", True),
-        ("owns_direct_io_disable_after_error_policy", True),
-        ("owns_arena_range_allocation", True),
-        ("owns_range_cache_budget_fallback", True),
-        ("owns_source_page_discard_policy", False),
-        ("owns_progress_reporting", False),
+        ("owns_containing_range_reuse", True),
+        ("owns_source_page_discard_policy", True),
+        ("owns_progress_reporting", True),
+        ("owns_raii_cache_cleanup", True),
         ("owns_ds4_kernels", False),
         ("changes_default_route", False),
         ("retains_current_c_cuda_oracle", True),
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_1B2B3B2_SCOPE",
-        "owns_four_slot_event_ring: true",
-        "owns_direct_io_disable_after_error_policy: true",
-        "owns_arena_range_allocation: true",
-        "owns_range_cache_budget_fallback: true",
-        "owns_source_page_discard_policy: false",
-        "owns_progress_reporting: false",
+        "pub const M14_1B2C_SCOPE",
+        "owns_containing_range_reuse: true",
+        "owns_source_page_discard_policy: true",
+        "owns_progress_reporting: true",
+        "owns_raii_cache_cleanup: true",
+        "owns_ds4_kernels: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
     for marker in [
-        "pub struct AsyncPinnedRangeCache",
-        "AsyncPinnedCacheOutcome::BudgetFallback",
-        "DirectIoPolicyState::DisabledAfterError",
-        "direct_io_error_disables",
-        "ASYNC_STAGE_SLOTS",
-        "event.synchronize()",
-        "substrate.record_event()",
-        "reserve_range",
-        "ARENA_ALIGNMENT",
-        "if aligned > self.config.cache_limit_bytes - self.range_bytes",
-        "let synchronize_result = substrate.synchronize()",
+        "pub enum ModelLoadProgressMode",
+        "fn discard_source_pages",
+        "libc::posix_fadvise",
+        "libc::POSIX_FADV_DONTNEED",
+        "libc::posix_madvise",
+        "libc::POSIX_MADV_DONTNEED",
+        "fn find_containing",
+        "self.progress.note",
+        "source_file_discard_calls",
+        "source_mapping_discard_calls",
     ]:
         report.check(marker in texts["model_map"], f"model-map marker missing: {marker}")
-    for marker in ["enqueue_pinned_u8_range_async", "CudaEvent", "record_event"]:
-        report.check(marker in texts["substrate"], f"substrate marker missing: {marker}")
 
 
 def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -192,82 +178,74 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
     report.check(execution.get("cuda_toolkit") == "13.2", "CUDA toolkit drift")
     report.check("--features cuda-oxide-backend" in execution.get("test_command", ""), "feature test command missing")
-    report.check("--bin ds4-cuda-model-async-staging-smoke" in execution.get("command", ""), "smoke command missing")
+    report.check("--bin ds4-cuda-model-map-closure-smoke" in execution.get("command", ""), "smoke command missing")
+    report.check(
+        execution.get("stderr_markers") == ["ds4: CUDA loading model tensors into device cache"],
+        "non-TTY progress marker drift",
+    )
     expected = {
-        "milestone": "M14.1b2b3b2",
+        "milestone": "M14.1b2c",
         "device_name": "NVIDIA B300 SXM6 AC",
         "model_size": MODEL_SIZE,
-        "copy_chunk_bytes": 4096,
-        "first_range_offset": 13,
-        "first_range_bytes": 24576,
-        "second_range_offset": 24589,
-        "second_range_bytes": 4096,
-        "rejected_range_offset": 28685,
-        "rejected_range_bytes": 1,
-        "direct_io_alignment": 4096,
-        "stage_slots": 4,
-        "chunks_uploaded": 7,
-        "stage_slot_reuse_waits": 2,
-        "events_recorded": 7,
-        "direct_io_chunks": 7,
-        "buffered_chunks": 0,
-        "arena_count": 1,
-        "arena_bytes": 32768,
-        "range_count": 2,
-        "range_bytes": 28672,
-        "cache_limit_bytes": 28672,
-        "budget_fallbacks": 1,
-        "budget_fallback_not_cached": True,
-        "aligned_new_arena_budget_fallback": True,
-        "exact_readbacks_match": True,
-        "direct_io_disable_after_error_policy_present": True,
-        "direct_io_error_branch_live_exercised": False,
-        "owns_four_slot_event_ring": True,
-        "owns_arena_range_allocation": True,
-        "owns_range_cache_budget_fallback": True,
-        "owns_source_page_discard_policy": False,
-        "owns_progress_reporting": False,
+        "cached_offset": 13,
+        "cached_bytes": 8192,
+        "contained_offset": 4116,
+        "contained_bytes": 257,
+        "chunks_uploaded": 2,
+        "exact_range_hits": 1,
+        "containing_range_hits": 1,
+        "contained_range_reused": True,
+        "contained_readback_matches": True,
+        "source_file_discard_calls": 2,
+        "source_file_discard_bytes": 8192,
+        "source_mapping_discard_calls": 2,
+        "source_mapping_discard_bytes": 16384,
+        "progress_notes": 3,
+        "progress_messages": 1,
+        "non_tty_progress_initial_message": True,
+        "fresh_cache_starts_empty": True,
+        "keep_source_pages_suppresses_advice": True,
+        "disabled_progress_suppresses_messages": True,
+        "owns_containing_range_reuse": True,
+        "owns_source_page_discard_policy": True,
+        "owns_progress_reporting": True,
+        "owns_raii_cache_cleanup": True,
         "owns_ds4_kernels": False,
         "changes_default_route": False,
     }
     stdout = require_dict(report, execution.get("stdout"), "b300_execution.stdout")
-    report.check(stdout == expected, "B300 asynchronous staging result drift")
+    report.check(stdout == expected, "B300 model-map closure result drift")
     for marker in [
         "AsyncPinnedRangeCache",
-        "AsyncPinnedCacheOutcome::BudgetFallback",
-        "stage_slot_reuse_waits",
-        "aligned_new_arena_budget_fallback",
-        "direct_io_error_branch_live_exercised",
-        "exact_readbacks_match",
+        "ModelLoadProgressMode::NonTty",
+        "contained_readback_matches",
+        "keep_source_pages_suppresses_advice",
+        "fresh_cache_starts_empty",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture = "ds4-parity/baselines/backend/m14.1b2b3b2/model-async-staging-smoke.json"
-    checker = "check_model_async_staging_smoke.py"
-    report.check("M14.1b2b3b2: Asynchronous Staging Ring And Budget Policy" in texts["roadmap"], "roadmap item missing")
+    fixture = "ds4-parity/baselines/backend/m14.1b2c/model-map-closure-smoke.json"
+    checker = "check_model_map_closure_smoke.py"
+    report.check("M14.1b2c: Model Map Cache Closure" in texts["roadmap"], "roadmap item missing")
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
-    report.check("M14.1b2b3b2: Asynchronous Staging Ring And Budget Policy" in texts["todo"], "TODO item missing")
+    report.check("M14.1b2c: Model Map Cache Closure" in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check(
-        "Active item: M14.1b2c Model Map Cache Closure" in texts["status"]
-        or "Active item: M14.1b3 Allocation And Quality Policy" in texts["status"],
-        "next active stage missing",
-    )
-    report.check("M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy" in texts["status"], "status evidence missing")
+    report.check("Active item: M14.1b3 Allocation And Quality Policy" in texts["status"], "next active stage missing")
+    report.check("M14.1b2c Model Map Cache Closure" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("event reuse absent", lambda value: value["b300_execution"]["stdout"].update({"stage_slot_reuse_waits": 0})),
-        ("budget fallback absent", lambda value: value["b300_execution"]["stdout"].update({"budget_fallbacks": 0})),
-        ("aligned arena budget fallback absent", lambda value: value["b300_execution"]["stdout"].update({"aligned_new_arena_budget_fallback": False})),
-        ("readback mismatch", lambda value: value["b300_execution"]["stdout"].update({"exact_readbacks_match": False})),
-        ("live error overclaim", lambda value: value["b300_execution"]["stdout"].update({"direct_io_error_branch_live_exercised": True})),
-        ("source discard overclaim", lambda value: value["ownership"].update({"owns_source_page_discard_policy": True})),
+        ("contained reuse absent", lambda value: value["b300_execution"]["stdout"].update({"containing_range_hits": 0})),
+        ("readback mismatch", lambda value: value["b300_execution"]["stdout"].update({"contained_readback_matches": False})),
+        ("file advice absent", lambda value: value["b300_execution"]["stdout"].update({"source_file_discard_calls": 0})),
+        ("mapping advice absent", lambda value: value["b300_execution"]["stdout"].update({"source_mapping_discard_calls": 0})),
+        ("progress absent", lambda value: value["b300_execution"]["stdout"].update({"progress_messages": 0})),
+        ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)
@@ -283,7 +261,7 @@ def require_dict(report: Report, value: Any, name: str) -> dict[str, Any]:
 
 def print_report(report: Report) -> None:
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.1b2b3b2 model async staging smoke: {status} ({report.checks} checks)")
+    print(f"M14.1b2c model-map cache closure smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
 

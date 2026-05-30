@@ -2147,6 +2147,20 @@ the direct-I/O disable errno policy; the live smoke does not claim an induced
 I/O error, source-page discard/progress behavior, kernels, or route
 activation.
 
+Validate the M14.1b2c model-map cache closure B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_map_closure_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-map-closure-smoke` against the pinned GGUF. It proves
+contained-range reuse with exact CUDA readback, Linux source file/mapping
+discard advisory calls and keep-pages suppression, explicit non-TTY progress
+emission and disabled suppression, and fresh-cache reset state. It does not
+claim physical page eviction, default runtime environment/terminal wiring,
+DS4 kernel consumption, or route activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

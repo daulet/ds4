@@ -7446,10 +7446,33 @@
 
 ####### M14.1b2c: Model Map Cache Closure
 
-- Status: planned
+- Status: done
 - Goal: close model-map/range-cache ownership, remaining source-page
   discard/progress policy, and retained-current-C route evidence before
   allocation/quality work.
+- Oracle: current-C `cuda_model_range_ptr`, `cuda_model_drop_file_pages`,
+  `cuda_model_discard_source_pages`, `cuda_model_load_progress_note`, and
+  `cuda_model_range_release_all`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2c/model-map-closure-smoke.json`.
+- Evidence: the B300 smoke cached 8,192 bytes and served a 257-byte interior
+  range exactly without another upload; its two staging chunks issued two
+  file discard calls totaling 8,192 bytes and two page-aligned mapping
+  discard calls totaling 16,384 bytes. A retention-policy cache issued no
+  discard calls. Explicit non-TTY progress emitted the initial current-C
+  message once for three notes, disabled progress emitted nothing, and a
+  fresh cache began with empty state. Physical eviction, runtime environment
+  or terminal selection wiring, kernels, and route activation remain
+  unclaimed.
+- Validation: local workspace tests, formatting and diff checks, the 84-check
+  new comparator, retained M14 comparators, B300 feature-enabled crate tests
+  and predecessor asynchronous-staging smoke, and unified parity (104 passed,
+  50 skipped, 0 failed) passed. Local feature compilation requires CUDA
+  headers unavailable on this host; B300 supplied that gate. Non-interactive
+  Claude review was unavailable because the CLI reported `Not logged in`;
+  adversarial self-review fixed a progress-threshold overflow edge before
+  recording no remaining pointer, advisory-claim, progress, lifetime, or
+  bounded-claim issue.
 
 ###### M14.1b3: Allocation And Quality Policy
 

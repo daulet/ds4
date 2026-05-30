@@ -9,6 +9,7 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::slice;
+use std::time::{Duration, Instant};
 
 use cuda_core::{
     CudaEvent, DeviceBuffer, DriverError, PinnedHostBuffer, ReadOnlyPageableHostMemory,
@@ -187,6 +188,52 @@ impl MappedModelFile {
             slice::from_raw_parts(self.ptr.as_ptr().add(registered_offset), registered_bytes)
         };
         Ok((layout, source))
+    }
+
+    fn discard_source_pages(
+        &self,
+        offset: u64,
+        bytes: u64,
+        keep_source_pages: bool,
+    ) -> Result<SourcePageDiscardAttempt, ModelRangeError> {
+        self.range(offset, bytes)?;
+        if keep_source_pages {
+            return Ok(SourcePageDiscardAttempt::default());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let layout = self.registered_range_layout(offset, bytes)?;
+            let file_offset =
+                libc::off_t::try_from(offset).map_err(|_| ModelRangeError::ModelTooLarge)?;
+            let file_bytes =
+                libc::off_t::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+            let mapping_bytes = usize::try_from(layout.registered_bytes)
+                .map_err(|_| ModelRangeError::ModelTooLarge)?;
+            let mapping_offset = usize::try_from(layout.registered_offset)
+                .map_err(|_| ModelRangeError::ModelTooLarge)?;
+            unsafe {
+                let _ = libc::posix_fadvise(
+                    self._file.as_raw_fd(),
+                    file_offset,
+                    file_bytes,
+                    libc::POSIX_FADV_DONTNEED,
+                );
+                let _ = libc::posix_madvise(
+                    self.ptr.as_ptr().add(mapping_offset).cast::<c_void>(),
+                    mapping_bytes,
+                    libc::POSIX_MADV_DONTNEED,
+                );
+            }
+            Ok(SourcePageDiscardAttempt {
+                file_bytes: bytes,
+                mapping_bytes: layout.registered_bytes,
+            })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (offset, bytes);
+            Ok(SourcePageDiscardAttempt::default())
+        }
     }
 }
 
@@ -393,10 +440,19 @@ const ASYNC_STAGE_SLOTS: usize = 4;
 const ARENA_ALIGNMENT: u64 = 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelLoadProgressMode {
+    Disabled,
+    NonTty,
+    Tty,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AsyncPinnedCacheConfig {
     pub copy_chunk_bytes: u64,
     pub arena_chunk_bytes: u64,
     pub cache_limit_bytes: u64,
+    pub keep_source_pages: bool,
+    pub progress_mode: ModelLoadProgressMode,
 }
 
 impl AsyncPinnedCacheConfig {
@@ -447,7 +503,100 @@ pub struct AsyncPinnedCacheStats {
     pub range_count: usize,
     pub range_bytes: u64,
     pub budget_fallbacks: u64,
+    pub exact_range_hits: u64,
+    pub containing_range_hits: u64,
+    pub source_file_discard_calls: u64,
+    pub source_file_discard_bytes: u64,
+    pub source_mapping_discard_calls: u64,
+    pub source_mapping_discard_bytes: u64,
+    pub progress_notes: u64,
+    pub progress_messages: u64,
     pub direct_io_state: DirectIoPolicyState,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct SourcePageDiscardAttempt {
+    file_bytes: u64,
+    mapping_bytes: u64,
+}
+
+struct ModelLoadProgress {
+    mode: ModelLoadProgressMode,
+    next: u64,
+    last: Option<Instant>,
+    started: bool,
+    notes: u64,
+    messages: u64,
+}
+
+impl ModelLoadProgress {
+    fn new(mode: ModelLoadProgressMode) -> Self {
+        Self {
+            mode,
+            next: 0,
+            last: None,
+            started: false,
+            notes: 0,
+            messages: 0,
+        }
+    }
+
+    fn note(&mut self, cached_bytes: u64) {
+        if self.mode == ModelLoadProgressMode::Disabled {
+            return;
+        }
+        self.notes += 1;
+        let now = Instant::now();
+        let (step, interval) = match self.mode {
+            ModelLoadProgressMode::Disabled => unreachable!(),
+            ModelLoadProgressMode::NonTty => (16_u64 << 30, Duration::from_secs(10)),
+            ModelLoadProgressMode::Tty => (2_u64 << 30, Duration::from_secs(2)),
+        };
+        if !self.started {
+            self.started = true;
+            self.next = step;
+            self.last = Some(now);
+            self.messages += 1;
+            match self.mode {
+                ModelLoadProgressMode::NonTty => {
+                    eprintln!("ds4: CUDA loading model tensors into device cache");
+                }
+                ModelLoadProgressMode::Tty => {
+                    eprint!("ds4: CUDA loading model tensors into device cache: 0.00 GiB");
+                }
+                ModelLoadProgressMode::Disabled => unreachable!(),
+            }
+        }
+        if cached_bytes < self.next
+            && now.duration_since(self.last.expect("started progress has timestamp")) < interval
+        {
+            return;
+        }
+        self.messages += 1;
+        match self.mode {
+            ModelLoadProgressMode::NonTty => {
+                eprintln!(
+                    "ds4: CUDA loading model tensors {:.2} GiB cached",
+                    cached_bytes as f64 / 1_073_741_824.0
+                );
+            }
+            ModelLoadProgressMode::Tty => {
+                eprint!(
+                    "\rds4: CUDA loading model tensors into device cache: {:.2} GiB",
+                    cached_bytes as f64 / 1_073_741_824.0
+                );
+            }
+            ModelLoadProgressMode::Disabled => unreachable!(),
+        }
+        self.last = Some(now);
+        while self.next <= cached_bytes {
+            let Some(next) = self.next.checked_add(step) else {
+                self.next = u64::MAX;
+                break;
+            };
+            self.next = next;
+        }
+    }
 }
 
 struct AsyncPinnedStageSlot {
@@ -617,6 +766,13 @@ pub struct AsyncPinnedRangeCache<'model> {
     buffered_chunks: u64,
     range_bytes: u64,
     budget_fallbacks: u64,
+    exact_range_hits: u64,
+    containing_range_hits: u64,
+    source_file_discard_calls: u64,
+    source_file_discard_bytes: u64,
+    source_mapping_discard_calls: u64,
+    source_mapping_discard_bytes: u64,
+    progress: ModelLoadProgress,
 }
 
 impl<'model> AsyncPinnedRangeCache<'model> {
@@ -638,6 +794,13 @@ impl<'model> AsyncPinnedRangeCache<'model> {
             buffered_chunks: 0,
             range_bytes: 0,
             budget_fallbacks: 0,
+            exact_range_hits: 0,
+            containing_range_hits: 0,
+            source_file_discard_calls: 0,
+            source_file_discard_bytes: 0,
+            source_mapping_discard_calls: 0,
+            source_mapping_discard_bytes: 0,
+            progress: ModelLoadProgress::new(config.progress_mode),
         })
     }
 
@@ -648,7 +811,12 @@ impl<'model> AsyncPinnedRangeCache<'model> {
         bytes: u64,
     ) -> Result<AsyncPinnedCacheOutcome, ModelRangeError> {
         self.model.range(offset, bytes)?;
-        if self.find(offset, bytes).is_some() {
+        if self.find_exact(offset, bytes).is_some() {
+            self.exact_range_hits += 1;
+            return Ok(AsyncPinnedCacheOutcome::Reused);
+        }
+        if self.find_containing(offset, bytes).is_some() {
+            self.containing_range_hits += 1;
             return Ok(AsyncPinnedCacheOutcome::Reused);
         }
         let Some((arena_index, device_offset)) = self.reserve_range(substrate, bytes)? else {
@@ -663,6 +831,7 @@ impl<'model> AsyncPinnedRangeCache<'model> {
             device_offset,
         });
         self.range_bytes += bytes;
+        self.progress.note(self.range_bytes);
         Ok(AsyncPinnedCacheOutcome::Inserted)
     }
 
@@ -673,13 +842,17 @@ impl<'model> AsyncPinnedRangeCache<'model> {
         bytes: u64,
     ) -> Result<Vec<u8>, ModelRangeError> {
         let range = self
-            .find(offset, bytes)
+            .find_containing(offset, bytes)
             .ok_or(ModelRangeError::MissingCachedRange { offset, bytes })?;
         let device = &self.arenas[range.arena_index].device;
         let requested_bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+        let requested_device_offset = range
+            .device_offset
+            .checked_add(offset - range.offset)
+            .ok_or(ModelRangeError::ModelTooLarge)?;
         Ok(unsafe {
             substrate.download_u8_device_ptr(
-                device.cu_deviceptr() + range.device_offset,
+                device.cu_deviceptr() + requested_device_offset,
                 requested_bytes,
             )?
         })
@@ -698,14 +871,30 @@ impl<'model> AsyncPinnedRangeCache<'model> {
             range_count: self.ranges.len(),
             range_bytes: self.range_bytes,
             budget_fallbacks: self.budget_fallbacks,
+            exact_range_hits: self.exact_range_hits,
+            containing_range_hits: self.containing_range_hits,
+            source_file_discard_calls: self.source_file_discard_calls,
+            source_file_discard_bytes: self.source_file_discard_bytes,
+            source_mapping_discard_calls: self.source_mapping_discard_calls,
+            source_mapping_discard_bytes: self.source_mapping_discard_bytes,
+            progress_notes: self.progress.notes,
+            progress_messages: self.progress.messages,
             direct_io_state: self.direct_io.state(),
         }
     }
 
-    fn find(&self, offset: u64, bytes: u64) -> Option<&AsyncPinnedCachedRange> {
+    fn find_exact(&self, offset: u64, bytes: u64) -> Option<&AsyncPinnedCachedRange> {
         self.ranges
             .iter()
             .find(|range| range.offset == offset && range.bytes == bytes)
+    }
+
+    fn find_containing(&self, offset: u64, bytes: u64) -> Option<&AsyncPinnedCachedRange> {
+        let end = offset.checked_add(bytes)?;
+        self.ranges.iter().find(|range| {
+            let range_end = range.offset.checked_add(range.bytes);
+            offset >= range.offset && range_end.is_some_and(|range_end| end <= range_end)
+        })
     }
 
     fn reserve_range(
@@ -803,7 +992,21 @@ impl<'model> AsyncPinnedRangeCache<'model> {
                 } else {
                     self.buffered_chunks += 1;
                 }
+                let discard = self.model.discard_source_pages(
+                    offset + copied,
+                    chunk_bytes as u64,
+                    self.config.keep_source_pages,
+                )?;
+                if discard.file_bytes != 0 {
+                    self.source_file_discard_calls += 1;
+                    self.source_file_discard_bytes += discard.file_bytes;
+                }
+                if discard.mapping_bytes != 0 {
+                    self.source_mapping_discard_calls += 1;
+                    self.source_mapping_discard_bytes += discard.mapping_bytes;
+                }
                 copied += chunk_bytes as u64;
+                self.progress.note(self.range_bytes + copied);
                 chunk_index += 1;
             }
             Ok::<(), ModelRangeError>(())

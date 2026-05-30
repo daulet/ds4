@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use ds4_cuda::model_map::{
     AsyncPinnedCacheConfig, AsyncPinnedCacheOutcome, AsyncPinnedRangeCache, DirectIoPolicyState,
-    MappedModelFile,
+    MappedModelFile, ModelLoadProgressMode,
 };
 use ds4_cuda::{substrate::CudaOxideSubstrate, M14_1B2B3B2_SCOPE};
 
@@ -29,6 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             copy_chunk_bytes: CHUNK_BYTES,
             arena_chunk_bytes: ARENA_CHUNK_BYTES,
             cache_limit_bytes: CACHE_LIMIT_BYTES,
+            keep_source_pages: true,
+            progress_mode: ModelLoadProgressMode::Disabled,
         },
     )?;
 
@@ -83,6 +85,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             copy_chunk_bytes: CHUNK_BYTES,
             arena_chunk_bytes: 256,
             cache_limit_bytes: 257,
+            keep_source_pages: true,
+            progress_mode: ModelLoadProgressMode::Disabled,
         },
     )?;
     assert_eq!(

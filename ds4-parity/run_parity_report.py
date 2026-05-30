@@ -880,6 +880,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.1b2c cuda-oxide model-map cache closure smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_model_map_closure_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

@@ -54,3 +54,8 @@ required-features = ["cuda-oxide-backend"]
 name = "ds4-cuda-model-async-staging-smoke"
 path = "src/bin/model_async_staging_smoke.rs"
 required-features = ["cuda-oxide-backend"]
+
+[[bin]]
+name = "ds4-cuda-model-map-closure-smoke"
+path = "src/bin/model_map_closure_smoke.rs"
+required-features = ["cuda-oxide-backend"]

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b2c Model Map Cache Closure
+- Active item: M14.1b3 Allocation And Quality Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -14,7 +14,8 @@
   through M14.1b2b3b2 because file-staged device copy, registered fallback,
   pageable HMM, direct-I/O read selection, and asynchronous staging policy
   have distinct API and live-evidence boundaries.
-- Last validated source before the active item: M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy.
+- Last validated source before the active item: M14.1b2c Model Map Cache Closure.
+- Earlier M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy.
 - Earlier M14.1b2b3b1 Direct-I/O Pinned Read Selection.
 - Earlier M14.1b2b3a Pageable HMM Range Strategy.
 - Earlier M14.1b2b2 Registered Range Strategy.
@@ -121,6 +122,26 @@
 
 ## Last Evidence
 
+- M14.1b2c Model Map Cache Closure extends the opt-in Rust range cache with
+  contained-range reuse, Linux source-page discard advisory policy, explicit
+  non-TTY progress emission, and cache-lifetime reset evidence. On B300 pod
+  `ds4-rust-port-b300`, an 8,192-byte range served a 257-byte interior
+  readback exactly without re-upload; two chunks issued two file advice calls
+  totaling 8,192 bytes and two page-aligned mapping advice calls totaling
+  16,384 bytes. A keep-pages cache suppressed advice, disabled progress
+  emitted no message, and a fresh cache began empty. Its fixture and checker
+  are `ds4-parity/baselines/backend/m14.1b2c/model-map-closure-smoke.json`
+  and `ds4-parity/check_model_map_closure_smoke.py --negative-test`.
+  Physical eviction, runtime environment/terminal selection wiring, DS4
+  kernels, and default-route ownership remain unclaimed.
+  Local workspace tests, formatter/diff checks, the 84-check comparator and
+  retained M14 checks, B300 feature tests and predecessor async staging smoke,
+  and unified parity (104 passed, 50 skipped, 0 failed) passed. Local feature
+  compilation cannot run without CUDA headers; B300 supplied that gate.
+  Non-interactive Claude review was unavailable because the CLI reported
+  `Not logged in`; adversarial self-review fixed a progress-threshold
+  overflow edge before finding no remaining pointer, advisory-claim,
+  progress, lifetime, or bounded-claim issue.
 - M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy adds an opt-in
   Rust four-slot pinned upload ring with CUDA-event-guarded refill, persistent
   direct-I/O disable-after-selected-error policy, and bounded device-arena

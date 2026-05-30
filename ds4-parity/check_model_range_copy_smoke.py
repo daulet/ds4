@@ -185,7 +185,8 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
         "Active item: M14.1b2b" in texts["status"]
-        or "Active item: M14.1b2c Model Map Cache Closure" in texts["status"],
+        or "Active item: M14.1b2c Model Map Cache Closure" in texts["status"]
+        or "Active item: M14.1b3 Allocation And Quality Policy" in texts["status"],
         "next active stage missing",
     )
     report.check("M14.1b2a Owned Mmap Device Range Copy" in texts["status"], "status evidence missing")

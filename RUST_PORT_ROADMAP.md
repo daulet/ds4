@@ -7020,9 +7020,46 @@ Stage split:
 
 ####### M14.1b2c: Model Map Cache Closure
 
-- Status: planned.
+- Status: complete.
 - Goal: close the model-map/range-cache assignment, including remaining
   source-page discard/progress policy and retained-current-C route evidence.
+- Oracle: current-C `cuda_model_range_ptr`, `cuda_model_drop_file_pages`,
+  `cuda_model_discard_source_pages`, `cuda_model_load_progress_note`, and
+  `cuda_model_range_release_all`.
+- Acceptance: an opt-in Rust cache must reuse an interior cached range with
+  exact CUDA readback, issue Linux file/mapping discard advisory calls after
+  staged chunks unless explicitly retained, emit the explicit non-TTY
+  progress form unless disabled, and start new cache state cleanly after
+  prior cache lifetime ends. DS4 kernel consumption and default-route
+  activation remain rejected.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2c/model-map-closure-smoke.json`.
+- Comparator:
+  `ds4-parity/check_model_map_closure_smoke.py --negative-test` plus
+  executable Rust B300 smoke using the pinned GGUF.
+- Evidence:
+  - Added explicit `ModelLoadProgressMode` and source-page retention policy
+    to `AsyncPinnedRangeCache`, containing-range readback/reuse, and
+    Linux `posix_fadvise`/`posix_madvise` call accounting.
+  - On B300 pod `ds4-rust-port-b300`, an 8,192-byte admitted range served a
+    257-byte interior readback exactly without another upload. Its two staged
+    chunks issued two file discard calls totaling 8,192 bytes and two
+    page-aligned mapping discard calls totaling 16,384 bytes, while a
+    retained-pages cache suppressed both advisory classes.
+  - The explicit non-TTY progress policy emitted the current-C initial
+    message once for three progress notes; a disabled-progress cache emitted
+    no message, and a new cache began with empty range/progress state.
+    Physical page eviction, default runtime environment/TTY wiring, DS4
+    kernels, and runtime route activation remain unclaimed.
+  - Validation passed through local workspace tests, formatter and diff
+    checks, the 84-check comparator and retained M14 checks, B300
+    feature-enabled crate tests plus predecessor asynchronous-staging smoke,
+    and unified parity with 104 passed, 50 skipped, and 0 failed. Local
+    feature compilation requires CUDA headers unavailable on this host; B300
+    supplied that gate. Non-interactive Claude review was unavailable because
+    the local CLI reported `Not logged in`; adversarial self-review fixed a
+    progress-threshold overflow edge before finding no remaining pointer,
+    advisory-claim, progress, lifetime, or bounded-claim defect.
 
 ###### M14.1b3: Allocation And Quality Policy
 

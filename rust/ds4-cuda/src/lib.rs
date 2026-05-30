@@ -172,6 +172,27 @@ pub const M14_1B2B3B2_SCOPE: AsyncStagingPolicyScope = AsyncStagingPolicyScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ModelMapClosureScope {
+    pub opt_in_only: bool,
+    pub owns_containing_range_reuse: bool,
+    pub owns_source_page_discard_policy: bool,
+    pub owns_progress_reporting: bool,
+    pub owns_raii_cache_cleanup: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B2C_SCOPE: ModelMapClosureScope = ModelMapClosureScope {
+    opt_in_only: true,
+    owns_containing_range_reuse: true,
+    owns_source_page_discard_policy: true,
+    owns_progress_reporting: true,
+    owns_raii_cache_cleanup: true,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
 
@@ -182,7 +203,7 @@ pub mod substrate;
 mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
-        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE,
+        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
     };
 
     #[test]
@@ -277,5 +298,16 @@ mod tests {
         assert!(!M14_1B2B3B2_SCOPE.owns_progress_reporting);
         assert!(!M14_1B2B3B2_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B2B3B2_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn model_map_closure_keeps_kernels_and_route_pending() {
+        assert!(M14_1B2C_SCOPE.opt_in_only);
+        assert!(M14_1B2C_SCOPE.owns_containing_range_reuse);
+        assert!(M14_1B2C_SCOPE.owns_source_page_discard_policy);
+        assert!(M14_1B2C_SCOPE.owns_progress_reporting);
+        assert!(M14_1B2C_SCOPE.owns_raii_cache_cleanup);
+        assert!(!M14_1B2C_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B2C_SCOPE.changes_default_route);
     }
 }
