@@ -26,7 +26,8 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-DEPENDENCY_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+RECORDED_DEPENDENCY_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+CURRENT_DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
 TOOL_REVISION = "981e3244a107d84d807cfb087793269c477cc764"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide fill_f32 kernel launch proof",
@@ -91,12 +92,12 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     report.check(fixture.get("milestone") == "M14.1b4", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "cuda-oxide dependency revision drift")
+    report.check(oxide.get("dependency_revision") == RECORDED_DEPENDENCY_REVISION, "cuda-oxide dependency revision drift")
     report.check(oxide.get("tool_revision") == TOOL_REVISION, "cargo-oxide tool revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
     report.check(oxide.get("module_form") == "executable-local #[cuda_module]", "kernel module boundary drift")
-    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
-    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
+    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "current crate dependency revision pin missing")
+    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "current lockfile dependency revision pin missing")
     report.check('cuda-oxide-kernels = ["cuda-oxide-backend", "dep:cuda-device", "dep:cuda-host"]' in texts["cargo"], "kernel feature missing")
     report.check('name = "ds4-cuda-fill-lifetime-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)

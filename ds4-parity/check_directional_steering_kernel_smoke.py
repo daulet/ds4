@@ -25,7 +25,8 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-DEPENDENCY_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+RECORDED_DEPENDENCY_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+CURRENT_DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
 TOOL_REVISION = "981e3244a107d84d807cfb087793269c477cc764"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide directional_steering_project_kernel launch proof",
@@ -89,11 +90,11 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     report.check(fixture.get("milestone") == "M14.2b1", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
+    report.check(oxide.get("dependency_revision") == RECORDED_DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("tool_revision") == TOOL_REVISION, "cargo-oxide tool revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
-    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
-    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
+    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "current crate dependency revision pin missing")
+    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "current lockfile dependency revision pin missing")
     report.check('name = "ds4-cuda-directional-steering-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
@@ -194,7 +195,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check("M14.2b1: Directional Steering Projection Kernel" in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.2b2 SwiGLU Libdevice Path" in texts["status"], "next active stage missing")
+    report.check("Active item: M14.2" in texts["status"], "next active stage missing")
     report.check("M14.2b1 Directional Steering Projection Kernel" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")

@@ -5,9 +5,9 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
-cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "aabe10dc4fa0086375104458909e222d1ac1cfe3", optional = true }
-cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "aabe10dc4fa0086375104458909e222d1ac1cfe3", optional = true }
-cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "aabe10dc4fa0086375104458909e222d1ac1cfe3", optional = true }
+cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "d4791b7002152af3b7f6b15a48d7f5acd7a63011", optional = true }
+cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "d4791b7002152af3b7f6b15a48d7f5acd7a63011", optional = true }
+cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "d4791b7002152af3b7f6b15a48d7f5acd7a63011", optional = true }
 libc = { version = "0.2", optional = true }
 
 [features]
@@ -86,4 +86,9 @@ required-features = ["cuda-oxide-kernels"]
 [[bin]]
 name = "ds4-cuda-directional-steering-smoke"
 path = "src/bin/directional_steering_smoke.rs"
+required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-swiglu-smoke"
+path = "src/bin/swiglu_smoke.rs"
 required-features = ["cuda-oxide-kernels"]

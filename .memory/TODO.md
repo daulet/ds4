@@ -7641,7 +7641,29 @@
 
 ##### M14.2b2: SwiGLU Libdevice Path
 
-- Status: planned
+- Status: done
 - Goal: make cuda-oxide execute current-C-shaped SwiGLU math on B300 after
-  repairing or replacing the blocked libdevice/NVVM path.
+  repairing the blocked libdevice/NVVM path.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2b2/swiglu-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_swiglu_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Evidence: pushed cuda-oxide revision
+  `d4791b7002152af3b7f6b15a48d7f5acd7a63011`, which converts the
+  failed opaque-pointer NVVM path into portable PTX plus context-targeted
+  libdevice cubin loading. The Rust `swiglu_kernel` preserves current-C
+  finite and NaN clamps, unclamped behavior, SiLU exponential, output weight,
+  and bounds behavior through a typed launch wrapped around
+  `cuda_host::ltoir`. B300 feature-enabled
+  `ds4-cuda` tests passed with 24 tests; live execution emitted portable
+  `sm_80` PTX, generated `ds4_cuda_swiglu_smoke.sm_103.cubin`, and proved
+  clamped output, unclamped output, and invalid-shape rejection with no
+  compile or link target overrides. Embedding, indexer/top-k, route
+  activation, and C CUDA removal remain unclaimed.
+- Validation: local workspace tests, formatter/diff checks, the 73-check
+  SwiGLU comparator, and unified parity passed with 116 passed, 45 skipped,
+  and 0 failed. Non-interactive Claude review timed out without a completed
+  result; adversarial self-review caught a NaN clamp divergence caused by
+  optimized-away float comparisons and fixed it with explicit IEEE-754 bit
+  classification before final B300 validation.
 - Owner path: Rust cuda-oxide kernel smoke and current-C operation oracle.

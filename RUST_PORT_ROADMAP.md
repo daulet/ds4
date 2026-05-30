@@ -7314,14 +7314,41 @@ Stage split:
 
 ##### M14.2b2: SwiGLU Libdevice Path
 
-- Status: planned.
-- Goal: repair or replace cuda-oxide's blocked executable libdevice path,
-  then port current-C `swiglu_kernel` and `ds4_gpu_swiglu_tensor`.
-- Blocker: the generated NVVM IR for an `f32::exp()` kernel is rejected by
-  CUDA 13.2 `libnvvm` before a loadable cubin can be produced.
-- Acceptance: a semantics-preserving SwiGLU kernel executes on B300 with
-  bounded clamp/output evidence; no route or later kernel ownership is
-  implied.
+- Status: done.
+- Goal: repair cuda-oxide's blocked executable libdevice path and port
+  current-C `swiglu_kernel` and `ds4_gpu_swiglu_tensor`.
+- Oracle: current-C `swiglu_kernel` clamp, SiLU exponential, output weighting,
+  and `ds4_gpu_swiglu_tensor` argument/launch contract.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.2b2/swiglu-kernel-smoke.json`.
+- Comparator: `ds4-parity/check_swiglu_kernel_smoke.py --negative-test` plus
+  live B300 cargo-oxide execution.
+- Acceptance: Rust owns bounded SwiGLU and retains the previously established
+  directional projection ownership; embedding, indexer/top-k, route
+  activation, and C CUDA removal remain pending.
+- Evidence:
+  - Pushed cuda-oxide revision
+    `d4791b7002152af3b7f6b15a48d7f5acd7a63011`, which emits portable PTX
+    for device `__nv_*` calls, links NVIDIA libdevice into a cubin targeted
+    to the executing CUDA context, and keys linked artifacts by architecture.
+  - Added executable-local Rust `swiglu_kernel` with current-C-shaped finite
+    and NaN clamps, unclamped behavior, SiLU exponential, weighting,
+    256-thread geometry, and host buffer validation. It uses
+    `cuda_host::ltoir` to load the libdevice-linked PTX while retaining typed
+    kernel launches.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 24 tests. Live cargo-oxide execution emitted portable `sm_80` PTX,
+    generated `ds4_cuda_swiglu_smoke.sm_103.cubin`, and proved clamped,
+    unclamped, and invalid-shape behavior on `NVIDIA B300 SXM6 AC` without
+    target overrides.
+  - Local workspace tests, formatter/diff checks, the 73-check SwiGLU
+    comparator, and unified parity passed with 116 passed, 45 skipped, and
+    0 failed. Non-interactive Claude review timed out without a completed
+    result; adversarial self-review found and fixed NaN clamp handling by
+    replacing optimized-away float comparisons with explicit IEEE-754 bit
+    classification before the recorded B300 pass.
+  - This stage remains opt-in; it does not claim embedding/model-range,
+    indexer/top-k, runtime route, or C CUDA removal ownership.
 
 ## Removal Criteria for C Host Code
 

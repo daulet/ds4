@@ -27,7 +27,8 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+RECORDED_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+CURRENT_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
 EXPECTED_RUST_OWNED = [
     "cuda-oxide typed cuBLAS math-mode selection",
     "Q8/F16 cache eligibility, preload, and budget policy",
@@ -94,13 +95,13 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     report.check(fixture.get("milestone") == "M14.1b3b", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("revision") == REVISION, "cuda-oxide revision drift")
+    report.check(oxide.get("revision") == RECORDED_REVISION, "cuda-oxide revision drift")
     report.check(
         oxide.get("new_api") == "Blas::set_math_mode(BlasMathMode)",
         "cuBLAS math-mode API drift",
     )
-    report.check(f'rev = "{REVISION}"' in texts["cargo"], "crate revision pin missing")
-    report.check(f"#{REVISION}" in texts["lock"], "lockfile revision pin missing")
+    report.check(f'rev = "{CURRENT_REVISION}"' in texts["cargo"], "current crate revision pin missing")
+    report.check(f"#{CURRENT_REVISION}" in texts["lock"], "current lockfile revision pin missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)

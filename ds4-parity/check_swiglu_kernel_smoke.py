@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.2a Rust CUDA add and repeat_hc kernel smoke."""
+"""Validate the M14.2b2 Rust CUDA SwiGLU kernel and libdevice-link smoke."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.2a/elementwise-kernel-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.2b2/swiglu-kernel-smoke.json"
 CARGO = ROOT / "rust/ds4-cuda/Cargo.toml"
 LOCK = ROOT / "Cargo.lock"
 CRATE_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
-SMOKE = ROOT / "rust/ds4-cuda/src/bin/elementwise_smoke.rs"
+SMOKE = ROOT / "rust/ds4-cuda/src/bin/swiglu_smoke.rs"
 CUDA_SOURCE = ROOT / "ds4_cuda.cu"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
 TODO = ROOT / ".memory/TODO.md"
@@ -25,18 +25,15 @@ STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
-RECORDED_DEPENDENCY_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
-CURRENT_DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
-TOOL_REVISION = "981e3244a107d84d807cfb087793269c477cc764"
+DEPENDENCY_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
 EXPECTED_RUST_OWNED = [
-    "executable-local cuda-oxide add_kernel launch proof",
-    "executable-local cuda-oxide repeat_hc_kernel launch proof",
-    "current-C-shaped elementwise bounds and repeat-shape validation",
+    "executable-local cuda-oxide swiglu_kernel launch proof",
+    "current-C-shaped clamp, SiLU exponential, weight, and bounds semantics",
+    "portable PTX plus context-targeted libdevice cubin loading path",
 ]
 EXPECTED_NOT_CLAIMED = [
     "embedding and model-range kernels",
     "indexer and top-k kernels",
-    "swiglu and directional-steering kernels",
     "runtime graph integration or default CUDA route",
 ]
 
@@ -86,19 +83,19 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.elementwise_kernel_smoke.v1", "schema drift")
-    report.check(fixture.get("milestone") == "M14.2a", "milestone drift")
+    report.check(fixture.get("schema") == "ds4.swiglu_kernel_smoke.v1", "schema drift")
+    report.check(fixture.get("milestone") == "M14.2b2", "milestone drift")
     report.check(fixture.get("status") == "b300-pass", "B300 smoke status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
-    report.check(oxide.get("dependency_revision") == RECORDED_DEPENDENCY_REVISION, "dependency revision drift")
-    report.check(oxide.get("tool_revision") == TOOL_REVISION, "cargo-oxide tool revision drift")
+    report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "dependency revision drift")
     report.check(oxide.get("feature") == "cuda-oxide-kernels", "kernel feature drift")
-    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "current crate dependency revision pin missing")
-    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "current lockfile dependency revision pin missing")
-    report.check('name = "ds4-cuda-elementwise-smoke"' in texts["cargo"], "smoke binary wiring missing")
+    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "crate dependency revision pin missing")
+    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lockfile dependency revision pin missing")
+    report.check('name = "ds4-cuda-swiglu-smoke"' in texts["cargo"], "smoke binary wiring missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
+    validate_repair(report, fixture, texts)
     validate_wiring(report, texts)
 
 
@@ -106,12 +103,12 @@ def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, st
     oracle = require_dict(report, fixture.get("current_c_oracle"), "current_c_oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "current-C source drift")
     for marker in [
-        "__global__ static void add_kernel",
-        "ds4_gpu_add_tensor",
-        "add_kernel<<<(n + 255) / 256, 256>>>",
-        "__global__ static void repeat_hc_kernel",
-        "ds4_gpu_repeat_hc_tensor",
-        "repeat_hc_kernel<<<(n + 255) / 256, 256>>>",
+        "__global__ static void swiglu_kernel",
+        "g = fminf(g, clamp);",
+        "u = fminf(fmaxf(u, -clamp), clamp);",
+        "float s = g / (1.0f + expf(-g));",
+        "ds4_gpu_swiglu_tensor",
+        "swiglu_kernel<<<(n + 255) / 256, 256>>>",
     ]:
         report.check(marker in texts["cuda"], f"current-C oracle marker missing: {marker}")
 
@@ -122,22 +119,20 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(ownership.get("not_claimed_in_this_stage") == EXPECTED_NOT_CLAIMED, "non-claim scope drift")
     for key, expected in [
         ("opt_in_only", True),
-        ("owns_add_tensor", True),
-        ("owns_repeat_hc_tensor", True),
+        ("owns_swiglu_tensor", True),
+        ("owns_directional_steering_project_tensor", True),
         ("owns_embedding_kernels", False),
         ("owns_indexer_kernels", False),
-        ("owns_swiglu_and_directional_steering", False),
         ("changes_default_route", False),
         ("retains_current_c_cuda_oracle", True),
     ]:
         report.check(ownership.get(key) is expected, f"ownership drift: {key}")
     for marker in [
-        "pub const M14_2A_SCOPE",
-        "owns_add_tensor: true",
-        "owns_repeat_hc_tensor: true",
+        "pub const M14_2B2_SCOPE",
+        "owns_swiglu_tensor: true",
+        "owns_directional_steering_project_tensor: true",
         "owns_embedding_kernels: false",
         "owns_indexer_kernels: false",
-        "owns_swiglu_and_directional_steering: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -148,63 +143,72 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check(execution.get("kube_context") == "hou2-prod1", "B300 context drift")
     report.check(execution.get("pod") == "ds4-rust-port-b300", "B300 pod drift")
     report.check(execution.get("node") == "c1v17-b300n1-nic1", "B300 node drift")
-    report.check("--features cuda-oxide-backend" in execution.get("test_command", ""), "feature test command missing")
     command = execution.get("command", "")
     report.check("--features cuda-oxide-kernels" in command, "kernel feature command missing")
-    report.check("--bin ds4-cuda-elementwise-smoke" in command, "smoke command missing")
-    report.check("CUDA_OXIDE_TARGET" not in command, "smoke command forces a device target")
+    report.check("--bin ds4-cuda-swiglu-smoke" in command, "smoke command missing")
+    report.check("CUDA_OXIDE_TARGET" not in command, "smoke command forces a compile target")
+    report.check("CUDA_OXIDE_LINK_TARGET" not in command, "smoke command forces a link target")
     report.check(execution.get("backend_selected_target") == "sm_80", "portable backend target drift")
+    report.check(execution.get("linked_cubin_target") == "sm_103", "B300 linked target drift")
     expected = {
-        "milestone": "M14.2a",
+        "milestone": "M14.2b2",
         "device_name": "NVIDIA B300 SXM6 AC",
         "rust_kernel_toolchain": True,
-        "add_output_matches": True,
-        "repeat_hc_output_matches": True,
-        "add_bounds_rejected": True,
-        "repeat_shape_rejected": True,
-        "owns_add_tensor": True,
-        "owns_repeat_hc_tensor": True,
+        "swiglu_output_matches": True,
+        "swiglu_unclamped_output_matches": True,
+        "swiglu_shape_rejected": True,
+        "uses_libdevice_link_path": True,
+        "owns_swiglu_tensor": True,
+        "owns_directional_steering_project_tensor": True,
         "owns_embedding_kernels": False,
         "owns_indexer_kernels": False,
-        "owns_swiglu_and_directional_steering": False,
         "changes_default_route": False,
     }
     stdout = require_dict(report, execution.get("stdout"), "b300_execution.stdout")
-    report.check(stdout == expected, "B300 elementwise result drift")
+    report.check(stdout == expected, "B300 SwiGLU result drift")
     for marker in [
         "#[cuda_module]",
-        "pub fn add_kernel",
-        "pub fn repeat_hc_kernel",
-        "a[i] + b[i]",
-        "row[i % n_embd as usize]",
-        "add_tensor(&module",
-        "repeat_hc_tensor(&module",
-        "Err(ElementwiseError::BufferTooSmall)",
-        "Err(ElementwiseError::InvalidRepeatShape)",
+        "pub fn swiglu_kernel",
+        "(g.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || g > clamp",
+        "(u.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || u < -clamp",
+        "(-g).exp()",
+        "ltoir::load_kernel_module",
+        "../../ds4_cuda_swiglu_smoke",
+        "swiglu_tensor(",
+        "Err(SwigluError::InvalidShape)",
     ]:
         report.check(marker in texts["smoke"], f"smoke marker missing: {marker}")
 
 
+def validate_repair(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
+    repair = require_dict(report, fixture.get("libdevice_repair"), "libdevice_repair")
+    report.check(repair.get("cuda_oxide_revision") == DEPENDENCY_REVISION, "repair revision drift")
+    report.check("__nv_expf" in repair.get("resolved_boundary", ""), "resolved exp boundary missing")
+    report.check("portable PTX" in repair.get("resolved_boundary", ""), "portable PTX boundary missing")
+    report.check("sm_103" in repair.get("resolved_boundary", ""), "linked target boundary missing")
+
+
 def validate_wiring(report: Report, texts: dict[str, str]) -> None:
-    fixture = "ds4-parity/baselines/backend/m14.2a/elementwise-kernel-smoke.json"
-    checker = "check_elementwise_kernel_smoke.py"
-    report.check("M14.2a: Add And Repeat Elementwise Kernels" in texts["roadmap"], "roadmap item missing")
+    fixture = "ds4-parity/baselines/backend/m14.2b2/swiglu-kernel-smoke.json"
+    checker = "check_swiglu_kernel_smoke.py"
+    report.check("M14.2b2: SwiGLU Libdevice Path" in texts["roadmap"], "roadmap item missing")
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
-    report.check("M14.2a: Add And Repeat Elementwise Kernels" in texts["todo"], "TODO item missing")
+    report.check("M14.2b2: SwiGLU Libdevice Path" in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.2" in texts["status"], "next active stage missing")
-    report.check("M14.2a Add And Repeat Elementwise Kernels" in texts["status"], "status evidence missing")
+    report.check("Active item: M14.2c Embedding Kernel Pair" in texts["status"], "next active stage missing")
+    report.check("M14.2b2 SwiGLU Libdevice Path" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("add result absent", lambda value: value["b300_execution"]["stdout"].update({"add_output_matches": False})),
-        ("repeat result absent", lambda value: value["b300_execution"]["stdout"].update({"repeat_hc_output_matches": False})),
+        ("SwiGLU result absent", lambda value: value["b300_execution"]["stdout"].update({"swiglu_output_matches": False})),
+        ("unclamped result absent", lambda value: value["b300_execution"]["stdout"].update({"swiglu_unclamped_output_matches": False})),
+        ("libdevice path absent", lambda value: value["b300_execution"]["stdout"].update({"uses_libdevice_link_path": False})),
         ("embedding overclaim", lambda value: value["ownership"].update({"owns_embedding_kernels": True})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
-        ("portable target lost", lambda value: value["b300_execution"].update({"backend_selected_target": "sm_103"})),
+        ("linked target lost", lambda value: value["b300_execution"].update({"linked_cubin_target": "sm_80"})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)
@@ -220,7 +224,7 @@ def require_dict(report: Report, value: Any, name: str) -> dict[str, Any]:
 
 def print_report(report: Report) -> None:
     status = "PASS" if report.ok else "FAIL"
-    print(f"M14.2a elementwise kernel smoke: {status} ({report.checks} checks)")
+    print(f"M14.2b2 SwiGLU kernel smoke: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
 

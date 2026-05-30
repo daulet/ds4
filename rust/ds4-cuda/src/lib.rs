@@ -1,4 +1,4 @@
-pub const CUDA_OXIDE_REVISION: &str = "aabe10dc4fa0086375104458909e222d1ac1cfe3";
+pub const CUDA_OXIDE_REVISION: &str = "d4791b7002152af3b7f6b15a48d7f5acd7a63011";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostSubstrateScope {
@@ -298,6 +298,25 @@ pub const M14_2B1_SCOPE: DirectionalSteeringKernelScope = DirectionalSteeringKer
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SwigluKernelScope {
+    pub opt_in_only: bool,
+    pub owns_swiglu_tensor: bool,
+    pub owns_directional_steering_project_tensor: bool,
+    pub owns_embedding_kernels: bool,
+    pub owns_indexer_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_2B2_SCOPE: SwigluKernelScope = SwigluKernelScope {
+    opt_in_only: true,
+    owns_swiglu_tensor: true,
+    owns_directional_steering_project_tensor: true,
+    owns_embedding_kernels: false,
+    owns_indexer_kernels: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -312,14 +331,14 @@ mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
-        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE,
+        M14_1B3A_SCOPE, M14_1B3B_SCOPE, M14_1B4_SCOPE, M14_2A_SCOPE, M14_2B1_SCOPE, M14_2B2_SCOPE,
     };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
         assert_eq!(
             CUDA_OXIDE_REVISION,
-            "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+            "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
         );
         assert!(M14_1A_SCOPE.opt_in_only);
         assert!(M14_1A_SCOPE.owns_context_and_stream);
@@ -473,5 +492,15 @@ mod tests {
         assert!(!M14_2B1_SCOPE.owns_embedding_kernels);
         assert!(!M14_2B1_SCOPE.owns_indexer_kernels);
         assert!(!M14_2B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn swiglu_scope_retains_directional_ownership_without_later_kernel_or_route_claims() {
+        assert!(M14_2B2_SCOPE.opt_in_only);
+        assert!(M14_2B2_SCOPE.owns_swiglu_tensor);
+        assert!(M14_2B2_SCOPE.owns_directional_steering_project_tensor);
+        assert!(!M14_2B2_SCOPE.owns_embedding_kernels);
+        assert!(!M14_2B2_SCOPE.owns_indexer_kernels);
+        assert!(!M14_2B2_SCOPE.changes_default_route);
     }
 }

@@ -936,6 +936,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.2b2 cuda-oxide SwiGLU libdevice kernel smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_swiglu_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

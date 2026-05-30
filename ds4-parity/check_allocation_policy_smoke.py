@@ -28,7 +28,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 FIXTURE_REVISION = "0ec61156a7c5d65802402898b7a197bfff266d31"
-CURRENT_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
+CURRENT_REVISION = "d4791b7002152af3b7f6b15a48d7f5acd7a63011"
 EXPECTED_RUST_OWNED = [
     "cuda-oxide live device memory-capacity query",
     "managed tensor allocation through existing Rust substrate",

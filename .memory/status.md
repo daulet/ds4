@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.2b2 SwiGLU Libdevice Path
+- Active item: M14.2c Embedding Kernel Pair
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -23,7 +23,8 @@
   CUDA evidence boundaries. M14.2b is further split into M14.2b1 and
   M14.2b2 because B300 proved the directional projection PTX path while
   exposing a separate libdevice/NVVM executable blocker for SwiGLU.
-- Last validated source before the active item: M14.2b1 Directional Steering Projection Kernel.
+- Last validated source before the active item: M14.2b2 SwiGLU Libdevice Path.
+- Earlier M14.2b1 Directional Steering Projection Kernel.
 - Earlier M14.2a Add And Repeat Elementwise Kernels.
 - Earlier M14.1c Substrate Route Closure Gate.
 - Earlier M14.1b4 Fill Kernel And Command Lifetime.
@@ -137,6 +138,27 @@
 
 ## Last Evidence
 
+- M14.2b2 SwiGLU Libdevice Path adds the executable-local Rust cuda-oxide
+  `swiglu_kernel` path with current-C-shaped finite and NaN clamps, unclamped
+  behavior, SiLU exponential, output weighting, and host-side shape
+  rejection. It pins cuda-oxide
+  revision `d4791b7002152af3b7f6b15a48d7f5acd7a63011`, which repairs
+  the observed `__nv_expf` failure by emitting portable PTX and linking
+  libdevice into a cubin targeted to the executing CUDA context. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 24
+  tests; live cargo-oxide execution emitted portable `sm_80` PTX, generated
+  `ds4_cuda_swiglu_smoke.sm_103.cubin`, and proved matching clamped and
+  unclamped output plus invalid-shape rejection without target overrides. Its
+  fixture and checker
+  are `ds4-parity/baselines/backend/m14.2b2/swiglu-kernel-smoke.json` and
+  `ds4-parity/check_swiglu_kernel_smoke.py --negative-test`. Directional
+  projection ownership is retained; embedding, indexer/top-k, route
+  activation, and C CUDA removal remain unclaimed. Local workspace tests,
+  formatter/diff checks, the 73-check SwiGLU comparator, and unified parity
+  passed with 116 passed, 45 skipped, and 0 failed. Non-interactive Claude
+  review timed out without a completed result; adversarial self-review found
+  and fixed NaN clamp handling using explicit IEEE-754 bit classification
+  before the final B300 run.
 - M14.2b1 Directional Steering Projection Kernel introduces the
   executable-local Rust cuda-oxide `directional_steering_project_kernel`
   path with one block per row, `SharedArray<f32, 256>` reduction storage,

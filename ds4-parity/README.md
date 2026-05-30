@@ -2237,6 +2237,19 @@ also records the remaining SwiGLU blocker: `f32::exp()` selects cuda-oxide's
 libdevice/NVVM path, whose emitted opaque-pointer IR is rejected by CUDA 13.2
 `libnvvm`, so SwiGLU ownership is not claimed.
 
+Validate the M14.2b2 Rust CUDA SwiGLU/libdevice kernel smoke:
+
+```sh
+python3 ds4-parity/check_swiglu_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `swiglu_kernel` execution on B300 after
+cuda-oxide revision `d4791b7002152af3b7f6b15a48d7f5acd7a63011` repaired
+the libdevice route: portable `sm_80` PTX with `__nv_expf` is linked into a
+context-targeted `sm_103` cubin. It proves finite and NaN clamp behavior,
+unclamped output, SiLU, weight, and shape rejection without claiming
+embedding, indexer/top-k, runtime route, or C CUDA removal ownership.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
