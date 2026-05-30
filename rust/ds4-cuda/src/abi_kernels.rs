@@ -537,6 +537,68 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_matmul_q8_0_pair_preq_warp8_kernel(
+        in_dim: u64,
+        out0_dim: u64,
+        out1_dim: u64,
+        blocks: u64,
+        use_dp4a: u32,
+        weights0: &[u8],
+        weights1: &[u8],
+        xq: &[i8],
+        xscale: &[f32],
+        mut out0: DisjointSlice<f32>,
+        mut out1: DisjointSlice<f32>,
+    ) {
+        let row = thread::blockIdx_x() as u64 * 8 + (thread::threadIdx_x() >> 5) as u64;
+        let lane = (thread::threadIdx_x() & 31) as u64;
+        if row >= out0_dim && row >= out1_dim {
+            return;
+        }
+        let mut acc0 = 0.0_f32;
+        let mut acc1 = 0.0_f32;
+        let mut block = lane;
+        while block < blocks {
+            let remaining = in_dim - block * 32;
+            let count = if remaining < 32 { remaining } else { 32 };
+            let xq_base = (block * 32) as usize;
+            if row < out0_dim {
+                let weight_base = ((row * blocks + block) * 34) as usize;
+                let scale_bits =
+                    weights0[weight_base] as u16 | ((weights0[weight_base + 1] as u16) << 8);
+                let weight_scale = f16::from_bits(scale_bits) as f32;
+                let dot = q8_dot(weights0, weight_base, xq, xq_base, count, use_dp4a != 0);
+                acc0 += weight_scale * xscale[block as usize] * dot as f32;
+            }
+            if row < out1_dim {
+                let weight_base = ((row * blocks + block) * 34) as usize;
+                let scale_bits =
+                    weights1[weight_base] as u16 | ((weights1[weight_base + 1] as u16) << 8);
+                let weight_scale = f16::from_bits(scale_bits) as f32;
+                let dot = q8_dot(weights1, weight_base, xq, xq_base, count, use_dp4a != 0);
+                acc1 += weight_scale * xscale[block as usize] * dot as f32;
+            }
+            block += 32;
+        }
+        let mut offset = 16_u32;
+        while offset > 0 {
+            acc0 += warp::shuffle_down_f32(acc0, offset);
+            acc1 += warp::shuffle_down_f32(acc1, offset);
+            offset >>= 1;
+        }
+        if lane == 0 {
+            unsafe {
+                if row < out0_dim {
+                    *out0.get_unchecked_mut(row as usize) = acc0;
+                }
+                if row < out1_dim {
+                    *out1.get_unchecked_mut(row as usize) = acc1;
+                }
+            }
+        }
+    }
+
+    #[kernel]
     pub fn abi_matmul_q8_0_hc_expand_preq_warp8_kernel(
         in_dim: u64,
         out_dim: u64,
@@ -923,6 +985,7 @@ pub(crate) struct AbiKernelModule {
     matmul_q8_0_preq_kernel: CudaFunction,
     matmul_q8_0_preq_warp8_kernel: CudaFunction,
     matmul_q8_0_preq_batch_warp8_kernel: CudaFunction,
+    matmul_q8_0_pair_preq_warp8_kernel: CudaFunction,
     matmul_q8_0_hc_expand_preq_warp8_kernel: CudaFunction,
     f32_to_f16_kernel: CudaFunction,
     matmul_f16_kernel: CudaFunction,
@@ -974,6 +1037,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             matmul_q8_0_preq_batch_warp8_kernel: module
                 .load_function("abi_matmul_q8_0_preq_batch_warp8_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            matmul_q8_0_pair_preq_warp8_kernel: module
+                .load_function("abi_matmul_q8_0_pair_preq_warp8_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             matmul_q8_0_hc_expand_preq_warp8_kernel: module
                 .load_function("abi_matmul_q8_0_hc_expand_preq_warp8_kernel")
@@ -1617,6 +1683,81 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 function,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn matmul_q8_pair_tensor(
+        &self,
+        stream: &CudaStream,
+        out0_ptr: u64,
+        out1_ptr: u64,
+        weight0_ptr: u64,
+        weight1_ptr: u64,
+        xq_ptr: u64,
+        xscale_ptr: u64,
+        in_dim: u64,
+        out0_dim: u64,
+        out1_dim: u64,
+        use_dp4a: bool,
+    ) -> bool {
+        let blocks = in_dim.div_ceil(32);
+        let Ok(grid_x) = u32::try_from(out0_dim.max(out1_dim).div_ceil(8)) else {
+            return false;
+        };
+        let config = LaunchConfig {
+            grid_dim: (grid_x, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut in_dim = in_dim;
+        let mut out0_dim = out0_dim;
+        let mut out1_dim = out1_dim;
+        let mut blocks = blocks;
+        let mut use_dp4a = u32::from(use_dp4a);
+        let mut weight0_ptr = weight0_ptr;
+        let mut weight0_len = out0_dim * blocks * 34;
+        let mut weight1_ptr = weight1_ptr;
+        let mut weight1_len = out1_dim * blocks * 34;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = blocks * 32;
+        let mut xscale_ptr = xscale_ptr;
+        let mut xscale_len = blocks;
+        let mut out0_ptr = out0_ptr;
+        let mut out0_len = out0_dim;
+        let mut out1_ptr = out1_ptr;
+        let mut out1_len = out1_dim;
+        let mut params = [
+            (&mut in_dim as *mut u64).cast::<c_void>(),
+            (&mut out0_dim as *mut u64).cast::<c_void>(),
+            (&mut out1_dim as *mut u64).cast::<c_void>(),
+            (&mut blocks as *mut u64).cast::<c_void>(),
+            (&mut use_dp4a as *mut u32).cast::<c_void>(),
+            (&mut weight0_ptr as *mut u64).cast::<c_void>(),
+            (&mut weight0_len as *mut u64).cast::<c_void>(),
+            (&mut weight1_ptr as *mut u64).cast::<c_void>(),
+            (&mut weight1_len as *mut u64).cast::<c_void>(),
+            (&mut xq_ptr as *mut u64).cast::<c_void>(),
+            (&mut xq_len as *mut u64).cast::<c_void>(),
+            (&mut xscale_ptr as *mut u64).cast::<c_void>(),
+            (&mut xscale_len as *mut u64).cast::<c_void>(),
+            (&mut out0_ptr as *mut u64).cast::<c_void>(),
+            (&mut out0_len as *mut u64).cast::<c_void>(),
+            (&mut out1_ptr as *mut u64).cast::<c_void>(),
+            (&mut out1_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates both packed-Q8 ranges and retains
+        // prequantized scratch through this paired single-token launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.matmul_q8_0_pair_preq_warp8_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

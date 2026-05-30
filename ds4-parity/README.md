@@ -3549,6 +3549,19 @@ path, and aliased routed-output addition. The internal Q8 pair consumer,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbba Rust CUDA
+public shared gate/up Q8 SwiGLU ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_shared_gate_up_swiglu_q8_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public shared gate/up consumer through
+its private paired DP4A and scalar routes plus its disabled-pair public
+fallback, and checks clamped SwiGLU output and invalid range rejection.
+Remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbba: Public Shared Gate Up SwiGLU Q8 ABI
+  is validated. Rust exports `ds4_gpu_shared_gate_up_swiglu_q8_0_tensor`
+  through an embedded private paired-Q8 kernel with retained DP4A/scalar
+  selection, while preserving `DS4_CUDA_DISABLE_SHARED_GATE_UP_PAIR`
+  delegation through the prior public Q8 and SwiGLU exports. A C-linked
+  B300 witness proves paired DP4A/scalar output, disabled-pair fallback,
+  clamped SwiGLU output, and invalid-range rejection. Local tests pass with
+  129 tests; B300 feature tests pass with 136 tests; the static library
+  exposes 42 symbols; all 39 preceding linked ABI consumers pass against the
+  rebuilt archive with the known executable-stack warning. All 43 CUDA ABI
+  comparators pass, and the unified report passes with 215 passed, 45
+  skipped, and 0 failed. The pre-implementation non-interactive Claude
+  review attempt returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`; final pass-end
+  Claude review returned `NO BLOCKERS`. Remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain
+  open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbba: Public Fused Q8 Hyperconnection Consumers ABI
   is validated. Rust exports `ds4_gpu_matmul_q8_0_hc_expand_tensor` and
   `ds4_gpu_shared_down_hc_expand_q8_0_tensor` through an embedded fused Q8

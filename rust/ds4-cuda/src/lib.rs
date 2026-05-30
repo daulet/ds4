@@ -3108,6 +3108,36 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBA_SCOPE: CudaAbiFusedQ8
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiSharedGateUpSwigluQ8Scope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub consumes_q8_matmul_and_swiglu_abi: bool,
+    pub owns_shared_gate_up_swiglu_q8_0_tensor: bool,
+    pub owns_private_q8_pair_kernel: bool,
+    pub owns_disabled_pair_fallback: bool,
+    pub owns_dp4a_and_scalar_selection: bool,
+    pub exports_internal_pair_tensor: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE:
+    CudaAbiSharedGateUpSwigluQ8Scope = CudaAbiSharedGateUpSwigluQ8Scope {
+    exported_abi_symbol_count: 42,
+    exported_compute_symbol_count: 19,
+    consumes_q8_matmul_and_swiglu_abi: true,
+    owns_shared_gate_up_swiglu_q8_0_tensor: true,
+    owns_private_q8_pair_kernel: true,
+    owns_disabled_pair_fallback: true,
+    owns_dp4a_and_scalar_selection: true,
+    exports_internal_pair_tensor: false,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -3173,6 +3203,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -5065,6 +5096,44 @@ mod tests {
         );
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBA_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_shared_gate_up_swiglu_q8_scope_keeps_remaining_graph_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.exported_abi_symbol_count,
+            42
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.exported_compute_symbol_count,
+            19
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE
+                .consumes_q8_matmul_and_swiglu_abi
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_shared_gate_up_swiglu_q8_0_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.owns_private_q8_pair_kernel
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.owns_disabled_pair_fallback
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.owns_dp4a_and_scalar_selection
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.exports_internal_pair_tensor
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_remaining_graph_compute_abi
+        );
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBA_SCOPE.changes_default_route);
     }
 
     #[test]

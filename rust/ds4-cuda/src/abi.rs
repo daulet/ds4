@@ -3248,6 +3248,187 @@ pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
 
 #[cfg(feature = "cuda-oxide-kernels")]
 #[allow(clippy::too_many_arguments)]
+unsafe fn matmul_q8_pair_fused_impl(
+    out0: &Ds4GpuTensor,
+    out1: &Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight0_offset: u64,
+    weight1_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: &Ds4GpuTensor,
+) -> bool {
+    let Some((_weight_elements, _weight_elements_usize, weight_bytes)) =
+        abi_q8_shape(in_dim, out_dim)
+    else {
+        return false;
+    };
+    let Some(x_bytes) = in_dim.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(out_bytes) = out_dim.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    if model_map.is_null()
+        || weight0_offset > model_size
+        || weight1_offset > model_size
+        || weight_bytes > model_size - weight0_offset
+        || weight_bytes > model_size - weight1_offset
+        || x.bytes < x_bytes
+        || out0.bytes < out_bytes
+        || out1.bytes < out_bytes
+    {
+        return false;
+    }
+    with_backend(|backend| {
+        with_cached_abi_model_range(
+            backend,
+            model_map,
+            model_size,
+            weight0_offset,
+            weight_bytes,
+            |weight0_ptr| {
+                with_cached_abi_model_range(
+                    backend,
+                    model_map,
+                    model_size,
+                    weight1_offset,
+                    weight_bytes,
+                    |weight1_ptr| {
+                        let blocks = in_dim.div_ceil(32);
+                        let Some(quantized_elements) = blocks.checked_mul(32) else {
+                            return Some(false);
+                        };
+                        let Some(quantized_elements) = usize::try_from(quantized_elements).ok()
+                        else {
+                            return Some(false);
+                        };
+                        let Some(scale_elements) = usize::try_from(blocks).ok() else {
+                            return Some(false);
+                        };
+                        with_abi_q8_activations(
+                            backend,
+                            quantized_elements,
+                            scale_elements,
+                            |activations| {
+                                with_abi_kernels(backend, |kernels| {
+                                    if !unsafe {
+                                        kernels.quantize_q8_f32_tensor(
+                                            backend.stream(),
+                                            x.device_ptr(),
+                                            activations.quantized.cu_deviceptr(),
+                                            activations.scales.cu_deviceptr(),
+                                            in_dim,
+                                            blocks,
+                                            1,
+                                        )
+                                    } {
+                                        return Some(false);
+                                    }
+                                    Some(unsafe {
+                                        kernels.matmul_q8_pair_tensor(
+                                            backend.stream(),
+                                            out0.device_ptr(),
+                                            out1.device_ptr(),
+                                            weight0_ptr,
+                                            weight1_ptr,
+                                            activations.quantized.cu_deviceptr(),
+                                            activations.scales.cu_deviceptr(),
+                                            in_dim,
+                                            out_dim,
+                                            out_dim,
+                                            q8_dp4a_enabled(
+                                                std::env::var_os("DS4_CUDA_NO_Q8_DP4A").is_some(),
+                                            ),
+                                        )
+                                    })
+                                })
+                            },
+                        )
+                    },
+                )
+            },
+        )
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_shared_gate_up_swiglu_q8_0_tensor(
+    gate: *mut Ds4GpuTensor,
+    up: *mut Ds4GpuTensor,
+    mid: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    gate_offset: u64,
+    up_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: *const Ds4GpuTensor,
+    clamp: f32,
+) -> c_int {
+    if std::env::var_os("DS4_CUDA_DISABLE_SHARED_GATE_UP_PAIR").is_some() {
+        return status(|| unsafe {
+            ds4_gpu_matmul_q8_0_tensor(
+                gate,
+                model_map,
+                model_size,
+                gate_offset,
+                in_dim,
+                out_dim,
+                x,
+                1,
+            ) != 0
+                && ds4_gpu_matmul_q8_0_tensor(
+                    up, model_map, model_size, up_offset, in_dim, out_dim, x, 1,
+                ) != 0
+                && ds4_gpu_swiglu_tensor(
+                    mid,
+                    gate.cast_const(),
+                    up.cast_const(),
+                    out_dim as u32,
+                    clamp,
+                    1.0,
+                ) != 0
+        });
+    }
+    status(|| {
+        let Some(gate_tensor) = (unsafe { tensor_ref(gate.cast_const()) }) else {
+            return false;
+        };
+        let Some(up_tensor) = (unsafe { tensor_ref(up.cast_const()) }) else {
+            return false;
+        };
+        let Some(x_tensor) = (unsafe { tensor_ref(x) }) else {
+            return false;
+        };
+        unsafe {
+            matmul_q8_pair_fused_impl(
+                gate_tensor,
+                up_tensor,
+                model_map,
+                model_size,
+                gate_offset,
+                up_offset,
+                in_dim,
+                out_dim,
+                x_tensor,
+            ) && ds4_gpu_swiglu_tensor(
+                mid,
+                gate.cast_const(),
+                up.cast_const(),
+                out_dim as u32,
+                clamp,
+                1.0,
+            ) != 0
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
 unsafe fn matmul_q8_hc_expand_fused_impl(
     out_hc: &Ds4GpuTensor,
     block_out: &Ds4GpuTensor,

@@ -68,6 +68,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_hc_expand_add_split_tensor",
     "ds4_gpu_matmul_q8_0_hc_expand_tensor",
     "ds4_gpu_shared_down_hc_expand_q8_0_tensor",
+    "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
 ]
 
 

@@ -58,7 +58,7 @@ EXPECTED_SYMBOLS = [
     "ds4_gpu_tensor_view",
     "ds4_gpu_tensor_write",
 ]
-CURRENT_SUCCESSOR_SYMBOLS = ["ds4_gpu_matmul_f16_tensor", "ds4_gpu_matmul_f16_pair_tensor", "ds4_gpu_matmul_f32_tensor", "ds4_gpu_cache_q8_f16_range", "ds4_gpu_print_memory_report", "ds4_gpu_set_quality", "ds4_gpu_matmul_q8_0_tensor", "ds4_gpu_hc_expand_tensor", "ds4_gpu_hc_expand_split_tensor", "ds4_gpu_hc_expand_add_split_tensor", "ds4_gpu_matmul_q8_0_hc_expand_tensor", "ds4_gpu_shared_down_hc_expand_q8_0_tensor"]
+CURRENT_SUCCESSOR_SYMBOLS = ["ds4_gpu_matmul_f16_tensor", "ds4_gpu_matmul_f16_pair_tensor", "ds4_gpu_matmul_f32_tensor", "ds4_gpu_cache_q8_f16_range", "ds4_gpu_print_memory_report", "ds4_gpu_set_quality", "ds4_gpu_matmul_q8_0_tensor", "ds4_gpu_hc_expand_tensor", "ds4_gpu_hc_expand_split_tensor", "ds4_gpu_hc_expand_add_split_tensor", "ds4_gpu_matmul_q8_0_hc_expand_tensor", "ds4_gpu_shared_down_hc_expand_q8_0_tensor", "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor"]
 
 
 @dataclass
@@ -246,7 +246,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy" in texts["status"],
         "active item missing",
     )
     report.check(

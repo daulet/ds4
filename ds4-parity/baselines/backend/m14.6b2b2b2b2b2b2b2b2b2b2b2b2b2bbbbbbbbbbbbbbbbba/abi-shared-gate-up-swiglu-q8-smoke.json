@@ -1,0 +1,68 @@
+{
+  "schema": "ds4.cuda_abi_shared_gate_up_swiglu_q8_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-shared-gate-up-swiglu-q8-abi",
+  "goal": "Rust-own the public shared gate/up Q8 SwiGLU consumer and its disabled-pair fallback without exporting its private pair helper or claiming route promotion.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbol": "ds4_gpu_shared_gate_up_swiglu_q8_0_tensor",
+    "semantics": [
+      "current C defaults the public wrapper to the private matmul_q8_0_pair_preq_warp8_kernel then SwiGLU",
+      "DS4_CUDA_DISABLE_SHARED_GATE_UP_PAIR falls back to two base Q8 matmuls plus SwiGLU",
+      "the paired native Q8 dot path selects DP4A unless DS4_CUDA_NO_Q8_DP4A is present"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbba/abi_shared_gate_up_swiglu_q8_link_smoke.c",
+    "kernel_entry": "abi_matmul_q8_0_pair_preq_warp8_kernel",
+    "fallback_path": "DS4_CUDA_DISABLE_SHARED_GATE_UP_PAIR delegates to Rust-owned ds4_gpu_matmul_q8_0_tensor twice plus ds4_gpu_swiglu_tensor",
+    "remaining_compute_boundary": "the private pair helper is not a public ABI export; remaining graph compute, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof currently retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 42,
+    "exported_compute_symbol_count": 19,
+    "public_gpu_abi_function_count": 81,
+    "consumes_q8_matmul_and_swiglu_abi": true,
+    "owns_shared_gate_up_swiglu_q8_0_tensor": true,
+    "owns_private_q8_pair_kernel": true,
+    "owns_disabled_pair_fallback": true,
+    "owns_dp4a_and_scalar_selection": true,
+    "exports_internal_pair_tensor": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 129,
+    "feature_release_test_count": 136,
+    "staticlib_export_count": 42,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "paired_dp4a_output_matches": true,
+      "paired_scalar_output_matches": true,
+      "disabled_pair_fallback_output_matches": true,
+      "swiglu_clamp_output_matches": true,
+      "invalid_range_rejected": true,
+      "embedded_q8_pair_kernel_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 39,
+      "predecessor_relink_executable_stack_warning_count": 39
+    }
+  },
+  "integration_risks": [
+    "the private Q8 pair helper is consumed only behind the public shared gate/up wrapper and is not exported as additional public ABI",
+    "remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
