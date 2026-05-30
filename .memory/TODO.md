@@ -10080,6 +10080,45 @@
 
 ####################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbb: Remaining Residual Failure Selection Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbba and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbb because buffered fd-read failure
+  continuation can be forced independently from event and final
+  synchronization failure paths.
 - Goal: connect remaining fd-read, event, and final synchronization failure
   selection without claiming graph compute closure or route promotion.
+
+######################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbba: Public Fd Read Failure Continuation ABI
+
+- Status: done
+- Goal: preserve current-C public buffered fd-read failure continuation so
+  failed staged reads retry on later ranges and continue through cached host
+  fallback independently of strict fd-cache mode.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbba/abi-model-control-fd-read-failure-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_read_failure_smoke.py --negative-test`.
+- Evidence: Existing Rust buffered-read propagation already maps failed
+  `pread` into registration/device-copy fallback without consulting strict
+  fd-cache mode, so no routing code change is required. A C-linked B300
+  consumer selects buffered fd caching, injects `EIO` from `pread` only for
+  the configured model fd before two disjoint ranges across a strict-mode
+  transition, rejects the first range-registration attempt, and proves both
+  ranges retain host-backed cached output rather than fd bytes. Two read
+  failures prove retry without arena cache-full latching; one
+  range-registration attempt preserves the prior registration-disable
+  boundary. Local tests pass with 116 tests, B300 release-feature tests pass
+  with 123 tests, and the static library retains 29 exports.
+  Stage-allocation failure, stage-pool reuse, fd-upload failure continuation,
+  fd-arena failure, fd-budget cache-result, default-fd, direct-I/O
+  asynchronous-staging, and registration-disable linked consumers pass
+  against the rebuilt archive. The focused comparator and default unified
+  parity report pass with 202 passed, 45 skipped, and 0 failed. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Event and final synchronization observations,
+  route promotion, and the `.note.GNU-stack` warning remain pending.
+
+######################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbb: Remaining Residual Failure Selection Policy
+
+- Status: active
+- Goal: connect remaining event and final synchronization failure selection
+  without claiming graph compute closure or route promotion.

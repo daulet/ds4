@@ -3357,6 +3357,22 @@ mode; the repeated allocation failure proves it does not latch arena
 cache-full state. Fd-read, event, final synchronization, whole-archive
 retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbba Rust CUDA public fd-read
+failure continuation ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_read_failure_smoke.py --negative-test
+```
+
+The fixture selects buffered fd caching from a C-linked B300 consumer,
+injects `EIO` from `pread` only for the configured model fd before two
+disjoint ranges across a strict-mode transition, and rejects the first
+range-registration attempt. Host-backed cached weighted output from both
+ranges proves buffered read failure continues through device-copy fallback
+independently of strict mode; two injected reads prove failure does not latch
+arena cache-full state. Event, final synchronization, whole-archive
+retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
