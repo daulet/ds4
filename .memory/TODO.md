@@ -10198,6 +10198,45 @@
 
 ########################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbb: Remaining Residual Failure Selection Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbb because final
+  stream-synchronization failure can be forced independently from remaining
+  graph-compute and route-promotion work.
 - Goal: connect remaining final stream-synchronization failure selection
   without claiming graph compute closure or route promotion.
+
+########################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba: Public Fd Final Sync Failure Continuation ABI
+
+- Status: done
+- Goal: preserve current-C public fd final upload synchronization failure
+  continuation so failed completed staging attempts retry on later ranges and
+  continue through cached host fallback independently of strict fd-cache mode.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba/abi-model-control-fd-final-sync-failure-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_final_sync_failure_smoke.py --negative-test`.
+- Evidence: Existing Rust final synchronization handling already maps failed
+  `backend.synchronize()` into registration/device-copy fallback without
+  consulting strict fd-cache mode, so no routing code change is required. A
+  C-linked B300 consumer selects buffered fd caching, injects one
+  `cuStreamSynchronize` failure per staged fd attempt across a strict-mode
+  transition, forwards subsequent synchronization so fallback can complete,
+  rejects the first range-registration attempt, and proves both ranges retain
+  host-backed cached output rather than fd bytes. Local tests pass with 119
+  tests, B300 release-feature tests pass with 126 tests, and the static
+  library retains 29 exports. Event-wait failure, event-record failure,
+  fd-read failure, stage-allocation failure, stage-pool reuse, fd-upload
+  failure continuation, fd-arena failure, fd-budget cache-result, default-fd,
+  direct-I/O asynchronous-staging, and registration-disable linked consumers
+  pass against the rebuilt archive. The focused comparator and default unified
+  parity report pass with 205 passed, 45 skipped, and 0 failed. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Q8/f16 hooks, remaining graph compute, route
+  promotion, and the `.note.GNU-stack` warning remain pending.
+
+########################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active
+- Goal: connect remaining q8/f16 hooks, graph compute, whole-archive
+  retention, and production route-promotion work without claiming C CUDA
+  removal before those gates pass.

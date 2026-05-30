@@ -10691,9 +10691,58 @@ Stage split:
 
 ########################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbb: Remaining Residual Failure Selection Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbb because final
+  stream-synchronization failure can be forced independently from remaining
+  graph-compute and route-promotion work.
 - Goal: connect remaining final stream-synchronization failure selection
   without claiming remaining graph compute or route promotion.
+
+########################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba: Public Fd Final Sync Failure Continuation ABI
+
+- Status: done.
+- Goal: preserve current-C public fd final upload synchronization failure
+  continuation so failed completed staging attempts retry on later ranges and
+  continue through cached host fallback independently of strict fd-cache mode.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba/abi-model-control-fd-final-sync-failure-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_final_sync_failure_smoke.py --negative-test`.
+- Evidence:
+  - Existing `rust/ds4-cuda/src/abi.rs` final synchronization handling already
+    maps failed `backend.synchronize()` through selected fd upload into public
+    registration/device-copy fallback without consulting
+    `DS4_CUDA_STRICT_WEIGHT_CACHE`; this leaf records the boundary without
+    changing routing code.
+  - A C-linked B300 consumer selects buffered fd caching, injects one
+    `cuStreamSynchronize` failure per staged fd attempt across a strict-mode
+    transition, forwards subsequent synchronization so device-copy fallback
+    can complete, rejects the first range-registration attempt, and proves
+    both ranges retain host-backed cached output rather than fd bytes.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 119 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 126 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - Event-wait failure, event-record failure, fd-read failure,
+    stage-allocation failure, stage-pool reuse, fd-upload failure
+    continuation, fd-arena failure, fd-budget cache-result, default-fd,
+    direct-I/O asynchronous-staging, and registration-disable C-linked B300
+    consumers pass against the rebuilt archive.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_fd_final_sync_failure_smoke.py
+    --negative-test` passes, and the default unified parity report passes with
+    205 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Q8/f16 hooks, remaining graph compute, route promotion, and the generated
+    `.note.GNU-stack` warning remain open.
+
+########################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: connect remaining q8/f16 hooks, graph compute, whole-archive
+  retention, and production route-promotion work without claiming C CUDA
+  removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 

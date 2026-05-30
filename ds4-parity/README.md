@@ -3405,6 +3405,22 @@ through device-copy fallback independently of strict mode. Final
 stream-synchronization, whole-archive retention, and the executable-stack
 warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba Rust CUDA public fd
+final upload synchronization failure continuation ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_final_sync_failure_smoke.py --negative-test
+```
+
+The fixture selects buffered fd caching from a C-linked B300 consumer,
+injects one `cuStreamSynchronize` failure per staged fd request across a
+strict-mode transition, and forwards subsequent synchronizations so fallback
+completion remains observable. Host-backed cached weighted output from both
+ranges proves final synchronization failure continues through device-copy
+fallback independently of strict mode. Q8/f16 hooks, graph compute,
+whole-archive retention, route promotion, and the executable-stack warning
+remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

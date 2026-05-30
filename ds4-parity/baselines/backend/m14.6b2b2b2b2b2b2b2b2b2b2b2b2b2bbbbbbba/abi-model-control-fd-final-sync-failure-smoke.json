@@ -1,0 +1,88 @@
+{
+  "schema": "ds4.cuda_abi_model_control_fd_final_sync_failure_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba",
+  "status": "b300-pass-staticlib-fd-final-sync-failure-abi",
+  "goal": "Rust-own current-C public fd final upload synchronization failure continuation so failed completed staging attempts retry on later fd ranges and continue through registration or device-copy fallback independently of strict fd-cache mode.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "cuda_model_range_ptr_from_fd",
+      "cuda_model_range_ptr"
+    ],
+    "semantics": [
+      "current C synchronizes the upload stream after staged fd copies and returns NULL from cuda_model_range_ptr_from_fd on final upload synchronization failure",
+      "cuda_model_range_ptr treats that NULL as fd-path failure and continues into mapped registration or device-copy fallback",
+      "DS4_CUDA_STRICT_WEIGHT_CACHE controls arena-allocation failure only; it does not alter final stream-synchronization failure continuation"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "substrate_source": "rust/ds4-cuda/src/substrate.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba/abi_model_control_fd_final_sync_failure_link_smoke.c",
+    "selection_path": "existing Rust final backend.synchronize result maps failed selected fd upload into with_cached_abi_model_range registration/device-copy continuation without consulting strict mode; the DS4 substrate adapter delegates synchronization to its cuda-oxide stream",
+    "live_boundary": "the linked consumer injects one cuStreamSynchronize failure per selected fd attempt, then forwards subsequent synchronization so fallback device-copy completion is independently observed across a strict-mode transition",
+    "remaining_policy_boundary": "q8/f16, graph-compute, whole-archive retention, route-promotion, and C CUDA removal boundaries remain pending"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_fd_final_sync_failure_continuation": true,
+    "owns_strict_independent_final_sync_failure_continuation": true,
+    "owns_live_retried_final_sync_failure_observation": true,
+    "owns_remaining_residual_failure_selection": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 119,
+    "feature_release_test_count": 126,
+    "forced_failure": {
+      "interposed_symbol": "cuStreamSynchronize",
+      "final_sync_failure_error": 1,
+      "registration_failure_error": 801
+    },
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "buffered_fd_selection_active": true,
+      "interposed_fd_final_sync_failure": true,
+      "one_shot_failure_allows_fallback_sync": true,
+      "final_sync_failure_retries_without_cache_full_latch": true,
+      "non_strict_final_sync_failure_continues_to_cached_device_copy": true,
+      "strict_final_sync_failure_continues_to_cached_device_copy": true,
+      "first_final_sync_failure_enters_registration_fallback": true,
+      "subsequent_final_sync_failure_respects_registration_disable": true,
+      "cached_fallback_retains_original_host_bytes": true,
+      "host_bytes_precede_file_bytes_after_final_sync_failure": true,
+      "weighted_outputs_match": true,
+      "embedded_libdevice_module_loaded": true,
+      "staticlib_export_count_unchanged": true,
+      "fd_event_wait_failure_regression_passed": true,
+      "fd_event_record_failure_regression_passed": true,
+      "fd_read_failure_regression_passed": true,
+      "fd_stage_allocation_failure_regression_passed": true,
+      "fd_stage_pool_reuse_regression_passed": true,
+      "fd_upload_failure_continuation_regression_passed": true,
+      "fd_arena_failure_regression_passed": true,
+      "fd_budget_cache_result_regression_passed": true,
+      "default_fd_regression_passed": true,
+      "direct_io_async_staging_regression_passed": true,
+      "registration_disable_regression_passed": true
+    }
+  },
+  "integration_risks": [
+    "the live linked consumer injects a one-shot invalid-value failure from cuStreamSynchronize for each selected fd attempt and forwards subsequent synchronization so device-copy fallback completion remains testable",
+    "the first forced final synchronization failure enters the existing registration fallback; its injected not-supported result intentionally preserves the previously owned same-map range-registration disable behavior for the second range",
+    "residual public fd failure-selection observations are now covered; q8/f16 hooks and remaining graph compute remain separate work",
+    "production linker selection and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

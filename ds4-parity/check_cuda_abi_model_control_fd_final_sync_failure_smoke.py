@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba fd stage-pool reuse ABI smoke."""
+"""Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba fd final-sync failure ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba/abi-model-control-fd-stage-pool-reuse-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba/abi-model-control-fd-final-sync-failure-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
-HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba/abi_model_control_fd_stage_pool_reuse_link_smoke.c"
+SUBSTRATE = ROOT / "rust/ds4-cuda/src/substrate.rs"
+HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba/abi_model_control_fd_final_sync_failure_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -52,6 +53,7 @@ def main(argv: Iterable[str]) -> int:
         "cuda_c": CUDA_C.read_text(encoding="utf-8"),
         "lib": CUDA_LIB.read_text(encoding="utf-8"),
         "abi": CUDA_ABI.read_text(encoding="utf-8"),
+        "substrate": SUBSTRATE.read_text(encoding="utf-8"),
         "harness": HARNESS.read_text(encoding="utf-8"),
         "gpu_build": GPU_BUILD.read_text(encoding="utf-8"),
         "gpu_sys": GPU_SYS.read_text(encoding="utf-8"),
@@ -67,8 +69,8 @@ def main(argv: Iterable[str]) -> int:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
     print(
-        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba Rust CUDA public fd stage-pool "
-        f"reuse ABI smoke: {state} ({report.checks} checks)"
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba Rust CUDA public fd final-sync "
+        f"failure ABI smoke: {state} ({report.checks} checks)"
     )
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
@@ -77,15 +79,15 @@ def main(argv: Iterable[str]) -> int:
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     report.check(
-        fixture.get("schema") == "ds4.cuda_abi_model_control_fd_stage_pool_reuse_smoke.v1",
+        fixture.get("schema") == "ds4.cuda_abi_model_control_fd_final_sync_failure_smoke.v1",
         "schema drift",
     )
     report.check(
-        fixture.get("milestone") == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba",
+        fixture.get("milestone") == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba",
         "milestone drift",
     )
     report.check(
-        fixture.get("status") == "b300-pass-staticlib-fd-stage-pool-reuse-abi",
+        fixture.get("status") == "b300-pass-staticlib-fd-final-sync-failure-abi",
         "status drift",
     )
     validate_oracle(report, fixture, texts)
@@ -98,21 +100,18 @@ def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[st
     oracle = require_dict(report, fixture.get("oracle"), "oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
     report.check(
-        oracle.get("symbols")
-        == ["cuda_model_stage_pool_alloc", "cuda_model_range_ptr_from_fd", "ds4_gpu_cleanup"],
+        oracle.get("symbols") == ["cuda_model_range_ptr_from_fd", "cuda_model_range_ptr"],
         "oracle symbols drift",
     )
     for marker in [
-        "static void *g_model_stage_raw[4];",
-        "static cudaEvent_t g_model_stage_event[4];",
-        "static uint64_t g_model_stage_bytes;",
-        "static int cuda_model_stage_pool_alloc(uint64_t bytes) {",
-        "if (g_model_stage_bytes >= bytes) return 1;",
-        "if (!cuda_model_stage_pool_alloc(stage_bytes)) return NULL;",
-        "(void)cudaFreeHost(g_model_stage_raw[i]);",
-        "g_model_stage_bytes = 0;",
+        "err = cudaStreamSynchronize(g_model_upload_stream);",
+        "ds4: CUDA model range upload sync failed for %s",
+        "return NULL;",
+        "const char *fd_ptr = cuda_model_range_ptr_from_fd(model_map, offset, bytes, what);",
+        "if (fd_ptr) return fd_ptr;",
+        "if (g_model_range_mapping_supported) {",
     ]:
-        report.check(marker in texts["cuda_c"], f"current-C stage-pool marker missing: {marker}")
+        report.check(marker in texts["cuda_c"], f"current-C final-sync marker missing: {marker}")
 
 
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -121,11 +120,10 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         ("exported_abi_symbol_count", 29),
         ("exported_compute_symbol_count", 9),
         ("public_gpu_abi_function_count", 81),
-        ("owns_retained_four_slot_fd_stage_pool", True),
-        ("owns_stage_pool_cleanup_boundary", True),
-        ("owns_live_second_range_reuse_observation", True),
-        ("owns_live_armed_second_allocation_suppression_observation", True),
-        ("owns_remaining_failure_selection", False),
+        ("owns_fd_final_sync_failure_continuation", True),
+        ("owns_strict_independent_final_sync_failure_continuation", True),
+        ("owns_live_retried_final_sync_failure_observation", True),
+        ("owns_remaining_residual_failure_selection", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
         ("changes_default_route", False),
@@ -140,35 +138,36 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     upload_fn = texts["abi"].split("fn upload_abi_async_fd_range_into", maxsplit=1)[1].split(
         "fn upload_abi_async_fd_arena_range", maxsplit=1
     )[0]
-    cleanup_fn = texts["abi"].split('pub extern "C" fn ds4_gpu_cleanup()', maxsplit=1)[1].split(
-        'pub extern "C" fn ds4_gpu_tensor_alloc', maxsplit=1
-    )[0]
-    model_map_fn = texts["abi"].split('pub unsafe extern "C" fn ds4_gpu_set_model_map(', maxsplit=1)[1].split(
-        'pub extern "C" fn ds4_gpu_set_model_fd', maxsplit=1
+    range_fn = texts["abi"].split("fn with_cached_abi_model_range", maxsplit=1)[1].split(
+        "fn abi_model_range_is_cached", maxsplit=1
     )[0]
     for marker in [
-        "static ABI_MODEL_STAGE_POOL: Mutex<AbiModelStagePool>",
-        "struct AbiModelStageSlot",
-        "struct AbiModelStagePool",
-        "let mut stage_pool = ABI_MODEL_STAGE_POOL.lock().ok()?;",
-        "if stage_pool.stage_bytes < stage_bytes {",
-        "stage_pool.slots.clear();",
-        "stage_pool.slots.push(AbiModelStageSlot {",
-        "let stage_slot = stage_pool.slots.get_mut(slot)?;",
-        "if synchronize_ok {",
-        "slot.event = None;",
+        "let synchronize_ok = backend.synchronize().is_ok();",
+        "let used_direct = upload_result?;",
+        "if !synchronize_ok {",
+        "return None;",
     ]:
-        report.check(marker in texts["abi"] or marker in upload_fn, f"Rust stage-pool marker missing: {marker}")
-    report.check("ABI_MODEL_STAGE_POOL.lock()" in cleanup_fn, "cleanup does not release stage pool")
-    report.check("ABI_MODEL_STAGE_POOL.lock()" not in model_map_fn, "model replacement unexpectedly clears stage pool")
+        report.check(marker in upload_fn, f"Rust final-sync propagation marker missing: {marker}")
+    report.check(
+        "pub fn synchronize(&self) -> Result<(), DriverError>" in texts["substrate"]
+        and "self.stream.synchronize()" in texts["substrate"],
+        "DS4 cuda-oxide stream synchronization adapter missing",
+    )
     for marker in [
-        "pub struct CudaAbiFdStagePoolReuseScope",
-        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBA_SCOPE",
-        "owns_retained_four_slot_fd_stage_pool: true",
-        "owns_stage_pool_cleanup_boundary: true",
-        "owns_live_second_range_reuse_observation: true",
-        "owns_live_armed_second_allocation_suppression_observation: true",
-        "owns_remaining_failure_selection: false",
+        "let fd_resolution = if direct_io_fd_weight_cache_selected() {",
+        "let storage = match fd_resolution {",
+        "None => {",
+        "match try_register_abi_model_range(",
+        "AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?)",
+    ]:
+        report.check(marker in range_fn, f"Rust post-final-sync continuation marker missing: {marker}")
+    for marker in [
+        "pub struct CudaAbiFdFinalSyncFailureScope",
+        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBA_SCOPE",
+        "owns_fd_final_sync_failure_continuation: true",
+        "owns_strict_independent_final_sync_failure_continuation: true",
+        "owns_live_retried_final_sync_failure_observation: true",
+        "owns_remaining_residual_failure_selection: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -182,30 +181,38 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 114),
-        ("feature_release_test_count", 121),
+        ("local_library_test_count", 119),
+        ("feature_release_test_count", 126),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
-    forced = require_dict(report, execution.get("forced_boundary"), "forced_boundary")
+    failure = require_dict(report, execution.get("forced_failure"), "forced_failure")
     for key, expected in [
-        ("interposed_symbol", "cuMemAllocHost_v2"),
-        ("armed_second_range_allocation_error", 2),
+        ("interposed_symbol", "cuStreamSynchronize"),
+        ("final_sync_failure_error", 1),
         ("registration_failure_error", 801),
     ]:
-        report.check(forced.get(key) == expected, f"forced boundary drift: {key}")
+        report.check(failure.get(key) == expected, f"forced failure drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
         "buffered_fd_selection_active",
-        "four_slot_stage_pool_created_once",
-        "second_range_reuses_stage_pool",
-        "armed_second_allocation_failure_not_triggered",
-        "fd_bytes_win_after_pool_reuse",
-        "cached_ranges_retain_original_fd_bytes",
-        "registration_fallback_not_entered_for_second_range",
+        "interposed_fd_final_sync_failure",
+        "one_shot_failure_allows_fallback_sync",
+        "final_sync_failure_retries_without_cache_full_latch",
+        "non_strict_final_sync_failure_continues_to_cached_device_copy",
+        "strict_final_sync_failure_continues_to_cached_device_copy",
+        "first_final_sync_failure_enters_registration_fallback",
+        "subsequent_final_sync_failure_respects_registration_disable",
+        "cached_fallback_retains_original_host_bytes",
+        "host_bytes_precede_file_bytes_after_final_sync_failure",
         "weighted_outputs_match",
         "embedded_libdevice_module_loaded",
         "staticlib_export_count_unchanged",
+        "fd_event_wait_failure_regression_passed",
+        "fd_event_record_failure_regression_passed",
+        "fd_read_failure_regression_passed",
+        "fd_stage_allocation_failure_regression_passed",
+        "fd_stage_pool_reuse_regression_passed",
         "fd_upload_failure_continuation_regression_passed",
         "fd_arena_failure_regression_passed",
         "fd_budget_cache_result_regression_passed",
@@ -215,29 +222,33 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
     for marker in [
-        "CUresult cuMemAllocHost_v2(",
-        'dlsym(RTLD_NEXT, "cuMemAllocHost_v2")',
-        "fail_future_stage_alloc = 1;",
-        "pinned_alloc_calls != 4",
-        "injected_second_range_stage_alloc_failures != 0",
-        'setenv("DS4_CUDA_NO_DIRECT_IO", "1", 1)',
-        "second_range_reuses_stage_pool",
-        "cached_ranges_retain_original_fd_bytes",
+        "CUresult cuStreamSynchronize(",
+        'dlsym(RTLD_NEXT, "cuStreamSynchronize")',
+        "fail_next_stream_sync = 1;",
+        "stream_sync_failures != 1",
+        "stream_sync_failures != 2",
+        "fail_next_stream_sync ||",
+        "host_register_calls != register_calls_after_map + 1",
+        'setenv("DS4_CUDA_STRICT_WEIGHT_CACHE", "1", 1)',
+        "one_shot_failure_allows_fallback_sync",
+        "subsequent_final_sync_failure_respects_registration_disable",
+        "cached_fallback_retains_original_host_bytes",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
     risks = fixture.get("integration_risks", [])
-    report.check(any("cuMemAllocHost_v2" in value for value in risks), "allocation reuse boundary missing")
-    report.check(any("remain separate observations" in value for value in risks), "remaining failure boundary missing")
+    report.check(any("one-shot" in value for value in risks), "one-shot sync boundary missing")
+    report.check(any("range-registration disable" in value for value in risks), "registration-disable boundary missing")
+    report.check(any("residual public fd failure-selection" in value for value in risks), "residual closure boundary missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     fixture_path = (
-        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba/"
-        "abi-model-control-fd-stage-pool-reuse-smoke.json"
+        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba/"
+        "abi-model-control-fd-final-sync-failure-smoke.json"
     )
-    checker = "check_cuda_abi_model_control_fd_stage_pool_reuse_smoke.py"
-    item = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba: Public Fd Stage Pool Reuse ABI"
+    checker = "check_cuda_abi_model_control_fd_final_sync_failure_smoke.py"
+    item = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba: Public Fd Final Sync Failure Continuation ABI"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
@@ -248,7 +259,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
         "active item missing",
     )
     report.check(
-        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bba Public Fd Stage Pool Reuse"
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbba Public Fd Final Sync Failure"
         in texts["status"],
         "status evidence missing",
     )
@@ -256,17 +267,17 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(
         fixture.get("next_required_stage")
-        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbb Remaining Residual Failure Selection Policy",
+        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbb Remaining Graph Compute And Route Promotion Policy",
         "next stage drift",
     )
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("retained pool ownership missing", lambda value: value["ownership"].update({"owns_retained_four_slot_fd_stage_pool": False})),
-        ("cleanup boundary missing", lambda value: value["ownership"].update({"owns_stage_pool_cleanup_boundary": False})),
-        ("reuse observation missing", lambda value: value["b300_execution"]["observed"].update({"second_range_reuses_stage_pool": False})),
-        ("allocation suppression missing", lambda value: value["b300_execution"]["observed"].update({"armed_second_allocation_failure_not_triggered": False})),
+        ("final-sync ownership missing", lambda value: value["ownership"].update({"owns_fd_final_sync_failure_continuation": False})),
+        ("strict-independent ownership missing", lambda value: value["ownership"].update({"owns_strict_independent_final_sync_failure_continuation": False})),
+        ("one-shot observation missing", lambda value: value["b300_execution"]["observed"].update({"one_shot_failure_allows_fallback_sync": False})),
+        ("cached host result missing", lambda value: value["b300_execution"]["observed"].update({"cached_fallback_retains_original_host_bytes": False})),
         ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)
