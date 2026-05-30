@@ -8653,7 +8653,7 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2b.
+- Status: active; split beginning with M14.5a through M14.5c2b2.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8775,13 +8775,40 @@ Stage split:
     M14 checks, and unified parity passed with 153 passed, 50 skipped, and 0
     failed.
 
-##### M14.5c2b: Batched Quantized Routed MoE Scheduling
+##### M14.5c2b1: Batched Sorted-Pair Metadata
+
+- Status: done.
+- Goal: port the current-C batched routed-MoE pair histogram, prefix-offset,
+  and scatter metadata kernels before sorted projection execution.
+- Oracle: current-C `moe_count_sorted_pairs_kernel`,
+  `moe_prefix_sorted_pairs_kernel`, and `moe_scatter_sorted_pairs_kernel`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2b1/routed-moe-sorted-pairs-smoke.json`.
+- Comparator: `ds4-parity/check_routed_moe_sorted_pairs_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in atomic expert histogram, prefix offsets/cursors,
+  scatter grouping, duplicate pair preservation, and negative-expert
+  expert-zero bucketing. Sorted projection, expert-tile/atomic-down execution,
+  Q4_K, hyperconnection, runtime graph integration, default route activation,
+  and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust device-atomic metadata kernels matching the
+    current-C count, prefix, and scatter stages without imposing ordering
+    inside equal-expert atomic regions.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 75 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    and matched histogram, prefix, grouped-scatter, duplicate, and
+    negative-expert metadata behavior on `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the M14.5c2b1 comparator, retained
+    M14 checks, and unified parity passed with 154 passed, 50 skipped, and 0
+    failed.
+
+##### M14.5c2b2: Sorted-Pair P2 Quantized Projection
 
 - Status: active.
-- Goal: port sorted-pair and expert-tile batched IQ2-XXS/Q2_K quantized
-  routed-MoE scheduling after single-token quantized closure; keep Q4_K in a
-  subsequent evidence boundary unless the implementation proves both paths
-  together.
+- Goal: port the no-expert-tiles/default-P2 batched IQ2-XXS/Q2_K gate/down
+  projection kernels over the sorted metadata before expert-tile and
+  atomic-down scheduling variants.
 
 ## Removal Criteria for C Host Code
 

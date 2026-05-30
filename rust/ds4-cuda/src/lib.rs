@@ -1617,6 +1617,35 @@ pub const M14_5C2A_SCOPE: RoutedMoeQuantizedSingleScope = RoutedMoeQuantizedSing
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RoutedMoeSortedPairsScope {
+    pub opt_in_only: bool,
+    pub consumes_quantized_single_surface: bool,
+    pub owns_moe_count_sorted_pairs_kernel: bool,
+    pub owns_moe_prefix_sorted_pairs_kernel: bool,
+    pub owns_moe_scatter_sorted_pairs_kernel: bool,
+    pub owns_negative_expert_bucket_zero: bool,
+    pub owns_sorted_pair_metadata: bool,
+    pub owns_sorted_projection_kernels: bool,
+    pub owns_expert_tile_or_atomic_down: bool,
+    pub owns_q4_k_or_runtime_graph: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5C2B1_SCOPE: RoutedMoeSortedPairsScope = RoutedMoeSortedPairsScope {
+    opt_in_only: true,
+    consumes_quantized_single_surface: true,
+    owns_moe_count_sorted_pairs_kernel: true,
+    owns_moe_prefix_sorted_pairs_kernel: true,
+    owns_moe_scatter_sorted_pairs_kernel: true,
+    owns_negative_expert_bucket_zero: true,
+    owns_sorted_pair_metadata: true,
+    owns_sorted_projection_kernels: false,
+    owns_expert_tile_or_atomic_down: false,
+    owns_q4_k_or_runtime_graph: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1650,7 +1679,7 @@ mod tests {
         M14_3D3_SCOPE, M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE,
         M14_4C3A_SCOPE, M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE,
         M14_4D5_SCOPE, M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
-        M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE,
+        M14_5B_SCOPE, M14_5C1_SCOPE, M14_5C2A_SCOPE, M14_5C2B1_SCOPE,
     };
 
     #[test]
@@ -2479,6 +2508,21 @@ mod tests {
         assert!(!M14_5C2A_SCOPE.owns_q4_k_dispatch);
         assert!(!M14_5C2A_SCOPE.owns_hyperconnection_or_runtime_graph);
         assert!(!M14_5C2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn routed_moe_sorted_pairs_scope_leaves_sorted_compute_and_route_pending() {
+        assert!(M14_5C2B1_SCOPE.opt_in_only);
+        assert!(M14_5C2B1_SCOPE.consumes_quantized_single_surface);
+        assert!(M14_5C2B1_SCOPE.owns_moe_count_sorted_pairs_kernel);
+        assert!(M14_5C2B1_SCOPE.owns_moe_prefix_sorted_pairs_kernel);
+        assert!(M14_5C2B1_SCOPE.owns_moe_scatter_sorted_pairs_kernel);
+        assert!(M14_5C2B1_SCOPE.owns_negative_expert_bucket_zero);
+        assert!(M14_5C2B1_SCOPE.owns_sorted_pair_metadata);
+        assert!(!M14_5C2B1_SCOPE.owns_sorted_projection_kernels);
+        assert!(!M14_5C2B1_SCOPE.owns_expert_tile_or_atomic_down);
+        assert!(!M14_5C2B1_SCOPE.owns_q4_k_or_runtime_graph);
+        assert!(!M14_5C2B1_SCOPE.changes_default_route);
     }
 
     #[test]

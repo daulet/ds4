@@ -1,0 +1,85 @@
+{
+  "schema": "ds4.routed_moe_sorted_pairs_smoke.v1",
+  "milestone": "M14.5c2b1",
+  "status": "b300-pass",
+  "id": "m14.5c2b1-routed-moe-sorted-pairs",
+  "goal": "Prove opt-in Rust cuda-oxide batched routed-MoE sorted-pair metadata construction without claiming the sorted projection or tile execution kernels.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "dependency_revision": "485bdd86fc1c900ad15ebd421b3b187619fe0903",
+    "feature": "cuda-oxide-kernels",
+    "module_form": "executable-local #[cuda_module] sorted-pair metadata kernels"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_behavior": [
+      "moe_count_sorted_pairs_kernel atomic expert histogram",
+      "moe_prefix_sorted_pairs_kernel offsets and scatter cursors",
+      "moe_scatter_sorted_pairs_kernel atomic pair grouping with negative experts mapped to expert zero"
+    ],
+    "excluded_behavior": [
+      "sorted P2 or expert-tile gate/down projection kernels",
+      "Q4_K routed-MoE, hyperconnection, runtime graph integration, default route activation, and C CUDA removal"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "executable-local atomic routed-expert histogram, prefix, and scatter proof",
+      "batched sorted-pair metadata grouping with duplicate pair preservation",
+      "negative expert identifier mapping into expert-zero metadata"
+    ],
+    "not_claimed_in_this_stage": [
+      "sorted projection, expert-tile, or atomic-down routed-MoE kernels",
+      "Q4_K, hyperconnection, runtime graph integration, default CUDA route, or C CUDA removal"
+    ],
+    "opt_in_only": true,
+    "consumes_quantized_single_surface": true,
+    "owns_moe_count_sorted_pairs_kernel": true,
+    "owns_moe_prefix_sorted_pairs_kernel": true,
+    "owns_moe_scatter_sorted_pairs_kernel": true,
+    "owns_negative_expert_bucket_zero": true,
+    "owns_sorted_pair_metadata": true,
+    "owns_sorted_projection_kernels": false,
+    "owns_expert_tile_or_atomic_down": false,
+    "owns_q4_k_or_runtime_graph": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 cargo test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "test_count": 75,
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 RUSTUP_TOOLCHAIN=nightly-2026-04-03 CUDA_OXIDE_BACKEND=/workspace/cuda-oxide/crates/rustc-codegen-cuda/target/debug/librustc_codegen_cuda.so CUDA_OXIDE_LLC=/usr/bin/llc CUDA_OXIDE_VERBOSE=1 cargo run --manifest-path /workspace/cuda-oxide/crates/cargo-oxide/Cargo.toml -- run --features cuda-oxide-kernels --bin ds4-cuda-routed-moe-sorted-pairs-smoke",
+    "backend_selected_target": "sm_80",
+    "stdout": {
+      "milestone": "M14.5c2b1",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "rust_kernel_toolchain": true,
+      "count_histogram_matches": true,
+      "prefix_offsets_match": true,
+      "scatter_grouping_matches": true,
+      "duplicate_expert_pairs_preserved": true,
+      "negative_expert_bucket_zero_matches": true,
+      "atomic_cursor_completion_matches": true,
+      "invalid_shape_rejected": true,
+      "uses_device_atomic_fetch_add": true,
+      "consumes_quantized_single_surface": true,
+      "owns_moe_count_sorted_pairs_kernel": true,
+      "owns_moe_prefix_sorted_pairs_kernel": true,
+      "owns_moe_scatter_sorted_pairs_kernel": true,
+      "owns_negative_expert_bucket_zero": true,
+      "owns_sorted_pair_metadata": true,
+      "owns_sorted_projection_kernels": false,
+      "owns_expert_tile_or_atomic_down": false,
+      "owns_q4_k_or_runtime_graph": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.5c2b2 Sorted-Pair P2 Quantized Projection"
+}

@@ -211,7 +211,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.5c2b Batched Quantized Routed MoE Scheduling" in texts["status"],
+        "Active item: M14.5c2b2 Sorted-Pair P2 Quantized Projection" in texts["status"],
         "next active stage missing",
     )
     report.check(item.replace(":", "") in texts["status"], "status evidence missing")

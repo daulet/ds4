@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.5c2b Batched Quantized Routed MoE Scheduling
+- Active item: M14.5c2b2 Sorted-Pair P2 Quantized Projection
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -53,7 +53,8 @@
 - M14.4 compressor work now owns row storage, pooling/shift, update
   orchestration, prefill/replay orchestration, and optional FP8 compressed
   output before beginning attention execution.
-- Last validated source before the active item: M14.5c2a Default Single-Token Quantized Routed MoE Dispatch.
+- Last validated source before the active item: M14.5c2b1 Batched Sorted-Pair Metadata.
+- Earlier M14.5c2a Default Single-Token Quantized Routed MoE Dispatch.
 - Earlier M14.5c1 Packed F32-Activation Routed MoE Fallback.
 - Earlier M14.5b Parallel And Warp Router Dispatch.
 - Earlier M14.5a Scalar Router Selection Surfaces.
@@ -210,6 +211,19 @@
 
 ## Last Evidence
 
+- M14.5c2b1 Batched Sorted-Pair Metadata adds executable-local Rust
+  cuda-oxide device-atomic expert counting and scattering plus prefix
+  offsets/cursors for the current-C batched routed-MoE ordering surface. On
+  B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with
+  75 tests; live cargo-oxide execution emitted portable `sm_80` PTX and
+  matched histogram, prefix, grouped-scatter, duplicate, and negative-expert
+  metadata behavior on `NVIDIA B300 SXM6 AC`. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.5c2b1/routed-moe-sorted-pairs-smoke.json`
+  and `ds4-parity/check_routed_moe_sorted_pairs_smoke.py --negative-test`.
+  Sorted projection, expert-tile/atomic-down execution, Q4_K, hyperconnection,
+  runtime route activation, and C CUDA removal remain unclaimed. Local
+  formatting, diff, library tests, the M14.5c2b1 comparator, retained M14
+  checks, and unified parity passed with 154 passed, 50 skipped, and 0 failed.
 - M14.5c2a Default Single-Token Quantized Routed MoE Dispatch adds
   executable-local Rust cuda-oxide Q8_K activation quantization,
   LUT-equivalent IQ2-XXS/Q8_K gate/up decode, Q2_K/Q8_K direct six-expert

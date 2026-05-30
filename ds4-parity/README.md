@@ -2763,6 +2763,18 @@ output, auxiliary write mode, zero quantization, and negative-expert
 fallback. It leaves batched sorted/tiled dispatch, Q4_K, hyperconnection,
 runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.5c2b1 Rust CUDA routed MoE sorted-pair metadata smoke:
+
+```sh
+python3 ds4-parity/check_routed_moe_sorted_pairs_smoke.py --negative-test
+```
+
+The fixture records current-C batched sorted-pair metadata behavior on B300:
+device-atomic expert counts, prefix offsets/cursors, grouped scatter with
+duplicate pair preservation, and negative-expert bucket-zero semantics. It
+leaves sorted projection, expert-tile/atomic-down execution, Q4_K,
+hyperconnection, runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

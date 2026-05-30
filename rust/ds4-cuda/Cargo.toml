@@ -297,3 +297,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-routed-moe-quantized-single-smoke"
 path = "src/bin/routed_moe_quantized_single_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-routed-moe-sorted-pairs-smoke"
+path = "src/bin/routed_moe_sorted_pairs_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

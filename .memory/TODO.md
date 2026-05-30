@@ -8706,7 +8706,7 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active; split beginning with M14.5a through M14.5c2b
+- Status: active; split beginning with M14.5a through M14.5c2b2
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
 
@@ -8784,9 +8784,27 @@
   retained M14 checks, and unified parity passed with 153 passed, 50 skipped,
   and 0 failed.
 
-##### M14.5c2b: Batched Quantized Routed MoE Scheduling
+##### M14.5c2b1: Batched Sorted-Pair Metadata
+
+- Status: done
+- Goal: port the current-C pair histogram, prefix-offset, and scatter
+  metadata kernels before sorted quantized projection.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.5c2b1/routed-moe-sorted-pairs-smoke.json`
+- Comparator: `ds4-parity/check_routed_moe_sorted_pairs_smoke.py --negative-test`
+- Evidence: executable-local Rust device-atomic metadata kernels cover
+  expert histogram, prefix offsets/cursors, grouped scatter, duplicate pair
+  preservation, and negative-expert expert-zero bucketing without assuming
+  ordering within an equal-expert atomic region. B300 feature-enabled tests
+  passed with 75 tests; live cargo-oxide execution emitted portable `sm_80`
+  PTX and matched metadata behavior on `NVIDIA B300 SXM6 AC`. Sorted
+  projection, expert-tile/atomic-down execution, Q4_K, hyperconnection,
+  runtime route activation, and C CUDA removal remain unclaimed. Local
+  formatting, diff, library tests, the M14.5c2b1 comparator, retained M14
+  checks, and unified parity passed with 154 passed, 50 skipped, and 0 failed.
+
+##### M14.5c2b2: Sorted-Pair P2 Quantized Projection
 
 - Status: active
-- Goal: port sorted-pair and expert-tile batched IQ2-XXS/Q2_K quantized
-  routed-MoE scheduling after single-token quantized closure; keep Q4_K
-  separate unless both routes can be validated in the same bounded slice.
+- Goal: port no-expert-tiles/default-P2 batched IQ2-XXS/Q2_K gate/down
+  projection over sorted metadata before expert-tile and atomic-down variants.
