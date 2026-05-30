@@ -1988,9 +1988,12 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
             if control.model_fd >= 0 && control.model_fd_host_base == 0 {
                 control.model_fd_host_base = model_map as usize;
             }
-            if !full_model_copy_selected() {
-                let _ = try_register_abi_model(backend, model_map, model_size);
+            if full_model_copy_selected()
+                && try_copy_abi_model_window(backend, model_map, model_size, 0, model_size)
+            {
+                return Some(true);
             }
+            let _ = try_register_abi_model(backend, model_map, model_size);
             Some(true)
         })
         .unwrap_or(false)

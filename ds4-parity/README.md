@@ -3235,6 +3235,21 @@ fallback output; successful zero-copy registration, remaining failure
 selection, whole-archive retention, and the executable-stack warning remain
 open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2a Rust CUDA public full-model
+copy selection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_full_model_copy_smoke.py --negative-test
+```
+
+The fixture selects nonempty `DS4_CUDA_COPY_MODEL` from a C-linked B300
+consumer, interposes host registration, mutates host weights after model-map
+setup, and replaces the map. It proves that successful full-model copying
+skips registration and retains the copied device image for weighted RMS
+reads. Allocation or transfer failure continuation into registration is
+source-backed but not forced in live execution; remaining failure selection,
+whole-archive retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

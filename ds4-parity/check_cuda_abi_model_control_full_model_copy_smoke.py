@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the M14.6b2b2b2b2b2b2a whole-map registration precedence ABI smoke."""
+"""Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2a full-model copy ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,11 +14,13 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2a/abi-model-control-whole-registration-precedence-smoke.json"
+FIXTURE = ROOT / "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-full-model-copy-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
-HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2a/abi_model_control_whole_registration_precedence_link_smoke.c"
+HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/abi_model_control_full_model_copy_link_smoke.c"
+FD_BUDGET_HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b1/abi_model_control_fd_cache_budget_link_smoke.c"
+FD_PROGRESS_HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2a/abi_model_control_fd_source_page_progress_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -26,38 +28,6 @@ TODO = ROOT / ".memory/TODO.md"
 STATUS = ROOT / ".memory/status.md"
 README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
-
-EXPECTED_SYMBOLS = [
-    "ds4_gpu_add_tensor",
-    "ds4_gpu_begin_commands",
-    "ds4_gpu_cache_model_range",
-    "ds4_gpu_cleanup",
-    "ds4_gpu_directional_steering_project_tensor",
-    "ds4_gpu_end_commands",
-    "ds4_gpu_flush_commands",
-    "ds4_gpu_init",
-    "ds4_gpu_repeat_hc_tensor",
-    "ds4_gpu_rms_norm_plain_rows_tensor",
-    "ds4_gpu_rms_norm_plain_tensor",
-    "ds4_gpu_rms_norm_weight_rows_tensor",
-    "ds4_gpu_rms_norm_weight_tensor",
-    "ds4_gpu_set_model_fd",
-    "ds4_gpu_set_model_map",
-    "ds4_gpu_set_model_map_range",
-    "ds4_gpu_should_use_managed_kv_cache",
-    "ds4_gpu_swiglu_tensor",
-    "ds4_gpu_synchronize",
-    "ds4_gpu_tensor_alloc",
-    "ds4_gpu_tensor_alloc_managed",
-    "ds4_gpu_tensor_bytes",
-    "ds4_gpu_tensor_contents",
-    "ds4_gpu_tensor_copy",
-    "ds4_gpu_tensor_fill_f32",
-    "ds4_gpu_tensor_free",
-    "ds4_gpu_tensor_read",
-    "ds4_gpu_tensor_view",
-    "ds4_gpu_tensor_write",
-]
 
 
 @dataclass
@@ -85,6 +55,8 @@ def main(argv: Iterable[str]) -> int:
         "lib": CUDA_LIB.read_text(encoding="utf-8"),
         "abi": CUDA_ABI.read_text(encoding="utf-8"),
         "harness": HARNESS.read_text(encoding="utf-8"),
+        "fd_budget": FD_BUDGET_HARNESS.read_text(encoding="utf-8"),
+        "fd_progress": FD_PROGRESS_HARNESS.read_text(encoding="utf-8"),
         "gpu_build": GPU_BUILD.read_text(encoding="utf-8"),
         "gpu_sys": GPU_SYS.read_text(encoding="utf-8"),
         "roadmap": ROADMAP.read_text(encoding="utf-8"),
@@ -99,8 +71,8 @@ def main(argv: Iterable[str]) -> int:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
     print(
-        "M14.6b2b2b2b2b2b2a Rust CUDA whole-map registration precedence ABI smoke: "
-        f"{state} ({report.checks} checks)"
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2a Rust CUDA public full-model copy "
+        f"ABI smoke: {state} ({report.checks} checks)"
     )
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
@@ -109,12 +81,12 @@ def main(argv: Iterable[str]) -> int:
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     report.check(
-        fixture.get("schema") == "ds4.cuda_abi_model_control_whole_registration_precedence_smoke.v1",
+        fixture.get("schema") == "ds4.cuda_abi_model_control_full_model_copy_smoke.v1",
         "schema drift",
     )
-    report.check(fixture.get("milestone") == "M14.6b2b2b2b2b2b2a", "milestone drift")
+    report.check(fixture.get("milestone") == "M14.6b2b2b2b2b2b2b2b2b2b2b2a", "milestone drift")
     report.check(
-        fixture.get("status") == "b300-pass-staticlib-whole-registration-precedence-abi",
+        fixture.get("status") == "b300-pass-staticlib-full-model-copy-abi",
         "status drift",
     )
     validate_oracle(report, fixture, texts)
@@ -128,18 +100,20 @@ def validate_oracle(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
     report.check(
         oracle.get("symbols")
-        == ["ds4_gpu_set_model_map", "cuda_model_copy_chunked", "cuda_model_range_ptr"],
+        == ["ds4_gpu_set_model_map", "cuda_model_range_ptr", "cuda_model_range_is_cached"],
         "oracle symbols drift",
     )
     for marker in [
-        'extern "C" int ds4_gpu_set_model_map(',
         'const char *copy_env = getenv("DS4_CUDA_COPY_MODEL");',
         "if (copy_env && copy_env[0])",
+        "cudaMalloc(&dev, (size_t)model_size)",
+        "cudaMemcpy(dev, model_map, (size_t)model_size, cudaMemcpyHostToDevice)",
+        "g_model_device_owned = 1;",
         "cudaHostRegister((void *)model_map",
-        "g_model_registered = 1",
+        "if (g_model_device_owned || g_model_registered) return cuda_model_ptr(model_map, offset);",
         "if (g_model_device_owned || g_model_registered) return 1;",
     ]:
-        report.check(marker in texts["cuda_c"], f"current-C registration oracle marker missing: {marker}")
+        report.check(marker in texts["cuda_c"], f"current-C full-copy marker missing: {marker}")
 
 
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
@@ -148,46 +122,42 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         ("exported_abi_symbol_count", 29),
         ("exported_compute_symbol_count", 9),
         ("public_gpu_abi_function_count", 81),
-        ("owns_whole_map_read_only_registration_attempt", True),
-        ("owns_global_registered_pointer_precedence", True),
-        ("owns_rejected_registration_continuation_to_chunk_copy", True),
-        ("owns_fd_backed_staging_policy", False),
+        ("owns_nonempty_full_model_copy_selection", True),
+        ("owns_retained_full_model_device_image", True),
+        ("owns_copy_failure_registration_continuation", True),
+        ("owns_live_copy_failure_observation", False),
+        ("owns_remaining_failure_selection", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
         ("changes_default_route", False),
         ("production_build_still_compiles_ds4_cuda_cu", True),
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
-    symbols = sorted(set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"])))
-    report.check(symbols == EXPECTED_SYMBOLS, "Rust ABI symbol implementation drift")
+    symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
+    report.check(len(symbols) == 29, "Rust ABI export implementation count drift")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
-    report.check(set(EXPECTED_SYMBOLS) <= ffi_symbols, "Rust exports do not match public GPU ABI")
+    report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
-        "static ABI_REGISTERED_MODEL",
-        "struct AbiRegisteredModel",
-        "fn try_register_abi_model(",
         "fn full_model_copy_selected() -> bool",
         'std::env::var_os("DS4_CUDA_COPY_MODEL").is_some_and(|value| !value.is_empty())',
-        "backend.register_read_only_host_range(source)",
-        ".and_then(|model| model.device_ptr(model_map, model_size, offset, bytes))",
-        "*ABI_REGISTERED_MODEL.lock().ok()? = None",
-        "try_register_abi_model(backend, model_map, model_size)",
+        "fn try_copy_abi_model_window(",
+        "if full_model_copy_selected()",
+        "&& try_copy_abi_model_window(backend, model_map, model_size, 0, model_size)",
+        "let _ = try_register_abi_model(backend, model_map, model_size);",
     ]:
-        report.check(marker in texts["abi"], f"Rust whole-map registration marker missing: {marker}")
+        report.check(marker in texts["abi"], f"Rust full-copy marker missing: {marker}")
     for marker in [
-        "pub struct CudaAbiWholeMapRegistrationScope",
-        "pub const M14_6B2B2B2B2B2B2A_SCOPE",
-        "owns_whole_map_read_only_registration_attempt: true",
-        "owns_global_registered_pointer_precedence: true",
-        "owns_rejected_registration_continuation_to_chunk_copy: true",
-        "owns_fd_backed_staging_policy: false",
-        "owns_remaining_graph_compute_abi: false",
-        "owns_complete_ds4_gpu_abi: false",
+        "pub struct CudaAbiFullModelCopySelectionScope",
+        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE",
+        "owns_nonempty_full_model_copy_selection: true",
+        "owns_retained_full_model_device_image: true",
+        "owns_copy_failure_registration_continuation: true",
+        "owns_live_copy_failure_observation: false",
+        "owns_remaining_failure_selection: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
-    report.check("AsyncPinnedRangeCache" not in texts["abi"], "fd-backed cache overclaim in public ABI")
     report.check('.arg("ds4_cuda.cu")' in texts["gpu_build"], "current C CUDA link marker missing")
 
 
@@ -198,56 +168,57 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 98),
-        ("feature_release_test_count", 100),
+        ("local_library_test_count", 108),
+        ("feature_release_test_count", 115),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
-    probe = require_dict(report, execution.get("read_only_registration_probe"), "read_only_registration_probe")
-    for key, expected in [
-        ("registration_attempted", True),
-        ("registration_supported", False),
-        ("registration_error_code", 801),
-        ("device_copy_fallback_output_matches", True),
-    ]:
-        report.check(probe.get(key) == expected, f"registration probe drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
-        "page_aligned_model_map",
-        "empty_copy_model_env_preserves_registration_attempt",
-        "rejected_whole_map_registration_continues_to_chunk_copy",
-        "repeated_map_range_reuses_copied_image",
-        "weighted_output_matches",
+        "nonempty_copy_model_selected",
+        "successful_full_copy_skips_registration",
+        "host_mutation_after_map_setup_ignored",
+        "model_replacement_copies_new_image",
+        "cached_weighted_rms_reads_copied_image",
+        "weighted_outputs_match",
         "embedded_libdevice_module_loaded",
-        "temporary_link_artifacts_cleaned",
+        "staticlib_export_count_unchanged",
+        "whole_registration_regression_passed",
+        "registration_disable_regression_passed",
+        "chunk_selected_copy_regression_passed",
+        "fd_budget_regression_passed",
+        "fd_source_page_progress_regression_passed",
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
     for marker in [
-        "posix_memalign",
-        'setenv("DS4_CUDA_COPY_MODEL", "", 1)',
-        'setenv("DS4_CUDA_COPY_MODEL_CHUNKED", "1", 1)',
-        "ds4_gpu_set_model_map_range(model_map, model_size, offset, bytes)",
-        "memcpy(model_map + offset, changed",
+        "CUresult cuMemHostRegister_v2(",
+        "return 801;",
+        'setenv("DS4_CUDA_COPY_MODEL", "1", 1)',
+        "host_register_calls != 0",
+        "memcpy((unsigned char *)first_map + offset, first_changed, bytes)",
+        "ds4_gpu_set_model_map(second_map, sizeof(second_map))",
         "ds4_gpu_rms_norm_weight_tensor(",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
-    report.check(
-        texts["harness"].count("ds4_gpu_set_model_map_range(model_map, model_size, offset, bytes)") == 2,
-        "C-linked harness does not exercise rejected registration continuation reuse",
-    )
+    for name in ["fd_budget", "fd_progress"]:
+        report.check(
+            'setenv("DS4_CUDA_COPY_MODEL", "", 1)' in texts[name],
+            f"{name} regression still selects full-model copy instead of fd staging",
+        )
     risks = fixture.get("integration_risks", [])
-    report.check(any("not live-observed" in value for value in risks), "successful registration observation caveat missing")
-    report.check(any("fd-backed" in value for value in risks), "fd staging risk missing")
+    report.check(any("source-backed only" in value for value in risks), "live copy-failure caveat missing")
+    report.check(any("fd-only predecessor" in value for value in risks), "fd regression correction caveat missing")
+    report.check(any("remaining model-control" in value for value in risks), "remaining selection risk missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     fixture_path = (
-        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2a/"
-        "abi-model-control-whole-registration-precedence-smoke.json"
+        "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/"
+        "abi-model-control-full-model-copy-smoke.json"
     )
-    checker = "check_cuda_abi_model_control_whole_registration_precedence_smoke.py"
-    item = "M14.6b2b2b2b2b2b2a: Whole-Map Registration Precedence ABI"
+    checker = "check_cuda_abi_model_control_full_model_copy_smoke.py"
+    item = "M14.6b2b2b2b2b2b2b2b2b2b2b2a: Public Full-Model Copy Selection ABI"
     report.check(item in texts["roadmap"], "roadmap item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(item in texts["todo"], "TODO item missing")
@@ -258,44 +229,26 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
         "active item missing",
     )
     report.check(
-        "M14.6b2b2b2b2b2b2a Whole-Map Registration Precedence ABI" in texts["status"],
+        "M14.6b2b2b2b2b2b2b2b2b2b2b2a Public Full-Model Copy Selection ABI"
+        in texts["status"],
         "status evidence missing",
-    )
-    report.check(
-        "M14.6b2b2b2b2b2b2b1 Buffered Fd-Backed Weight Cache ABI" in texts["status"],
-        "buffered fd successor status missing",
     )
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(
         fixture.get("next_required_stage")
-        == "M14.6b2b2b2b2b2b2b Fd-Backed And Residual Model-Control Policy",
+        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy",
         "next stage drift",
     )
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        (
-            "registration attempt missing",
-            lambda value: value["ownership"].update({"owns_whole_map_read_only_registration_attempt": False}),
-        ),
-        (
-            "registered pointer precedence missing",
-            lambda value: value["ownership"].update({"owns_global_registered_pointer_precedence": False}),
-        ),
-        (
-            "rejected continuation missing",
-            lambda value: value["ownership"].update({"owns_rejected_registration_continuation_to_chunk_copy": False}),
-        ),
-        ("fd staging overclaim", lambda value: value["ownership"].update({"owns_fd_backed_staging_policy": True})),
-        ("output mismatch", lambda value: value["b300_execution"]["observed"].update({"weighted_output_matches": False})),
-        (
-            "probe unexpectedly supported",
-            lambda value: value["b300_execution"]["read_only_registration_probe"].update(
-                {"registration_supported": True}
-            ),
-        ),
+        ("full-copy ownership missing", lambda value: value["ownership"].update({"owns_nonempty_full_model_copy_selection": False})),
+        ("retained image missing", lambda value: value["b300_execution"]["observed"].update({"host_mutation_after_map_setup_ignored": False})),
+        ("registration unexpectedly used", lambda value: value["b300_execution"]["observed"].update({"successful_full_copy_skips_registration": False})),
+        ("live failure overclaim", lambda value: value["ownership"].update({"owns_live_copy_failure_observation": True})),
+        ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)

@@ -10171,6 +10171,53 @@ Stage split:
 
 ############### M14.6b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b because successful nonempty full-model copy
+  selection is independently observable from remaining failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  remaining graph compute or route promotion.
+
+################ M14.6b2b2b2b2b2b2b2b2b2b2b2a: Public Full-Model Copy Selection ABI
+
+- Status: done.
+- Goal: preserve current-C successful nonempty `DS4_CUDA_COPY_MODEL`
+  selection, copied-image retention, and copy-failure continuation wiring
+  while leaving live copy-failure observation and remaining selection pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-full-model-copy-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_full_model_copy_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now routes a nonempty full-model copy
+    selection through a whole-map copied device image before attempting
+    registration, while a failed copy continues to whole-map registration.
+  - A C-linked B300 consumer selects full copy, interposes registration,
+    mutates host weights after setup, replaces the model map, and verifies
+    weighted RMS reads from each retained copied image with zero registration
+    calls.
+  - Full-copy allocation or transfer failure continuation is source-backed
+    but not forced in the live consumer.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 108 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 115 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - The preceding chunk-selected-copy, whole-map-registration,
+    registration-disable, fd-budget, and fd source-page/progress C-linked
+    B300 consumers pass against the full-copy-aware static library. The two
+    fd-only fixtures now leave full-model copy unselected to match current-C
+    precedence.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_full_model_copy_smoke.py
+    --negative-test` passes with 94 checks, and the default unified parity
+    report passes with 194 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Remaining failure selection, q8/f16 hooks, remaining graph compute,
+    whole-archive retention, route promotion, and the generated
+    `.note.GNU-stack` warning remain open.
+
+################ M14.6b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
+
 - Status: active.
 - Goal: connect remaining model-control failure selection without claiming
   remaining graph compute or route promotion.

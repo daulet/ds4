@@ -9783,6 +9783,42 @@
 
 ############### M14.6b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b because successful nonempty full-model copy
+  selection is independently observable from remaining failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.
+
+################ M14.6b2b2b2b2b2b2b2b2b2b2b2a: Public Full-Model Copy Selection ABI
+
+- Status: done
+- Goal: preserve current-C successful nonempty `DS4_CUDA_COPY_MODEL`
+  selection, copied-image retention, and copy-failure continuation wiring
+  while leaving live copy-failure observation and remaining selection pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/abi-model-control-full-model-copy-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_full_model_copy_smoke.py --negative-test`.
+- Evidence: Rust now routes nonempty full-model copy selection through a
+  retained whole-map device image before registration, with failed-copy
+  continuation to registration preserved in source. A C-linked B300 consumer
+  selects full copy, interposes registration, mutates host weights after map
+  setup, replaces the map, and observes retained copied-image weighted output
+  with zero registration calls. Local tests pass with 108 tests, B300
+  release-feature tests pass with 115 tests, and the static library retains
+  29 exports. The chunk-selected-copy, whole-map-registration,
+  registration-disable, fd-budget, and fd source-page/progress linked
+  consumers pass against the full-copy-aware static library; the two fd-only
+  fixtures leave full-model copy unselected to match current-C precedence.
+  The public full-copy checker passes 94 checks, and the default unified
+  report passes with 194 passed, 45 skipped, and 0 failed. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Live forced copy failure, remaining failure
+  selection, whole-archive retention, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+################ M14.6b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
+
 - Status: active
 - Goal: connect remaining model-control failure selection without claiming
   graph compute closure or route promotion.

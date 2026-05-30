@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,22 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2a Public Full-Model Copy Selection ABI
+  routes nonempty `DS4_CUDA_COPY_MODEL` through a retained whole-map device
+  image before registration, while preserving source-backed continuation to
+  registration if the copy fails. A C-linked B300 consumer interposes host
+  registration, mutates host weights after map setup, replaces the map, and
+  observes copied-image weighted output with zero registration calls. Local
+  library tests pass with 108 tests; B300 release-feature tests pass with 115
+  tests, the static library retains 29 exports, and chunk-selected-copy,
+  whole-map-registration, registration-disable, fd-budget, and fd
+  source-page/progress linked consumers pass against it. The two fd-only
+  fixtures leave full-model copy unselected to match current-C precedence.
+  The public full-copy checker passes 94 checks, and the default unified
+  report passes with 194 passed, 45 skipped, and 0 failed. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Live forced copy failure, remaining failure
+  selection, route promotion, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b2b2b2b1 Public Cross-Range Registration Disable ABI
   retains a model-lifetime registration gate in the Rust public range-cache
   path, disables later per-range attempts after the current-C error pair, and

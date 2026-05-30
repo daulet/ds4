@@ -1,0 +1,74 @@
+{
+  "schema": "ds4.cuda_abi_model_control_full_model_copy_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2a",
+  "status": "b300-pass-staticlib-full-model-copy-abi",
+  "goal": "Rust-own successful nonempty DS4_CUDA_COPY_MODEL selection and retained full-model device-image behavior while leaving live copy-failure observation, remaining failure selection, and route promotion pending.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_set_model_map",
+      "cuda_model_range_ptr",
+      "cuda_model_range_is_cached"
+    ],
+    "semantics": [
+      "current C selects full-model device copying only for a nonempty DS4_CUDA_COPY_MODEL value",
+      "a successful full-model copy sets the owned device image and returns before whole-map host registration",
+      "later cached reads consume the owned device image rather than caller host mutations",
+      "allocation or transfer failure falls through to whole-map registration"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2a/abi_model_control_full_model_copy_link_smoke.c",
+    "selection_path": "ds4_gpu_set_model_map now routes nonempty full-model copy selection through try_copy_abi_model_window over the entire declared map, retains AbiCopiedModel on success, and only attempts registration if copying does not succeed",
+    "observable_public_harness_boundary": "the C-linked B300 consumer selects nonempty full copying, interposes host registration, mutates host bytes after map setup, replaces the active model map, and consumes weighted RMS results through the exported ABI",
+    "fd_regression_precondition": "fd-only predecessor fixtures leave DS4_CUDA_COPY_MODEL empty because current-C successful full-model copy precedes fd range staging",
+    "remaining_policy_boundary": "live forced copy-allocation or transfer failure, other residual failure selection, q8/f16 hooks, remaining compute exports, and route promotion stay pending"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 29,
+    "exported_compute_symbol_count": 9,
+    "public_gpu_abi_function_count": 81,
+    "owns_nonempty_full_model_copy_selection": true,
+    "owns_retained_full_model_device_image": true,
+    "owns_copy_failure_registration_continuation": true,
+    "owns_live_copy_failure_observation": false,
+    "owns_remaining_failure_selection": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 108,
+    "feature_release_test_count": 115,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "nonempty_copy_model_selected": true,
+      "successful_full_copy_skips_registration": true,
+      "host_mutation_after_map_setup_ignored": true,
+      "model_replacement_copies_new_image": true,
+      "cached_weighted_rms_reads_copied_image": true,
+      "weighted_outputs_match": true,
+      "embedded_libdevice_module_loaded": true,
+      "staticlib_export_count_unchanged": true,
+      "whole_registration_regression_passed": true,
+      "registration_disable_regression_passed": true,
+      "chunk_selected_copy_regression_passed": true,
+      "fd_budget_regression_passed": true,
+      "fd_source_page_progress_regression_passed": true
+    }
+  },
+  "integration_risks": [
+    "the B300 consumer proves successful retained full-model copying and registration bypass but does not force a device-allocation or transfer failure; failure continuation is source-backed only",
+    "two fd-only predecessor consumers now use an empty DS4_CUDA_COPY_MODEL value because successful nonempty full-copy selection correctly precedes fd staging in current C",
+    "remaining model-control failure selection, q8/f16 hooks, production linker selection, and C CUDA removal remain pending",
+    "the generated embed object still produces an executable-stack linker warning before route promotion"
+  ],
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy"
+}

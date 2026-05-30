@@ -233,7 +233,7 @@ def validate_execution(
         "PROT_NONE",
         'setenv("DS4_CUDA_WEIGHT_CACHE_LIMIT_GB", "1", 1)',
         'setenv("DS4_CUDA_WEIGHT_ARENA_CHUNK_MB", "256", 1)',
-        'setenv("DS4_CUDA_COPY_MODEL", "1", 1)',
+        'setenv("DS4_CUDA_COPY_MODEL", "", 1)',
         "const uint64_t rejected_bytes = limit_bytes;",
         "budget-rejected-repeat",
     ]:
@@ -253,7 +253,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy"
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy"
         in texts["status"],
         "active item missing",
     )

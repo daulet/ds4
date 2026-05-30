@@ -155,7 +155,7 @@ int main(void) {
         setenv("DS4_CUDA_NO_DIRECT_IO", "1", 1) != 0 ||
         setenv("DS4_CUDA_WEIGHT_ARENA_CHUNK_MB", "256", 1) != 0 ||
         setenv("DS4_CUDA_MODEL_COPY_CHUNK_MB", "16", 1) != 0 ||
-        setenv("DS4_CUDA_COPY_MODEL", "1", 1) != 0 ||
+        setenv("DS4_CUDA_COPY_MODEL", "", 1) != 0 ||
         unsetenv("DS4_CUDA_WEIGHT_CACHE_LIMIT_GB") != 0 ||
         unsetenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE") != 0 ||
         unsetenv("DS4_CUDA_KEEP_MODEL_PAGES") != 0 ||

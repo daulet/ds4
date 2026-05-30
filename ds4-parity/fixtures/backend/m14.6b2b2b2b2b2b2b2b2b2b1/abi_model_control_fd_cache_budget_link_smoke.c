@@ -80,7 +80,7 @@ int main(void) {
         setenv("DS4_CUDA_WEIGHT_CACHE_LIMIT_GB", "1", 1) != 0 ||
         setenv("DS4_CUDA_WEIGHT_ARENA_CHUNK_MB", "256", 1) != 0 ||
         setenv("DS4_CUDA_MODEL_COPY_CHUNK_MB", "16", 1) != 0 ||
-        setenv("DS4_CUDA_COPY_MODEL", "1", 1) != 0 ||
+        setenv("DS4_CUDA_COPY_MODEL", "", 1) != 0 ||
         unsetenv("DS4_CUDA_NO_FD_CACHE") != 0 ||
         unsetenv("DS4_CUDA_COPY_MODEL_CHUNKED") != 0 ||
         unsetenv("DS4_CUDA_DIRECT_MODEL") != 0 ||
