@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b Residual Fd Cache And Model-Control Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2 Arena Budget And Residual Model-Control Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,20 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b1 Public Buffered Fd Async Staging ABI routes the
+  `DS4_CUDA_NO_DIRECT_IO=1` public fd-cache path through the shared
+  four-slot event-backed uploader. A C-linked B300 consumer requests five
+  16 MiB buffered chunks, observes fd-sourced weighted RMS output, and
+  preserves cached device bytes after the backing file is changed; the
+  direct-enabled five-chunk consumer also passes as a regression gate after
+  the shared-uploader refactor. Local library tests pass with 103 tests;
+  B300 release-feature tests pass with 107 tests, and the static library
+  retains 29 exports. The buffered-async checker passes with 103 checks and
+  unified parity passes with 189 passed, 45 skipped, and no failures. The
+  required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Arena/cache
+  budgets, source-page/progress policy, residual model-control selection,
+  whole-archive retention, and remaining graph compute remain active.
 - M14.6b2b2b2b2b2b2b2b2a Public Direct-I/O Async Staging ABI connects the
   direct-enabled public fd-cache branch to four pinned staging slots, waits
   before slot reuse, records per-chunk CUDA events, and honors the current-C

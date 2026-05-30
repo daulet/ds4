@@ -383,6 +383,7 @@ fn read_abi_buffered_fd_into(fd: c_int, offset: u64, destination: &mut [u8]) -> 
     Some(())
 }
 
+#[cfg(not(target_os = "linux"))]
 fn upload_abi_buffered_fd_range(
     backend: &CudaOxideSubstrate,
     fd: c_int,
@@ -395,6 +396,21 @@ fn upload_abi_buffered_fd_range(
     backend.upload_pinned_u8_range(&staging, 0, bytes).ok()
 }
 
+#[cfg(target_os = "linux")]
+fn try_upload_abi_buffered_fd_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    offset: u64,
+    bytes: u64,
+) -> Option<DeviceBuffer<u8>> {
+    if !buffered_fd_weight_cache_selected() || bytes == 0 {
+        return None;
+    }
+    upload_abi_async_fd_range(backend, abi_model_fd(model_map)?, offset, bytes, false)
+        .map(|(device, _)| device)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn try_upload_abi_buffered_fd_range(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
@@ -454,16 +470,13 @@ fn read_abi_direct_or_buffered_fd_stage(
 }
 
 #[cfg(target_os = "linux")]
-fn try_upload_abi_direct_fd_range(
+fn upload_abi_async_fd_range(
     backend: &CudaOxideSubstrate,
-    model_map: *const c_void,
+    fd: c_int,
     offset: u64,
     bytes: u64,
+    use_direct_io: bool,
 ) -> Option<(DeviceBuffer<u8>, bool)> {
-    if !direct_io_fd_weight_cache_selected() || bytes == 0 {
-        return None;
-    }
-    let fd = abi_model_fd(model_map)?;
     let bytes = usize::try_from(bytes).ok()?;
     let chunk_bytes = abi_model_copy_chunk_bytes()?;
     let alignment = ABI_MODEL_CONTROL.lock().ok()?.model_direct_align.max(1);
@@ -487,12 +500,21 @@ fn try_upload_abi_direct_fd_range(
                 event.synchronize().ok()?;
             }
             let file_offset = offset.checked_add(u64::try_from(copied).ok()?)?;
-            let (payload_offset, direct) = read_abi_direct_or_buffered_fd_stage(
-                fd,
-                &mut staging[slot],
-                file_offset,
-                this_chunk,
-            )?;
+            let (payload_offset, direct) = if use_direct_io {
+                read_abi_direct_or_buffered_fd_stage(
+                    fd,
+                    &mut staging[slot],
+                    file_offset,
+                    this_chunk,
+                )?
+            } else {
+                read_abi_buffered_fd_into(
+                    fd,
+                    file_offset,
+                    &mut staging[slot].as_mut_slice()[..this_chunk],
+                )?;
+                (0, false)
+            };
             unsafe {
                 backend
                     .enqueue_pinned_u8_range_async(
@@ -517,6 +539,19 @@ fn try_upload_abi_direct_fd_range(
         return None;
     }
     Some((device, used_direct))
+}
+
+#[cfg(target_os = "linux")]
+fn try_upload_abi_direct_fd_range(
+    backend: &CudaOxideSubstrate,
+    model_map: *const c_void,
+    offset: u64,
+    bytes: u64,
+) -> Option<(DeviceBuffer<u8>, bool)> {
+    if !direct_io_fd_weight_cache_selected() || bytes == 0 {
+        return None;
+    }
+    upload_abi_async_fd_range(backend, abi_model_fd(model_map)?, offset, bytes, true)
 }
 
 #[cfg(target_os = "linux")]

@@ -3158,6 +3158,20 @@ exposes event counts. Buffered-only asynchronous staging, arena/cache-budget
 and source-page/progress policy, residual model-control selection,
 whole-archive retention, and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b1 Rust CUDA buffered fd async staging ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_buffered_fd_async_staging_smoke.py --negative-test
+```
+
+The fixture selects buffered-only public fd caching with
+`DS4_CUDA_NO_DIRECT_IO=1`, sets a 16 MiB chunk, and requests five chunks
+through a C-linked B300 consumer. Public output proves buffered fd-sourced
+computation and retained cache reuse, while the existing lower-level
+asynchronous staging baseline remains the event-count proof. Arena/cache
+budget, source-page/progress policy, residual model-control selection,
+whole-archive retention, and the executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

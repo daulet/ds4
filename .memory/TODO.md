@@ -9601,8 +9601,42 @@
 
 ########## M14.6b2b2b2b2b2b2b2b2b: Residual Fd Cache And Model-Control Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2 because buffered-only public asynchronous
+  staging is independently testable from arena/cache budget,
+  source-page/progress, and residual selection policy.
 - Goal: connect buffered-only asynchronous staging, arena/cache-budget and
   source-page/progress policy, chunk-copy failure routing, and residual
   model-control selection/cache policy without claiming graph compute closure
   or route promotion.
+
+########### M14.6b2b2b2b2b2b2b2b2b1: Public Buffered Fd Async Staging ABI
+
+- Status: done
+- Goal: connect buffered-only public fd-cache requests to the shared
+  four-slot asynchronous uploader while leaving arena/budget and residual
+  policy pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b1/abi-model-control-buffered-fd-async-staging-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_buffered_fd_async_staging_smoke.py --negative-test`.
+- Evidence: Rust routes `DS4_CUDA_NO_DIRECT_IO=1` fd-cache reads through the
+  existing four-slot event-backed uploader. A C-linked B300 consumer sets a
+  16 MiB chunk override, requests five buffered chunks, observes fd-backed
+  weighted output, and retains cached device bytes after file mutation; the
+  direct-enabled five-chunk public consumer also passes after refactoring.
+  Local tests pass with 103 tests, B300 release-feature tests pass with 107
+  tests, and the static library retains 29 exports. The checker passes with
+  103 checks and unified parity passes with 189 passed, 45 skipped, and no
+  failures. The required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  Arena/cache-budget and source-page/progress policy, residual selection,
+  whole-archive retention, route promotion, and the `.note.GNU-stack`
+  warning remain pending.
+
+########### M14.6b2b2b2b2b2b2b2b2b2: Arena Budget And Residual Model-Control Policy
+
+- Status: active
+- Goal: connect arena/cache-budget and source-page/progress policy,
+  chunk-copy failure routing, and residual model-control selection/cache
+  policy without claiming graph compute closure or route promotion.
