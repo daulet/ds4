@@ -7476,9 +7476,40 @@
 
 ###### M14.1b3: Allocation And Quality Policy
 
-- Status: planned
+- Status: split before implementation into M14.1b3a and M14.1b3b.
 - Goal: port managed-KV, Q8/F16 cache, quality-mode, and memory-report policy
   without adding compute kernels.
+
+####### M14.1b3a: Managed KV And Memory Report Policy
+
+- Status: done
+- Goal: port managed-tensor allocation proof, managed-KV selection, and
+  memory-report formatting without claiming converted-weight caches or BLAS
+  math-mode behavior.
+- Oracle: current-C `ds4_gpu_tensor_alloc_managed`,
+  `cuda_managed_kv_reserve_bytes`, `ds4_gpu_should_use_managed_kv_cache`, and
+  `ds4_gpu_print_memory_report`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b3a/allocation-policy-smoke.json`.
+- Evidence: cuda-oxide revision `0ec61156a7c5d65802402898b7a197bfff266d31`
+  adds `CudaContext::memory_info()`. The B300 smoke queried valid live
+  capacity, allocated managed memory, matched current-C report formatting,
+  and exercised empty KV, forced managed KV, unavailable-query, sufficient
+  capacity, reserve-pressure, and context-exceeds-free decisions. Q8 caches,
+  quality mode, kernels, and route activation remain unclaimed.
+- Validation: local workspace tests, formatting and diff checks, the 64-check
+  comparator and retained M14 comparators, full B300 `cuda-core` tests, B300
+  feature-enabled `ds4-cuda` tests, predecessor model-map closure smoke, and
+  unified parity (105 passed, 50 skipped, 0 failed) passed. Non-interactive
+  Claude review timed out without a completed result; adversarial self-review
+  found no threshold, reserve, transient-capacity, report-format,
+  dependency-pin, or bounded-claim issue.
+
+####### M14.1b3b: Q8 Cache And Quality Policy
+
+- Status: planned
+- Goal: port converted Q8 cache admission/failure paths and quality-mode BLAS
+  selection without changing the default runtime route.
 
 ###### M14.1b4: Fill Kernel And Command Lifetime
 

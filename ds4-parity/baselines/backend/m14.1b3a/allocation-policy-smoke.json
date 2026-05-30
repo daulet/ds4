@@ -1,0 +1,87 @@
+{
+  "schema": "ds4.allocation_policy_smoke.v1",
+  "milestone": "M14.1b3a",
+  "status": "b300-pass",
+  "id": "m14.1b3a-managed-kv-memory-report-policy",
+  "goal": "Port managed-KV selection and memory-report policy through the opt-in Rust CUDA substrate without claiming Q8 cache, quality-mode, kernel, or route ownership.",
+  "cuda_oxide": {
+    "repository": "https://github.com/daulet/cuda-oxide",
+    "revision": "0ec61156a7c5d65802402898b7a197bfff266d31",
+    "dependency": "cuda-core",
+    "feature": "cuda-oxide-backend",
+    "new_api": "CudaContext::memory_info"
+  },
+  "current_c_oracle": {
+    "source": "ds4_cuda.cu",
+    "covered_branches": [
+      "ds4_gpu_tensor_alloc_managed managed allocation",
+      "cuda_managed_kv_reserve_bytes quarter-capacity reserve clamped to 8-40 GiB",
+      "ds4_gpu_should_use_managed_kv_cache empty, huge-KV, small-context, query-failure, pressure, and sufficient-capacity selection",
+      "ds4_gpu_print_memory_report free and total MiB output shape"
+    ],
+    "excluded_policy": [
+      "Q8/F16 or Q8/F32 converted range caches",
+      "quality-mode cuBLAS math selection",
+      "DS4 compute kernels",
+      "runtime graph or default CUDA route"
+    ]
+  },
+  "ownership": {
+    "rust_owned_in_this_stage": [
+      "cuda-oxide live device memory-capacity query",
+      "managed tensor allocation through existing Rust substrate",
+      "managed-KV threshold and reserve policy decisions",
+      "CUDA memory-report output formatting"
+    ],
+    "not_claimed_in_this_stage": [
+      "Q8/F16 or Q8/F32 converted range-cache allocation",
+      "quality-mode cuBLAS math configuration",
+      "DS4 compute kernels",
+      "runtime graph or default CUDA route"
+    ],
+    "opt_in_only": true,
+    "owns_managed_tensor_allocation": true,
+    "owns_managed_kv_selection": true,
+    "owns_memory_report": true,
+    "owns_q8_cache_policy": false,
+    "owns_quality_mode": false,
+    "owns_ds4_kernels": false,
+    "changes_default_route": false,
+    "retains_current_c_cuda_oracle": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "cuda_toolkit": "13.2",
+    "rust_toolchain": "nightly-2026-04-03",
+    "cuda_oxide_test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 cargo +nightly-2026-04-03 test --locked -p cuda-core -- --nocapture",
+    "test_command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 cargo +nightly-2026-04-03 test --locked -p ds4-cuda --features cuda-oxide-backend -- --nocapture",
+    "command": "CARGO_HOME=/tmp/cargo RUSTUP_HOME=/tmp/rustup PATH=/tmp/cargo/bin:$PATH LIBCLANG_PATH=/lib/x86_64-linux-gnu CUDA_HOME=/usr/local/cuda-13.2 cargo +nightly-2026-04-03 run --locked -p ds4-cuda --features cuda-oxide-backend --bin ds4-cuda-allocation-policy-smoke",
+    "stderr_prefix": "ds4: CUDA memory report b3a live: free ",
+    "stdout": {
+      "milestone": "M14.1b3a",
+      "device_name": "NVIDIA B300 SXM6 AC",
+      "live_memory_info_valid": true,
+      "managed_allocation": true,
+      "zero_kv_uses_device": true,
+      "huge_kv_uses_managed": true,
+      "small_context_uses_device": true,
+      "memory_query_failure_uses_device": true,
+      "sufficient_capacity_uses_device": true,
+      "reserve_pressure_uses_managed": true,
+      "context_exceeds_free_uses_managed": true,
+      "memory_report_shape_matches": true,
+      "owns_managed_tensor_allocation": true,
+      "owns_managed_kv_selection": true,
+      "owns_memory_report": true,
+      "owns_q8_cache_policy": false,
+      "owns_quality_mode": false,
+      "owns_ds4_kernels": false,
+      "changes_default_route": false
+    }
+  },
+  "next_stage": "M14.1b3b Q8 Cache And Quality Policy"
+}

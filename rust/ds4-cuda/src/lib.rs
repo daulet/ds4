@@ -1,4 +1,4 @@
-pub const CUDA_OXIDE_REVISION: &str = "361300ea643688eea87eaa215d9a62a5e74a30e6";
+pub const CUDA_OXIDE_REVISION: &str = "0ec61156a7c5d65802402898b7a197bfff266d31";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HostSubstrateScope {
@@ -193,6 +193,31 @@ pub const M14_1B2C_SCOPE: ModelMapClosureScope = ModelMapClosureScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AllocationPolicyScope {
+    pub opt_in_only: bool,
+    pub owns_managed_tensor_allocation: bool,
+    pub owns_managed_kv_selection: bool,
+    pub owns_memory_report: bool,
+    pub owns_q8_cache_policy: bool,
+    pub owns_quality_mode: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B3A_SCOPE: AllocationPolicyScope = AllocationPolicyScope {
+    opt_in_only: true,
+    owns_managed_tensor_allocation: true,
+    owns_managed_kv_selection: true,
+    owns_memory_report: true,
+    owns_q8_cache_policy: false,
+    owns_quality_mode: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
+pub mod allocation_policy;
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
 
@@ -204,13 +229,14 @@ mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
         M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE, M14_1B2B3B2_SCOPE, M14_1B2C_SCOPE,
+        M14_1B3A_SCOPE,
     };
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
         assert_eq!(
             CUDA_OXIDE_REVISION,
-            "361300ea643688eea87eaa215d9a62a5e74a30e6"
+            "0ec61156a7c5d65802402898b7a197bfff266d31"
         );
         assert!(M14_1A_SCOPE.opt_in_only);
         assert!(M14_1A_SCOPE.owns_context_and_stream);
@@ -309,5 +335,17 @@ mod tests {
         assert!(M14_1B2C_SCOPE.owns_raii_cache_cleanup);
         assert!(!M14_1B2C_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B2C_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn allocation_policy_leaves_q8_quality_kernels_and_route_pending() {
+        assert!(M14_1B3A_SCOPE.opt_in_only);
+        assert!(M14_1B3A_SCOPE.owns_managed_tensor_allocation);
+        assert!(M14_1B3A_SCOPE.owns_managed_kv_selection);
+        assert!(M14_1B3A_SCOPE.owns_memory_report);
+        assert!(!M14_1B3A_SCOPE.owns_q8_cache_policy);
+        assert!(!M14_1B3A_SCOPE.owns_quality_mode);
+        assert!(!M14_1B3A_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B3A_SCOPE.changes_default_route);
     }
 }

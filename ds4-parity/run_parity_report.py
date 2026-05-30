@@ -888,6 +888,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.1b3a cuda-oxide allocation policy smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_allocation_policy_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

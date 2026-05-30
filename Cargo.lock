@@ -87,7 +87,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 [[package]]
 name = "cublas-sys"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=361300ea643688eea87eaa215d9a62a5e74a30e6#361300ea643688eea87eaa215d9a62a5e74a30e6"
+source = "git+https://github.com/daulet/cuda-oxide?rev=0ec61156a7c5d65802402898b7a197bfff266d31#0ec61156a7c5d65802402898b7a197bfff266d31"
 dependencies = [
  "libloading",
  "thiserror",
@@ -96,7 +96,7 @@ dependencies = [
 [[package]]
 name = "cuda-bindings"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=361300ea643688eea87eaa215d9a62a5e74a30e6#361300ea643688eea87eaa215d9a62a5e74a30e6"
+source = "git+https://github.com/daulet/cuda-oxide?rev=0ec61156a7c5d65802402898b7a197bfff266d31#0ec61156a7c5d65802402898b7a197bfff266d31"
 dependencies = [
  "bindgen",
 ]
@@ -104,7 +104,7 @@ dependencies = [
 [[package]]
 name = "cuda-core"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=361300ea643688eea87eaa215d9a62a5e74a30e6#361300ea643688eea87eaa215d9a62a5e74a30e6"
+source = "git+https://github.com/daulet/cuda-oxide?rev=0ec61156a7c5d65802402898b7a197bfff266d31#0ec61156a7c5d65802402898b7a197bfff266d31"
 dependencies = [
  "anyhow",
  "cublas-sys",
@@ -117,7 +117,7 @@ dependencies = [
 [[package]]
 name = "cuda-lowp"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=361300ea643688eea87eaa215d9a62a5e74a30e6#361300ea643688eea87eaa215d9a62a5e74a30e6"
+source = "git+https://github.com/daulet/cuda-oxide?rev=0ec61156a7c5d65802402898b7a197bfff266d31#0ec61156a7c5d65802402898b7a197bfff266d31"
 
 [[package]]
 name = "ds4-cuda"
@@ -278,7 +278,7 @@ dependencies = [
 [[package]]
 name = "oxide-artifacts"
 version = "0.1.0"
-source = "git+https://github.com/daulet/cuda-oxide?rev=361300ea643688eea87eaa215d9a62a5e74a30e6#361300ea643688eea87eaa215d9a62a5e74a30e6"
+source = "git+https://github.com/daulet/cuda-oxide?rev=0ec61156a7c5d65802402898b7a197bfff266d31#0ec61156a7c5d65802402898b7a197bfff266d31"
 dependencies = [
  "object",
 ]

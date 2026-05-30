@@ -6,6 +6,8 @@ use cuda_core::{
     ReadOnlyRegisteredHostMemory, RegisteredHostMemory, StreamAttachment,
 };
 
+use crate::allocation_policy::DeviceMemoryCapacity;
+
 /// Rust-owned CUDA host resources used before DS4 kernels move off `ds4_cuda.cu`.
 ///
 /// This type owns the CUDA context and stream through `cuda-core`. It does not
@@ -29,6 +31,14 @@ impl CudaOxideSubstrate {
 
     pub fn device_ordinal(&self) -> usize {
         self.context.ordinal()
+    }
+
+    pub fn memory_capacity(&self) -> Result<DeviceMemoryCapacity, DriverError> {
+        let memory = self.context.memory_info()?;
+        Ok(DeviceMemoryCapacity {
+            free_bytes: memory.free_bytes as u64,
+            total_bytes: memory.total_bytes as u64,
+        })
     }
 
     pub fn synchronize(&self) -> Result<(), DriverError> {

@@ -27,7 +27,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 FIXTURE_REVISION = "b938480882f208045bc36ecf29da1ec5531d55ba"
-CURRENT_REVISION = "361300ea643688eea87eaa215d9a62a5e74a30e6"
+CURRENT_REVISION = "0ec61156a7c5d65802402898b7a197bfff266d31"
 MODEL_SHA256 = "efc7ed607ff27076e3e501fc3fefefa33c0ed8cf1eff483a2b7fdc0c2e616668"
 MODEL_SIZE = 86720111488
 EXPECTED_RUST_OWNED = [
@@ -214,7 +214,8 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["todo"], "TODO fixture missing")
     report.check(
         "Active item: M14.1b2c Model Map Cache Closure" in texts["status"]
-        or "Active item: M14.1b3 Allocation And Quality Policy" in texts["status"],
+        or "Active item: M14.1b3 Allocation And Quality Policy" in texts["status"]
+        or "Active item: M14.1b3b Q8 Cache And Quality Policy" in texts["status"],
         "next active stage missing",
     )
     report.check("M14.1b2b2 Registered Range Strategy" in texts["status"], "status evidence missing")

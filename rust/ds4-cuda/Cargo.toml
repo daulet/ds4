@@ -5,7 +5,7 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
-cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "361300ea643688eea87eaa215d9a62a5e74a30e6", optional = true }
+cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "0ec61156a7c5d65802402898b7a197bfff266d31", optional = true }
 libc = { version = "0.2", optional = true }
 
 [features]
@@ -58,4 +58,9 @@ required-features = ["cuda-oxide-backend"]
 [[bin]]
 name = "ds4-cuda-model-map-closure-smoke"
 path = "src/bin/model_map_closure_smoke.rs"
+required-features = ["cuda-oxide-backend"]
+
+[[bin]]
+name = "ds4-cuda-allocation-policy-smoke"
+path = "src/bin/allocation_policy_smoke.rs"
 required-features = ["cuda-oxide-backend"]

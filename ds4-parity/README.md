@@ -2161,6 +2161,19 @@ emission and disabled suppression, and fresh-cache reset state. It does not
 claim physical page eviction, default runtime environment/terminal wiring,
 DS4 kernel consumption, or route activation.
 
+Validate the M14.1b3a managed-KV and memory-report policy B300 smoke:
+
+```sh
+python3 ds4-parity/check_allocation_policy_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-allocation-policy-smoke` using the cuda-oxide context memory query.
+It proves managed allocation, current-C managed-KV threshold and reserve
+choices, and current-C-shaped memory-report formatting. It does not claim
+Q8 converted caches, quality-mode BLAS selection, DS4 kernels, or route
+activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

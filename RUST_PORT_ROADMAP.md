@@ -7063,9 +7063,54 @@ Stage split:
 
 ###### M14.1b3: Allocation And Quality Policy
 
-- Status: planned.
+- Status: split before implementation into M14.1b3a and M14.1b3b.
 - Goal: port managed-KV selection, Q8/F16 range-cache policy, quality mode,
   and memory-report behavior without porting compute kernels.
+
+####### M14.1b3a: Managed KV And Memory Report Policy
+
+- Status: complete.
+- Goal: own managed-tensor allocation proof, managed-KV selection policy, and
+  CUDA memory-report formatting through the opt-in Rust substrate.
+- Oracle: current-C `ds4_gpu_tensor_alloc_managed`,
+  `cuda_managed_kv_reserve_bytes`, `ds4_gpu_should_use_managed_kv_cache`, and
+  `ds4_gpu_print_memory_report`.
+- Acceptance: Rust must reproduce empty/huge/small-context/query-failure and
+  capacity-pressure managed-KV choices, query live device capacity through
+  cuda-oxide, allocate managed storage on B300, and format the memory report
+  without claiming Q8 cache, quality-mode, kernel, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b3a/allocation-policy-smoke.json`.
+- Comparator:
+  `ds4-parity/check_allocation_policy_smoke.py --negative-test` plus
+  executable Rust B300 smoke using pinned cuda-oxide revision
+  `0ec61156a7c5d65802402898b7a197bfff266d31`.
+- Evidence:
+  - Added the reusable `CudaContext::memory_info()` cuda-oxide API, validated
+    by the full `cuda-core` B300 test suite, and consumed it through
+    `CudaOxideSubstrate::memory_capacity`.
+  - The Rust policy reproduces the current-C 8 GiB thresholds and clamped
+    quarter-capacity reserve rule; deterministic cases covered empty KV,
+    forced managed KV, query failure, sufficient capacity, reserve pressure,
+    and context exceeding free device memory.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed;
+    the live smoke queried valid free/total device capacity, allocated managed
+    memory, and emitted the current-C-shaped memory-report prefix. Q8 cache,
+    quality-mode, compute kernels, and default-route ownership remain false.
+  - Validation passed through local workspace tests, formatter and diff
+    checks, the 64-check comparator and retained M14 checks, full B300
+    `cuda-core` tests, B300 feature-enabled `ds4-cuda` tests, and the retained
+    model-map closure smoke. Unified parity passed with 105 passed, 50
+    skipped, and 0 failed. Non-interactive Claude review timed out without a
+    completed result; adversarial self-review found no threshold, reserve,
+    transient-capacity, report-format, dependency-pin, or bounded-claim
+    defect.
+
+####### M14.1b3b: Q8 Cache And Quality Policy
+
+- Status: planned.
+- Goal: port Q8/F16 and Q8/F32 converted-cache admission/failure policy plus
+  quality-mode BLAS math selection without promoting the runtime route.
 
 ###### M14.1b4: Fill Kernel And Command Lifetime
 

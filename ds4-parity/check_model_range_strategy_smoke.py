@@ -209,7 +209,8 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
         or "Active item: M14.1b2b3b Direct-I/O Staging Policy" in texts["status"]
         or "Active item: M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy" in texts["status"]
         or "Active item: M14.1b2c Model Map Cache Closure" in texts["status"]
-        or "Active item: M14.1b3 Allocation And Quality Policy" in texts["status"],
+        or "Active item: M14.1b3 Allocation And Quality Policy" in texts["status"]
+        or "Active item: M14.1b3b Q8 Cache And Quality Policy" in texts["status"],
         "next active stage missing",
     )
     report.check("M14.1b2b1 File-Staged Range Strategy" in texts["status"], "status evidence missing")

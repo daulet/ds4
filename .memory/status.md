@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b3 Allocation And Quality Policy
+- Active item: M14.1b3b Q8 Cache And Quality Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -13,8 +13,12 @@
   parity or model-cache closure. M14.1b2b is further split into M14.1b2b1
   through M14.1b2b3b2 because file-staged device copy, registered fallback,
   pageable HMM, direct-I/O read selection, and asynchronous staging policy
-  have distinct API and live-evidence boundaries.
-- Last validated source before the active item: M14.1b2c Model Map Cache Closure.
+  have distinct API and live-evidence boundaries. M14.1b3 is split into
+  M14.1b3a and M14.1b3b because managed-KV/memory-report policy only needs a
+  memory-capacity query, while Q8 caches and quality mode need BLAS or kernel
+  ownership.
+- Last validated source before the active item: M14.1b3a Managed KV And Memory Report Policy.
+- Earlier M14.1b2c Model Map Cache Closure.
 - Earlier M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy.
 - Earlier M14.1b2b3b1 Direct-I/O Pinned Read Selection.
 - Earlier M14.1b2b3a Pageable HMM Range Strategy.
@@ -122,6 +126,25 @@
 
 ## Last Evidence
 
+- M14.1b3a Managed KV And Memory Report Policy pins cuda-oxide revision
+  `0ec61156a7c5d65802402898b7a197bfff266d31`, which adds the reusable
+  `CudaContext::memory_info()` API. The opt-in Rust policy reproduces
+  current-C managed-KV thresholds and reserve selection and exact memory
+  report formatting. On B300 pod `ds4-rust-port-b300`, full `cuda-core`
+  tests and feature-enabled `ds4-cuda` tests passed; the live smoke queried
+  valid device capacity, allocated managed memory, and exercised empty,
+  forced-managed, query-failure, sufficient-capacity, reserve-pressure, and
+  context-exceeds-free choices. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b3a/allocation-policy-smoke.json` and
+  `ds4-parity/check_allocation_policy_smoke.py --negative-test`. Q8 caches,
+  quality-mode BLAS selection, kernels, and default-route ownership remain
+  unclaimed. Local workspace tests, formatter/diff checks, the 64-check
+  comparator and retained M14 checks, full B300 `cuda-core` tests, B300
+  feature-enabled `ds4-cuda` tests, predecessor model-map closure smoke, and
+  unified parity (105 passed, 50 skipped, 0 failed) passed. Non-interactive
+  Claude review timed out without a completed result; adversarial self-review
+  found no threshold, reserve, transient-capacity, report-format,
+  dependency-pin, or bounded-claim issue.
 - M14.1b2c Model Map Cache Closure extends the opt-in Rust range cache with
   contained-range reuse, Linux source-page discard advisory policy, explicit
   non-TTY progress emission, and cache-lifetime reset evidence. On B300 pod
