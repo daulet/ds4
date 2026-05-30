@@ -2713,6 +2713,18 @@ cuda-oxide safe SGEMM adapter, low-output unpacking, and the current-C branch
 predicate. It records the `CUDA_R_16F` GemmEx API difference explicitly and
 leaves runtime route activation and C CUDA removal unclaimed.
 
+Validate the M14.5a Rust CUDA scalar router smoke:
+
+```sh
+python3 ds4-parity/check_router_scalar_smoke.py --negative-test
+```
+
+The fixture records current-C scalar router behavior on B300: probability
+transformation, bias-ranked top-6 selection, hash routing with invalid-token
+fallback, normalized selected weights, and both single-token and batched
+layouts. It leaves parallel/warp routing, routed MoE, hyperconnection,
+runtime route, and C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

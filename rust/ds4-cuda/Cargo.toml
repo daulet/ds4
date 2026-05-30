@@ -277,3 +277,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-attention-output-q8-cublas-smoke"
 path = "src/bin/attention_output_q8_cublas_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-router-scalar-smoke"
+path = "src/bin/router_scalar_smoke.rs"
+required-features = ["cuda-oxide-kernels"]

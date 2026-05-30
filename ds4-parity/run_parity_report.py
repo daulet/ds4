@@ -1248,6 +1248,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.5a cuda-oxide scalar router smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_router_scalar_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

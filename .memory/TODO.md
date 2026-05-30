@@ -8706,6 +8706,30 @@
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active
+- Status: active; split beginning with M14.5a and M14.5b
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
+
+##### M14.5a: Scalar Router Selection Surfaces
+
+- Status: done
+- Goal: port scalar single-token and batched router selection before optimized
+  dispatch and routed expert execution.
+- Fixture: `ds4-parity/baselines/backend/m14.5a/router-scalar-smoke.json`
+- Comparator: `ds4-parity/check_router_scalar_smoke.py --negative-test`
+- Evidence: executable-local Rust scalar router selection covers current-C
+  softplus probabilities, bias-ranked top-6 output, hash routing with
+  invalid-token fallback, normalized selected weights, and single/batched
+  layout. B300 feature-enabled tests passed with 70 tests; live cargo-oxide
+  execution emitted portable `sm_80` PTX through libdevice and matched scalar
+  router outputs on `NVIDIA B300 SXM6 AC`. Parallel/warp dispatch, routed
+  MoE, hyperconnection, runtime route activation, and C CUDA removal remain
+  unclaimed. Local formatting, diff, library tests, the 63-check M14.5a
+  comparator, retained M14 checks, and unified parity passed with 150 passed,
+  50 skipped, and 0 failed.
+
+##### M14.5b: Parallel And Warp Router Dispatch
+
+- Status: active
+- Goal: port optimized parallel/warp router-selection kernels and current-C
+  dispatch priority before routed MoE execution.

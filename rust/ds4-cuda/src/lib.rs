@@ -1488,6 +1488,29 @@ pub const M14_4D8B_SCOPE: AttentionOutputQ8CublasScope = AttentionOutputQ8Cublas
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RouterScalarScope {
+    pub opt_in_only: bool,
+    pub owns_router_select_kernel: bool,
+    pub owns_scalar_single_and_batch_router_surface: bool,
+    pub owns_bias_and_hash_router_semantics: bool,
+    pub owns_parallel_or_warp_router_dispatch: bool,
+    pub owns_routed_moe_or_hyperconnection: bool,
+    pub owns_runtime_graph_integration: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_5A_SCOPE: RouterScalarScope = RouterScalarScope {
+    opt_in_only: true,
+    owns_router_select_kernel: true,
+    owns_scalar_single_and_batch_router_surface: true,
+    owns_bias_and_hash_router_semantics: true,
+    owns_parallel_or_warp_router_dispatch: false,
+    owns_routed_moe_or_hyperconnection: false,
+    owns_runtime_graph_integration: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -1519,7 +1542,7 @@ mod tests {
         M14_3C1_SCOPE, M14_3C2_SCOPE, M14_3C3_SCOPE, M14_3D1_SCOPE, M14_3D2_SCOPE, M14_3D3_SCOPE,
         M14_3D4_SCOPE, M14_4A_SCOPE, M14_4B_SCOPE, M14_4C1_SCOPE, M14_4C2_SCOPE, M14_4C3A_SCOPE,
         M14_4C3B_SCOPE, M14_4D1_SCOPE, M14_4D2_SCOPE, M14_4D3_SCOPE, M14_4D4_SCOPE, M14_4D5_SCOPE,
-        M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE,
+        M14_4D6_SCOPE, M14_4D7_SCOPE, M14_4D8A_SCOPE, M14_4D8B_SCOPE, M14_5A_SCOPE,
     };
 
     #[test]
@@ -2260,6 +2283,18 @@ mod tests {
                 AttentionOutputAPath::NativeQ8
             );
         }
+    }
+
+    #[test]
+    fn router_scalar_scope_leaves_optimized_moe_and_route_pending() {
+        assert!(M14_5A_SCOPE.opt_in_only);
+        assert!(M14_5A_SCOPE.owns_router_select_kernel);
+        assert!(M14_5A_SCOPE.owns_scalar_single_and_batch_router_surface);
+        assert!(M14_5A_SCOPE.owns_bias_and_hash_router_semantics);
+        assert!(!M14_5A_SCOPE.owns_parallel_or_warp_router_dispatch);
+        assert!(!M14_5A_SCOPE.owns_routed_moe_or_hyperconnection);
+        assert!(!M14_5A_SCOPE.owns_runtime_graph_integration);
+        assert!(!M14_5A_SCOPE.changes_default_route);
     }
 
     #[test]

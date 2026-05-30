@@ -8653,9 +8653,42 @@ Stage split:
 
 #### M14.5: Router MoE And Hyperconnection Kernels
 
-- Status: active.
+- Status: active; split beginning with M14.5a and M14.5b.
 - Goal: port the remaining current-C router, routed-MoE, shared-expert, and
   hyperconnection CUDA surfaces after attention-family closure.
+
+##### M14.5a: Scalar Router Selection Surfaces
+
+- Status: done.
+- Goal: port the scalar single-token and batched router-selection behavior
+  before optimized router dispatch and routed expert execution.
+- Oracle: current-C `router_select_kernel`,
+  `ds4_gpu_router_select_tensor`, and `ds4_gpu_router_select_batch_tensor`.
+- Fixture: `ds4-parity/baselines/backend/m14.5a/router-scalar-smoke.json`.
+- Comparator: `ds4-parity/check_router_scalar_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in scalar router probability transformation,
+  bias-ranked top-6 output, hash routing with invalid-token fallback, scaled
+  selected weights, and single/batched layout. Parallel/warp selection,
+  routed MoE, hyperconnection, runtime graph integration, default route
+  activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust scalar router selection for current-C softplus
+    probability, bias ordering, hash selection, and normalized-weight
+    behavior.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 70 tests; live cargo-oxide execution emitted portable `sm_80` PTX
+    through libdevice and matched scalar router outputs on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 63-check M14.5a comparator,
+    retained M14 checks, and unified parity passed with 150 passed, 50
+    skipped, and 0 failed.
+
+##### M14.5b: Parallel And Warp Router Dispatch
+
+- Status: active.
+- Goal: port optimized parallel/warp router-selection kernels and current-C
+  dispatch priority before routed MoE execution.
 
 ## Removal Criteria for C Host Code
 
