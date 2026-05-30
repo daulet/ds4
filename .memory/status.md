@@ -3,12 +3,16 @@
 - Date: 2026-05-25 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b2 Model Map And Range Cache Policy
+- Active item: M14.1b2b Model Range Strategy Parity
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
   policy, and kernel command lifetime have distinct evidence boundaries.
-- Last validated source before the active item: M14.1b1 Bounded Model Residency Handles.
+  M14.1b2 is further split into M14.1b2a through M14.1b2c because device
+  range-copy proof does not establish registered/HMM/direct-I/O strategy
+  parity or model-cache closure.
+- Last validated source before the active item: M14.1b2a Owned Mmap Device Range Copy.
+- Earlier M14.1b1 Bounded Model Residency Handles.
 - Earlier M14.1a Host Substrate Buffer Roundtrip.
 - Earlier M14.0 CUDA Rust Ownership Inventory And Adoption Contract.
 - Earlier post-M13 roadmap decision.
@@ -109,6 +113,25 @@
 
 ## Last Evidence
 
+- M14.1b2a Owned Mmap Device Range Copy adds Rust-owned `MappedModelFile`
+  lifetime and `ModelRangeCache` device-copy/reuse behavior under the opt-in
+  `ds4-cuda` feature. On B300 pod `ds4-rust-port-b300`, the feature compile
+  first rejected an unnecessary `Debug` derive on `DeviceBuffer<u8>`; after
+  removing that derive, the smoke mmaped pinned model
+  `/workspace/ds4/ds4flash.gguf`, rejected an invalid range, copied/read back
+  a 4096-byte device range exactly, and reused the cached entry on
+  `NVIDIA B300 SXM6 AC`. The fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b2a/model-range-copy-smoke.json` and
+  `ds4-parity/check_model_range_copy_smoke.py --negative-test`; registered,
+  HMM, direct-I/O, Q8, kernel, and route strategy ownership remain false.
+  Adversarial self-review found and fixed a rejected-null-address `mmap`
+  cleanup leak, and the B300 smoke rerun passed after that fix. Validation
+  passed `cargo test --workspace`, `cargo fmt --all -- --check`, the M14.1b2a
+  checker with 64 checks, retained predecessor gates, `git diff --check`, and
+  unified parity with 98 passed, 50 skipped, and 0 failed. Non-interactive
+  Claude review could not run because the local CLI reported `Not logged in`;
+  post-fix self-review found no material mmap/cache lifetime,
+  synchronization, bounded-claim, or default-route issue.
 - M14.1b1 Bounded Model Residency Handles extends the opt-in `rust/ds4-cuda`
   crate with managed read-mostly/preferred-device advice and prefetch,
   mapped-host allocation, and registered-host range guards. Its B300 smoke

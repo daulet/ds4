@@ -40,12 +40,36 @@ pub const M14_1B1_SCOPE: ModelResidencyScope = ModelResidencyScope {
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ModelRangeCopyScope {
+    pub opt_in_only: bool,
+    pub owns_mapped_model_file_lifetime: bool,
+    pub owns_device_range_copy_cache: bool,
+    pub owns_range_cache_reuse: bool,
+    pub owns_range_strategy_selection: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B2A_SCOPE: ModelRangeCopyScope = ModelRangeCopyScope {
+    opt_in_only: true,
+    owns_mapped_model_file_lifetime: true,
+    owns_device_range_copy_cache: true,
+    owns_range_cache_reuse: true,
+    owns_range_strategy_selection: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
+#[cfg(feature = "cuda-oxide-backend")]
+pub mod model_map;
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod substrate;
 
 #[cfg(test)]
 mod tests {
-    use super::{CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE};
+    use super::{CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE};
 
     #[test]
     fn substrate_scope_does_not_overclaim_kernel_or_route_ownership() {
@@ -70,5 +94,16 @@ mod tests {
         assert!(!M14_1B1_SCOPE.owns_complete_model_map);
         assert!(!M14_1B1_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B1_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn range_copy_scope_does_not_overclaim_strategy_kernel_or_route_ownership() {
+        assert!(M14_1B2A_SCOPE.opt_in_only);
+        assert!(M14_1B2A_SCOPE.owns_mapped_model_file_lifetime);
+        assert!(M14_1B2A_SCOPE.owns_device_range_copy_cache);
+        assert!(M14_1B2A_SCOPE.owns_range_cache_reuse);
+        assert!(!M14_1B2A_SCOPE.owns_range_strategy_selection);
+        assert!(!M14_1B2A_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B2A_SCOPE.changes_default_route);
     }
 }

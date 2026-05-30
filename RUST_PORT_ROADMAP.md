@@ -6755,10 +6755,60 @@ Stage split:
 
 ###### M14.1b2: Model Map And Range Cache Policy
 
+- Status: split before implementation into M14.1b2a through M14.1b2c.
+- Goal: port model file mapping and range-cache strategies onto the Rust
+  substrate without conflating an executable bounded cache with every
+  current-C policy branch.
+
+####### M14.1b2a: Owned Mmap Device Range Copy
+
+- Status: complete.
+- Goal: own model file/map lifetime in Rust and prove a bounded,
+  bounds-checked model range can be copied to a cached CUDA device buffer and
+  reused with byte-exact readback.
+- Oracle: current-C `ds4_gpu_set_model_fd`, `ds4_gpu_set_model_map_range`,
+  and `ds4_gpu_cache_model_range` intent, limited to the explicit device-copy
+  range-cache branch.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2a/model-range-copy-smoke.json`.
+- Comparator: `ds4-parity/check_model_range_copy_smoke.py --negative-test`
+  plus executable Rust B300 smoke using the pinned GGUF.
+- Acceptance: an opt-in Rust `mmap` owner and CUDA device range cache pass
+  bounds, exact-readback, and reuse checks without claiming HMM, registered
+  zero-copy, direct-I/O, Q8 conversion, kernel, or route ownership.
+- Evidence:
+  - Added Rust-owned `MappedModelFile` and `ModelRangeCache` types; copied
+    ranges synchronize before entering the reusable cache and retain
+    fail-closed bounds checking.
+  - Added
+    `ds4-parity/baselines/backend/m14.1b2a/model-range-copy-smoke.json` and
+    `ds4-parity/check_model_range_copy_smoke.py --negative-test`.
+  - On B300 pod `ds4-rust-port-b300`, after removing an invalid diagnostic
+    `Debug` derive rejected by feature compilation, the feature-enabled smoke
+    mmaped the pinned GGUF and passed 4096-byte bounds rejection, CUDA
+    copy/readback, and cache-reuse checks on `NVIDIA B300 SXM6 AC`.
+  - Adversarial self-review found and fixed a rejected-null-address `mmap`
+    cleanup leak; the B300 smoke rerun passed after that cleanup-only fix.
+  - Validation passed: `cargo test --workspace`, `cargo fmt --all -- --check`,
+    `python3 ds4-parity/check_model_range_copy_smoke.py --negative-test`
+    (64 checks), prior M14.1b1/M14.1a/M14.0 gates, `git diff --check`, and
+    `python3 ds4-parity/run_parity_report.py --skip-local-oracles` (98 passed,
+    50 skipped, 0 failed).
+  - Non-interactive Claude review could not run because the local CLI reported
+    `Not logged in`; post-fix self-review found no material mmap/cache
+    lifetime, synchronization, bounded-claim, or default-route issue.
+
+####### M14.1b2b: Model Range Strategy Parity
+
 - Status: active.
-- Goal: port `ds4_gpu_set_model_map`, `ds4_gpu_set_model_map_range`,
-  `ds4_gpu_set_model_fd`, and `ds4_gpu_cache_model_range` ownership onto the
-  Rust substrate with the current-C model route retained as oracle.
+- Goal: implement and compare registered/HMM/direct-I/O range-strategy
+  selection and failure behavior against current-C.
+
+####### M14.1b2c: Model Map Cache Closure
+
+- Status: planned.
+- Goal: close the model-map/range-cache assignment with explicit strategy
+  coverage and retained-current-C route evidence.
 
 ###### M14.1b3: Allocation And Quality Policy
 

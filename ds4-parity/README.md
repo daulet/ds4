@@ -2065,6 +2065,18 @@ GGUF: managed advice/prefetch, mapped-host device-pointer creation, and
 registered caller-owned host lifetime. It does not claim complete model-map
 or range-cache ownership, DS4 kernels, or runtime route activation.
 
+Validate the M14.1b2a Rust-owned mmap/device-range copy B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_range_copy_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-range-copy-smoke` against the pinned GGUF: Rust-owned mmap
+lifetime, bounds-checked range selection, CUDA device-buffer copy/readback,
+and exact cache reuse. It does not claim registered/HMM/direct-I/O strategy
+selection, DS4 kernels, or runtime route activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

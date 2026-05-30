@@ -7281,9 +7281,42 @@
 
 ###### M14.1b2: Model Map And Range Cache Policy
 
+- Status: split before implementation into M14.1b2a through M14.1b2c.
+- Goal: port model-map and model-range cache strategies as bounded,
+  executable Rust-owned cuts with current-C retained as oracle.
+
+####### M14.1b2a: Owned Mmap Device Range Copy
+
+- Status: done
+- Goal: own model file/mmap lifetime in Rust and prove bounds-checked,
+  byte-exact cached CUDA device-range copy plus reuse on B300.
+- Oracle: current-C model fd/map/range-cache intent, limited to device-copy
+  cache behavior.
+- Fixture: `ds4-parity/baselines/backend/m14.1b2a/model-range-copy-smoke.json`.
+- Comparator: `ds4-parity/check_model_range_copy_smoke.py --negative-test`
+  plus B300 Rust smoke.
+- Validation needed: pinned-model B300 exact readback and cache reuse; no
+  direct-I/O, HMM, registered-zero-copy, Q8, kernel, or route claim.
+- Evidence: the feature-enabled B300 smoke mmaped the pinned GGUF, rejected
+  an out-of-bounds range, copied/read back one 4096-byte CUDA device range,
+  and reused exactly one cache entry on `NVIDIA B300 SXM6 AC`; strategy,
+  kernel, and route ownership remain false. Feature compilation first exposed
+  an invalid `Debug` derive, and self-review then found a rejected-null
+  `mmap` cleanup leak; both were fixed before the final B300 rerun. Local
+  workspace tests, the 64-check M14.1b2a gate, prior gates, and unified
+  parity (98 passed, 50 skipped, 0 failed) passed; non-interactive Claude was
+  unavailable due missing CLI login.
+
+####### M14.1b2b: Model Range Strategy Parity
+
 - Status: active
-- Goal: port model-map, model-range, fd, and model-cache ownership with
-  current-C retained as oracle.
+- Goal: implement registered/HMM/direct-I/O strategy selection and failure
+  behavior with current-C comparison.
+
+####### M14.1b2c: Model Map Cache Closure
+
+- Status: planned
+- Goal: close model-map/range-cache ownership before allocation/quality work.
 
 ###### M14.1b3: Allocation And Quality Policy
 
