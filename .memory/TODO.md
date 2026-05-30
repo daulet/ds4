@@ -9223,6 +9223,38 @@
 
 ##### M14.6b2b2b2: Remaining Rust CUDA Kernel ABI Assembly
 
-- Status: active
+- Status: active; split into M14.6b2b2b2a and M14.6b2b2b2b because plain
+  RMS normalization is tensor-only, while weighted RMS and downstream
+  normalization APIs require the still-unowned `model_map` range boundary.
 - Goal: export the remaining graph compute ABI symbols and resolve embedded
   artifact production-link integration before selecting a Rust CUDA route.
+
+##### M14.6b2b2b2a: Plain RMS Norm ABI Export
+
+- Status: done
+- Goal: export `ds4_gpu_rms_norm_plain_tensor` and
+  `ds4_gpu_rms_norm_plain_rows_tensor` from the reusable embedded Rust CUDA
+  module without claiming weighted/model-backed normalization.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2a/abi-plain-rms-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_plain_rms_smoke.py --negative-test`.
+- Evidence: `abi_rms_norm_plain_kernel` executes through a C-linked
+  `libds4_cuda.a` consumer on B300 and passes single-row, batched-row,
+  in-place alias, undersized-output, zero-row, current-C zero-width, and null
+  checks; `nm` confirms 23 exports. Local library tests pass with 92 tests and
+  B300 release-feature tests pass with 94 tests. Weighted RMS remains blocked
+  on Rust ownership of the model-map range boundary. Whole-archive retention,
+  the `.note.GNU-stack` warning, and the shared-module non-release SwiGLU
+  codegen blocker remain open before route promotion. The plain-RMS ABI
+  checker passes with 94 checks and unified parity passes with 178 passed, 45
+  skipped, and no failures. The required non-interactive Claude review timed
+  out after 60 seconds without a completed result; self-review preserved the
+  current-C zero-width boundary and kept model-backed RMS pending.
+
+##### M14.6b2b2b2b: Weighted RMS And Model-Backed ABI Assembly
+
+- Status: active
+- Goal: establish a Rust-owned model-map range boundary required by weighted
+  RMS and subsequent model-backed graph-compute exports before exposing those
+  ABI symbols.

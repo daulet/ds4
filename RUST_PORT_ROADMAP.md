@@ -9412,9 +9412,54 @@ Stage split:
 
 ##### M14.6b2b2b2: Remaining Rust CUDA Kernel ABI Assembly
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2a and M14.6b2b2b2b because plain
+  RMS normalization uses only tensor inputs while weighted RMS and subsequent
+  normalization surfaces read weights through the still-unowned
+  `model_map`/`cuda_model_range_ptr` ABI boundary.
 - Goal: export the remaining graph compute ABI symbols and resolve embedded
   artifact production-link integration before selecting a Rust CUDA route.
+
+##### M14.6b2b2b2a: Plain RMS Norm ABI Export
+
+- Status: done.
+- Goal: export `ds4_gpu_rms_norm_plain_tensor` and
+  `ds4_gpu_rms_norm_plain_rows_tensor` through the reusable embedded Rust
+  CUDA module without claiming model-backed normalization.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2a/abi-plain-rms-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_plain_rms_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` adds
+    `abi_rms_norm_plain_kernel`; `abi.rs` exports the single-row and batched
+    plain-RMS wrappers while preserving output/input aliasing and the
+    current-C zero-width success boundary.
+  - A C consumer of `libds4_cuda.a` on `ds4-rust-port-b300`
+    (`NVIDIA B300 SXM6 AC`) passes single-row, two-row, aliasing,
+    undersized-output, zero-row, zero-width, and null-input checks; `nm`
+    confirms 23 exported `ds4_gpu_*` symbols.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 92 tests and
+    B300 `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 94 tests.
+  - The shared embedded module still carries the preceding non-release
+    SwiGLU codegen blocker, whole-archive retention requirement, and generated
+    `.note.GNU-stack` linker warning; weighted RMS remains pending on
+    model-map ABI ownership rather than being overclaimed here.
+  - `check_cuda_abi_plain_rms_smoke.py --negative-test` passes with 94
+    checks, and unified parity passes with 178 passed, 45 skipped, and no
+    failures.
+  - The required non-interactive Claude adversarial review was invoked with
+    the source, oracle, comparator, B300 proof, and open boundary/risk bundle,
+    but timed out after 60 seconds without a completed result. Adversarial
+    self-review preserved the current-C zero-width result boundary and kept
+    weighted/model-backed RMS outside this leaf.
+
+##### M14.6b2b2b2b: Weighted RMS And Model-Backed ABI Assembly
+
+- Status: active.
+- Goal: establish a Rust-owned model-map range boundary required by weighted
+  RMS and the subsequent model-backed graph-compute exports before adding
+  those public ABI symbols.
 
 ## Removal Criteria for C Host Code
 

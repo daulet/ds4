@@ -427,6 +427,72 @@ pub unsafe extern "C" fn ds4_gpu_swiglu_tensor(
     })
 }
 
+#[cfg(feature = "cuda-oxide-kernels")]
+unsafe fn rms_norm_plain_rows_impl(
+    out: *mut Ds4GpuTensor,
+    x: *const Ds4GpuTensor,
+    n: u32,
+    rows: u32,
+    eps: f32,
+) -> bool {
+    let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+        return false;
+    };
+    let Some(x) = (unsafe { tensor_ref(x) }) else {
+        return false;
+    };
+    let Some(count) = u64::from(n).checked_mul(u64::from(rows)) else {
+        return false;
+    };
+    let Some(bytes) = count.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    if rows == 0 || out.bytes < bytes || x.bytes < bytes {
+        return false;
+    }
+    with_backend(|backend| {
+        with_abi_kernels(backend, |kernels| {
+            // SAFETY: bounds above cover each device pointer; all source
+            // elements are reduced before row-local stores, preserving
+            // current-C support for output/input aliasing.
+            Some(unsafe {
+                kernels.rms_norm_plain_rows_tensor(
+                    backend.stream(),
+                    out.device_ptr(),
+                    x.device_ptr(),
+                    n,
+                    rows,
+                    eps,
+                )
+            })
+        })
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_rms_norm_plain_tensor(
+    out: *mut Ds4GpuTensor,
+    x: *const Ds4GpuTensor,
+    n: u32,
+    eps: f32,
+) -> c_int {
+    status(|| unsafe { rms_norm_plain_rows_impl(out, x, n, 1, eps) })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_rms_norm_plain_rows_tensor(
+    out: *mut Ds4GpuTensor,
+    x: *const Ds4GpuTensor,
+    n: u32,
+    rows: u32,
+    eps: f32,
+) -> c_int {
+    status(|| unsafe { rms_norm_plain_rows_impl(out, x, n, rows, eps) })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ds4_gpu_tensor_write(
     tensor: *mut Ds4GpuTensor,

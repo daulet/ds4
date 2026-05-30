@@ -2993,6 +2993,20 @@ output/input alias cases pass. Whole-archive retention, executable-stack
 warning removal, and the remaining graph exports remain open before route
 promotion.
 
+Validate the M14.6b2b2b2a Rust CUDA plain RMS ABI export:
+
+```sh
+python3 ds4-parity/check_cuda_abi_plain_rms_smoke.py --negative-test
+```
+
+The fixture records `ds4_gpu_rms_norm_plain_tensor` and
+`ds4_gpu_rms_norm_plain_rows_tensor` running from a C consumer of the Rust
+static library on B300, including batched rows, in-place aliasing, and the
+current-C zero-width result boundary. Weighted RMS remains pending because it
+reads weights through the model-map range ABI; whole-archive retention and
+the generated executable-stack warning also remain open before route
+promotion.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
