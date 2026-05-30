@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use cuda_core::{
     CudaContext, CudaStream, DeviceBuffer, DeviceCopy, DriverError, ManagedBuffer,
-    MappedHostBuffer, MemoryAdvice, MemoryLocation, ReadOnlyPageableHostMemory,
+    MappedHostBuffer, MemoryAdvice, MemoryLocation, PinnedHostBuffer, ReadOnlyPageableHostMemory,
     ReadOnlyRegisteredHostMemory, RegisteredHostMemory, StreamAttachment,
 };
 
@@ -132,6 +132,34 @@ impl CudaOxideSubstrate {
             range.prefetch_to(&self.stream, device)?;
         }
         self.synchronize()
+    }
+
+    pub fn pinned_zeroed<T: DeviceCopy>(
+        &self,
+        len: usize,
+    ) -> Result<PinnedHostBuffer<T>, DriverError> {
+        PinnedHostBuffer::zeroed(&self.context, len)
+    }
+
+    /// Copies a selected range from a live pinned staging buffer and completes it.
+    pub fn upload_pinned_u8_range(
+        &self,
+        staging: &PinnedHostBuffer<u8>,
+        offset: usize,
+        bytes: usize,
+    ) -> Result<DeviceBuffer<u8>, DriverError> {
+        assert!(offset <= staging.len() && bytes <= staging.len() - offset);
+        let device = self.zeroed(bytes)?;
+        unsafe {
+            cuda_core::memory::memcpy_htod_async(
+                device.cu_deviceptr(),
+                staging.as_ptr().add(offset),
+                bytes,
+                self.stream.cu_stream(),
+            )?;
+        }
+        self.synchronize()?;
+        Ok(device)
     }
 
     /// Copies bytes from a device-readable pointer owned by a live residency guard.

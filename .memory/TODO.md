@@ -7386,9 +7386,39 @@
 
 ######## M14.1b2b3b: Direct-I/O Staging Policy
 
+- Status: split into M14.1b2b3b1 and M14.1b2b3b2 before implementation
+- Goal: add direct-I/O read selection and asynchronous pinned staging as
+  separate current-C policy slices.
+
+######### M14.1b2b3b1: Direct-I/O Pinned Read Selection
+
+- Status: done
+- Goal: add Linux `O_DIRECT` aligned read selection and buffered fallback
+  through synchronized pinned host-to-device upload.
+- Oracle: current-C `ds4_gpu_set_model_fd`, `cuda_model_stage_read`, and the
+  selected transfer portion of `cuda_model_range_ptr_from_fd`, excluding
+  event-ring overlap and arena/budget state.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b3b1/model-direct-io-smoke.json`.
+- Evidence: the B300 smoke read requested range `13..4109` through an
+  `O_DIRECT` aligned pinned window `0..8192` at alignment `4096`, uploaded
+  the requested bytes through CUDA, and read them back exactly. Because the
+  pinned model length is not direct-I/O aligned, its final 13-byte request
+  exercised the buffered fallback and also read back exactly. Asynchronous
+  ring/event scheduling, cache-budget and persistent disable-after-error
+  policy, kernels, and route activation remain unclaimed.
+- Validation: local workspace tests, formatting and diff checks, the
+  79-check new comparator, retained M14 comparators, B300 feature-enabled
+  crate tests and predecessor HMM smoke, and unified parity (102 passed, 50
+  skipped, 0 failed) passed. Non-interactive Claude review was unavailable
+  because the CLI reported `Not logged in`; adversarial self-review found no
+  lifetime, alignment, fallback, or bounded-claim defect.
+
+######### M14.1b2b3b2: Asynchronous Staging Ring And Budget Policy
+
 - Status: planned
-- Goal: add the O_DIRECT open/aligned-read fallback and pinned asynchronous
-  staging comparison as a separate current-C policy slice.
+- Goal: add multi-buffer event-driven overlap, direct-I/O error suppression,
+  and range-cache arena/budget behavior.
 
 ####### M14.1b2c: Model Map Cache Closure
 

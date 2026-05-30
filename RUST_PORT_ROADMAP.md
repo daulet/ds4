@@ -6932,9 +6932,54 @@ Stage split:
 
 ######## M14.1b2b3b: Direct-I/O Staging Policy
 
+- Status: split before implementation into M14.1b2b3b1 and M14.1b2b3b2.
+- Goal: port file-descriptor direct-I/O and pinned staging behavior through
+  separately measurable read-selection and asynchronous scheduling slices.
+
+######### M14.1b2b3b1: Direct-I/O Pinned Read Selection
+
+- Status: complete.
+- Goal: port `O_DIRECT` open/aligned-read selection, buffered fallback, and
+  synchronized pinned host-to-device upload for a bounded model range.
+- Oracle: current-C `ds4_gpu_set_model_fd`, `cuda_model_stage_read`, and the
+  selected upload in `cuda_model_range_ptr_from_fd`, excluding its
+  multi-buffer event ring, persistent direct-I/O disable state, and arena
+  budget.
+- Acceptance: a normal unaligned range is read from an aligned direct-I/O
+  pinned window and uploads byte-exactly; a final partial-file range selects
+  the current-C-style buffered fallback and also uploads byte-exactly without
+  claiming asynchronous overlap or cache-budget policy.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.1b2b3b1/model-direct-io-smoke.json`.
+- Comparator:
+  `ds4-parity/check_model_direct_io_smoke.py --negative-test` plus executable
+  Rust B300 smoke using the pinned GGUF.
+- Evidence:
+  - Added a Rust pinned-staging read selection API that attempts Linux
+    `O_DIRECT` through the model file descriptor, aligns its CUDA-pinned
+    source window, and synchronizes the selected device upload before the
+    staging allocation drops.
+  - On B300 pod `ds4-rust-port-b300`, requested range `13..4109` selected an
+    aligned direct read `0..8192` at alignment `4096`, and exact device
+    readback passed. The model's final 13 bytes selected the buffered fallback
+    because an aligned direct read would extend past the non-aligned file end,
+    and that exact readback passed as well.
+  - The stage explicitly leaves asynchronous staging-ring/event scheduling,
+    cache-budget policy, persistent disable-after-error state, compute
+    kernels, and runtime route activation unclaimed.
+  - Validation passed local workspace tests, formatting and diff checks, the
+    79-check direct-I/O comparator, retained M14 comparators, B300
+    feature-enabled crate tests and predecessor HMM smoke, and unified parity
+    with 102 passed, 50 skipped, and 0 failed. Non-interactive Claude review
+    was unavailable because the local CLI reported `Not logged in`; adversarial
+    self-review found no lifetime, alignment, fallback, or bounded-claim
+    defect.
+
+######### M14.1b2b3b2: Asynchronous Staging Ring And Budget Policy
+
 - Status: planned.
-- Goal: port the file-descriptor `O_DIRECT` open/aligned-read fallback and
-  pinned asynchronous staging behavior as a separately measurable branch.
+- Goal: port the multi-buffer event-driven upload ring, direct-I/O
+  disable-after-error state, and range-cache arena/budget decisions.
 
 ####### M14.1b2c: Model Map Cache Closure
 

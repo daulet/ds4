@@ -1,6 +1,8 @@
 use std::ffi::c_void;
 use std::fmt;
 use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::fs::OpenOptions;
 use std::os::raw::c_int;
 use std::os::unix::fs::FileExt;
 use std::os::unix::io::AsRawFd;
@@ -9,7 +11,8 @@ use std::ptr::NonNull;
 use std::slice;
 
 use cuda_core::{
-    DeviceBuffer, DriverError, ReadOnlyPageableHostMemory, ReadOnlyRegisteredHostMemory,
+    DeviceBuffer, DriverError, PinnedHostBuffer, ReadOnlyPageableHostMemory,
+    ReadOnlyRegisteredHostMemory,
 };
 
 use crate::substrate::CudaOxideSubstrate;
@@ -238,6 +241,151 @@ pub fn prefetch_pageable_read_only_range<'model>(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PinnedStagePolicy {
+    Buffered,
+    DirectIoOrBufferedFallback,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PinnedStageResolution {
+    Buffered,
+    DirectIo {
+        alignment: u64,
+        read_offset: u64,
+        read_bytes: u64,
+        payload_offset: u64,
+    },
+    BufferedFallback,
+}
+
+pub struct PinnedStagedModelRange {
+    device: DeviceBuffer<u8>,
+    resolution: PinnedStageResolution,
+}
+
+impl PinnedStagedModelRange {
+    pub const fn resolution(&self) -> PinnedStageResolution {
+        self.resolution
+    }
+
+    pub fn readback(&self, substrate: &CudaOxideSubstrate) -> Result<Vec<u8>, ModelRangeError> {
+        Ok(substrate.download(&self.device)?)
+    }
+}
+
+pub fn stage_pinned_model_range(
+    substrate: &CudaOxideSubstrate,
+    model: &MappedModelFile,
+    offset: u64,
+    bytes: u64,
+    policy: PinnedStagePolicy,
+) -> Result<PinnedStagedModelRange, ModelRangeError> {
+    model.range(offset, bytes)?;
+    let (staging, payload_offset, resolution) = match policy {
+        PinnedStagePolicy::Buffered => buffered_pinned_source(substrate, model, offset, bytes)?,
+        PinnedStagePolicy::DirectIoOrBufferedFallback => {
+            match try_direct_pinned_source(substrate, model, offset, bytes)? {
+                Some(source) => source,
+                None => {
+                    let (staging, payload_offset, _) =
+                        buffered_pinned_source(substrate, model, offset, bytes)?;
+                    (
+                        staging,
+                        payload_offset,
+                        PinnedStageResolution::BufferedFallback,
+                    )
+                }
+            }
+        }
+    };
+    let bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+    let device = substrate.upload_pinned_u8_range(&staging, payload_offset, bytes)?;
+    Ok(PinnedStagedModelRange { device, resolution })
+}
+
+fn buffered_pinned_source(
+    substrate: &CudaOxideSubstrate,
+    model: &MappedModelFile,
+    offset: u64,
+    bytes: u64,
+) -> Result<(PinnedHostBuffer<u8>, usize, PinnedStageResolution), ModelRangeError> {
+    let bytes = usize::try_from(bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+    let mut staging = substrate.pinned_zeroed(bytes)?;
+    model._file.read_exact_at(staging.as_mut_slice(), offset)?;
+    Ok((staging, 0, PinnedStageResolution::Buffered))
+}
+
+#[cfg(target_os = "linux")]
+fn try_direct_pinned_source(
+    substrate: &CudaOxideSubstrate,
+    model: &MappedModelFile,
+    offset: u64,
+    bytes: u64,
+) -> Result<Option<(PinnedHostBuffer<u8>, usize, PinnedStageResolution)>, ModelRangeError> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+
+    let alignment = (model._file.metadata()?.blksize() as u64).max(512);
+    let read_offset = offset - (offset % alignment);
+    let payload_delta = offset - read_offset;
+    let payload_end = payload_delta
+        .checked_add(bytes)
+        .ok_or(ModelRangeError::ModelTooLarge)?;
+    let read_bytes = round_up_to_alignment(payload_end, alignment)?;
+    if read_offset > model.size || read_bytes > model.size - read_offset {
+        return Ok(None);
+    }
+    let direct_path = format!("/proc/self/fd/{}", model._file.as_raw_fd());
+    let direct_file = match OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECT)
+        .open(direct_path)
+    {
+        Ok(file) => file,
+        Err(_) => return Ok(None),
+    };
+    let stage_bytes = read_bytes
+        .checked_add(alignment)
+        .ok_or(ModelRangeError::ModelTooLarge)?;
+    let stage_bytes = usize::try_from(stage_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+    let mut staging = substrate.pinned_zeroed(stage_bytes)?;
+    let base = staging.as_ptr() as usize;
+    let alignment_usize = usize::try_from(alignment).map_err(|_| ModelRangeError::ModelTooLarge)?;
+    let aligned_delta = (alignment_usize - (base % alignment_usize)) % alignment_usize;
+    let read_bytes_usize =
+        usize::try_from(read_bytes).map_err(|_| ModelRangeError::ModelTooLarge)?;
+    let direct_window =
+        &mut staging.as_mut_slice()[aligned_delta..aligned_delta + read_bytes_usize];
+    if direct_file
+        .read_exact_at(direct_window, read_offset)
+        .is_err()
+    {
+        return Ok(None);
+    }
+    let payload_delta =
+        usize::try_from(payload_delta).map_err(|_| ModelRangeError::ModelTooLarge)?;
+    Ok(Some((
+        staging,
+        aligned_delta + payload_delta,
+        PinnedStageResolution::DirectIo {
+            alignment,
+            read_offset,
+            read_bytes,
+            payload_offset: payload_delta as u64,
+        },
+    )))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn try_direct_pinned_source(
+    _substrate: &CudaOxideSubstrate,
+    _model: &MappedModelFile,
+    _offset: u64,
+    _bytes: u64,
+) -> Result<Option<(PinnedHostBuffer<u8>, usize, PinnedStageResolution)>, ModelRangeError> {
+    Ok(None)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CacheOutcome {
     Inserted,
     Reused,
@@ -415,8 +563,12 @@ fn page_size() -> Result<u64, ModelRangeError> {
 }
 
 fn round_up_to_page(value: u64, page_size: u64) -> Result<u64, ModelRangeError> {
+    round_up_to_alignment(value, page_size)
+}
+
+fn round_up_to_alignment(value: u64, alignment: u64) -> Result<u64, ModelRangeError> {
     value
-        .checked_add(page_size - 1)
-        .map(|end| (end / page_size) * page_size)
+        .checked_add(alignment - 1)
+        .map(|end| (end / alignment) * alignment)
         .ok_or(ModelRangeError::ModelTooLarge)
 }

@@ -124,6 +124,29 @@ pub const M14_1B2B3A_SCOPE: PageableHmmStrategyScope = PageableHmmStrategyScope 
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DirectIoStagingScope {
+    pub opt_in_only: bool,
+    pub owns_pinned_file_staging: bool,
+    pub owns_o_direct_open_and_aligned_read: bool,
+    pub owns_buffered_read_fallback: bool,
+    pub owns_asynchronous_staging_ring: bool,
+    pub owns_cache_budget_policy: bool,
+    pub owns_ds4_kernels: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_1B2B3B1_SCOPE: DirectIoStagingScope = DirectIoStagingScope {
+    opt_in_only: true,
+    owns_pinned_file_staging: true,
+    owns_o_direct_open_and_aligned_read: true,
+    owns_buffered_read_fallback: true,
+    owns_asynchronous_staging_ring: false,
+    owns_cache_budget_policy: false,
+    owns_ds4_kernels: false,
+    changes_default_route: false,
+};
+
 #[cfg(feature = "cuda-oxide-backend")]
 pub mod model_map;
 
@@ -134,7 +157,7 @@ pub mod substrate;
 mod tests {
     use super::{
         CUDA_OXIDE_REVISION, M14_1A_SCOPE, M14_1B1_SCOPE, M14_1B2A_SCOPE, M14_1B2B1_SCOPE,
-        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE,
+        M14_1B2B2_SCOPE, M14_1B2B3A_SCOPE, M14_1B2B3B1_SCOPE,
     };
 
     #[test]
@@ -204,5 +227,17 @@ mod tests {
         assert!(!M14_1B2B3A_SCOPE.owns_o_direct_staging);
         assert!(!M14_1B2B3A_SCOPE.owns_ds4_kernels);
         assert!(!M14_1B2B3A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn direct_io_scope_leaves_ring_budget_kernels_and_route_pending() {
+        assert!(M14_1B2B3B1_SCOPE.opt_in_only);
+        assert!(M14_1B2B3B1_SCOPE.owns_pinned_file_staging);
+        assert!(M14_1B2B3B1_SCOPE.owns_o_direct_open_and_aligned_read);
+        assert!(M14_1B2B3B1_SCOPE.owns_buffered_read_fallback);
+        assert!(!M14_1B2B3B1_SCOPE.owns_asynchronous_staging_ring);
+        assert!(!M14_1B2B3B1_SCOPE.owns_cache_budget_policy);
+        assert!(!M14_1B2B3B1_SCOPE.owns_ds4_kernels);
+        assert!(!M14_1B2B3B1_SCOPE.changes_default_route);
     }
 }

@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.1b2b3b Direct-I/O Staging Policy
+- Active item: M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -11,10 +11,11 @@
   M14.1b2 is further split into M14.1b2a through M14.1b2c because device
   range-copy proof does not establish registered/HMM/direct-I/O strategy
   parity or model-cache closure. M14.1b2b is further split into M14.1b2b1
-  through M14.1b2b3b because file-staged device copy, registered fallback,
-  pageable HMM, and direct-I/O staging have distinct API and live-evidence
-  boundaries.
-- Last validated source before the active item: M14.1b2b3a Pageable HMM Range Strategy.
+  through M14.1b2b3b2 because file-staged device copy, registered fallback,
+  pageable HMM, direct-I/O read selection, and asynchronous staging policy
+  have distinct API and live-evidence boundaries.
+- Last validated source before the active item: M14.1b2b3b1 Direct-I/O Pinned Read Selection.
+- Earlier M14.1b2b3a Pageable HMM Range Strategy.
 - Earlier M14.1b2b2 Registered Range Strategy.
 - Earlier M14.1b2b1 File-Staged Range Strategy.
 - Earlier M14.1b2a Owned Mmap Device Range Copy.
@@ -119,6 +120,23 @@
 
 ## Last Evidence
 
+- M14.1b2b3b1 Direct-I/O Pinned Read Selection adds a Rust
+  `O_DIRECT`-or-buffered pinned stage and synchronized selected-range device
+  upload. On B300 pod `ds4-rust-port-b300`, requested range `13..4109` read
+  from aligned direct-I/O window `0..8192` at alignment `4096`, then matched
+  exact CUDA readback. The model's final 13 bytes took the buffered fallback
+  because its file end is not direct-I/O aligned, and that exact CUDA
+  readback also matched. Its fixture and checker are
+  `ds4-parity/baselines/backend/m14.1b2b3b1/model-direct-io-smoke.json` and
+  `ds4-parity/check_model_direct_io_smoke.py --negative-test`.
+  Asynchronous staging-ring/event scheduling, cache-budget policy, persistent
+  disable-after-error state, DS4 kernels, and default-route ownership remain
+  false. Validation passed local workspace tests, formatting and diff checks,
+  the 79-check new comparator, retained M14 comparators, B300 feature-enabled
+  crate tests and predecessor HMM smoke, and unified parity with 102 passed,
+  50 skipped, and 0 failed. Non-interactive Claude review was unavailable
+  because the CLI reported `Not logged in`; adversarial self-review found no
+  lifetime, alignment, fallback, or bounded-claim defect.
 - M14.1b2b3a Pageable HMM Range Strategy pins corrected cuda-oxide revision
   `361300ea643688eea87eaa215d9a62a5e74a30e6`, after integration review
   changed borrowed asynchronous pageable prefetch from a safe API to an

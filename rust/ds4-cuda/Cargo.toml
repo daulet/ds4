@@ -44,3 +44,8 @@ required-features = ["cuda-oxide-backend"]
 name = "ds4-cuda-model-pageable-hmm-smoke"
 path = "src/bin/model_pageable_hmm_smoke.rs"
 required-features = ["cuda-oxide-backend"]
+
+[[bin]]
+name = "ds4-cuda-model-direct-io-smoke"
+path = "src/bin/model_direct_io_smoke.rs"
+required-features = ["cuda-oxide-backend"]

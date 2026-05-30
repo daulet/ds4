@@ -2118,6 +2118,20 @@ pointer. The proof path synchronizes prefetch lifetime and does not claim
 `O_DIRECT`, asynchronous production prefetch policy, DS4 kernels, or runtime
 route activation.
 
+Validate the M14.1b2b3b1 direct-I/O pinned read selection B300 smoke:
+
+```sh
+python3 ds4-parity/check_model_direct_io_smoke.py --negative-test
+```
+
+The fixture records a feature-enabled B300 execution of
+`ds4-cuda-model-direct-io-smoke` against the pinned GGUF: an ordinary
+unaligned request is staged through an aligned `O_DIRECT` pinned window and
+the unaligned file tail takes the buffered fallback; both CUDA readbacks must
+match. It does not claim asynchronous staging-ring/event scheduling,
+cache-budget policy, persistent disable-after-error state, kernels, or route
+activation.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

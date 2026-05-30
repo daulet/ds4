@@ -212,7 +212,7 @@ def validate_wiring(report: Report, texts: dict[str, str]) -> None:
     report.check(fixture in texts["roadmap"], "roadmap fixture missing")
     report.check("M14.1b2b2: Registered Range Strategy" in texts["todo"], "TODO item missing")
     report.check(fixture in texts["todo"], "TODO fixture missing")
-    report.check("Active item: M14.1b2b3b Direct-I/O Staging Policy" in texts["status"], "next active stage missing")
+    report.check("Active item: M14.1b2b3b2 Asynchronous Staging Ring And Budget Policy" in texts["status"], "next active stage missing")
     report.check("M14.1b2b2 Registered Range Strategy" in texts["status"], "status evidence missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
