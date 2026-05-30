@@ -2538,6 +2538,34 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE: CudaAbiFullModelCopySelectionScope
         changes_default_route: false,
     };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiDirectModelReadScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub owns_nonempty_direct_model_read_selection: bool,
+    pub owns_direct_read_before_per_range_staging: bool,
+    pub owns_direct_reads_not_reported_as_cached: bool,
+    pub owns_pageable_hmm_cache_result_correction: bool,
+    pub owns_remaining_failure_selection: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE: CudaAbiDirectModelReadScope =
+    CudaAbiDirectModelReadScope {
+        exported_abi_symbol_count: 29,
+        exported_compute_symbol_count: 9,
+        owns_nonempty_direct_model_read_selection: true,
+        owns_direct_read_before_per_range_staging: true,
+        owns_direct_reads_not_reported_as_cached: true,
+        owns_pageable_hmm_cache_result_correction: true,
+        owns_remaining_failure_selection: false,
+        owns_remaining_graph_compute_abi: false,
+        owns_complete_ds4_gpu_abi: false,
+        changes_default_route: false,
+    };
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -2588,6 +2616,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2A_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B1_SCOPE, M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE,
     };
 
     #[test]
@@ -3922,6 +3951,26 @@ mod tests {
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_remaining_graph_compute_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.owns_complete_ds4_gpu_abi);
         assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2A_SCOPE.changes_default_route);
+    }
+
+    #[test]
+    fn public_direct_model_read_scope_leaves_remaining_failure_selection_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.exported_abi_symbol_count,
+            29
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.exported_compute_symbol_count,
+            9
+        );
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_nonempty_direct_model_read_selection);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_direct_read_before_per_range_staging);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_direct_reads_not_reported_as_cached);
+        assert!(M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_pageable_hmm_cache_result_correction);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_remaining_failure_selection);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_remaining_graph_compute_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.owns_complete_ds4_gpu_abi);
+        assert!(!M14_6B2B2B2B2B2B2B2B2B2B2B2B1_SCOPE.changes_default_route);
     }
 
     #[test]

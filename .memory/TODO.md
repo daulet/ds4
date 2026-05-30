@@ -9361,7 +9361,7 @@
 
 - Status: done
 - Goal: connect the deterministic current-C pageable HMM fallback subset to
-  public map-range/cache-range calls while leaving chunk-copy and fd policy
+  public map-range/direct-read calls while leaving chunk-copy and fd policy
   pending.
 - Fixture:
   `ds4-parity/baselines/backend/m14.6b2b2b2b2b2a/abi-model-control-pageable-hmm-smoke.json`
@@ -9370,13 +9370,16 @@
 - Evidence: the Rust ABI retains a page-bounded pageable host guard only for
   deterministic current-C fallback selection (`DS4_CUDA_COPY_MODEL_CHUNKED`
   plus `DS4_CUDA_NO_MODEL_COPY` or `DS4_CUDA_DIRECT_MODEL`) and routes
-  matching cached reads through that prefetched window. On B300 the existing
+  matching model reads through that prefetched window without reporting a
+  cache admission. On B300 the existing
   HMM probe confirms pageable advice/prefetch and exact direct readback; a
-  C-linked public consumer selects the fallback environment and matches
-  weighted RMS output with 29 unchanged exports. Local default library tests
+  C-linked public consumer selects the fallback environment, observes an
+  uncached direct-pointer result, and matches weighted RMS output with 29
+  unchanged exports. Local default library tests
   pass with 96 tests and B300 release-feature tests pass with 98 tests. The
-  pageable-HMM checker passes with 103 checks, and unified parity passes with
-  182 passed, 45 skipped, and no failures. The required non-interactive Claude
+  pageable-HMM checker passes with 107 checks after the cache-result
+  correction, and unified parity at the original leaf passes with 182
+  passed, 45 skipped, and no failures. The required non-interactive Claude
   review timed out after 60 seconds without completed findings; self-review
   fixed the consumption-time
   `DS4_CUDA_WEIGHT_CACHE`/`DS4_CUDA_WEIGHT_PRELOAD` exclusion guard.
@@ -9818,6 +9821,42 @@
   `.note.GNU-stack` warning remain pending.
 
 ################ M14.6b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
+
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2 because nonempty direct-model read
+  selection and its uncached public cache-result boundary are independently
+  observable from remaining failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  graph compute closure or route promotion.
+
+################# M14.6b2b2b2b2b2b2b2b2b2b2b2b1: Public Direct-Model Read Selection ABI
+
+- Status: done
+- Goal: preserve current-C nonempty `DS4_CUDA_DIRECT_MODEL` host-read
+  selection and its uncached public cache result while leaving remaining
+  failure selection and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b1/abi-model-control-direct-model-read-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_direct_model_read_smoke.py --negative-test`.
+- Evidence: Rust now resolves nonempty direct-model reads from the caller
+  mapping before per-range staging after global copied/registered state and
+  reports only actual retained storage from public cache calls. A C-linked
+  B300 consumer rejects whole-map registration with error code 801, observes
+  no range admission or registration retry, mutates host weights, and
+  verifies weighted RMS reads the changed bytes. The corrected pageable-HMM
+  predecessor proves its prefetched direct pointer is likewise not reported
+  as cached. Local tests pass with 109 tests, B300 release-feature tests pass
+  with 116 tests, and the static library retains 29 exports. The preceding
+  full-model-copy linked consumer passes against the new static library.
+  The public direct-model read checker passes 88 checks, and the default
+  unified report passes with 195 passed, 45 skipped, and 0 failed. The
+  required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Remaining
+  failure selection, whole-archive retention, route promotion, and the
+  `.note.GNU-stack` warning remain pending.
+
+################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
 
 - Status: active
 - Goal: connect remaining model-control failure selection without claiming

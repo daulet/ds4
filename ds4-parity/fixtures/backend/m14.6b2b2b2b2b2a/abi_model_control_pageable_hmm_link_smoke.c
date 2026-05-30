@@ -62,7 +62,7 @@ int main(void) {
 
     if (!ds4_gpu_set_model_fd(-1) ||
         !ds4_gpu_set_model_map_range(model_map, model_size, offset, bytes) ||
-        !ds4_gpu_cache_model_range(model_map, model_size, offset, bytes, "pageable-hmm") ||
+        ds4_gpu_cache_model_range(model_map, model_size, offset, bytes, "pageable-hmm") != 0 ||
         !ds4_gpu_rms_norm_weight_tensor(
             out, x, model_map, model_size, offset, 7, 1.0e-5f) ||
         !ds4_gpu_tensor_read(out, 0, got, sizeof(got)) ||
@@ -73,6 +73,6 @@ int main(void) {
     ds4_gpu_tensor_free(x);
     ds4_gpu_cleanup();
     free(allocation);
-    puts("{\"c_linked_rust_staticlib\":true,\"pageable_hmm_fallback_environment_selected\":true,\"page_aligned_model_map\":true,\"prefetched_window_consumed_by_weighted_rms\":true,\"weighted_output_matches\":true,\"embedded_libdevice_module_loaded\":true}");
+    puts("{\"c_linked_rust_staticlib\":true,\"pageable_hmm_fallback_environment_selected\":true,\"page_aligned_model_map\":true,\"prefetched_direct_read_not_reported_as_cached\":true,\"prefetched_window_consumed_by_weighted_rms\":true,\"weighted_output_matches\":true,\"embedded_libdevice_module_loaded\":true}");
     return 0;
 }

@@ -9606,7 +9606,7 @@ Stage split:
 
 - Status: done.
 - Goal: connect the deterministic current-C pageable HMM fallback subset to
-  the public map-range and cached model-range ABI while retaining chunked
+  the public map-range and direct model-read ABI while retaining chunked
   full-model copy and fd-backed policy as follow-on work.
 - Fixture:
   `ds4-parity/baselines/backend/m14.6b2b2b2b2b2a/abi-model-control-pageable-hmm-smoke.json`.
@@ -9618,17 +9618,20 @@ Stage split:
     current-C fallback selection: chunked copy selected and explicitly
     suppressed by `DS4_CUDA_NO_MODEL_COPY` or `DS4_CUDA_DIRECT_MODEL`, with
     HMM exclusion variables absent. Model-range consumption consults that
-    prefetched window before registered or device-copy caching.
+    prefetched window before registered or device-copy caching, without
+    reporting the prefetched direct pointer as a cache admission.
   - The independent B300 pageable-HMM probe observes pageable access,
     read-mostly/preferred-device advice, successful prefetch, and exact
     direct-pointer readback. A C-linked public consumer selects the fallback
-    environment, consumes the prefetched window through weighted RMS with
-    matching output, and preserves the 29-symbol Rust ABI export set.
+    environment, observes that the direct pointer is not reported as cached,
+    consumes the prefetched window through weighted RMS with matching output,
+    and preserves the 29-symbol Rust ABI export set.
   - Local `cargo test --locked -p ds4-cuda --lib` passes with 96 tests; B300
     `cargo test --locked --release -p ds4-cuda --features cuda-oxide-kernels
     --lib` passes with 98 tests and the release static library rebuilds.
   - `check_cuda_abi_model_control_pageable_hmm_smoke.py --negative-test`
-    passes with 103 checks, and unified parity passes with 182 passed, 45
+    passes with 107 checks after the cache-result correction, and unified
+    parity at the original leaf passes with 182 passed, 45
     skipped, and no failures.
   - The required non-interactive Claude adversarial review was invoked with
     the HMM subset boundary, C oracle, comparator, and B300 evidence, but
@@ -10217,6 +10220,53 @@ Stage split:
     `.note.GNU-stack` warning remain open.
 
 ################ M14.6b2b2b2b2b2b2b2b2b2b2b2b: Remaining Residual Failure Selection Policy
+
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b1 and
+  M14.6b2b2b2b2b2b2b2b2b2b2b2b2 because nonempty direct-model read
+  selection and the uncached cache-result boundary are independently
+  observable from remaining failure selection.
+- Goal: connect remaining model-control failure selection without claiming
+  remaining graph compute or route promotion.
+
+################# M14.6b2b2b2b2b2b2b2b2b2b2b2b1: Public Direct-Model Read Selection ABI
+
+- Status: done.
+- Goal: preserve current-C nonempty `DS4_CUDA_DIRECT_MODEL` host-read
+  selection and its uncached public cache result while leaving remaining
+  failure selection and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b1/abi-model-control-direct-model-read-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_direct_model_read_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now resolves nonempty direct-model reads from
+    the caller mapping after global copied/registered state but before
+    pageable or per-range staging, while public cache calls report only
+    actual retained storage.
+  - A C-linked B300 consumer interposes whole-map registration with error
+    code 801, selects direct-model reads, observes no range-cache admission
+    or registration retry, mutates host weights, and verifies that weighted
+    RMS observes the changed bytes.
+  - The corrected pageable-HMM predecessor consumer verifies that its
+    prefetched direct pointer remains usable for weighted RMS but is not
+    reported as a cache admission.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 109 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 116 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - The preceding full-model-copy C-linked B300 consumer reruns successfully
+    against the direct-model-aware static library.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_direct_model_read_smoke.py
+    --negative-test` passes with 88 checks, and the default unified parity
+    report passes with 195 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Remaining failure selection, q8/f16 hooks, remaining graph compute,
+    whole-archive retention, route promotion, and the generated
+    `.note.GNU-stack` warning remain open.
+
+################# M14.6b2b2b2b2b2b2b2b2b2b2b2b2: Remaining Residual Failure Selection Policy
 
 - Status: active.
 - Goal: connect remaining model-control failure selection without claiming

@@ -2,7 +2,7 @@
   "schema": "ds4.cuda_abi_model_control_pageable_hmm_smoke.v1",
   "milestone": "M14.6b2b2b2b2b2a",
   "status": "b300-pass-staticlib-pageable-hmm-fallback-abi",
-  "goal": "Rust-own the deterministic environment-selected pageable HMM fallback subset behind the public map-range and cached model-range ABI without claiming chunked full-model copy, fd-backed staging, remaining graph compute, or route promotion.",
+  "goal": "Rust-own the deterministic environment-selected pageable HMM fallback subset behind the public map-range and model-read ABI without claiming cache admission, chunked full-model copy, fd-backed staging, remaining graph compute, or route promotion.",
   "oracle": {
     "source": "ds4_cuda.cu",
     "symbols": [
@@ -20,7 +20,7 @@
     "abi_source": "rust/ds4-cuda/src/abi.rs",
     "scope_source": "rust/ds4-cuda/src/lib.rs",
     "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2a/abi_model_control_pageable_hmm_link_smoke.c",
-    "range_path": "ds4_gpu_set_model_map_range selects bounded pageable HMM prefetch for the deterministic current-C fallback environment; with_cached_abi_model_range consumes the retained prefetched window before registered or device-copy caching",
+    "range_path": "ds4_gpu_set_model_map_range selects bounded pageable HMM prefetch for the deterministic current-C fallback environment; model reads consume the retained prefetched window without claiming a cache admission",
     "lifetime_boundary": "the page-rounded ReadOnlyPageableHostMemory guard is retained until synchronized map replacement or cleanup",
     "remaining_policy_boundary": "chunked full-model copy success or allocation-failure selection, fd-backed direct-I/O staging, cross-range registration disable, preload/cache policy, q8/f16 cache hooks, and remaining compute exports stay pending"
   },
@@ -93,6 +93,7 @@
       "c_linked_rust_staticlib": true,
       "pageable_hmm_fallback_environment_selected": true,
       "page_aligned_model_map": true,
+      "prefetched_direct_read_not_reported_as_cached": true,
       "prefetched_window_consumed_by_weighted_rms": true,
       "weighted_output_matches": true,
       "embedded_libdevice_module_loaded": true,
@@ -100,7 +101,7 @@
     }
   },
   "integration_risks": [
-    "this leaf implements only deterministic current-C pageable HMM fallback selection after chunked copy is explicitly suppressed, not successful chunked full-model copy or allocation-failure selection",
+    "this leaf implements only deterministic current-C pageable HMM fallback selection after chunked copy is explicitly suppressed, and direct host reads are intentionally not reported as cache admissions",
     "the public prefetched direct-pointer route is intentionally limited to the advised page-rounded window rather than claiming current-C global HMM direct reads outside that window",
     "fd-backed direct-I/O staging, cache-policy integration, production linker selection, and C CUDA removal remain pending",
     "the generated embed object still produces an executable-stack linker warning before route promotion"

@@ -222,6 +222,7 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         "c_linked_rust_staticlib",
         "pageable_hmm_fallback_environment_selected",
         "page_aligned_model_map",
+        "prefetched_direct_read_not_reported_as_cached",
         "prefetched_window_consumed_by_weighted_rms",
         "weighted_output_matches",
         "embedded_libdevice_module_loaded",
@@ -233,7 +234,7 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         'setenv("DS4_CUDA_NO_MODEL_COPY", "1", 1)',
         'unsetenv("DS4_CUDA_NO_MODEL_PREFETCH")',
         "ds4_gpu_set_model_map_range(model_map, model_size, offset, bytes)",
-        "ds4_gpu_cache_model_range(model_map, model_size, offset, bytes",
+        "ds4_gpu_cache_model_range(model_map, model_size, offset, bytes, \"pageable-hmm\") != 0",
         "ds4_gpu_rms_norm_weight_tensor(",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
@@ -253,7 +254,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy"
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy"
         in texts["status"],
         "active item missing",
     )

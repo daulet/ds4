@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b Remaining Residual Failure Selection Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2 Remaining Residual Failure Selection Policy
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -225,6 +225,23 @@
 
 ## Last Evidence
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b1 Public Direct-Model Read Selection ABI
+  resolves nonempty `DS4_CUDA_DIRECT_MODEL` reads from the caller mapping
+  before per-range staging after global copied/registered state, while
+  public cache calls report only actual retained storage. A C-linked B300
+  consumer rejects whole-map registration with error code 801, observes no
+  range admission or registration retry, mutates host weights, and verifies
+  weighted RMS reads the changed bytes. The corrected pageable-HMM
+  predecessor proves its prefetched direct pointer is usable but not
+  reported as cached. Local library tests pass with 109 tests; B300
+  release-feature tests pass with 116 tests, the static library retains 29
+  exports, and the preceding full-model-copy linked consumer passes against
+  it. The public direct-model read checker passes 88 checks, and the default
+  unified report passes with 195 passed, 45 skipped, and 0 failed. The
+  required non-interactive Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings. Remaining
+  failure selection, route promotion, and remaining graph compute remain
+  active.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2a Public Full-Model Copy Selection ABI
   routes nonempty `DS4_CUDA_COPY_MODEL` through a retained whole-map device
   image before registration, while preserving source-backed continuation to
@@ -436,14 +453,16 @@
 - M14.6b2b2b2b2b2a Pageable HMM Fallback ABI adds the deterministic public
   pageable-HMM fallback subset: when chunked model copy is selected but
   explicitly suppressed and prefetch exclusions are absent, Rust retains a
-  page-bounded prefetched host window and uses it for matching cached model
-  reads. The B300 pageable-HMM probe reports supported access, successful
+  page-bounded prefetched host window and uses it for matching model reads
+  without reporting a cache admission. The B300 pageable-HMM probe reports supported access, successful
   advice/prefetch, and exact direct readback; a C-linked public consumer
-  selects the fallback environment and matches weighted RMS output with 29
-  unchanged exports. Local default library tests pass with 96 tests and B300
+  selects the fallback environment, observes the uncached direct-pointer
+  result, and matches weighted RMS output with 29 unchanged exports. Local
+  default library tests pass with 96 tests and B300
   release-feature tests pass with 98 tests. The pageable-HMM checker passes
-  with 103 checks, and unified parity passes with 182 passed, 45 skipped, and
-  no failures. The required non-interactive Claude adversarial review timed
+  with 107 checks after the cache-result correction, and unified parity at
+  the original leaf passes with 182 passed, 45 skipped, and no failures. The
+  required non-interactive Claude adversarial review timed
   out after 60 seconds without completed findings; self-review fixed
   consumption-time weight-cache/preload exclusion checks to match current C.
   Chunked-copy success/allocation-failure routing,

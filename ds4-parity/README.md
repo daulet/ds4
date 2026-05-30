@@ -3063,9 +3063,11 @@ The fixture combines the live B300 pageable-HMM probe with a C-linked public
 ABI consumer that selects the deterministic current-C fallback environment:
 chunked model copy selected and explicitly suppressed while HMM exclusions
 remain absent. Rust retains and consumes only the advised page-rounded
-window. Chunked-copy success/allocation-failure routing, global HMM reads
-outside that window, fd staging, q8/f16 cache hooks, whole-archive retention,
-and the executable-stack warning remain open.
+window, while the public cache call correctly reports that the direct HMM
+pointer is not a retained cache admission. Chunked-copy
+success/allocation-failure routing, global HMM reads outside that window, fd
+staging, q8/f16 cache hooks, whole-archive retention, and the
+executable-stack warning remain open.
 
 Validate the M14.6b2b2b2b2b2b1 Rust CUDA chunk-selected model-copy ABI:
 
@@ -3249,6 +3251,22 @@ skips registration and retains the copied device image for weighted RMS
 reads. Allocation or transfer failure continuation into registration is
 source-backed but not forced in live execution; remaining failure selection,
 whole-archive retention, and the executable-stack warning remain open.
+
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b1 Rust CUDA public direct-model
+read selection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_direct_model_read_smoke.py --negative-test
+```
+
+The fixture selects nonempty `DS4_CUDA_DIRECT_MODEL` from a C-linked B300
+consumer after deterministically rejecting whole-map registration. It proves
+that weighted reads observe host mutation without a per-range
+registration/copy admission and that `ds4_gpu_cache_model_range` reports this
+direct pointer as uncached. The corrected pageable-HMM predecessor proves the
+same cache-return boundary for prefetched host reads. Remaining failure
+selection, whole-archive retention, and the executable-stack warning remain
+open.
 
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 

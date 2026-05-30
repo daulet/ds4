@@ -414,6 +414,10 @@ fn full_model_copy_selected() -> bool {
     std::env::var_os("DS4_CUDA_COPY_MODEL").is_some_and(|value| !value.is_empty())
 }
 
+fn direct_model_read_selected() -> bool {
+    std::env::var_os("DS4_CUDA_DIRECT_MODEL").is_some_and(|value| !value.is_empty())
+}
+
 fn fd_weight_cache_selected() -> bool {
     std::env::var_os("DS4_CUDA_WEIGHT_CACHE").is_some()
         && std::env::var_os("DS4_CUDA_NO_FD_CACHE").is_none()
@@ -1180,6 +1184,10 @@ fn with_cached_abi_model_range<T>(
     if let Some(ptr) = copied_ptr {
         return operation(ptr);
     }
+    if direct_model_read_selected() {
+        let ptr = (model_map as usize).checked_add(usize::try_from(offset).ok()?)?;
+        return operation(ptr as u64);
+    }
     let pageable_ptr = if pageable_hmm_direct_read_selected() {
         ABI_PAGEABLE_MODEL_RANGE
             .lock()
@@ -1278,6 +1286,63 @@ fn with_cached_abi_model_range<T>(
         storage,
     });
     operation(ptr)
+}
+
+fn abi_model_range_is_cached(
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+) -> bool {
+    if model_map.is_null() || offset > model_size || bytes > model_size - offset {
+        return false;
+    }
+    if ABI_REGISTERED_MODEL.lock().ok().is_some_and(|active| {
+        active.as_ref().is_some_and(|model| {
+            model
+                .device_ptr(model_map, model_size, offset, bytes)
+                .is_some()
+        })
+    }) || ABI_COPIED_MODEL.lock().ok().is_some_and(|active| {
+        active.as_ref().is_some_and(|model| {
+            model
+                .device_ptr(model_map, model_size, offset, bytes)
+                .is_some()
+        })
+    }) {
+        return true;
+    }
+    let Some(end) = offset.checked_add(bytes) else {
+        return false;
+    };
+    ABI_MODEL_RANGES.lock().ok().is_some_and(|ranges| {
+        ranges.iter().any(|range| {
+            range.model_map == model_map as usize
+                && range.model_size == model_size
+                && offset >= range.offset
+                && range
+                    .offset
+                    .checked_add(range.bytes)
+                    .is_some_and(|range_end| end <= range_end)
+        })
+    })
+}
+
+fn abi_uncached_direct_read_selected(
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+) -> bool {
+    direct_model_read_selected()
+        || (pageable_hmm_direct_read_selected()
+            && ABI_PAGEABLE_MODEL_RANGE.lock().ok().is_some_and(|active| {
+                active.as_ref().is_some_and(|range| {
+                    range
+                        .device_ptr(model_map, model_size, offset, bytes)
+                        .is_some()
+                })
+            }))
 }
 
 fn allocation_len(bytes: u64) -> Option<(u64, usize)> {
@@ -2054,6 +2119,9 @@ pub unsafe extern "C" fn ds4_gpu_cache_model_range(
     status(|| {
         if bytes == 0 {
             return true;
+        }
+        if abi_uncached_direct_read_selected(model_map, model_size, offset, bytes) {
+            return abi_model_range_is_cached(model_map, model_size, offset, bytes);
         }
         with_backend(|backend| {
             with_cached_abi_model_range(backend, model_map, model_size, offset, bytes, |_| {
