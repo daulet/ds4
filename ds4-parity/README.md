@@ -3749,6 +3749,22 @@ Compressor update/prefill, attention, routed MoE, remaining graph compute,
 whole-archive retention policy, route promotion, C CUDA removal, and the
 embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public compressor ratio-4 state-only ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_compressor_state_ratio4_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public ratio-4 state-only wrapper
+through one embedded Rust set-rows kernel after stream-ordered state
+initialization. It proves FP32 and FP16 APE state placement, initialized
+untouched rows, and invalid model-range no-mutation ordering, then checks
+invalid-shape, overflow, and null rejection. Compressor update/full prefill,
+attention, routed MoE, remaining graph compute, whole-archive retention
+policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

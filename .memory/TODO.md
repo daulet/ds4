@@ -11072,6 +11072,45 @@
 
 ################################################## M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public ratio-4 state-only compressor prefill wrapper is
+  independently comparable before update/full prefill, attention, routed
+  MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Compressor Ratio-4 State ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_compressor_prefill_state_ratio4_tensor` through
+  state initialization and one public set-rows kernel without claiming
+  compressor update/full prefill, attention, routed MoE, remaining graph
+  compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-compressor-state-ratio4-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_compressor_state_ratio4_smoke.py --negative-test`.
+- Evidence: Rust exports the public ratio-4 state-only wrapper through one
+  embedded set-rows kernel after driver-backed zero and negative-infinity
+  state initialization. A C-linked B300 witness proves FP32 and FP16 APE
+  output, lower-bank row placement, untouched initialized rows, invalid
+  model-range no-mutation ordering, invalid-shape rejection, checked-overflow
+  rejection, and null rejection. Ratio-4 modulo cannot distinguish wrapped
+  from widened position addition, so this leaf does not claim that separate
+  witness. Local tests pass with 143 tests; B300 feature tests pass with 150
+  tests; the static library exposes 59 symbols and embeds 35 kernels; all 53
+  preceding linked ABI consumers pass against the rebuilt archive with the
+  known executable-stack warning. All 57 CUDA ABI comparators pass, and the
+  unified report passes with 229 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Compressor update/full prefill,
+  attention, routed MoE, remaining graph compute, route promotion, and C
+  CUDA removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

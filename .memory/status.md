@@ -3,7 +3,25 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Compressor Ratio-4 State ABI
+  is validated on B300. Rust exports
+  `ds4_gpu_compressor_prefill_state_ratio4_tensor` through one embedded
+  compressor set-rows kernel after driver-backed zero and negative-infinity
+  state initialization on the same stream. A C-linked B300 witness proves
+  ratio-4 lower-bank state placement, both APE formats, initialization of
+  untouched rows, invalid model-range no-mutation ordering, invalid-shape,
+  checked-overflow, and null rejection. Local tests pass with 143 tests;
+  B300 feature tests pass with 150 tests; the static library exposes 59
+  symbols and embeds 35 kernels; all 53 preceding linked ABI consumers pass
+  against the rebuilt archive with the known executable-stack warning. All
+  57 CUDA ABI comparators pass, and the unified report passes with 229
+  passed, 45 skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Compressor update,
+  full prefill, attention, routed MoE, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the executable-stack
+  warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Compressor Store Batch ABI
   is validated on B300. Rust exports `ds4_gpu_compressor_store_batch_tensor`
   through one embedded compressor-store kernel consuming cached FP32 or FP16
