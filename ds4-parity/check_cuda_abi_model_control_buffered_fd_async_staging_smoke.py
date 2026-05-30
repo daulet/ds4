@@ -137,7 +137,15 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
         "fn upload_abi_async_fd_range_into(",
-        "upload_abi_async_fd_arena_range(backend, abi_model_fd(model_map)?, offset, bytes, false)",
+        "match upload_abi_async_fd_arena_range(\n"
+        "        backend,\n"
+        "        abi_model_fd(model_map)?,\n"
+        "        model_map,\n"
+        "        model_size,\n"
+        "        offset,\n"
+        "        bytes,\n"
+        "        false,\n"
+        "    )? {",
         "let (payload_offset, direct) = if use_direct_io",
         "read_abi_buffered_fd_into(",
         "Vec::with_capacity(ABI_DIRECT_FD_STAGE_SLOTS)",
@@ -242,7 +250,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2 Source-Page Progress And Residual Model-Control Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b Residual Model-Control Selection Policy" in texts["status"],
         "active item missing",
     )
     report.check("M14.6b2b2b2b2b2b2b2b2b1 Public Buffered Fd Async Staging ABI" in texts["status"], "status evidence missing")

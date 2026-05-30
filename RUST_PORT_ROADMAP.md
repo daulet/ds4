@@ -10077,10 +10077,58 @@ Stage split:
 
 ############# M14.6b2b2b2b2b2b2b2b2b2b2: Source-Page Progress And Residual Model-Control Policy
 
-- Status: active.
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b2b because public fd source-page/progress
+  behavior is independently observable from remaining selection policy.
 - Goal: connect source-page/progress policy, residual model-control
   selection/cache behavior, and remaining failure routing without claiming
   remaining graph compute or route promotion.
+
+############## M14.6b2b2b2b2b2b2b2b2b2b2a: Public Fd Source-Page And Progress ABI
+
+- Status: done.
+- Goal: connect source-file/mapping discard advice and model-load progress
+  behavior to public fd-cached uploads while leaving residual model-control
+  selection and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2a/abi-model-control-fd-source-page-progress-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_source_page_progress_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now applies file and source-mapping discard
+    advice after each enqueued public fd chunk, maintains current-C progress
+    emission/suppression state, and resets that state with synchronized public
+    model replacement or cleanup.
+  - A C-linked B300 consumer interposes both POSIX advice calls and captures
+    stderr around two ordinary uploads plus one suppressed upload. It observes
+    two advice calls for each ordinary multi-chunk range, an initial non-TTY
+    progress line after each model replacement, and no advice/progress when
+    `DS4_CUDA_KEEP_MODEL_PAGES` plus verbose mode are selected.
+  - The consumer observes advisory invocation rather than physical page
+    eviction and does not claim TTY refresh rendering.
+  - Local `cargo test --locked -p ds4-cuda --lib` passes with 106 tests; B300
+    `cargo test --locked --release -p ds4-cuda --features
+    cuda-oxide-kernels --lib` passes with 112 tests, the static library
+    rebuilds, and the Rust export set remains 29 symbols.
+  - The preceding public budget, fd-arena, buffered asynchronous staging, and
+    direct-I/O asynchronous staging C-linked B300 consumers rerun successfully
+    against the source-page/progress-aware static library.
+  - `python3
+    ds4-parity/check_cuda_abi_model_control_fd_source_page_progress_smoke.py
+    --negative-test` passes with 122 checks, and the default unified parity
+    report passes with 192 passed, 45 skipped, and 0 failed.
+  - The required non-interactive Claude review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S` without completed findings.
+  - Residual model-control selection, public fallback compute, q8/f16 hooks,
+    remaining graph compute, whole-archive retention, route promotion, and
+    the generated `.note.GNU-stack` warning remain open.
+
+############## M14.6b2b2b2b2b2b2b2b2b2b2b: Residual Model-Control Selection Policy
+
+- Status: active.
+- Goal: connect residual model-control selection/cache behavior and remaining
+  failure routing without claiming remaining graph compute or route
+  promotion.
 
 ## Removal Criteria for C Host Code
 

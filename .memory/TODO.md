@@ -9710,7 +9710,43 @@
 
 ############# M14.6b2b2b2b2b2b2b2b2b2b2: Source-Page Progress And Residual Model-Control Policy
 
-- Status: active
+- Status: active; split into M14.6b2b2b2b2b2b2b2b2b2b2a and
+  M14.6b2b2b2b2b2b2b2b2b2b2b because public fd source-page/progress
+  behavior is independently observable from remaining selection policy.
 - Goal: connect source-page/progress policy, residual model-control
   selection/cache behavior, and remaining failure routing without claiming
   graph compute closure or route promotion.
+
+############## M14.6b2b2b2b2b2b2b2b2b2b2a: Public Fd Source-Page And Progress ABI
+
+- Status: done
+- Goal: connect source-file/mapping discard advice and model-load progress
+  behavior to public fd-cached uploads while leaving residual model-control
+  selection and route promotion pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2a/abi-model-control-fd-source-page-progress-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_model_control_fd_source_page_progress_smoke.py --negative-test`.
+- Evidence: Rust now applies source-file and source-mapping discard advice
+  after public fd upload chunks, emits/suppresses current-C progress behavior,
+  and resets progress on synchronized model replacement or cleanup. A
+  C-linked B300 consumer interposes both POSIX advice calls and captures
+  stderr across two ordinary multi-chunk uploads and one suppressed upload,
+  observing advice invocation, progress reset, and keep-pages/verbose
+  suppression without claiming physical eviction or TTY refresh rendering.
+  Local tests pass with 106 tests, B300 release-feature tests pass with 112
+  tests, and the static library retains 29 exports. The prior public budget,
+  fd-arena, buffered asynchronous staging, and direct-I/O asynchronous staging
+  linked consumers pass against the new static library. The public
+  page/progress checker passes 122 checks, and the default unified report
+  passes with 192 passed, 45 skipped, and 0 failed. The required
+  non-interactive Claude review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`
+  without completed findings. Residual model-control selection, whole-archive
+  retention, route promotion, and the `.note.GNU-stack` warning remain
+  pending.
+
+############## M14.6b2b2b2b2b2b2b2b2b2b2b: Residual Model-Control Selection Policy
+
+- Status: active
+- Goal: connect residual model-control selection/cache behavior and remaining
+  failure routing without claiming graph compute closure or route promotion.

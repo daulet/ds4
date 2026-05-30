@@ -3203,6 +3203,22 @@ claiming public compute through the uncached fallback pointer. Source-page
 progress policy, residual model-control selection, whole-archive retention,
 and the executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2a Rust CUDA public fd source-page
+and progress ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_model_control_fd_source_page_progress_smoke.py --negative-test
+```
+
+The fixture performs two ordinary and one suppressed multi-chunk buffered fd
+uploads through the C-linked B300 consumer. It interposes the advisory calls
+made by the linked Rust static library and captures stderr to prove source
+file/mapping discard invocation, non-TTY progress plus reset on model
+replacement, and `DS4_CUDA_KEEP_MODEL_PAGES`/verbose suppression. It does not
+claim physical page eviction or TTY refresh rendering. Residual model-control
+selection, whole-archive retention, and the executable-stack warning remain
+open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

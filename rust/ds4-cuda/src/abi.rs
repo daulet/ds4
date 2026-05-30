@@ -21,6 +21,12 @@ static ABI_MODEL_RANGES: Mutex<Vec<AbiModelRange>> = Mutex::new(Vec::new());
 static ABI_MODEL_ARENAS: Mutex<AbiModelArenaState> = Mutex::new(AbiModelArenaState {
     arenas: Vec::new(),
     range_bytes: 0,
+    progress: AbiModelLoadProgress {
+        next_bytes: 0,
+        last: None,
+        started: false,
+        tty: false,
+    },
 });
 static ABI_PAGEABLE_MODEL_RANGE: Mutex<Option<AbiPageableModelRange>> = Mutex::new(None);
 static ABI_COPIED_MODEL: Mutex<Option<AbiCopiedModel>> = Mutex::new(None);
@@ -55,6 +61,25 @@ struct AbiModelArena {
 struct AbiModelArenaState {
     arenas: Vec<AbiModelArena>,
     range_bytes: u64,
+    progress: AbiModelLoadProgress,
+}
+
+#[cfg(target_os = "linux")]
+struct AbiModelLoadProgress {
+    next_bytes: u64,
+    last: Option<std::time::Instant>,
+    started: bool,
+    tty: bool,
+}
+
+#[cfg(target_os = "linux")]
+impl AbiModelLoadProgress {
+    fn reset(&mut self) {
+        self.next_bytes = 0;
+        self.last = None;
+        self.started = false;
+        self.tty = false;
+    }
 }
 
 enum AbiModelRangeStorage {
@@ -448,6 +473,115 @@ fn abi_model_cache_limit_bytes() -> Option<u64> {
 }
 
 #[cfg(target_os = "linux")]
+fn abi_model_discard_source_pages(
+    model_map: *const c_void,
+    model_size: u64,
+    offset: u64,
+    bytes: u64,
+) -> Option<()> {
+    if std::env::var_os("DS4_CUDA_KEEP_MODEL_PAGES").is_some()
+        || model_map.is_null()
+        || bytes == 0
+        || offset > model_size
+    {
+        return Some(());
+    }
+    let bytes = bytes.min(model_size.checked_sub(offset)?);
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    let page_size = u64::try_from(page_size)
+        .ok()
+        .filter(|size| *size > 0)
+        .unwrap_or(4096);
+    let host_start = (model_map as usize).checked_add(usize::try_from(offset).ok()?)?;
+    let host_end = host_start.checked_add(usize::try_from(bytes).ok()?)?;
+    let page_size = usize::try_from(page_size).ok()?;
+    let page_start = host_start / page_size * page_size;
+    let page_end = host_end
+        .checked_add(page_size.checked_sub(1)?)?
+        .checked_div(page_size)?
+        .checked_mul(page_size)?;
+    if page_end > page_start {
+        let _ = unsafe {
+            libc::posix_madvise(
+                page_start as *mut c_void,
+                page_end - page_start,
+                libc::POSIX_MADV_DONTNEED,
+            )
+        };
+    }
+    Some(())
+}
+
+#[cfg(target_os = "linux")]
+fn abi_model_drop_file_pages(fd: c_int, offset: u64, bytes: u64) -> Option<()> {
+    if std::env::var_os("DS4_CUDA_KEEP_MODEL_PAGES").is_some() || fd < 0 || bytes == 0 {
+        return Some(());
+    }
+    let offset = libc::off_t::try_from(offset).ok()?;
+    let bytes = libc::off_t::try_from(bytes).ok()?;
+    let _ = unsafe { libc::posix_fadvise(fd, offset, bytes, libc::POSIX_FADV_DONTNEED) };
+    Some(())
+}
+
+#[cfg(target_os = "linux")]
+fn abi_model_load_progress_note(progress: &mut AbiModelLoadProgress, cached_bytes: u64) {
+    use std::io::Write as _;
+
+    if std::env::var_os("DS4_CUDA_WEIGHT_CACHE_VERBOSE").is_some() {
+        return;
+    }
+    let now = std::time::Instant::now();
+    if !progress.started {
+        progress.started = true;
+        progress.tty = unsafe { libc::isatty(libc::STDERR_FILENO) != 0 };
+        progress.next_bytes = if progress.tty {
+            2_u64 << 30
+        } else {
+            16_u64 << 30
+        };
+        progress.last = Some(now);
+        if progress.tty {
+            eprint!("ds4: CUDA loading model tensors into device cache: 0.00 GiB");
+        } else {
+            eprintln!("ds4: CUDA loading model tensors into device cache");
+        }
+    }
+    let interval = if progress.tty {
+        std::time::Duration::from_secs(2)
+    } else {
+        std::time::Duration::from_secs(10)
+    };
+    if cached_bytes < progress.next_bytes
+        && progress
+            .last
+            .is_some_and(|last| now.duration_since(last) < interval)
+    {
+        return;
+    }
+    if progress.tty {
+        eprint!(
+            "\rds4: CUDA loading model tensors into device cache: {:.2} GiB",
+            cached_bytes as f64 / 1073741824.0
+        );
+    } else {
+        eprintln!(
+            "ds4: CUDA loading model tensors {:.2} GiB cached",
+            cached_bytes as f64 / 1073741824.0
+        );
+    }
+    let _ = std::io::stderr().flush();
+    progress.last = Some(now);
+    let step = if progress.tty {
+        2_u64 << 30
+    } else {
+        16_u64 << 30
+    };
+    while progress.next_bytes <= cached_bytes {
+        progress.next_bytes = progress.next_bytes.saturating_add(step);
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn align_abi_model_arena_bytes(bytes: u64) -> Option<u64> {
     const ALIGNMENT: u64 = 256;
     bytes
@@ -515,14 +649,22 @@ fn upload_abi_buffered_fd_range(
 fn try_upload_abi_buffered_fd_range(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
+    model_size: u64,
     offset: u64,
     bytes: u64,
 ) -> Option<AbiFdRangeResolution> {
     if !buffered_fd_weight_cache_selected() || bytes == 0 {
         return None;
     }
-    match upload_abi_async_fd_arena_range(backend, abi_model_fd(model_map)?, offset, bytes, false)?
-    {
+    match upload_abi_async_fd_arena_range(
+        backend,
+        abi_model_fd(model_map)?,
+        model_map,
+        model_size,
+        offset,
+        bytes,
+        false,
+    )? {
         AbiFdArenaUpload::Uploaded {
             requested_device_ptr,
             ..
@@ -541,6 +683,7 @@ fn try_upload_abi_buffered_fd_range(
 fn try_upload_abi_buffered_fd_range(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
+    _model_size: u64,
     offset: u64,
     bytes: u64,
 ) -> Option<AbiFdRangeResolution> {
@@ -613,9 +756,13 @@ fn upload_abi_async_fd_range_into(
     device: &DeviceBuffer<u8>,
     device_offset: usize,
     fd: c_int,
+    model_map: *const c_void,
+    model_size: u64,
     offset: u64,
     bytes: u64,
     use_direct_io: bool,
+    cached_bytes_before: u64,
+    progress: &mut AbiModelLoadProgress,
 ) -> Option<bool> {
     let bytes = usize::try_from(bytes).ok()?;
     let chunk_bytes = abi_model_copy_chunk_bytes()?;
@@ -666,8 +813,15 @@ fn upload_abi_async_fd_range_into(
                     .ok()?;
             }
             events[slot] = Some(backend.record_event().ok()?);
+            let this_chunk = u64::try_from(this_chunk).ok()?;
+            abi_model_drop_file_pages(fd, file_offset, this_chunk)?;
+            abi_model_discard_source_pages(model_map, model_size, file_offset, this_chunk)?;
             used_direct |= direct;
-            copied = copied.checked_add(this_chunk)?;
+            copied = copied.checked_add(usize::try_from(this_chunk).ok()?)?;
+            abi_model_load_progress_note(
+                progress,
+                cached_bytes_before.checked_add(u64::try_from(copied).ok()?)?,
+            );
             chunk_index = chunk_index.checked_add(1)?;
         }
         Some(used_direct)
@@ -684,6 +838,8 @@ fn upload_abi_async_fd_range_into(
 fn upload_abi_async_fd_arena_range(
     backend: &CudaOxideSubstrate,
     fd: c_int,
+    model_map: *const c_void,
+    model_size: u64,
     offset: u64,
     bytes: u64,
     use_direct_io: bool,
@@ -717,18 +873,28 @@ fn upload_abi_async_fd_arena_range(
             (state.arenas.len().checked_sub(1)?, 0)
         }
     };
-    let arena = state.arenas.get(arena_index)?;
+    let cached_bytes_before = state.range_bytes;
+    let AbiModelArenaState {
+        arenas, progress, ..
+    } = &mut *state;
+    let arena = arenas.get(arena_index)?;
     let requested_device_ptr = arena.device.cu_deviceptr().checked_add(device_offset)?;
     let used_direct_io = upload_abi_async_fd_range_into(
         backend,
         &arena.device,
         usize::try_from(device_offset).ok()?,
         fd,
+        model_map,
+        model_size,
         offset,
         bytes,
         use_direct_io,
+        cached_bytes_before,
+        progress,
     )?;
     state.range_bytes = state.range_bytes.checked_add(bytes)?;
+    let range_bytes = state.range_bytes;
+    abi_model_load_progress_note(&mut state.progress, range_bytes);
     Some(AbiFdArenaUpload::Uploaded {
         requested_device_ptr,
         used_direct_io,
@@ -739,13 +905,22 @@ fn upload_abi_async_fd_arena_range(
 fn try_upload_abi_direct_fd_range(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
+    model_size: u64,
     offset: u64,
     bytes: u64,
 ) -> Option<AbiFdRangeResolution> {
     if !direct_io_fd_weight_cache_selected() || bytes == 0 {
         return None;
     }
-    match upload_abi_async_fd_arena_range(backend, abi_model_fd(model_map)?, offset, bytes, true)? {
+    match upload_abi_async_fd_arena_range(
+        backend,
+        abi_model_fd(model_map)?,
+        model_map,
+        model_size,
+        offset,
+        bytes,
+        true,
+    )? {
         AbiFdArenaUpload::Uploaded {
             requested_device_ptr,
             used_direct_io,
@@ -788,6 +963,7 @@ fn disable_abi_direct_io_after_error(
 fn try_upload_abi_direct_fd_range(
     backend: &CudaOxideSubstrate,
     model_map: *const c_void,
+    _model_size: u64,
     offset: u64,
     bytes: u64,
 ) -> Option<AbiFdRangeResolution> {
@@ -996,52 +1172,55 @@ fn with_cached_abi_model_range<T>(
     }
     let offset = usize::try_from(offset).ok()?;
     let bytes = usize::try_from(bytes).ok()?;
-    let storage =
-        match try_upload_abi_direct_fd_range(backend, model_map, offset as u64, bytes as u64) {
+    let storage = match try_upload_abi_direct_fd_range(
+        backend,
+        model_map,
+        model_size,
+        offset as u64,
+        bytes as u64,
+    ) {
+        Some(AbiFdRangeResolution::Cached(storage)) => storage,
+        Some(AbiFdRangeResolution::BudgetFallback {
+            requested_device_ptr,
+        }) => return operation(requested_device_ptr),
+        None => match try_upload_abi_buffered_fd_range(
+            backend,
+            model_map,
+            model_size,
+            offset as u64,
+            bytes as u64,
+        ) {
             Some(AbiFdRangeResolution::Cached(storage)) => storage,
             Some(AbiFdRangeResolution::BudgetFallback {
                 requested_device_ptr,
             }) => return operation(requested_device_ptr),
-            None => match try_upload_abi_buffered_fd_range(
-                backend,
-                model_map,
-                offset as u64,
-                bytes as u64,
-            ) {
-                Some(AbiFdRangeResolution::Cached(storage)) => storage,
-                Some(AbiFdRangeResolution::BudgetFallback {
-                    requested_device_ptr,
-                }) => return operation(requested_device_ptr),
-                None => {
-                    match abi_registered_source(model_map, model_size, offset as u64, bytes as u64)
-                        .and_then(|(registered_source, device_offset)| {
-                            let registration = backend
-                                .register_read_only_host_range(registered_source)
-                                .ok()?;
-                            Some(AbiModelRangeStorage::ReadOnlyRegistered {
-                                requested_device_ptr: registration
-                                    .cu_deviceptr()
-                                    .checked_add(device_offset)?,
-                                _registration: registration,
-                            })
-                        }) {
-                        Some(storage) => storage,
-                        None => {
-                            // SAFETY: the public C ABI requires `model_map` to remain readable
-                            // for `model_size` bytes while this copy executes; bounds were
-                            // checked above and the upload is synchronized before returning.
-                            let source = unsafe {
-                                std::slice::from_raw_parts(
-                                    model_map.cast::<u8>().add(offset),
-                                    bytes,
-                                )
-                            };
-                            AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?)
-                        }
+            None => {
+                match abi_registered_source(model_map, model_size, offset as u64, bytes as u64)
+                    .and_then(|(registered_source, device_offset)| {
+                        let registration = backend
+                            .register_read_only_host_range(registered_source)
+                            .ok()?;
+                        Some(AbiModelRangeStorage::ReadOnlyRegistered {
+                            requested_device_ptr: registration
+                                .cu_deviceptr()
+                                .checked_add(device_offset)?,
+                            _registration: registration,
+                        })
+                    }) {
+                    Some(storage) => storage,
+                    None => {
+                        // SAFETY: the public C ABI requires `model_map` to remain readable
+                        // for `model_size` bytes while this copy executes; bounds were
+                        // checked above and the upload is synchronized before returning.
+                        let source = unsafe {
+                            std::slice::from_raw_parts(model_map.cast::<u8>().add(offset), bytes)
+                        };
+                        AbiModelRangeStorage::DeviceCopy(backend.upload(source).ok()?)
                     }
                 }
-            },
-        };
+            }
+        },
+    };
     backend.synchronize().ok()?;
     let ptr = match &storage {
         AbiModelRangeStorage::DeviceCopy(device) => device.cu_deviceptr(),
@@ -1121,6 +1300,7 @@ pub extern "C" fn ds4_gpu_cleanup() {
             if let Ok(mut model_arenas) = ABI_MODEL_ARENAS.lock() {
                 model_arenas.arenas.clear();
                 model_arenas.range_bytes = 0;
+                model_arenas.progress.reset();
             }
             if let Ok(mut pageable_range) = ABI_PAGEABLE_MODEL_RANGE.lock() {
                 *pageable_range = None;
@@ -1765,6 +1945,7 @@ pub unsafe extern "C" fn ds4_gpu_set_model_map(model_map: *const c_void, model_s
                 let mut model_arenas = ABI_MODEL_ARENAS.lock().ok()?;
                 model_arenas.arenas.clear();
                 model_arenas.range_bytes = 0;
+                model_arenas.progress.reset();
             }
             *ABI_PAGEABLE_MODEL_RANGE.lock().ok()? = None;
             *ABI_COPIED_MODEL.lock().ok()? = None;
