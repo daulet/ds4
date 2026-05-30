@@ -8164,7 +8164,7 @@ Stage split:
 
 #### M14.4: RoPE KV Compressor And Attention Kernels
 
-- Status: active; done through M14.4a and split next into M14.4b.
+- Status: active; done through M14.4b and split next into M14.4c.
 - Goal: port the current-C RoPE, KV quantization/storage, compressor, and
   attention operation family through bounded Rust CUDA slices.
 
@@ -8200,9 +8200,40 @@ Stage split:
 
 ##### M14.4b: Raw KV Storage And Indexer QAT Kernels
 
-- Status: active.
+- Status: done.
 - Goal: port `store_raw_kv_batch_kernel` and `indexer_hadamard_fp4_kernel`
   behavior before claiming compressor or attention execution.
+- Oracle: current-C `store_raw_kv_batch_kernel`,
+  `indexer_hadamard_fp4_kernel`, `ds4_gpu_store_raw_kv_tensor`,
+  `ds4_gpu_store_raw_kv_batch_tensor`, and `ds4_gpu_dsv4_indexer_qat_tensor`.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.4b/raw-kv-indexer-qat-kernel-smoke.json`.
+- Comparator:
+  `ds4-parity/check_raw_kv_indexer_qat_kernel_smoke.py --negative-test`
+  plus live B300 cargo-oxide execution.
+- Acceptance: Rust owns opt-in direct raw-KV storage and indexer QAT
+  execution. Same-launch overlapping ring-row write ordering, composed FP8
+  storage, compressor, attention, runtime graph integration, default route
+  activation, and C CUDA removal remain pending.
+- Evidence:
+  - Added executable-local Rust `store_raw_kv_batch_kernel` with current-C
+    FP16 round-trip storage and deterministic ring wrap across distinct
+    destination rows.
+  - Added executable-local Rust `indexer_hadamard_fp4_kernel` with 128-wide
+    Hadamard rotation and four-block E2M1FN activation simulation.
+  - On B300 pod `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed
+    with 52 tests and live cargo-oxide execution emitted portable `sm_80` PTX
+    with libdevice linkage and matching raw-storage/indexer outputs on
+    `NVIDIA B300 SXM6 AC`.
+  - Local formatting, diff, library tests, the 68-check comparator, retained
+    M14 checks, and unified parity passed with 136 passed, 50 skipped, and
+    0 failed.
+
+##### M14.4c: Composed KV Storage And Compressor Kernels
+
+- Status: active.
+- Goal: port `ds4_gpu_kv_fp8_store_raw_tensor` composition and bounded
+  compressor storage/update kernels before claiming attention execution.
 
 ## Removal Criteria for C Host Code
 

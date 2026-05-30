@@ -2537,6 +2537,19 @@ E4M3FN round-trip quantization across a partial 64-wide prefix chunk, and
 unchanged RoPE-tail values while leaving KV storage, compressor, attention,
 runtime route, and C CUDA removal unclaimed.
 
+Validate the M14.4b Rust CUDA raw KV storage and indexer QAT smoke:
+
+```sh
+python3 ds4-parity/check_raw_kv_indexer_qat_kernel_smoke.py --negative-test
+```
+
+The fixture records executable-local `store_raw_kv_batch_kernel` and
+`indexer_hadamard_fp4_kernel` execution on B300. It proves FP16-round-tripped
+ring storage across distinct wrapped rows and the 128-wide Hadamard plus
+E2M1FN activation-simulation round trip. It leaves same-launch overlapping
+row ordering, composed FP8 store, compressor, attention, runtime route, and
+C CUDA removal unclaimed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

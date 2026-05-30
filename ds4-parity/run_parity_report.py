@@ -1136,6 +1136,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.4b cuda-oxide raw KV storage and indexer QAT smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_raw_kv_indexer_qat_kernel_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

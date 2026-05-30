@@ -3,7 +3,7 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.4b Raw KV Storage And Indexer QAT Kernels
+- Active item: M14.4c Composed KV Storage And Compressor Kernels
 - M14.1 cuda-oxide Substrate And Tensor Residency is split into M14.1a through
   M14.1c before implementation; M14.1b is further split into M14.1b1 through
   M14.1b4 because bounded residency handles, model-cache policy, allocation
@@ -49,9 +49,10 @@
   dequantization/activation quantization and M14.3d2 base/prequantized
   matmul, then M14.3d3 paired/HC-expansion before M14.3d4 DP4A/dispatch
   ownership. M14.3 is complete; M14.4 begins with standalone RoPE tail and
-  FP8 KV quantization before raw storage/indexer-QAT, compressor, or attention
-  execution.
-- Last validated source before the active item: M14.4a Standalone RoPE Tail And FP8 KV Quantization Kernels.
+  FP8 KV quantization before raw storage/indexer-QAT, composed storage and
+  compressor, or attention execution.
+- Last validated source before the active item: M14.4b Raw KV Storage And Indexer QAT Kernels.
+- Earlier M14.4a Standalone RoPE Tail And FP8 KV Quantization Kernels.
 - Earlier M14.3d4 Q8 DP4A Acceleration And Dispatch Policy.
 - Earlier M14.3d3 Paired And HC-Expansion Q8 Matmul Kernels.
 - Earlier M14.3d2 Base And Prequantized Q8 Matmul Kernels.
@@ -190,6 +191,22 @@
 
 ## Last Evidence
 
+- M14.4b Raw KV Storage And Indexer QAT Kernels adds executable-local Rust
+  cuda-oxide `store_raw_kv_batch_kernel` with current-C FP16 round-trip
+  storage and `indexer_hadamard_fp4_kernel` with 128-wide Hadamard plus
+  four-block E2M1FN activation simulation. On B300 pod
+  `ds4-rust-port-b300`, feature-enabled `ds4-cuda` tests passed with 52 tests
+  and live cargo-oxide execution emitted portable `sm_80` PTX with libdevice
+  linkage and matching outputs on `NVIDIA B300 SXM6 AC`. Its fixture and
+  checker are
+  `ds4-parity/baselines/backend/m14.4b/raw-kv-indexer-qat-kernel-smoke.json`
+  and `ds4-parity/check_raw_kv_indexer_qat_kernel_smoke.py --negative-test`.
+  Ring wrap is proved only across distinct destination rows; same-launch
+  overlapping row ordering, composed FP8 storage, compressor, attention,
+  runtime route activation, and C CUDA removal remain unclaimed.
+  Local formatting, diff, library tests, the 68-check comparator, retained
+  M14 checks, and unified parity passed with 136 passed, 50 skipped, and
+  0 failed.
 - M14.4a Standalone RoPE Tail And FP8 KV Quantization Kernels adds
   executable-local Rust cuda-oxide `rope_tail_kernel` with position stride,
   YARN inverse tail rotation, and `fp8_kv_quantize_kernel` with E4M3FN

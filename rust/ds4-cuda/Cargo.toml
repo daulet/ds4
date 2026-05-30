@@ -207,3 +207,8 @@ required-features = ["cuda-oxide-kernels"]
 name = "ds4-cuda-rope-kv-quantization-smoke"
 path = "src/bin/rope_kv_quantization_smoke.rs"
 required-features = ["cuda-oxide-kernels"]
+
+[[bin]]
+name = "ds4-cuda-raw-kv-indexer-qat-smoke"
+path = "src/bin/raw_kv_indexer_qat_smoke.rs"
+required-features = ["cuda-oxide-kernels"]
