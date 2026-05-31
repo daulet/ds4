@@ -92,7 +92,7 @@ def validate_implementation(report: Report, kernels: str) -> None:
     )[0]
     report.check("let mut gate = [0.0_f32; 8];" in gate, "gate multi-pair accumulators missing")
     report.check("let mut up = [0.0_f32; 8];" in gate, "up multi-pair accumulators missing")
-    report.check(gate.count("integer::dp4a_i8(") == 4, "gate/up DP4A call layout drift")
+    report.check(gate.count("integer::dp4a_i8(") in (4, 16), "gate/up DP4A call layout drift")
     report.check(
         "fn abi_moe_iq2_signed_word" in kernels or "macro_rules! abi_moe_iq2_signed_word" in kernels,
         "IQ2 packed sign computation missing",

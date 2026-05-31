@@ -4,6 +4,21 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate DP4A Accumulation Ordering Performance Repair
+  is validated on B300. The cached gate/up kernel now decodes all eight
+  signed IQ2 words per weight block and runs one ordered eight-DP4A chain per
+  staged pair, removing its spilled `subtotals[8]` accumulation. Emitted PTX
+  moves from `4` to `16` DP4A sites while local stores/loads fall from
+  `56/12` to `36/8`; the repaired DSO SHA-256 is
+  `bd5c6e1f124818ca9eb4899f43ede83885febc21c249bb50e02f85582373992f`.
+  In controlled parent/candidate repeats, gate/up falls from `2205.980 ms`
+  to `1538.377 ms`, total routed-MoE falls from `3349.612 ms` to
+  `2682.831 ms`, and prefill rises from `197.22` to `209.55 tok/s`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests; the unified report passes with `266`
+  passed, `50` skipped, and `0` failed. The final Claude review timed out
+  after `60s`, then flushed `NO BLOCKERS` while termination completed.
+  Routed-MoE remains `2.90x` current-C, so promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 Hot-Helper Expansion Performance Repair
   is validated on B300. The proven branchless IQ2 transform is now expanded
   at its four cached gate/up hot sites because `#[inline(always)]` retained

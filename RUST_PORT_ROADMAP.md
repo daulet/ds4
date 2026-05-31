@@ -13404,6 +13404,34 @@ Stage split:
     and promotion blockers remain in force while remaining gate/up packed
     arithmetic and reduction work is investigated.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate DP4A Accumulation Ordering Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE gate/up overhead by aligning its
+  per-pair accumulation order with current C's straight-line DP4A chain.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-gate-accumulation-order-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_moe_gate_accumulation_order_performance_repair.py --negative-test`.
+- Evidence:
+  - The cached gate/up row-span kernel decodes eight signed IQ2 words once per
+    weight block and runs one ordered eight-DP4A chain per staged pair,
+    eliminating its repeated per-group pair loops and `subtotals[8]`.
+  - Emitted PTX increases usable DP4A sites from `4` to `16` while local
+    stores/loads fall from `56/12` to `36/8`.
+  - A controlled B300 parent/candidate rebuild repeats gate/up at
+    `2205.980 ms` versus `1538.377 ms` (`1.43x`) and total routed-MoE at
+    `3349.612 ms` versus `2682.831 ms` (`1.25x`). Prefill rises from
+    `197.22` to `209.55 tok/s`.
+  - The repaired DSO SHA-256 is
+    `bd5c6e1f124818ca9eb4899f43ede83885febc21c249bb50e02f85582373992f`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `266`
+    passed, `50` skipped, and `0` failed. The final Claude review timed out
+    after `60s`, then flushed `NO BLOCKERS` while termination completed.
+    Total routed-MoE remains `2.90x` current-C, so default current-C routing
+    and promotion blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

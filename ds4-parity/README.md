@@ -4328,6 +4328,19 @@ calls in emitted PTX. Controlled B300 repeats lower gate/up from `2691.585
 ms` to `2205.067 ms`; official-vector correctness is preserved and the graph
 route remains current-C.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA gate DP4A accumulation ordering performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_moe_gate_accumulation_order_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up kernel now builds all eight IQ2 words for each weight
+block and applies one straight-line DP4A chain per staged pair, eliminating
+the repeated `subtotals[8]` path. Controlled B300 repeats lower gate/up from
+`2205.980 ms` to `1538.377 ms`; official-vector correctness is preserved and
+the graph route remains current-C.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

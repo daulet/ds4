@@ -2405,46 +2405,100 @@ mod kernels {
                             let aux_s = abi_moe_load_u16(gate_weights, q2 + 4) as u32
                                 | ((abi_moe_load_u16(gate_weights, q2 + 6) as u32) << 16);
                             let multiplier = (2 * (aux_s >> 28) + 1) as i32;
-                            let mut subtotals = [0_i32; 8];
-                            let mut group = 0_u32;
-                            while group < 4 {
-                                let grid =
-                                    unsafe { S_IQ2_GRID[((aux_g >> (8 * group)) & 0xff) as usize] };
-                                let signs =
-                                    unsafe { S_IQ2_SIGNS[((aux_s >> (7 * group)) & 127) as usize] };
-                                let weight_word0 = abi_moe_iq2_signed_word!(grid, signs, 0);
-                                let weight_word1 = abi_moe_iq2_signed_word!(grid, signs, 4);
-                                let q8_index = ib32 * 32 + group as usize * 8;
-                                let mut entry = 0_u32;
-                                while entry < np {
-                                    let q8_block =
-                                        entry as usize * xq_blocks as usize + block as usize;
-                                    subtotals[entry as usize] = integer::dp4a_i8(
-                                        weight_word0,
-                                        abi_moe_cached_q8_word(
-                                            unsafe { SXQ.as_ptr() },
-                                            q8_block,
-                                            q8_index,
-                                        ),
-                                        subtotals[entry as usize],
-                                    );
-                                    subtotals[entry as usize] = integer::dp4a_i8(
-                                        weight_word1,
-                                        abi_moe_cached_q8_word(
-                                            unsafe { SXQ.as_ptr() },
-                                            q8_block,
-                                            q8_index + 4,
-                                        ),
-                                        subtotals[entry as usize],
-                                    );
-                                    entry += 1;
-                                }
-                                group += 1;
-                            }
+                            let grid0 = unsafe { S_IQ2_GRID[(aux_g & 0xff) as usize] };
+                            let signs0 = unsafe { S_IQ2_SIGNS[(aux_s & 127) as usize] };
+                            let grid1 = unsafe { S_IQ2_GRID[((aux_g >> 8) & 0xff) as usize] };
+                            let signs1 = unsafe { S_IQ2_SIGNS[((aux_s >> 7) & 127) as usize] };
+                            let grid2 = unsafe { S_IQ2_GRID[((aux_g >> 16) & 0xff) as usize] };
+                            let signs2 = unsafe { S_IQ2_SIGNS[((aux_s >> 14) & 127) as usize] };
+                            let grid3 = unsafe { S_IQ2_GRID[((aux_g >> 24) & 0xff) as usize] };
+                            let signs3 = unsafe { S_IQ2_SIGNS[((aux_s >> 21) & 127) as usize] };
+                            let weight_word0 = abi_moe_iq2_signed_word!(grid0, signs0, 0);
+                            let weight_word1 = abi_moe_iq2_signed_word!(grid0, signs0, 4);
+                            let weight_word2 = abi_moe_iq2_signed_word!(grid1, signs1, 0);
+                            let weight_word3 = abi_moe_iq2_signed_word!(grid1, signs1, 4);
+                            let weight_word4 = abi_moe_iq2_signed_word!(grid2, signs2, 0);
+                            let weight_word5 = abi_moe_iq2_signed_word!(grid2, signs2, 4);
+                            let weight_word6 = abi_moe_iq2_signed_word!(grid3, signs3, 0);
+                            let weight_word7 = abi_moe_iq2_signed_word!(grid3, signs3, 4);
+                            let q8_index = ib32 * 32;
                             let mut entry = 0_u32;
                             while entry < np {
-                                block_sums[entry as usize] +=
-                                    subtotals[entry as usize] * multiplier;
+                                let q8_block = entry as usize * xq_blocks as usize + block as usize;
+                                let mut subtotal = 0_i32;
+                                subtotal = integer::dp4a_i8(
+                                    weight_word0,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word1,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 4,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word2,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 8,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word3,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 12,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word4,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 16,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word5,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 20,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word6,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 24,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word7,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 28,
+                                    ),
+                                    subtotal,
+                                );
+                                block_sums[entry as usize] += subtotal * multiplier;
                                 entry += 1;
                             }
                             ib32 += 1;
@@ -2471,46 +2525,100 @@ mod kernels {
                             let aux_s = abi_moe_load_u16(up_weights, q2 + 4) as u32
                                 | ((abi_moe_load_u16(up_weights, q2 + 6) as u32) << 16);
                             let multiplier = (2 * (aux_s >> 28) + 1) as i32;
-                            let mut subtotals = [0_i32; 8];
-                            let mut group = 0_u32;
-                            while group < 4 {
-                                let grid =
-                                    unsafe { S_IQ2_GRID[((aux_g >> (8 * group)) & 0xff) as usize] };
-                                let signs =
-                                    unsafe { S_IQ2_SIGNS[((aux_s >> (7 * group)) & 127) as usize] };
-                                let weight_word0 = abi_moe_iq2_signed_word!(grid, signs, 0);
-                                let weight_word1 = abi_moe_iq2_signed_word!(grid, signs, 4);
-                                let q8_index = ib32 * 32 + group as usize * 8;
-                                let mut entry = 0_u32;
-                                while entry < np {
-                                    let q8_block =
-                                        entry as usize * xq_blocks as usize + block as usize;
-                                    subtotals[entry as usize] = integer::dp4a_i8(
-                                        weight_word0,
-                                        abi_moe_cached_q8_word(
-                                            unsafe { SXQ.as_ptr() },
-                                            q8_block,
-                                            q8_index,
-                                        ),
-                                        subtotals[entry as usize],
-                                    );
-                                    subtotals[entry as usize] = integer::dp4a_i8(
-                                        weight_word1,
-                                        abi_moe_cached_q8_word(
-                                            unsafe { SXQ.as_ptr() },
-                                            q8_block,
-                                            q8_index + 4,
-                                        ),
-                                        subtotals[entry as usize],
-                                    );
-                                    entry += 1;
-                                }
-                                group += 1;
-                            }
+                            let grid0 = unsafe { S_IQ2_GRID[(aux_g & 0xff) as usize] };
+                            let signs0 = unsafe { S_IQ2_SIGNS[(aux_s & 127) as usize] };
+                            let grid1 = unsafe { S_IQ2_GRID[((aux_g >> 8) & 0xff) as usize] };
+                            let signs1 = unsafe { S_IQ2_SIGNS[((aux_s >> 7) & 127) as usize] };
+                            let grid2 = unsafe { S_IQ2_GRID[((aux_g >> 16) & 0xff) as usize] };
+                            let signs2 = unsafe { S_IQ2_SIGNS[((aux_s >> 14) & 127) as usize] };
+                            let grid3 = unsafe { S_IQ2_GRID[((aux_g >> 24) & 0xff) as usize] };
+                            let signs3 = unsafe { S_IQ2_SIGNS[((aux_s >> 21) & 127) as usize] };
+                            let weight_word0 = abi_moe_iq2_signed_word!(grid0, signs0, 0);
+                            let weight_word1 = abi_moe_iq2_signed_word!(grid0, signs0, 4);
+                            let weight_word2 = abi_moe_iq2_signed_word!(grid1, signs1, 0);
+                            let weight_word3 = abi_moe_iq2_signed_word!(grid1, signs1, 4);
+                            let weight_word4 = abi_moe_iq2_signed_word!(grid2, signs2, 0);
+                            let weight_word5 = abi_moe_iq2_signed_word!(grid2, signs2, 4);
+                            let weight_word6 = abi_moe_iq2_signed_word!(grid3, signs3, 0);
+                            let weight_word7 = abi_moe_iq2_signed_word!(grid3, signs3, 4);
+                            let q8_index = ib32 * 32;
                             let mut entry = 0_u32;
                             while entry < np {
-                                block_sums[entry as usize] +=
-                                    subtotals[entry as usize] * multiplier;
+                                let q8_block = entry as usize * xq_blocks as usize + block as usize;
+                                let mut subtotal = 0_i32;
+                                subtotal = integer::dp4a_i8(
+                                    weight_word0,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word1,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 4,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word2,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 8,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word3,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 12,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word4,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 16,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word5,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 20,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word6,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 24,
+                                    ),
+                                    subtotal,
+                                );
+                                subtotal = integer::dp4a_i8(
+                                    weight_word7,
+                                    abi_moe_cached_q8_word(
+                                        unsafe { SXQ.as_ptr() },
+                                        q8_block,
+                                        q8_index + 28,
+                                    ),
+                                    subtotal,
+                                );
+                                block_sums[entry as usize] += subtotal * multiplier;
                                 entry += 1;
                             }
                             ib32 += 1;
