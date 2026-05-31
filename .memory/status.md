@@ -3,7 +3,23 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexer Score Dispatch ABI
+  is validated on B300. The Rust ABI now exports
+  `ds4_gpu_indexer_score_one_tensor`,
+  `ds4_gpu_indexer_scores_prefill_tensor`, and
+  `ds4_gpu_indexer_scores_decode_batch_tensor` through shared current-C
+  dispatch selection, and embeds the scalar, direct-one, and
+  WMMA128/64/32/base score kernels. The rebuilt static library exposes 80
+  Rust ABI symbols and embeds 99 kernels. A C-linked consumer passes all six
+  score-route checks, quality-mode scalar fallback, decode-batch output, and
+  rejection controls; the public top-k mask consumer remains passing. Local
+  tests pass with 168 tests; B300 feature tests pass with 175 tests; all 82
+  CUDA ABI comparators pass; and the unified report passes with 255 passed,
+  45 skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Indexer top-k selection, graph-wide
+  route promotion, whole-archive policy, and C CUDA removal remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public DSV4 TopK Mask ABI
   is validated on B300. The Rust ABI now exports
   `ds4_gpu_dsv4_topk_mask_tensor`, embeds `abi_topk_mask_kernel`, and

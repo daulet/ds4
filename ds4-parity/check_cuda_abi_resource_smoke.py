@@ -101,6 +101,9 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_attention_output_q8_batch_tensor", "ds4_gpu_attention_prefill_raw_heads_tensor", "ds4_gpu_attention_prefill_static_mixed_heads_tensor", "ds4_gpu_attention_prefill_masked_mixed_heads_tensor", "ds4_gpu_router_select_tensor", "ds4_gpu_router_select_batch_tensor",
     "ds4_gpu_routed_moe_one_tensor", "ds4_gpu_routed_moe_batch_tensor", "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
     "ds4_gpu_dsv4_topk_mask_tensor",
+    "ds4_gpu_indexer_score_one_tensor",
+    "ds4_gpu_indexer_scores_prefill_tensor",
+    "ds4_gpu_indexer_scores_decode_batch_tensor",
 ]
 
 

@@ -7,11 +7,14 @@ use cuda_core::embedded::{
     embedded_modules_from_current_exe, ArtifactPayloadKind, EmbeddedModuleError,
 };
 use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, LaunchConfig};
+use cuda_device::mma::{load_a_m16n8k16, load_b_m16n8k16, mma_m16n8k16_f32_f16, zero_accumulator};
 use cuda_device::{
     atomic::{AtomicOrdering, DeviceAtomicF32, DeviceAtomicU32},
     cuda_module, integer, kernel, thread, warp, DisjointSlice, SharedArray,
 };
 use cuda_host::ltoir::{self, LtoirError};
+
+use crate::IndexerScoreKernel;
 
 const THREADS_PER_BLOCK: u32 = 256;
 const ABI_KERNEL_ARTIFACT: &str = "ds4-cuda";
@@ -26,6 +29,23 @@ const ABI_MOE_Q8_K_BLOCK_BYTES: u64 = 292;
 const ABI_MOE_SORTED_EXPERTS: usize = 256;
 const ABI_MOE_CACHED_GATE_MAX_BLOCKS: usize = 16;
 const ABI_MOE_CACHED_DOWN_MAX_BLOCKS: usize = 8;
+const ABI_INDEXER_HEAD_DIM: usize = 128;
+const ABI_INDEXER_N_HEAD: usize = 64;
+const ABI_INDEXER_TILE_TOKENS: usize = 16;
+const ABI_INDEXER_TILE_COMPONENTS: usize = 16;
+const ABI_INDEXER_MMA_K: usize = 16;
+const ABI_INDEXER_MMA_N: usize = 8;
+const ABI_INDEXER_DIRECT_THREADS: u32 = 128;
+const ABI_INDEXER_WMMA_THREADS: u32 = 32;
+const ABI_INDEXER_WMMA32_COMPONENTS: usize = 32;
+const ABI_INDEXER_WMMA32_WARPS: usize = 2;
+const ABI_INDEXER_WMMA32_THREADS: u32 = 64;
+const ABI_INDEXER_WMMA64_COMPONENTS: usize = 64;
+const ABI_INDEXER_WMMA64_WARPS: usize = 4;
+const ABI_INDEXER_WMMA64_THREADS: u32 = 128;
+const ABI_INDEXER_WMMA128_COMPONENTS: usize = 128;
+const ABI_INDEXER_WMMA128_WARPS: usize = 8;
+const ABI_INDEXER_WMMA128_THREADS: u32 = 256;
 pub(crate) const ABI_MOE_IQ2_SIGNS: [u8; 128] = [
     0, 129, 130, 3, 132, 5, 6, 135, 136, 9, 10, 139, 12, 141, 142, 15, 144, 17, 18, 147, 20, 149,
     150, 23, 24, 153, 154, 27, 156, 29, 30, 159, 160, 33, 34, 163, 36, 165, 166, 39, 40, 169, 170,
@@ -5253,6 +5273,1098 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_indexer_scores_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        pos0: u32,
+        n_head: u32,
+        head_dim: u32,
+        ratio: u32,
+        scale: f32,
+        causal: u32,
+        q: &[f32],
+        weights: &[f32],
+        index_comp: &[f32],
+        mut scores: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+
+        let comp = thread::blockIdx_x();
+        let token = thread::blockIdx_y();
+        if comp >= n_comp || token >= n_tokens {
+            return;
+        }
+        let tid = thread::threadIdx_x() as usize;
+        if causal != 0 {
+            let visible = (pos0 + token + 1) / ratio;
+            if comp >= visible {
+                if tid == 0 {
+                    let output = token as usize * n_comp as usize + comp as usize;
+                    unsafe {
+                        *scores.get_unchecked_mut(output) = f32::NEG_INFINITY;
+                    }
+                }
+                return;
+            }
+        }
+
+        let mut total = 0.0_f32;
+        let mut head = 0;
+        while head < n_head {
+            let q_base = (token as usize * n_head as usize + head as usize) * head_dim as usize;
+            let comp_base = comp as usize * head_dim as usize;
+            let mut dot = 0.0_f32;
+            let mut dimension = tid;
+            while dimension < head_dim as usize {
+                dot += q[q_base + dimension] * index_comp[comp_base + dimension];
+                dimension += 256;
+            }
+            unsafe {
+                PARTIAL[tid] = dot;
+            }
+            thread::sync_threads();
+
+            let mut stride = 128;
+            while stride > 0 {
+                if tid < stride {
+                    unsafe {
+                        PARTIAL[tid] += PARTIAL[tid + stride];
+                    }
+                }
+                thread::sync_threads();
+                stride >>= 1;
+            }
+
+            let reduced = unsafe { PARTIAL[0] };
+            let positive = if (reduced.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || reduced <= 0.0_f32
+            {
+                0.0_f32
+            } else {
+                reduced
+            };
+            total += positive * weights[token as usize * n_head as usize + head as usize];
+            thread::sync_threads();
+            head += 1;
+        }
+        if tid == 0 {
+            let output = token as usize * n_comp as usize + comp as usize;
+            unsafe {
+                *scores.get_unchecked_mut(output) = total * scale;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_score_one_direct_kernel(
+        n_comp: u32,
+        pos0: u32,
+        ratio: u32,
+        scale: f32,
+        causal: u32,
+        q: &[f32],
+        weights: &[f32],
+        index_comp: &[f32],
+        mut scores: DisjointSlice<f32>,
+    ) {
+        static mut K_ROW: SharedArray<f32, ABI_INDEXER_HEAD_DIM> = SharedArray::UNINIT;
+        static mut PARTIAL: SharedArray<f32, 4> = SharedArray::UNINIT;
+
+        let comp = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if comp >= n_comp || tid >= ABI_INDEXER_DIRECT_THREADS {
+            return;
+        }
+        let lane = tid & 31;
+        let warp_id = tid >> 5;
+        if causal != 0 {
+            let visible = if ratio != 0 {
+                (pos0 + 1) / ratio
+            } else {
+                n_comp
+            };
+            if comp >= visible {
+                if tid == 0 {
+                    unsafe {
+                        *scores.get_unchecked_mut(comp as usize) = f32::NEG_INFINITY;
+                    }
+                }
+                return;
+            }
+        }
+
+        unsafe {
+            K_ROW[tid as usize] = index_comp[comp as usize * ABI_INDEXER_HEAD_DIM + tid as usize];
+        }
+        thread::sync_threads();
+
+        let mut total = 0.0_f32;
+        let mut head_group = 0_u32;
+        while head_group < ABI_INDEXER_N_HEAD as u32 {
+            let head = head_group + warp_id;
+            let q_base = head as usize * ABI_INDEXER_HEAD_DIM + lane as usize * 4;
+            let k_base = lane as usize * 4;
+            let mut dot = q[q_base] * unsafe { K_ROW[k_base] }
+                + q[q_base + 1] * unsafe { K_ROW[k_base + 1] }
+                + q[q_base + 2] * unsafe { K_ROW[k_base + 2] }
+                + q[q_base + 3] * unsafe { K_ROW[k_base + 3] };
+            let mut offset = 16_u32;
+            while offset > 0 {
+                dot += warp::shuffle_down_f32(dot, offset);
+                offset >>= 1;
+            }
+            if lane == 0 {
+                let positive = if (dot.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || dot <= 0.0_f32 {
+                    0.0_f32
+                } else {
+                    dot
+                };
+                unsafe {
+                    PARTIAL[warp_id as usize] = positive * weights[head as usize] * scale;
+                }
+            }
+            thread::sync_threads();
+            if tid == 0 {
+                total += unsafe { PARTIAL[0] + PARTIAL[1] + PARTIAL[2] + PARTIAL[3] };
+            }
+            thread::sync_threads();
+            head_group += 4;
+        }
+        if tid == 0 {
+            unsafe {
+                *scores.get_unchecked_mut(comp as usize) = total;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_scores_wmma_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        pos0: u32,
+        ratio: u32,
+        scale: f32,
+        causal: u32,
+        q: &[f32],
+        weights: &[f32],
+        index_comp: &[f32],
+        mut scores: DisjointSlice<f32>,
+    ) {
+        static mut A_TILE: SharedArray<f16, { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K }, 16> =
+            SharedArray::UNINIT;
+        static mut B_LO_TILE: SharedArray<f16, { ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N }, 16> =
+            SharedArray::UNINIT;
+        static mut B_HI_TILE: SharedArray<f16, { ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N }, 16> =
+            SharedArray::UNINIT;
+        static mut C_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_TILE_COMPONENTS },
+        > = SharedArray::UNINIT;
+        static mut ACC_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_TILE_COMPONENTS },
+        > = SharedArray::UNINIT;
+
+        let tile_c = thread::blockIdx_x() as usize * ABI_INDEXER_TILE_COMPONENTS;
+        let tile_t = thread::blockIdx_y() as usize * ABI_INDEXER_TILE_TOKENS;
+        let tid = thread::threadIdx_x() as usize;
+        if tid >= ABI_INDEXER_WMMA_THREADS as usize {
+            return;
+        }
+
+        if causal != 0 {
+            let tile_end = tile_t as u32 + ABI_INDEXER_TILE_TOKENS as u32;
+            let last_token = if tile_end < n_tokens {
+                tile_end
+            } else {
+                n_tokens
+            };
+            let max_visible = if last_token > tile_t as u32 && ratio != 0 {
+                let visible = (pos0 + last_token) / ratio;
+                if visible < n_comp {
+                    visible
+                } else {
+                    n_comp
+                }
+            } else {
+                0
+            };
+            if tile_c as u32 >= max_visible {
+                let mut i = tid;
+                while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_TILE_COMPONENTS {
+                    let row = i / ABI_INDEXER_TILE_COMPONENTS;
+                    let col = i % ABI_INDEXER_TILE_COMPONENTS;
+                    let token = tile_t + row;
+                    let comp = tile_c + col;
+                    if token < n_tokens as usize && comp < n_comp as usize {
+                        unsafe {
+                            *scores.get_unchecked_mut(token * n_comp as usize + comp) =
+                                f32::NEG_INFINITY;
+                        }
+                    }
+                    i += ABI_INDEXER_WMMA_THREADS as usize;
+                }
+                return;
+            }
+        }
+
+        let mut i = tid;
+        while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_TILE_COMPONENTS {
+            unsafe {
+                ACC_TILE[i] = 0.0;
+            }
+            i += ABI_INDEXER_WMMA_THREADS as usize;
+        }
+        thread::sync_threads();
+
+        let lane = tid & 31;
+        let a_row = (lane & 7) + (lane & 8);
+        let a_col = if lane & 16 == 0 { 0 } else { 8 };
+        let b_row = (lane & 7) + (lane & 8);
+        let mut head = 0_usize;
+        while head < ABI_INDEXER_N_HEAD {
+            let mut acc_lo = zero_accumulator();
+            let mut acc_hi = zero_accumulator();
+            let mut k0 = 0_usize;
+            while k0 < ABI_INDEXER_HEAD_DIM {
+                let mut a_index = tid;
+                while a_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K {
+                    let row = a_index / ABI_INDEXER_MMA_K;
+                    let col = a_index % ABI_INDEXER_MMA_K;
+                    let token = tile_t + row;
+                    let value = if token < n_tokens as usize {
+                        q[(token * ABI_INDEXER_N_HEAD + head) * ABI_INDEXER_HEAD_DIM + k0 + col]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        A_TILE[a_index] = value as f16;
+                    }
+                    a_index += ABI_INDEXER_WMMA_THREADS as usize;
+                }
+
+                let mut b_index = tid;
+                while b_index < ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N {
+                    let row = b_index / ABI_INDEXER_MMA_N;
+                    let col = b_index % ABI_INDEXER_MMA_N;
+                    let comp_lo = tile_c + col;
+                    let comp_hi = tile_c + ABI_INDEXER_MMA_N + col;
+                    let dimension = k0 + row;
+                    let value_lo = if comp_lo < n_comp as usize {
+                        index_comp[comp_lo * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    let value_hi = if comp_hi < n_comp as usize {
+                        index_comp[comp_hi * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        B_LO_TILE[b_index] = value_lo as f16;
+                        B_HI_TILE[b_index] = value_hi as f16;
+                    }
+                    b_index += ABI_INDEXER_WMMA_THREADS as usize;
+                }
+                thread::sync_threads();
+
+                let a_ptr = unsafe {
+                    (&raw const A_TILE)
+                        .cast::<f16>()
+                        .add(a_row * ABI_INDEXER_MMA_K + a_col)
+                }
+                .cast::<u8>();
+                let b_lo_ptr = unsafe {
+                    (&raw const B_LO_TILE)
+                        .cast::<f16>()
+                        .add(b_row * ABI_INDEXER_MMA_N)
+                }
+                .cast::<u8>();
+                let b_hi_ptr = unsafe {
+                    (&raw const B_HI_TILE)
+                        .cast::<f16>()
+                        .add(b_row * ABI_INDEXER_MMA_N)
+                }
+                .cast::<u8>();
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                let b_lo_frag = unsafe { load_b_m16n8k16(b_lo_ptr) };
+                let b_hi_frag = unsafe { load_b_m16n8k16(b_hi_ptr) };
+                acc_lo = unsafe { mma_m16n8k16_f32_f16(acc_lo, a_frag, b_lo_frag) };
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                acc_hi = unsafe { mma_m16n8k16_f32_f16(acc_hi, a_frag, b_hi_frag) };
+                thread::sync_threads();
+                k0 += ABI_INDEXER_MMA_K;
+            }
+
+            let group_id = lane >> 2;
+            let thread_in_group = lane & 3;
+            let col_base = thread_in_group * 2;
+            unsafe {
+                C_TILE[group_id * ABI_INDEXER_TILE_COMPONENTS + col_base] = acc_lo.x();
+                C_TILE[group_id * ABI_INDEXER_TILE_COMPONENTS + col_base + 1] = acc_lo.y();
+                C_TILE[(group_id + 8) * ABI_INDEXER_TILE_COMPONENTS + col_base] = acc_lo.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_TILE_COMPONENTS + col_base + 1] = acc_lo.w();
+                C_TILE[group_id * ABI_INDEXER_TILE_COMPONENTS + ABI_INDEXER_MMA_N + col_base] =
+                    acc_hi.x();
+                C_TILE[group_id * ABI_INDEXER_TILE_COMPONENTS + ABI_INDEXER_MMA_N + col_base + 1] =
+                    acc_hi.y();
+                C_TILE
+                    [(group_id + 8) * ABI_INDEXER_TILE_COMPONENTS + ABI_INDEXER_MMA_N + col_base] =
+                    acc_hi.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_TILE_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base
+                    + 1] = acc_hi.w();
+            }
+            thread::sync_threads();
+
+            let mut output_index = tid;
+            while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_TILE_COMPONENTS {
+                let row = output_index / ABI_INDEXER_TILE_COMPONENTS;
+                let col = output_index % ABI_INDEXER_TILE_COMPONENTS;
+                let token = tile_t + row;
+                let comp = tile_c + col;
+                if token < n_tokens as usize && comp < n_comp as usize {
+                    let value = unsafe { C_TILE[output_index] };
+                    let positive = if (value.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || value <= 0.0
+                    {
+                        0.0
+                    } else {
+                        value
+                    };
+                    unsafe {
+                        ACC_TILE[output_index] +=
+                            positive * weights[token * ABI_INDEXER_N_HEAD + head];
+                    }
+                }
+                output_index += ABI_INDEXER_WMMA_THREADS as usize;
+            }
+            thread::sync_threads();
+            head += 1;
+        }
+
+        let mut output_index = tid;
+        while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_TILE_COMPONENTS {
+            let row = output_index / ABI_INDEXER_TILE_COMPONENTS;
+            let col = output_index % ABI_INDEXER_TILE_COMPONENTS;
+            let token = tile_t + row;
+            let comp = tile_c + col;
+            if token < n_tokens as usize && comp < n_comp as usize {
+                let mut output = unsafe { ACC_TILE[output_index] } * scale;
+                if causal != 0 {
+                    let visible = (pos0 + token as u32 + 1) / ratio;
+                    if comp as u32 >= visible {
+                        output = f32::NEG_INFINITY;
+                    }
+                }
+                unsafe {
+                    *scores.get_unchecked_mut(token * n_comp as usize + comp) = output;
+                }
+            }
+            output_index += ABI_INDEXER_WMMA_THREADS as usize;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_scores_wmma32_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        pos0: u32,
+        ratio: u32,
+        scale: f32,
+        causal: u32,
+        q: &[f32],
+        weights: &[f32],
+        index_comp: &[f32],
+        mut scores: DisjointSlice<f32>,
+    ) {
+        static mut A_TILE: SharedArray<f16, { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K }, 16> =
+            SharedArray::UNINIT;
+        static mut B_LO_TILE: SharedArray<
+            f16,
+            { ABI_INDEXER_WMMA32_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N },
+            16,
+        > = SharedArray::UNINIT;
+        static mut B_HI_TILE: SharedArray<
+            f16,
+            { ABI_INDEXER_WMMA32_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N },
+            16,
+        > = SharedArray::UNINIT;
+        static mut C_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA32_COMPONENTS },
+        > = SharedArray::UNINIT;
+        static mut ACC_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA32_COMPONENTS },
+        > = SharedArray::UNINIT;
+
+        let tile_c = thread::blockIdx_x() as usize * ABI_INDEXER_WMMA32_COMPONENTS;
+        let tile_t = thread::blockIdx_y() as usize * ABI_INDEXER_TILE_TOKENS;
+        let tid = thread::threadIdx_x() as usize;
+        if tid >= ABI_INDEXER_WMMA32_THREADS as usize {
+            return;
+        }
+
+        if causal != 0 {
+            let tile_end = tile_t as u32 + ABI_INDEXER_TILE_TOKENS as u32;
+            let last_token = if tile_end < n_tokens {
+                tile_end
+            } else {
+                n_tokens
+            };
+            let max_visible = if last_token > tile_t as u32 && ratio != 0 {
+                let visible = (pos0 + last_token) / ratio;
+                if visible < n_comp {
+                    visible
+                } else {
+                    n_comp
+                }
+            } else {
+                0
+            };
+            if tile_c as u32 >= max_visible {
+                let mut i = tid;
+                while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA32_COMPONENTS {
+                    let row = i / ABI_INDEXER_WMMA32_COMPONENTS;
+                    let col = i % ABI_INDEXER_WMMA32_COMPONENTS;
+                    let token = tile_t + row;
+                    let comp = tile_c + col;
+                    if token < n_tokens as usize && comp < n_comp as usize {
+                        unsafe {
+                            *scores.get_unchecked_mut(token * n_comp as usize + comp) =
+                                f32::NEG_INFINITY;
+                        }
+                    }
+                    i += ABI_INDEXER_WMMA32_THREADS as usize;
+                }
+                return;
+            }
+        }
+
+        let mut i = tid;
+        while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA32_COMPONENTS {
+            unsafe {
+                ACC_TILE[i] = 0.0;
+            }
+            i += ABI_INDEXER_WMMA32_THREADS as usize;
+        }
+        thread::sync_threads();
+
+        let warp_id = tid >> 5;
+        let lane = tid & 31;
+        let a_row = (lane & 7) + (lane & 8);
+        let a_col = if lane & 16 == 0 { 0 } else { 8 };
+        let b_row = (lane & 7) + (lane & 8);
+        let mut head = 0_usize;
+        while head < ABI_INDEXER_N_HEAD {
+            let mut acc_lo = zero_accumulator();
+            let mut acc_hi = zero_accumulator();
+            let mut k0 = 0_usize;
+            while k0 < ABI_INDEXER_HEAD_DIM {
+                let mut a_index = tid;
+                while a_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K {
+                    let row = a_index / ABI_INDEXER_MMA_K;
+                    let col = a_index % ABI_INDEXER_MMA_K;
+                    let token = tile_t + row;
+                    let value = if token < n_tokens as usize {
+                        q[(token * ABI_INDEXER_N_HEAD + head) * ABI_INDEXER_HEAD_DIM + k0 + col]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        A_TILE[a_index] = value as f16;
+                    }
+                    a_index += ABI_INDEXER_WMMA32_THREADS as usize;
+                }
+
+                let mut b_index = tid;
+                while b_index < ABI_INDEXER_WMMA32_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N {
+                    let warp_tile = b_index / (ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N);
+                    let local = b_index % (ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N);
+                    let row = local / ABI_INDEXER_MMA_N;
+                    let col = local % ABI_INDEXER_MMA_N;
+                    let comp_lo = tile_c + warp_tile * ABI_INDEXER_TILE_COMPONENTS + col;
+                    let comp_hi =
+                        tile_c + warp_tile * ABI_INDEXER_TILE_COMPONENTS + ABI_INDEXER_MMA_N + col;
+                    let dimension = k0 + row;
+                    let value_lo = if comp_lo < n_comp as usize {
+                        index_comp[comp_lo * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    let value_hi = if comp_hi < n_comp as usize {
+                        index_comp[comp_hi * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        B_LO_TILE[b_index] = value_lo as f16;
+                        B_HI_TILE[b_index] = value_hi as f16;
+                    }
+                    b_index += ABI_INDEXER_WMMA32_THREADS as usize;
+                }
+                thread::sync_threads();
+
+                let a_ptr = unsafe {
+                    (&raw const A_TILE)
+                        .cast::<f16>()
+                        .add(a_row * ABI_INDEXER_MMA_K + a_col)
+                }
+                .cast::<u8>();
+                let b_base =
+                    warp_id * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N + b_row * ABI_INDEXER_MMA_N;
+                let b_lo_ptr =
+                    unsafe { (&raw const B_LO_TILE).cast::<f16>().add(b_base) }.cast::<u8>();
+                let b_hi_ptr =
+                    unsafe { (&raw const B_HI_TILE).cast::<f16>().add(b_base) }.cast::<u8>();
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                let b_lo_frag = unsafe { load_b_m16n8k16(b_lo_ptr) };
+                let b_hi_frag = unsafe { load_b_m16n8k16(b_hi_ptr) };
+                acc_lo = unsafe { mma_m16n8k16_f32_f16(acc_lo, a_frag, b_lo_frag) };
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                acc_hi = unsafe { mma_m16n8k16_f32_f16(acc_hi, a_frag, b_hi_frag) };
+                thread::sync_threads();
+                k0 += ABI_INDEXER_MMA_K;
+            }
+
+            let group_id = lane >> 2;
+            let thread_in_group = lane & 3;
+            let col_base = warp_id * ABI_INDEXER_TILE_COMPONENTS + thread_in_group * 2;
+            unsafe {
+                C_TILE[group_id * ABI_INDEXER_WMMA32_COMPONENTS + col_base] = acc_lo.x();
+                C_TILE[group_id * ABI_INDEXER_WMMA32_COMPONENTS + col_base + 1] = acc_lo.y();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA32_COMPONENTS + col_base] = acc_lo.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA32_COMPONENTS + col_base + 1] = acc_lo.w();
+                C_TILE[group_id * ABI_INDEXER_WMMA32_COMPONENTS + ABI_INDEXER_MMA_N + col_base] =
+                    acc_hi.x();
+                C_TILE
+                    [group_id * ABI_INDEXER_WMMA32_COMPONENTS + ABI_INDEXER_MMA_N + col_base + 1] =
+                    acc_hi.y();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA32_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base] = acc_hi.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA32_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base
+                    + 1] = acc_hi.w();
+            }
+            thread::sync_threads();
+
+            let mut output_index = tid;
+            while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA32_COMPONENTS {
+                let row = output_index / ABI_INDEXER_WMMA32_COMPONENTS;
+                let col = output_index % ABI_INDEXER_WMMA32_COMPONENTS;
+                let token = tile_t + row;
+                let comp = tile_c + col;
+                if token < n_tokens as usize && comp < n_comp as usize {
+                    let value = unsafe { C_TILE[output_index] };
+                    let positive = if (value.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || value <= 0.0
+                    {
+                        0.0
+                    } else {
+                        value
+                    };
+                    unsafe {
+                        ACC_TILE[output_index] +=
+                            positive * weights[token * ABI_INDEXER_N_HEAD + head];
+                    }
+                }
+                output_index += ABI_INDEXER_WMMA32_THREADS as usize;
+            }
+            thread::sync_threads();
+            head += 1;
+        }
+
+        let mut output_index = tid;
+        while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA32_COMPONENTS {
+            let row = output_index / ABI_INDEXER_WMMA32_COMPONENTS;
+            let col = output_index % ABI_INDEXER_WMMA32_COMPONENTS;
+            let token = tile_t + row;
+            let comp = tile_c + col;
+            if token < n_tokens as usize && comp < n_comp as usize {
+                let mut output = unsafe { ACC_TILE[output_index] } * scale;
+                if causal != 0 {
+                    let visible = (pos0 + token as u32 + 1) / ratio;
+                    if comp as u32 >= visible {
+                        output = f32::NEG_INFINITY;
+                    }
+                }
+                unsafe {
+                    *scores.get_unchecked_mut(token * n_comp as usize + comp) = output;
+                }
+            }
+            output_index += ABI_INDEXER_WMMA32_THREADS as usize;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_scores_wmma64_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        pos0: u32,
+        ratio: u32,
+        scale: f32,
+        causal: u32,
+        q: &[f32],
+        weights: &[f32],
+        index_comp: &[f32],
+        mut scores: DisjointSlice<f32>,
+    ) {
+        static mut A_TILE: SharedArray<f16, { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K }, 16> =
+            SharedArray::UNINIT;
+        static mut B_LO_TILE: SharedArray<
+            f16,
+            { ABI_INDEXER_WMMA64_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N },
+            16,
+        > = SharedArray::UNINIT;
+        static mut B_HI_TILE: SharedArray<
+            f16,
+            { ABI_INDEXER_WMMA64_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N },
+            16,
+        > = SharedArray::UNINIT;
+        static mut C_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA64_COMPONENTS },
+        > = SharedArray::UNINIT;
+        static mut ACC_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA64_COMPONENTS },
+        > = SharedArray::UNINIT;
+
+        let tile_c = thread::blockIdx_x() as usize * ABI_INDEXER_WMMA64_COMPONENTS;
+        let tile_t = thread::blockIdx_y() as usize * ABI_INDEXER_TILE_TOKENS;
+        let tid = thread::threadIdx_x() as usize;
+        if tid >= ABI_INDEXER_WMMA64_THREADS as usize {
+            return;
+        }
+
+        if causal != 0 {
+            let tile_end = tile_t as u32 + ABI_INDEXER_TILE_TOKENS as u32;
+            let last_token = if tile_end < n_tokens {
+                tile_end
+            } else {
+                n_tokens
+            };
+            let max_visible = if last_token > tile_t as u32 && ratio != 0 {
+                let visible = (pos0 + last_token) / ratio;
+                if visible < n_comp {
+                    visible
+                } else {
+                    n_comp
+                }
+            } else {
+                0
+            };
+            if tile_c as u32 >= max_visible {
+                let mut i = tid;
+                while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA64_COMPONENTS {
+                    let row = i / ABI_INDEXER_WMMA64_COMPONENTS;
+                    let col = i % ABI_INDEXER_WMMA64_COMPONENTS;
+                    let token = tile_t + row;
+                    let comp = tile_c + col;
+                    if token < n_tokens as usize && comp < n_comp as usize {
+                        unsafe {
+                            *scores.get_unchecked_mut(token * n_comp as usize + comp) =
+                                f32::NEG_INFINITY;
+                        }
+                    }
+                    i += ABI_INDEXER_WMMA64_THREADS as usize;
+                }
+                return;
+            }
+        }
+
+        let mut i = tid;
+        while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA64_COMPONENTS {
+            unsafe {
+                ACC_TILE[i] = 0.0;
+            }
+            i += ABI_INDEXER_WMMA64_THREADS as usize;
+        }
+        thread::sync_threads();
+
+        let warp_id = tid >> 5;
+        let lane = tid & 31;
+        let a_row = (lane & 7) + (lane & 8);
+        let a_col = if lane & 16 == 0 { 0 } else { 8 };
+        let b_row = (lane & 7) + (lane & 8);
+        let mut head = 0_usize;
+        while head < ABI_INDEXER_N_HEAD {
+            let mut acc_lo = zero_accumulator();
+            let mut acc_hi = zero_accumulator();
+            let mut k0 = 0_usize;
+            while k0 < ABI_INDEXER_HEAD_DIM {
+                let mut a_index = tid;
+                while a_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K {
+                    let row = a_index / ABI_INDEXER_MMA_K;
+                    let col = a_index % ABI_INDEXER_MMA_K;
+                    let token = tile_t + row;
+                    let value = if token < n_tokens as usize {
+                        q[(token * ABI_INDEXER_N_HEAD + head) * ABI_INDEXER_HEAD_DIM + k0 + col]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        A_TILE[a_index] = value as f16;
+                    }
+                    a_index += ABI_INDEXER_WMMA64_THREADS as usize;
+                }
+
+                let mut b_index = tid;
+                while b_index < ABI_INDEXER_WMMA64_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N {
+                    let warp_tile = b_index / (ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N);
+                    let local = b_index % (ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N);
+                    let row = local / ABI_INDEXER_MMA_N;
+                    let col = local % ABI_INDEXER_MMA_N;
+                    let comp_lo = tile_c + warp_tile * ABI_INDEXER_TILE_COMPONENTS + col;
+                    let comp_hi =
+                        tile_c + warp_tile * ABI_INDEXER_TILE_COMPONENTS + ABI_INDEXER_MMA_N + col;
+                    let dimension = k0 + row;
+                    let value_lo = if comp_lo < n_comp as usize {
+                        index_comp[comp_lo * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    let value_hi = if comp_hi < n_comp as usize {
+                        index_comp[comp_hi * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        B_LO_TILE[b_index] = value_lo as f16;
+                        B_HI_TILE[b_index] = value_hi as f16;
+                    }
+                    b_index += ABI_INDEXER_WMMA64_THREADS as usize;
+                }
+                thread::sync_threads();
+
+                let a_ptr = unsafe {
+                    (&raw const A_TILE)
+                        .cast::<f16>()
+                        .add(a_row * ABI_INDEXER_MMA_K + a_col)
+                }
+                .cast::<u8>();
+                let b_base =
+                    warp_id * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N + b_row * ABI_INDEXER_MMA_N;
+                let b_lo_ptr =
+                    unsafe { (&raw const B_LO_TILE).cast::<f16>().add(b_base) }.cast::<u8>();
+                let b_hi_ptr =
+                    unsafe { (&raw const B_HI_TILE).cast::<f16>().add(b_base) }.cast::<u8>();
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                let b_lo_frag = unsafe { load_b_m16n8k16(b_lo_ptr) };
+                let b_hi_frag = unsafe { load_b_m16n8k16(b_hi_ptr) };
+                acc_lo = unsafe { mma_m16n8k16_f32_f16(acc_lo, a_frag, b_lo_frag) };
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                acc_hi = unsafe { mma_m16n8k16_f32_f16(acc_hi, a_frag, b_hi_frag) };
+                thread::sync_threads();
+                k0 += ABI_INDEXER_MMA_K;
+            }
+
+            let group_id = lane >> 2;
+            let thread_in_group = lane & 3;
+            let col_base = warp_id * ABI_INDEXER_TILE_COMPONENTS + thread_in_group * 2;
+            unsafe {
+                C_TILE[group_id * ABI_INDEXER_WMMA64_COMPONENTS + col_base] = acc_lo.x();
+                C_TILE[group_id * ABI_INDEXER_WMMA64_COMPONENTS + col_base + 1] = acc_lo.y();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA64_COMPONENTS + col_base] = acc_lo.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA64_COMPONENTS + col_base + 1] = acc_lo.w();
+                C_TILE[group_id * ABI_INDEXER_WMMA64_COMPONENTS + ABI_INDEXER_MMA_N + col_base] =
+                    acc_hi.x();
+                C_TILE
+                    [group_id * ABI_INDEXER_WMMA64_COMPONENTS + ABI_INDEXER_MMA_N + col_base + 1] =
+                    acc_hi.y();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA64_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base] = acc_hi.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA64_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base
+                    + 1] = acc_hi.w();
+            }
+            thread::sync_threads();
+
+            let mut output_index = tid;
+            while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA64_COMPONENTS {
+                let row = output_index / ABI_INDEXER_WMMA64_COMPONENTS;
+                let col = output_index % ABI_INDEXER_WMMA64_COMPONENTS;
+                let token = tile_t + row;
+                let comp = tile_c + col;
+                if token < n_tokens as usize && comp < n_comp as usize {
+                    let value = unsafe { C_TILE[output_index] };
+                    let positive = if (value.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || value <= 0.0
+                    {
+                        0.0
+                    } else {
+                        value
+                    };
+                    unsafe {
+                        ACC_TILE[output_index] +=
+                            positive * weights[token * ABI_INDEXER_N_HEAD + head];
+                    }
+                }
+                output_index += ABI_INDEXER_WMMA64_THREADS as usize;
+            }
+            thread::sync_threads();
+            head += 1;
+        }
+
+        let mut output_index = tid;
+        while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA64_COMPONENTS {
+            let row = output_index / ABI_INDEXER_WMMA64_COMPONENTS;
+            let col = output_index % ABI_INDEXER_WMMA64_COMPONENTS;
+            let token = tile_t + row;
+            let comp = tile_c + col;
+            if token < n_tokens as usize && comp < n_comp as usize {
+                let mut output = unsafe { ACC_TILE[output_index] } * scale;
+                if causal != 0 {
+                    let visible = (pos0 + token as u32 + 1) / ratio;
+                    if comp as u32 >= visible {
+                        output = f32::NEG_INFINITY;
+                    }
+                }
+                unsafe {
+                    *scores.get_unchecked_mut(token * n_comp as usize + comp) = output;
+                }
+            }
+            output_index += ABI_INDEXER_WMMA64_THREADS as usize;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_scores_wmma128_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        pos0: u32,
+        ratio: u32,
+        scale: f32,
+        causal: u32,
+        q: &[f32],
+        weights: &[f32],
+        index_comp: &[f32],
+        mut scores: DisjointSlice<f32>,
+    ) {
+        static mut A_TILE: SharedArray<f16, { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K }, 16> =
+            SharedArray::UNINIT;
+        static mut B_LO_TILE: SharedArray<
+            f16,
+            { ABI_INDEXER_WMMA128_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N },
+            16,
+        > = SharedArray::UNINIT;
+        static mut B_HI_TILE: SharedArray<
+            f16,
+            { ABI_INDEXER_WMMA128_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N },
+            16,
+        > = SharedArray::UNINIT;
+        static mut C_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA128_COMPONENTS },
+        > = SharedArray::UNINIT;
+        static mut ACC_TILE: SharedArray<
+            f32,
+            { ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA128_COMPONENTS },
+        > = SharedArray::UNINIT;
+
+        let tile_c = thread::blockIdx_x() as usize * ABI_INDEXER_WMMA128_COMPONENTS;
+        let tile_t = thread::blockIdx_y() as usize * ABI_INDEXER_TILE_TOKENS;
+        let tid = thread::threadIdx_x() as usize;
+        if tid >= ABI_INDEXER_WMMA128_THREADS as usize {
+            return;
+        }
+
+        if causal != 0 {
+            let tile_end = tile_t as u32 + ABI_INDEXER_TILE_TOKENS as u32;
+            let last_token = if tile_end < n_tokens {
+                tile_end
+            } else {
+                n_tokens
+            };
+            let max_visible = if last_token > tile_t as u32 && ratio != 0 {
+                let visible = (pos0 + last_token) / ratio;
+                if visible < n_comp {
+                    visible
+                } else {
+                    n_comp
+                }
+            } else {
+                0
+            };
+            if tile_c as u32 >= max_visible {
+                let mut i = tid;
+                while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA128_COMPONENTS {
+                    let row = i / ABI_INDEXER_WMMA128_COMPONENTS;
+                    let col = i % ABI_INDEXER_WMMA128_COMPONENTS;
+                    let token = tile_t + row;
+                    let comp = tile_c + col;
+                    if token < n_tokens as usize && comp < n_comp as usize {
+                        unsafe {
+                            *scores.get_unchecked_mut(token * n_comp as usize + comp) =
+                                f32::NEG_INFINITY;
+                        }
+                    }
+                    i += ABI_INDEXER_WMMA128_THREADS as usize;
+                }
+                return;
+            }
+        }
+
+        let mut i = tid;
+        while i < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA128_COMPONENTS {
+            unsafe {
+                ACC_TILE[i] = 0.0;
+            }
+            i += ABI_INDEXER_WMMA128_THREADS as usize;
+        }
+        thread::sync_threads();
+
+        let warp_id = tid >> 5;
+        let lane = tid & 31;
+        let a_row = (lane & 7) + (lane & 8);
+        let a_col = if lane & 16 == 0 { 0 } else { 8 };
+        let b_row = (lane & 7) + (lane & 8);
+        let mut head = 0_usize;
+        while head < ABI_INDEXER_N_HEAD {
+            let mut acc_lo = zero_accumulator();
+            let mut acc_hi = zero_accumulator();
+            let mut k0 = 0_usize;
+            while k0 < ABI_INDEXER_HEAD_DIM {
+                let mut a_index = tid;
+                while a_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_MMA_K {
+                    let row = a_index / ABI_INDEXER_MMA_K;
+                    let col = a_index % ABI_INDEXER_MMA_K;
+                    let token = tile_t + row;
+                    let value = if token < n_tokens as usize {
+                        q[(token * ABI_INDEXER_N_HEAD + head) * ABI_INDEXER_HEAD_DIM + k0 + col]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        A_TILE[a_index] = value as f16;
+                    }
+                    a_index += ABI_INDEXER_WMMA128_THREADS as usize;
+                }
+
+                let mut b_index = tid;
+                while b_index < ABI_INDEXER_WMMA128_WARPS * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N {
+                    let warp_tile = b_index / (ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N);
+                    let local = b_index % (ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N);
+                    let row = local / ABI_INDEXER_MMA_N;
+                    let col = local % ABI_INDEXER_MMA_N;
+                    let comp_lo = tile_c + warp_tile * ABI_INDEXER_TILE_COMPONENTS + col;
+                    let comp_hi =
+                        tile_c + warp_tile * ABI_INDEXER_TILE_COMPONENTS + ABI_INDEXER_MMA_N + col;
+                    let dimension = k0 + row;
+                    let value_lo = if comp_lo < n_comp as usize {
+                        index_comp[comp_lo * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    let value_hi = if comp_hi < n_comp as usize {
+                        index_comp[comp_hi * ABI_INDEXER_HEAD_DIM + dimension]
+                    } else {
+                        0.0
+                    };
+                    unsafe {
+                        B_LO_TILE[b_index] = value_lo as f16;
+                        B_HI_TILE[b_index] = value_hi as f16;
+                    }
+                    b_index += ABI_INDEXER_WMMA128_THREADS as usize;
+                }
+                thread::sync_threads();
+
+                let a_ptr = unsafe {
+                    (&raw const A_TILE)
+                        .cast::<f16>()
+                        .add(a_row * ABI_INDEXER_MMA_K + a_col)
+                }
+                .cast::<u8>();
+                let b_base =
+                    warp_id * ABI_INDEXER_MMA_K * ABI_INDEXER_MMA_N + b_row * ABI_INDEXER_MMA_N;
+                let b_lo_ptr =
+                    unsafe { (&raw const B_LO_TILE).cast::<f16>().add(b_base) }.cast::<u8>();
+                let b_hi_ptr =
+                    unsafe { (&raw const B_HI_TILE).cast::<f16>().add(b_base) }.cast::<u8>();
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                let b_lo_frag = unsafe { load_b_m16n8k16(b_lo_ptr) };
+                let b_hi_frag = unsafe { load_b_m16n8k16(b_hi_ptr) };
+                acc_lo = unsafe { mma_m16n8k16_f32_f16(acc_lo, a_frag, b_lo_frag) };
+                let a_frag = unsafe { load_a_m16n8k16(a_ptr) };
+                acc_hi = unsafe { mma_m16n8k16_f32_f16(acc_hi, a_frag, b_hi_frag) };
+                thread::sync_threads();
+                k0 += ABI_INDEXER_MMA_K;
+            }
+
+            let group_id = lane >> 2;
+            let thread_in_group = lane & 3;
+            let col_base = warp_id * ABI_INDEXER_TILE_COMPONENTS + thread_in_group * 2;
+            unsafe {
+                C_TILE[group_id * ABI_INDEXER_WMMA128_COMPONENTS + col_base] = acc_lo.x();
+                C_TILE[group_id * ABI_INDEXER_WMMA128_COMPONENTS + col_base + 1] = acc_lo.y();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA128_COMPONENTS + col_base] = acc_lo.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA128_COMPONENTS + col_base + 1] = acc_lo.w();
+                C_TILE[group_id * ABI_INDEXER_WMMA128_COMPONENTS + ABI_INDEXER_MMA_N + col_base] =
+                    acc_hi.x();
+                C_TILE[group_id * ABI_INDEXER_WMMA128_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base
+                    + 1] = acc_hi.y();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA128_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base] = acc_hi.z();
+                C_TILE[(group_id + 8) * ABI_INDEXER_WMMA128_COMPONENTS
+                    + ABI_INDEXER_MMA_N
+                    + col_base
+                    + 1] = acc_hi.w();
+            }
+            thread::sync_threads();
+
+            let mut output_index = tid;
+            while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA128_COMPONENTS {
+                let row = output_index / ABI_INDEXER_WMMA128_COMPONENTS;
+                let col = output_index % ABI_INDEXER_WMMA128_COMPONENTS;
+                let token = tile_t + row;
+                let comp = tile_c + col;
+                if token < n_tokens as usize && comp < n_comp as usize {
+                    let value = unsafe { C_TILE[output_index] };
+                    let positive = if (value.to_bits() & 0x7fff_ffff) > 0x7f80_0000 || value <= 0.0
+                    {
+                        0.0
+                    } else {
+                        value
+                    };
+                    unsafe {
+                        ACC_TILE[output_index] +=
+                            positive * weights[token * ABI_INDEXER_N_HEAD + head];
+                    }
+                }
+                output_index += ABI_INDEXER_WMMA128_THREADS as usize;
+            }
+            thread::sync_threads();
+            head += 1;
+        }
+
+        let mut output_index = tid;
+        while output_index < ABI_INDEXER_TILE_TOKENS * ABI_INDEXER_WMMA128_COMPONENTS {
+            let row = output_index / ABI_INDEXER_WMMA128_COMPONENTS;
+            let col = output_index % ABI_INDEXER_WMMA128_COMPONENTS;
+            let token = tile_t + row;
+            let comp = tile_c + col;
+            if token < n_tokens as usize && comp < n_comp as usize {
+                let mut output = unsafe { ACC_TILE[output_index] } * scale;
+                if causal != 0 {
+                    let visible = (pos0 + token as u32 + 1) / ratio;
+                    if comp as u32 >= visible {
+                        output = f32::NEG_INFINITY;
+                    }
+                }
+                unsafe {
+                    *scores.get_unchecked_mut(token * n_comp as usize + comp) = output;
+                }
+            }
+            output_index += ABI_INDEXER_WMMA128_THREADS as usize;
+        }
+    }
+
+    #[kernel]
     pub fn abi_topk_mask_kernel(
         count: u64,
         n_comp: u32,
@@ -6389,6 +7501,12 @@ pub(crate) struct AbiKernelModule {
     attention_indexed_mixed_heads8_rb4_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
+    indexer_scores_kernel: CudaFunction,
+    indexer_score_one_direct_kernel: CudaFunction,
+    indexer_scores_wmma_kernel: CudaFunction,
+    indexer_scores_wmma32_kernel: CudaFunction,
+    indexer_scores_wmma64_kernel: CudaFunction,
+    indexer_scores_wmma128_kernel: CudaFunction,
     topk_mask_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
     dsv4_qkv_rms_norm_rows_kernel: CudaFunction,
@@ -6629,6 +7747,24 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             indexer_hadamard_fp4_kernel: module
                 .load_function("abi_indexer_hadamard_fp4_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_scores_kernel: module
+                .load_function("abi_indexer_scores_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_score_one_direct_kernel: module
+                .load_function("abi_indexer_score_one_direct_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_scores_wmma_kernel: module
+                .load_function("abi_indexer_scores_wmma_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_scores_wmma32_kernel: module
+                .load_function("abi_indexer_scores_wmma32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_scores_wmma64_kernel: module
+                .load_function("abi_indexer_scores_wmma64_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_scores_wmma128_kernel: module
+                .load_function("abi_indexer_scores_wmma128_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             topk_mask_kernel: module
                 .load_function("abi_topk_mask_kernel")
@@ -11613,6 +12749,167 @@ impl AbiKernelModule {
             )
         }
         .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn indexer_scores_tensor(
+        &self,
+        stream: &CudaStream,
+        path: IndexerScoreKernel,
+        scores_ptr: u64,
+        q_ptr: u64,
+        weights_ptr: u64,
+        index_comp_ptr: u64,
+        n_comp: u32,
+        n_tokens: u32,
+        pos0: u32,
+        n_head: u32,
+        head_dim: u32,
+        ratio: u32,
+        scale: f32,
+        causal: bool,
+    ) -> bool {
+        let q_len = u64::from(n_tokens) * u64::from(n_head) * u64::from(head_dim);
+        let weights_len = u64::from(n_tokens) * u64::from(n_head);
+        let index_comp_len = u64::from(n_comp) * u64::from(head_dim);
+        let scores_len = u64::from(n_tokens) * u64::from(n_comp);
+        let mut n_comp = n_comp;
+        let mut n_tokens = n_tokens;
+        let mut pos0 = pos0;
+        let mut n_head = n_head;
+        let mut head_dim = head_dim;
+        let mut ratio = ratio;
+        let mut scale = scale;
+        let mut causal = u32::from(causal);
+        let mut q_ptr = q_ptr;
+        let mut q_len = q_len;
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = weights_len;
+        let mut index_comp_ptr = index_comp_ptr;
+        let mut index_comp_len = index_comp_len;
+        let mut scores_ptr = scores_ptr;
+        let mut scores_len = scores_len;
+
+        match path {
+            IndexerScoreKernel::Scalar => {
+                let mut params = [
+                    (&mut n_comp as *mut u32).cast::<c_void>(),
+                    (&mut n_tokens as *mut u32).cast::<c_void>(),
+                    (&mut pos0 as *mut u32).cast::<c_void>(),
+                    (&mut n_head as *mut u32).cast::<c_void>(),
+                    (&mut head_dim as *mut u32).cast::<c_void>(),
+                    (&mut ratio as *mut u32).cast::<c_void>(),
+                    (&mut scale as *mut f32).cast::<c_void>(),
+                    (&mut causal as *mut u32).cast::<c_void>(),
+                    (&mut q_ptr as *mut u64).cast::<c_void>(),
+                    (&mut q_len as *mut u64).cast::<c_void>(),
+                    (&mut weights_ptr as *mut u64).cast::<c_void>(),
+                    (&mut weights_len as *mut u64).cast::<c_void>(),
+                    (&mut index_comp_ptr as *mut u64).cast::<c_void>(),
+                    (&mut index_comp_len as *mut u64).cast::<c_void>(),
+                    (&mut scores_ptr as *mut u64).cast::<c_void>(),
+                    (&mut scores_len as *mut u64).cast::<c_void>(),
+                ];
+                unsafe {
+                    cuda_core::launch_kernel_on_stream(
+                        &self.indexer_scores_kernel,
+                        (n_comp, n_tokens, 1),
+                        (THREADS_PER_BLOCK, 1, 1),
+                        0,
+                        stream,
+                        &mut params,
+                    )
+                }
+                .is_ok()
+            }
+            IndexerScoreKernel::DirectOne => {
+                let mut params = [
+                    (&mut n_comp as *mut u32).cast::<c_void>(),
+                    (&mut pos0 as *mut u32).cast::<c_void>(),
+                    (&mut ratio as *mut u32).cast::<c_void>(),
+                    (&mut scale as *mut f32).cast::<c_void>(),
+                    (&mut causal as *mut u32).cast::<c_void>(),
+                    (&mut q_ptr as *mut u64).cast::<c_void>(),
+                    (&mut q_len as *mut u64).cast::<c_void>(),
+                    (&mut weights_ptr as *mut u64).cast::<c_void>(),
+                    (&mut weights_len as *mut u64).cast::<c_void>(),
+                    (&mut index_comp_ptr as *mut u64).cast::<c_void>(),
+                    (&mut index_comp_len as *mut u64).cast::<c_void>(),
+                    (&mut scores_ptr as *mut u64).cast::<c_void>(),
+                    (&mut scores_len as *mut u64).cast::<c_void>(),
+                ];
+                unsafe {
+                    cuda_core::launch_kernel_on_stream(
+                        &self.indexer_score_one_direct_kernel,
+                        (n_comp, 1, 1),
+                        (ABI_INDEXER_DIRECT_THREADS, 1, 1),
+                        0,
+                        stream,
+                        &mut params,
+                    )
+                }
+                .is_ok()
+            }
+            IndexerScoreKernel::Wmma
+            | IndexerScoreKernel::Wmma32
+            | IndexerScoreKernel::Wmma64
+            | IndexerScoreKernel::Wmma128 => {
+                let (kernel, components, threads) = match path {
+                    IndexerScoreKernel::Wmma => (
+                        &self.indexer_scores_wmma_kernel,
+                        ABI_INDEXER_TILE_COMPONENTS as u32,
+                        ABI_INDEXER_WMMA_THREADS,
+                    ),
+                    IndexerScoreKernel::Wmma32 => (
+                        &self.indexer_scores_wmma32_kernel,
+                        ABI_INDEXER_WMMA32_COMPONENTS as u32,
+                        ABI_INDEXER_WMMA32_THREADS,
+                    ),
+                    IndexerScoreKernel::Wmma64 => (
+                        &self.indexer_scores_wmma64_kernel,
+                        ABI_INDEXER_WMMA64_COMPONENTS as u32,
+                        ABI_INDEXER_WMMA64_THREADS,
+                    ),
+                    IndexerScoreKernel::Wmma128 => (
+                        &self.indexer_scores_wmma128_kernel,
+                        ABI_INDEXER_WMMA128_COMPONENTS as u32,
+                        ABI_INDEXER_WMMA128_THREADS,
+                    ),
+                    _ => unreachable!(),
+                };
+                let mut params = [
+                    (&mut n_comp as *mut u32).cast::<c_void>(),
+                    (&mut n_tokens as *mut u32).cast::<c_void>(),
+                    (&mut pos0 as *mut u32).cast::<c_void>(),
+                    (&mut ratio as *mut u32).cast::<c_void>(),
+                    (&mut scale as *mut f32).cast::<c_void>(),
+                    (&mut causal as *mut u32).cast::<c_void>(),
+                    (&mut q_ptr as *mut u64).cast::<c_void>(),
+                    (&mut q_len as *mut u64).cast::<c_void>(),
+                    (&mut weights_ptr as *mut u64).cast::<c_void>(),
+                    (&mut weights_len as *mut u64).cast::<c_void>(),
+                    (&mut index_comp_ptr as *mut u64).cast::<c_void>(),
+                    (&mut index_comp_len as *mut u64).cast::<c_void>(),
+                    (&mut scores_ptr as *mut u64).cast::<c_void>(),
+                    (&mut scores_len as *mut u64).cast::<c_void>(),
+                ];
+                unsafe {
+                    cuda_core::launch_kernel_on_stream(
+                        kernel,
+                        (
+                            n_comp.div_ceil(components),
+                            n_tokens.div_ceil(ABI_INDEXER_TILE_TOKENS as u32),
+                            1,
+                        ),
+                        (threads, 1, 1),
+                        0,
+                        stream,
+                        &mut params,
+                    )
+                }
+                .is_ok()
+            }
+        }
     }
 
     pub(crate) unsafe fn dsv4_topk_mask_tensor(

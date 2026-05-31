@@ -22,11 +22,12 @@ use crate::substrate::CudaOxideSubstrate;
 use crate::{
     q8_dp4a_enabled, select_attention_output_a_path, select_attention_prefill_path,
     select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
-    select_q8_matmul_path, select_router_select_path, AttentionOutputADispatchOptions,
-    AttentionOutputAPath, AttentionPrefillDispatchOptions, AttentionPrefillPath,
-    F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch,
-    Q8MatmulDispatchOptions, Q8MatmulPath, RouterSelectDispatchOptions, RouterSelectPath,
-    DS4_CUDA_ATTENTION_RAW_SCORE_CAP, DS4_CUDA_ATTENTION_SCORE_CAP,
+    select_indexer_score_kernel, select_q8_matmul_path, select_router_select_path,
+    AttentionOutputADispatchOptions, AttentionOutputAPath, AttentionPrefillDispatchOptions,
+    AttentionPrefillPath, F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch,
+    IndexerScoreDispatchOptions, Q8MatmulDispatchOptions, Q8MatmulPath,
+    RouterSelectDispatchOptions, RouterSelectPath, DS4_CUDA_ATTENTION_RAW_SCORE_CAP,
+    DS4_CUDA_ATTENTION_SCORE_CAP,
 };
 
 static BACKEND: Mutex<Option<CudaOxideSubstrate>> = Mutex::new(None);
@@ -3131,6 +3132,175 @@ pub unsafe extern "C" fn ds4_gpu_dsv4_indexer_qat_tensor(
             })
         })
         .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn abi_indexer_scores_launch(
+    scores: *mut Ds4GpuTensor,
+    q: *const Ds4GpuTensor,
+    weights: *const Ds4GpuTensor,
+    index_comp: *const Ds4GpuTensor,
+    n_comp: u32,
+    n_tokens: u32,
+    pos0: u32,
+    n_head: u32,
+    head_dim: u32,
+    ratio: u32,
+    scale: f32,
+    causal: bool,
+) -> bool {
+    let Some(scores) = (unsafe { tensor_ref(scores.cast_const()) }) else {
+        return false;
+    };
+    let Some(q) = (unsafe { tensor_ref(q) }) else {
+        return false;
+    };
+    let Some(weights) = (unsafe { tensor_ref(weights) }) else {
+        return false;
+    };
+    let Some(index_comp) = (unsafe { tensor_ref(index_comp) }) else {
+        return false;
+    };
+    let Some(q_elements) = u64::from(n_tokens)
+        .checked_mul(u64::from(n_head))
+        .and_then(|value| value.checked_mul(u64::from(head_dim)))
+    else {
+        return false;
+    };
+    let Some(weights_elements) = u64::from(n_tokens).checked_mul(u64::from(n_head)) else {
+        return false;
+    };
+    let Some(index_comp_elements) = u64::from(n_comp).checked_mul(u64::from(head_dim)) else {
+        return false;
+    };
+    let Some(scores_elements) = u64::from(n_tokens).checked_mul(u64::from(n_comp)) else {
+        return false;
+    };
+    let Some(q_bytes) = q_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(weights_bytes) = weights_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(index_comp_bytes) = index_comp_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(scores_bytes) = scores_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    if n_comp == 0
+        || n_tokens == 0
+        || n_head == 0
+        || head_dim == 0
+        || (causal && ratio == 0)
+        || q.bytes < q_bytes
+        || weights.bytes < weights_bytes
+        || index_comp.bytes < index_comp_bytes
+        || scores.bytes < scores_bytes
+    {
+        return false;
+    }
+    let path = select_indexer_score_kernel(IndexerScoreDispatchOptions {
+        n_tokens,
+        n_head,
+        head_dim,
+        quality_mode: ABI_QUALITY_MODE.load(Ordering::Relaxed),
+        no_direct_one: std::env::var_os("DS4_CUDA_NO_INDEXER_DIRECT_ONE").is_some(),
+        no_wmma: std::env::var_os("DS4_CUDA_NO_INDEXER_WMMA").is_some(),
+        no_wmma128: std::env::var_os("DS4_CUDA_NO_INDEXER_WMMA128").is_some(),
+        no_wmma64: std::env::var_os("DS4_CUDA_NO_INDEXER_WMMA64").is_some(),
+        no_wmma32: std::env::var_os("DS4_CUDA_NO_INDEXER_WMMA32").is_some(),
+    });
+    with_backend(|backend| {
+        with_abi_kernels(backend, |kernels| {
+            // SAFETY: all read/write tensor spans, nonzero launch dimensions,
+            // and the causal-ratio precondition are validated above.
+            Some(unsafe {
+                kernels.indexer_scores_tensor(
+                    backend.stream(),
+                    path,
+                    scores.device_ptr(),
+                    q.device_ptr(),
+                    weights.device_ptr(),
+                    index_comp.device_ptr(),
+                    n_comp,
+                    n_tokens,
+                    pos0,
+                    n_head,
+                    head_dim,
+                    ratio,
+                    scale,
+                    causal,
+                )
+            })
+        })
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_indexer_score_one_tensor(
+    scores: *mut Ds4GpuTensor,
+    q: *const Ds4GpuTensor,
+    weights: *const Ds4GpuTensor,
+    index_comp: *const Ds4GpuTensor,
+    n_comp: u32,
+    n_head: u32,
+    head_dim: u32,
+    scale: f32,
+) -> c_int {
+    status(|| unsafe {
+        abi_indexer_scores_launch(
+            scores, q, weights, index_comp, n_comp, 1, 0, n_head, head_dim, 1, scale, false,
+        )
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_indexer_scores_prefill_tensor(
+    scores: *mut Ds4GpuTensor,
+    q: *const Ds4GpuTensor,
+    weights: *const Ds4GpuTensor,
+    index_comp: *const Ds4GpuTensor,
+    n_comp: u32,
+    n_tokens: u32,
+    n_head: u32,
+    head_dim: u32,
+    ratio: u32,
+    scale: f32,
+) -> c_int {
+    status(|| unsafe {
+        abi_indexer_scores_launch(
+            scores, q, weights, index_comp, n_comp, n_tokens, 0, n_head, head_dim, ratio, scale,
+            true,
+        )
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_indexer_scores_decode_batch_tensor(
+    scores: *mut Ds4GpuTensor,
+    q: *const Ds4GpuTensor,
+    weights: *const Ds4GpuTensor,
+    index_comp: *const Ds4GpuTensor,
+    n_comp: u32,
+    n_tokens: u32,
+    pos0: u32,
+    n_head: u32,
+    head_dim: u32,
+    ratio: u32,
+    scale: f32,
+) -> c_int {
+    status(|| unsafe {
+        abi_indexer_scores_launch(
+            scores, q, weights, index_comp, n_comp, n_tokens, pos0, n_head, head_dim, ratio, scale,
+            true,
+        )
     })
 }
 

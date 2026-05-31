@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the public Rust CUDA DSV4 top-k mask ABI leaf."""
+"""Validate the public Rust CUDA indexer score-dispatch ABI leaf."""
 
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
 NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-topk-mask-smoke.json"
-HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_topk_mask_link_smoke.c"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-indexer-scores-smoke.json"
+HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_indexer_scores_link_smoke.c"
 
 
 @dataclass
@@ -65,16 +65,19 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     status = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA public DSV4 top-k mask ABI: {status} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA public indexer score-dispatch ABI: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.cuda_abi_topk_mask_smoke.v1", "schema drift")
+    report.check(fixture.get("schema") == "ds4.cuda_abi_indexer_scores_smoke.v1", "schema drift")
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
-    report.check(fixture.get("status") == "b300-pass-staticlib-public-topk-mask-abi", "status drift")
+    report.check(
+        fixture.get("status") == "b300-pass-staticlib-public-indexer-score-dispatch-abi",
+        "status drift",
+    )
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
@@ -84,26 +87,40 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
 def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     oracle = require_dict(report, fixture.get("oracle"), "oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
-    report.check(oracle.get("symbol") == "ds4_gpu_dsv4_topk_mask_tensor", "oracle symbol drift")
+    report.check(
+        oracle.get("symbols")
+        == [
+            "ds4_gpu_indexer_score_one_tensor",
+            "ds4_gpu_indexer_scores_prefill_tensor",
+            "ds4_gpu_indexer_scores_decode_batch_tensor",
+        ],
+        "oracle symbols drift",
+    )
     for marker in [
-        'extern "C" int ds4_gpu_dsv4_topk_mask_tensor',
-        "mask->bytes < (uint64_t)n_tokens * n_comp * sizeof(float)",
-        "topk->bytes < (uint64_t)n_tokens * top_k * sizeof(uint32_t)",
-        "topk_mask_kernel<<<blocks, 256>>>",
+        "static int indexer_scores_launch(",
+        'extern "C" int ds4_gpu_indexer_score_one_tensor',
+        'extern "C" int ds4_gpu_indexer_scores_prefill_tensor',
+        'extern "C" int ds4_gpu_indexer_scores_decode_batch_tensor',
+        'getenv("DS4_CUDA_NO_INDEXER_DIRECT_ONE") == NULL',
+        'getenv("DS4_CUDA_NO_INDEXER_WMMA128") == NULL',
+        'getenv("DS4_CUDA_NO_INDEXER_WMMA64") == NULL',
+        'getenv("DS4_CUDA_NO_INDEXER_WMMA32") == NULL',
+        "if (causal && ratio == 0) return 0;",
     ]:
-        report.check(marker in texts["cuda"], f"current-C top-k mask marker missing: {marker}")
+        report.check(marker in texts["cuda"], f"current-C score marker missing: {marker}")
 
 
 def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
-        ("exported_abi_symbol_count", 77),
-        ("exported_compute_symbol_count", 75),
-        ("embedded_kernel_count", 93),
+        ("exported_abi_symbol_count", 80),
+        ("exported_compute_symbol_count", 78),
+        ("embedded_kernel_count", 99),
         ("public_gpu_abi_function_count", 81),
-        ("owns_dsv4_topk_mask_tensor", True),
-        ("owns_topk_mask_kernel", True),
-        ("owns_indexer_score_abi", False),
+        ("owns_indexer_score_one_tensor", True),
+        ("owns_indexer_scores_prefill_tensor", True),
+        ("owns_indexer_scores_decode_batch_tensor", True),
+        ("owns_indexer_score_dispatch", True),
         ("owns_indexer_topk_selection_abi", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
@@ -113,36 +130,45 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
-    report.check(len(symbols) >= 77, "Rust ABI export count drift")
-    report.check("ds4_gpu_dsv4_topk_mask_tensor" in symbols, "top-k mask export missing")
+    report.check(len(symbols) >= 80, "Rust ABI export count drift")
+    for symbol in [
+        "ds4_gpu_indexer_score_one_tensor",
+        "ds4_gpu_indexer_scores_prefill_tensor",
+        "ds4_gpu_indexer_scores_decode_batch_tensor",
+    ]:
+        report.check(symbol in symbols, f"score export missing: {symbol}")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
-        'pub unsafe extern "C" fn ds4_gpu_dsv4_topk_mask_tensor',
-        "kernels.dsv4_topk_mask_tensor(",
-        "mask.bytes < mask_bytes",
-        "topk.bytes < topk_bytes",
-        "n_comp == 0",
-        "n_tokens == 0",
-        "top_k == 0",
+        "unsafe fn abi_indexer_scores_launch(",
+        'pub unsafe extern "C" fn ds4_gpu_indexer_score_one_tensor',
+        'pub unsafe extern "C" fn ds4_gpu_indexer_scores_prefill_tensor',
+        'pub unsafe extern "C" fn ds4_gpu_indexer_scores_decode_batch_tensor',
+        "select_indexer_score_kernel(IndexerScoreDispatchOptions",
+        'std::env::var_os("DS4_CUDA_NO_INDEXER_DIRECT_ONE")',
+        'std::env::var_os("DS4_CUDA_NO_INDEXER_WMMA128")',
+        "ABI_QUALITY_MODE.load(Ordering::Relaxed)",
+        "causal && ratio == 0",
     ]:
-        report.check(marker in texts["abi"], f"Rust top-k mask ABI marker missing: {marker}")
+        report.check(marker in texts["abi"], f"Rust score ABI marker missing: {marker}")
     for marker in [
-        "pub fn abi_topk_mask_kernel",
-        "topk_mask_kernel: CudaFunction",
-        '.load_function("abi_topk_mask_kernel")',
-        "fn dsv4_topk_mask_tensor(",
-        ".max(selected_count)",
+        "pub fn abi_indexer_scores_kernel",
+        "pub fn abi_indexer_score_one_direct_kernel",
+        "pub fn abi_indexer_scores_wmma_kernel",
+        "pub fn abi_indexer_scores_wmma32_kernel",
+        "pub fn abi_indexer_scores_wmma64_kernel",
+        "pub fn abi_indexer_scores_wmma128_kernel",
+        "fn indexer_scores_tensor(",
+        '.load_function("abi_indexer_scores_wmma128_kernel")',
     ]:
-        report.check(marker in texts["kernels"], f"embedded top-k mask marker missing: {marker}")
+        report.check(marker in texts["kernels"], f"embedded score marker missing: {marker}")
     for marker in [
-        "pub struct CudaAbiTopkMaskScope",
-        "M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
-        "exported_abi_symbol_count: 77",
-        "exported_compute_symbol_count: 75",
-        "embedded_kernel_count: 93",
-        "owns_dsv4_topk_mask_tensor: true",
-        "owns_topk_mask_kernel: true",
+        "pub struct CudaAbiIndexerScoreDispatchScope",
+        "M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
+        "exported_abi_symbol_count: 80",
+        "exported_compute_symbol_count: 78",
+        "embedded_kernel_count: 99",
+        "owns_indexer_score_dispatch: true",
         "owns_indexer_topk_selection_abi: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -151,8 +177,8 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
 
 def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
-    report.check(implementation.get("public_export") == "ds4_gpu_dsv4_topk_mask_tensor", "public export evidence drift")
-    report.check(implementation.get("kernel_entry") == "abi_topk_mask_kernel", "kernel entry drift")
+    report.check(len(implementation.get("public_exports", [])) == 3, "public export evidence drift")
+    report.check(len(implementation.get("kernel_entries", [])) == 6, "kernel entry evidence drift")
     report.check("--whole-archive" in implementation.get("linkage_requirement", ""), "linkage evidence missing")
     execution = require_dict(report, fixture.get("b300_execution"), "b300_execution")
     for key, expected in [
@@ -163,41 +189,45 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
         ("node", "c1v17-b300n1-nic1"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
         ("target", "sm_80"),
-        ("local_library_test_count", 167),
-        ("feature_release_test_count", 174),
-        ("staticlib_export_count", 77),
-        ("embedded_kernel_count", 93),
+        ("local_library_test_count", 168),
+        ("feature_release_test_count", 175),
+        ("staticlib_export_count", 80),
+        ("embedded_kernel_count", 99),
     ]:
         report.check(execution.get(key) == expected, f"B300 evidence drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
-        "predecessor_public_fused_qkv_consumer_passed",
-        "multi_token_mask_output_matches",
-        "selected_zero_mask_matches",
-        "excluded_negative_infinity_mask_matches",
-        "short_mask_rejected",
-        "short_topk_rejected",
-        "zero_dimension_rejected",
+        "predecessor_public_topk_mask_consumer_passed",
+        "scalar_output_matches",
+        "direct_one_output_matches",
+        "wmma128_prefill_matches",
+        "wmma64_prefill_matches",
+        "wmma32_prefill_matches",
+        "wmma_prefill_matches",
+        "quality_mode_scalar_fallback_matches",
+        "decode_batch_output_matches",
+        "short_tensor_rejected",
+        "zero_ratio_rejected",
         "null_rejected",
-        "embedded_topk_mask_kernel_loaded",
+        "embedded_score_kernels_loaded",
     ]:
         report.check(observed.get(key) is True, f"observed execution drift: {key}")
     for marker in [
-        "ds4_gpu_dsv4_topk_mask_tensor(",
-        "multi_token_mask_output_matches",
-        "selected_zero_mask_matches",
-        "excluded_negative_infinity_mask_matches",
-        "short_mask_rejected",
-        "short_topk_rejected",
+        "ds4_gpu_indexer_score_one_tensor(",
+        "ds4_gpu_indexer_scores_prefill_tensor(",
+        "ds4_gpu_indexer_scores_decode_batch_tensor(",
+        "DS4_CUDA_NO_INDEXER_WMMA128",
+        "quality_mode_scalar_fallback_matches",
+        "zero_ratio_rejected",
     ]:
         report.check(marker in texts["harness"], f"linked harness marker missing: {marker}")
     validation = require_dict(report, fixture.get("validation"), "validation")
     for key, expected in [
-        ("local_ds4_cuda_library_test_count", 167),
-        ("b300_feature_release_test_count", 174),
-        ("cuda_abi_comparators_passed", 81),
-        ("unified_report_passed", 254),
+        ("local_ds4_cuda_library_test_count", 168),
+        ("b300_feature_release_test_count", 175),
+        ("cuda_abi_comparators_passed", 82),
+        ("unified_report_passed", 255),
         ("unified_report_skipped", 45),
         ("unified_report_failed", 0),
     ]:
@@ -205,8 +235,8 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
 
 
 def validate_wiring(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    checker = "check_cuda_abi_topk_mask_smoke.py"
-    item = f"{MILESTONE}: Public DSV4 TopK Mask ABI"
+    checker = "check_cuda_abi_indexer_scores_smoke.py"
+    item = f"{MILESTONE}: Public Indexer Score Dispatch ABI"
     for target, label in [("roadmap", "roadmap"), ("todo", "TODO"), ("status", "status")]:
         report.check(item in texts[target], f"{label} item missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
@@ -220,9 +250,9 @@ def validate_wiring(report: Report, fixture: dict[str, Any], texts: dict[str, st
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("public ownership removed", lambda value: value["ownership"].update({"owns_dsv4_topk_mask_tensor": False})),
-        ("negative-infinity evidence removed", lambda value: value["b300_execution"]["observed"].update({"excluded_negative_infinity_mask_matches": False})),
-        ("B300 kernel count drift", lambda value: value["b300_execution"].update({"embedded_kernel_count": 92})),
+        ("public ownership removed", lambda value: value["ownership"].update({"owns_indexer_score_dispatch": False})),
+        ("WMMA evidence removed", lambda value: value["b300_execution"]["observed"].update({"wmma128_prefill_matches": False})),
+        ("B300 kernel count drift", lambda value: value["b300_execution"].update({"embedded_kernel_count": 93})),
         ("next stage drift", lambda value: value.update({"next_required_stage": "wrong"})),
     ]:
         candidate = copy.deepcopy(fixture)

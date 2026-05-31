@@ -12078,7 +12078,45 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the three public indexer score wrappers share one current-C
+  dispatcher and are independently executable before top-k selection and
+  route promotion.
+- Goal: export and validate the Rust public indexer score-dispatch wrappers
+  while preserving current-C dispatch and quality/environment controls.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexer Score Dispatch ABI
+
+- Status: done
+- Goal: export `ds4_gpu_indexer_score_one_tensor`,
+  `ds4_gpu_indexer_scores_prefill_tensor`, and
+  `ds4_gpu_indexer_scores_decode_batch_tensor` from the Rust CUDA ABI and
+  execute their shared score-dispatch behavior through a linked B300
+  consumer.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-indexer-scores-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_indexer_scores_smoke.py --negative-test`.
+- Evidence:
+  - Rust exports all three public score wrappers through shared validation
+    and current-C-compatible selection of scalar, direct-one, and
+    WMMA128/64/32/base paths.
+  - A linked B300 consumer validates each route, quality-mode scalar fallback,
+    decode-batch output, and rejection controls; the public top-k mask linked
+    predecessor remains passing.
+  - The rebuilt staticlib exposes 80 Rust ABI symbols and embeds 99 kernels.
+    Local tests pass with 168 tests; B300 feature tests pass with 175 tests;
+    all 82 CUDA ABI comparators pass; and the unified report passes with 255
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Indexer top-k selection, route promotion, whole-archive policy, and C
+    CUDA removal remain pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: export the remaining indexer score/top-k selection graph-compute wrappers, then
-  define route-promotion and whole-archive retention policy without claiming
-  C CUDA removal before those gates pass.
+- Goal: export the remaining indexer top-k selection graph-compute wrapper,
+  then define route-promotion and whole-archive retention policy without
+  claiming C CUDA removal before those gates pass.

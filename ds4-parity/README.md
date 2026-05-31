@@ -4118,6 +4118,18 @@ multiple tokens while retaining the current C rejection contract. Indexer
 score/top-k selection wrappers, route promotion, and C CUDA removal remain
 pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA public indexer score-dispatch ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_indexer_scores_smoke.py --negative-test
+```
+
+The Rust ABI now exports the public single-token, prefill, and decode-batch
+indexer score wrappers. The B300-linked consumer proves scalar, direct-one,
+WMMA128/64/32/base, quality-mode fallback, and validation behavior while
+leaving indexer top-k selection, route promotion, and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
