@@ -4130,6 +4130,18 @@ indexer score wrappers. The B300-linked consumer proves scalar, direct-one,
 WMMA128/64/32/base, quality-mode fallback, and validation behavior while
 leaving indexer top-k selection, route promotion, and C CUDA removal pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA public indexer top-k dispatch ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_indexer_topk_smoke.py --negative-test
+```
+
+The Rust ABI now exports the public indexer top-k wrapper. The B300-linked
+consumer proves scalar, specialized, packed-key, chunked-tree, disabled-path
+fallback, and rejection behavior while leaving route promotion,
+whole-archive production policy, and C CUDA removal pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

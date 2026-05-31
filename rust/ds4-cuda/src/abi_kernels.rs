@@ -10,11 +10,11 @@ use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, 
 use cuda_device::mma::{load_a_m16n8k16, load_b_m16n8k16, mma_m16n8k16_f32_f16, zero_accumulator};
 use cuda_device::{
     atomic::{AtomicOrdering, DeviceAtomicF32, DeviceAtomicU32},
-    cuda_module, integer, kernel, thread, warp, DisjointSlice, SharedArray,
+    cuda_module, integer, kernel, thread, warp, DisjointSlice, DynamicSharedArray, SharedArray,
 };
 use cuda_host::ltoir::{self, LtoirError};
 
-use crate::IndexerScoreKernel;
+use crate::{IndexerScoreKernel, IndexerTopkKernel};
 
 const THREADS_PER_BLOCK: u32 = 256;
 const ABI_KERNEL_ARTIFACT: &str = "ds4-cuda";
@@ -46,6 +46,17 @@ const ABI_INDEXER_WMMA64_THREADS: u32 = 128;
 const ABI_INDEXER_WMMA128_COMPONENTS: usize = 128;
 const ABI_INDEXER_WMMA128_WARPS: usize = 8;
 const ABI_INDEXER_WMMA128_THREADS: u32 = 256;
+const ABI_INDEXER_TOPK_1024_SORT_N: usize = 1024;
+const ABI_INDEXER_TOPK_2048_SORT_N: usize = 2048;
+const ABI_INDEXER_TOPK_4096_SORT_N: usize = 4096;
+const ABI_INDEXER_TOPK_8192_SORT_N: usize = 8192;
+const ABI_INDEXER_TOPK_THREADS: u32 = 1024;
+const ABI_INDEXER_TOPK_PACKED_THREADS: u32 = 512;
+const ABI_INDEXER_TOPK_PACKED_ITEMS_PER_THREAD: u32 = 16;
+const ABI_INDEXER_TOPK_PACKED_SHARED_KEY_BYTES: u32 =
+    (ABI_INDEXER_TOPK_8192_SORT_N * std::mem::size_of::<u64>()) as u32;
+const ABI_INDEXER_TOPK_EMPTY_KEY: u64 = 0x007f_ffff_u64 << 32;
+const ABI_INDEXER_TOPK_MERGE_GROUP: u32 = 8;
 pub(crate) const ABI_MOE_IQ2_SIGNS: [u8; 128] = [
     0, 129, 130, 3, 132, 5, 6, 135, 136, 9, 10, 139, 12, 141, 142, 15, 144, 17, 18, 147, 20, 149,
     150, 23, 24, 153, 154, 27, 156, 29, 30, 159, 160, 33, 34, 163, 36, 165, 166, 39, 40, 169, 170,
@@ -6365,6 +6376,719 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_indexer_topk_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        scores: &[f32],
+        mut selected: DisjointSlice<u32>,
+    ) {
+        let token = thread::blockIdx_x();
+        if token >= n_tokens || thread::threadIdx_x() != 0 {
+            return;
+        }
+        let score_base = token as usize * n_comp as usize;
+        let selected_base = token as usize * top_k as usize;
+        let mut k = 0;
+        while k < top_k {
+            unsafe {
+                *selected.get_unchecked_mut(selected_base + k as usize) = 0;
+            }
+            k += 1;
+        }
+        let mut comp = 0;
+        while comp < n_comp {
+            let value = scores[score_base + comp as usize];
+            k = 0;
+            while k < top_k {
+                let selected_index =
+                    unsafe { *selected.get_unchecked_mut(selected_base + k as usize) };
+                if k >= comp || value > scores[score_base + selected_index as usize] {
+                    let mut move_index = top_k - 1;
+                    while move_index > k {
+                        let previous = unsafe {
+                            *selected.get_unchecked_mut(selected_base + move_index as usize - 1)
+                        };
+                        unsafe {
+                            *selected.get_unchecked_mut(selected_base + move_index as usize) =
+                                previous;
+                        }
+                        move_index -= 1;
+                    }
+                    unsafe {
+                        *selected.get_unchecked_mut(selected_base + k as usize) = comp;
+                    }
+                    break;
+                }
+                k += 1;
+            }
+            comp += 1;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_1024_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        scores: &[f32],
+        mut selected: DisjointSlice<u32>,
+    ) {
+        static mut VALUES: SharedArray<f32, ABI_INDEXER_TOPK_1024_SORT_N> = SharedArray::UNINIT;
+        static mut INDICES: SharedArray<u32, ABI_INDEXER_TOPK_1024_SORT_N> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens || tid >= ABI_INDEXER_TOPK_THREADS {
+            return;
+        }
+        let index = tid as usize;
+        if tid < n_comp {
+            unsafe {
+                VALUES[index] = scores[token as usize * n_comp as usize + index];
+                INDICES[index] = tid;
+            }
+        } else {
+            unsafe {
+                VALUES[index] = f32::NEG_INFINITY;
+                INDICES[index] = u32::MAX;
+            }
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_1024_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                let other = tid ^ j;
+                if other > tid && other < ABI_INDEXER_TOPK_1024_SORT_N as u32 {
+                    let other_index = other as usize;
+                    let av = unsafe { VALUES[index] };
+                    let bv = unsafe { VALUES[other_index] };
+                    let ai = unsafe { INDICES[index] };
+                    let bi = unsafe { INDICES[other_index] };
+                    let desc_half = (tid & k) == 0;
+                    let b_better = bv > av || (bv == av && bi < ai);
+                    let a_better = av > bv || (av == bv && ai < bi);
+                    let swap = if desc_half { b_better } else { a_better };
+                    if swap {
+                        unsafe {
+                            VALUES[index] = bv;
+                            INDICES[index] = bi;
+                            VALUES[other_index] = av;
+                            INDICES[other_index] = ai;
+                        }
+                    }
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+
+        if tid < top_k {
+            unsafe {
+                *selected.get_unchecked_mut(token as usize * top_k as usize + index) =
+                    INDICES[index];
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_pow2_2048_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        scores: &[f32],
+        mut selected: DisjointSlice<u32>,
+    ) {
+        static mut VALUES: SharedArray<f32, ABI_INDEXER_TOPK_2048_SORT_N> = SharedArray::UNINIT;
+        static mut INDICES: SharedArray<u32, ABI_INDEXER_TOPK_2048_SORT_N> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens {
+            return;
+        }
+        let mut i = tid;
+        while i < ABI_INDEXER_TOPK_2048_SORT_N as u32 {
+            let index = i as usize;
+            if i < n_comp {
+                unsafe {
+                    VALUES[index] = scores[token as usize * n_comp as usize + index];
+                    INDICES[index] = i;
+                }
+            } else {
+                unsafe {
+                    VALUES[index] = f32::NEG_INFINITY;
+                    INDICES[index] = u32::MAX;
+                }
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_2048_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                i = tid;
+                while i < ABI_INDEXER_TOPK_2048_SORT_N as u32 {
+                    let other = i ^ j;
+                    if other > i && other < ABI_INDEXER_TOPK_2048_SORT_N as u32 {
+                        let index = i as usize;
+                        let other_index = other as usize;
+                        let av = unsafe { VALUES[index] };
+                        let bv = unsafe { VALUES[other_index] };
+                        let ai = unsafe { INDICES[index] };
+                        let bi = unsafe { INDICES[other_index] };
+                        let desc_half = (i & k) == 0;
+                        let b_better = bv > av || (bv == av && bi < ai);
+                        let a_better = av > bv || (av == bv && ai < bi);
+                        let swap = if desc_half { b_better } else { a_better };
+                        if swap {
+                            unsafe {
+                                VALUES[index] = bv;
+                                INDICES[index] = bi;
+                                VALUES[other_index] = av;
+                                INDICES[other_index] = ai;
+                            }
+                        }
+                    }
+                    i += ABI_INDEXER_TOPK_THREADS;
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+        i = tid;
+        while i < top_k {
+            unsafe {
+                *selected.get_unchecked_mut(token as usize * top_k as usize + i as usize) =
+                    INDICES[i as usize];
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_pow2_4096_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        scores: &[f32],
+        mut selected: DisjointSlice<u32>,
+    ) {
+        static mut VALUES: SharedArray<f32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+        static mut INDICES: SharedArray<u32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens {
+            return;
+        }
+        let mut i = tid;
+        while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let index = i as usize;
+            if i < n_comp {
+                unsafe {
+                    VALUES[index] = scores[token as usize * n_comp as usize + index];
+                    INDICES[index] = i;
+                }
+            } else {
+                unsafe {
+                    VALUES[index] = f32::NEG_INFINITY;
+                    INDICES[index] = u32::MAX;
+                }
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                i = tid;
+                while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                    let other = i ^ j;
+                    if other > i && other < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                        let index = i as usize;
+                        let other_index = other as usize;
+                        let av = unsafe { VALUES[index] };
+                        let bv = unsafe { VALUES[other_index] };
+                        let ai = unsafe { INDICES[index] };
+                        let bi = unsafe { INDICES[other_index] };
+                        let desc_half = (i & k) == 0;
+                        let b_better = bv > av || (bv == av && bi < ai);
+                        let a_better = av > bv || (av == bv && ai < bi);
+                        let swap = if desc_half { b_better } else { a_better };
+                        if swap {
+                            unsafe {
+                                VALUES[index] = bv;
+                                INDICES[index] = bi;
+                                VALUES[other_index] = av;
+                                INDICES[other_index] = ai;
+                            }
+                        }
+                    }
+                    i += ABI_INDEXER_TOPK_THREADS;
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+        i = tid;
+        while i < top_k {
+            unsafe {
+                *selected.get_unchecked_mut(token as usize * top_k as usize + i as usize) =
+                    INDICES[i as usize];
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_pow2_u16_8192_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        scores: &[f32],
+        mut selected: DisjointSlice<u32>,
+    ) {
+        static mut VALUES: SharedArray<f32, ABI_INDEXER_TOPK_8192_SORT_N> = SharedArray::UNINIT;
+        static mut INDICES: SharedArray<u16, ABI_INDEXER_TOPK_8192_SORT_N> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens {
+            return;
+        }
+        let mut i = tid;
+        while i < ABI_INDEXER_TOPK_8192_SORT_N as u32 {
+            let index = i as usize;
+            if i < n_comp {
+                unsafe {
+                    VALUES[index] = scores[token as usize * n_comp as usize + index];
+                    INDICES[index] = i as u16;
+                }
+            } else {
+                unsafe {
+                    VALUES[index] = f32::NEG_INFINITY;
+                    INDICES[index] = u16::MAX;
+                }
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_8192_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                i = tid;
+                while i < ABI_INDEXER_TOPK_8192_SORT_N as u32 {
+                    let other = i ^ j;
+                    if other > i && other < ABI_INDEXER_TOPK_8192_SORT_N as u32 {
+                        let index = i as usize;
+                        let other_index = other as usize;
+                        let av = unsafe { VALUES[index] };
+                        let bv = unsafe { VALUES[other_index] };
+                        let ai = unsafe { INDICES[index] } as u32;
+                        let bi = unsafe { INDICES[other_index] } as u32;
+                        let desc_half = (i & k) == 0;
+                        let b_better = bv > av || (bv == av && bi < ai);
+                        let a_better = av > bv || (av == bv && ai < bi);
+                        let swap = if desc_half { b_better } else { a_better };
+                        if swap {
+                            unsafe {
+                                VALUES[index] = bv;
+                                INDICES[index] = bi as u16;
+                                VALUES[other_index] = av;
+                                INDICES[other_index] = ai as u16;
+                            }
+                        }
+                    }
+                    i += ABI_INDEXER_TOPK_THREADS;
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+        i = tid;
+        while i < top_k {
+            unsafe {
+                *selected.get_unchecked_mut(token as usize * top_k as usize + i as usize) =
+                    INDICES[i as usize] as u32;
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_8192_packed_key_equivalent_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        scores: &[f32],
+        mut selected: DisjointSlice<u32>,
+    ) {
+        let keys = DynamicSharedArray::<u64>::get();
+        let token = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens || tid >= ABI_INDEXER_TOPK_PACKED_THREADS {
+            return;
+        }
+        let mut item = 0_u32;
+        while item < ABI_INDEXER_TOPK_PACKED_ITEMS_PER_THREAD {
+            let i = tid * ABI_INDEXER_TOPK_PACKED_ITEMS_PER_THREAD + item;
+            let key = if i < n_comp {
+                let value = scores[token as usize * n_comp as usize + i as usize];
+                let bits = value.to_bits();
+                let ordered = if (bits & 0x8000_0000) != 0 {
+                    !bits
+                } else {
+                    bits ^ 0x8000_0000
+                };
+                (ordered as u64) << 32 | (u32::MAX - i) as u64
+            } else {
+                ABI_INDEXER_TOPK_EMPTY_KEY
+            };
+            unsafe {
+                *keys.add(i as usize) = key;
+            }
+            item += 1;
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_8192_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                let mut i = tid;
+                while i < ABI_INDEXER_TOPK_8192_SORT_N as u32 {
+                    let other = i ^ j;
+                    if other > i && other < ABI_INDEXER_TOPK_8192_SORT_N as u32 {
+                        let left = unsafe { *keys.add(i as usize) };
+                        let right = unsafe { *keys.add(other as usize) };
+                        let descending = (i & k) == 0;
+                        let swap = if descending {
+                            right > left
+                        } else {
+                            left > right
+                        };
+                        if swap {
+                            unsafe {
+                                *keys.add(i as usize) = right;
+                                *keys.add(other as usize) = left;
+                            }
+                        }
+                    }
+                    i += ABI_INDEXER_TOPK_PACKED_THREADS;
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+
+        if tid < top_k {
+            let key = unsafe { *keys.add(tid as usize) };
+            unsafe {
+                *selected.get_unchecked_mut(token as usize * top_k as usize + tid as usize) =
+                    u32::MAX - key as u32;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_chunk_pow2_4096_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        candidate_stride: u32,
+        scores: &[f32],
+        mut scratch: DisjointSlice<u32>,
+    ) {
+        static mut VALUES: SharedArray<f32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+        static mut INDICES: SharedArray<u32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let chunk = thread::blockIdx_y();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens {
+            return;
+        }
+        let chunk_start = chunk * ABI_INDEXER_TOPK_4096_SORT_N as u32;
+        if chunk_start >= n_comp {
+            return;
+        }
+        let remaining = n_comp - chunk_start;
+        let chunk_n = if remaining < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            remaining
+        } else {
+            ABI_INDEXER_TOPK_4096_SORT_N as u32
+        };
+        let mut i = tid;
+        while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let index = i as usize;
+            if i < chunk_n {
+                unsafe {
+                    VALUES[index] =
+                        scores[token as usize * n_comp as usize + (chunk_start + i) as usize];
+                    INDICES[index] = chunk_start + i;
+                }
+            } else {
+                unsafe {
+                    VALUES[index] = f32::NEG_INFINITY;
+                    INDICES[index] = u32::MAX;
+                }
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                i = tid;
+                while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                    let other = i ^ j;
+                    if other > i && other < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                        let index = i as usize;
+                        let other_index = other as usize;
+                        let av = unsafe { VALUES[index] };
+                        let bv = unsafe { VALUES[other_index] };
+                        let ai = unsafe { INDICES[index] };
+                        let bi = unsafe { INDICES[other_index] };
+                        let desc_half = (i & k) == 0;
+                        let b_better = bv > av || (bv == av && bi < ai);
+                        let a_better = av > bv || (av == bv && ai < bi);
+                        let swap = if desc_half { b_better } else { a_better };
+                        if swap {
+                            unsafe {
+                                VALUES[index] = bv;
+                                INDICES[index] = bi;
+                                VALUES[other_index] = av;
+                                INDICES[other_index] = ai;
+                            }
+                        }
+                    }
+                    i += ABI_INDEXER_TOPK_THREADS;
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+
+        i = tid;
+        while i < top_k {
+            let out = token as usize * candidate_stride as usize
+                + chunk as usize * top_k as usize
+                + i as usize;
+            unsafe {
+                *scratch.get_unchecked_mut(out) = INDICES[i as usize];
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_tree_merge_pow2_4096_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        n_sets: u32,
+        merge_group: u32,
+        candidate_offset: u32,
+        candidate_stride: u32,
+        out_offset: u32,
+        out_stride: u32,
+        scores: &[f32],
+        mut scratch: DisjointSlice<u32>,
+    ) {
+        static mut VALUES: SharedArray<f32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+        static mut INDICES: SharedArray<u32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let group = thread::blockIdx_y();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens {
+            return;
+        }
+        let set0 = group * merge_group;
+        if set0 >= n_sets {
+            return;
+        }
+        let remaining = n_sets - set0;
+        let set_count = if remaining < merge_group {
+            remaining
+        } else {
+            merge_group
+        };
+        let candidate_count = set_count * top_k;
+        let mut i = tid;
+        while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let mut index = u32::MAX;
+            let mut value = f32::NEG_INFINITY;
+            if i < candidate_count {
+                let source = candidate_offset as usize
+                    + token as usize * candidate_stride as usize
+                    + set0 as usize * top_k as usize
+                    + i as usize;
+                index = unsafe { *scratch.get_unchecked_mut(source) };
+                if index < n_comp {
+                    value = scores[token as usize * n_comp as usize + index as usize];
+                }
+            }
+            unsafe {
+                VALUES[i as usize] = value;
+                INDICES[i as usize] = index;
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                i = tid;
+                while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                    let other = i ^ j;
+                    if other > i && other < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                        let index = i as usize;
+                        let other_index = other as usize;
+                        let av = unsafe { VALUES[index] };
+                        let bv = unsafe { VALUES[other_index] };
+                        let ai = unsafe { INDICES[index] };
+                        let bi = unsafe { INDICES[other_index] };
+                        let desc_half = (i & k) == 0;
+                        let b_better = bv > av || (bv == av && bi < ai);
+                        let a_better = av > bv || (av == bv && ai < bi);
+                        let swap = if desc_half { b_better } else { a_better };
+                        if swap {
+                            unsafe {
+                                VALUES[index] = bv;
+                                INDICES[index] = bi;
+                                VALUES[other_index] = av;
+                                INDICES[other_index] = ai;
+                            }
+                        }
+                    }
+                    i += ABI_INDEXER_TOPK_THREADS;
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+
+        i = tid;
+        while i < top_k {
+            let out = out_offset as usize
+                + token as usize * out_stride as usize
+                + group as usize * top_k as usize
+                + i as usize;
+            unsafe {
+                *scratch.get_unchecked_mut(out) = INDICES[i as usize];
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_indexer_topk_merge_pow2_4096_kernel(
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+        candidate_offset: u32,
+        candidate_count: u32,
+        candidate_stride: u32,
+        candidates: &[u32],
+        scores: &[f32],
+        mut selected: DisjointSlice<u32>,
+    ) {
+        static mut VALUES: SharedArray<f32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+        static mut INDICES: SharedArray<u32, ABI_INDEXER_TOPK_4096_SORT_N> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens {
+            return;
+        }
+        let mut i = tid;
+        while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let mut index = u32::MAX;
+            let mut value = f32::NEG_INFINITY;
+            if i < candidate_count {
+                let source = candidate_offset as usize
+                    + token as usize * candidate_stride as usize
+                    + i as usize;
+                index = candidates[source];
+                if index < n_comp {
+                    value = scores[token as usize * n_comp as usize + index as usize];
+                }
+            }
+            unsafe {
+                VALUES[i as usize] = value;
+                INDICES[i as usize] = index;
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+        thread::sync_threads();
+
+        let mut k = 2_u32;
+        while k <= ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+            let mut j = k >> 1;
+            while j > 0 {
+                i = tid;
+                while i < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                    let other = i ^ j;
+                    if other > i && other < ABI_INDEXER_TOPK_4096_SORT_N as u32 {
+                        let index = i as usize;
+                        let other_index = other as usize;
+                        let av = unsafe { VALUES[index] };
+                        let bv = unsafe { VALUES[other_index] };
+                        let ai = unsafe { INDICES[index] };
+                        let bi = unsafe { INDICES[other_index] };
+                        let desc_half = (i & k) == 0;
+                        let b_better = bv > av || (bv == av && bi < ai);
+                        let a_better = av > bv || (av == bv && ai < bi);
+                        let swap = if desc_half { b_better } else { a_better };
+                        if swap {
+                            unsafe {
+                                VALUES[index] = bv;
+                                INDICES[index] = bi;
+                                VALUES[other_index] = av;
+                                INDICES[other_index] = ai;
+                            }
+                        }
+                    }
+                    i += ABI_INDEXER_TOPK_THREADS;
+                }
+                thread::sync_threads();
+                j >>= 1;
+            }
+            k <<= 1;
+        }
+
+        i = tid;
+        while i < top_k {
+            unsafe {
+                *selected.get_unchecked_mut(token as usize * top_k as usize + i as usize) =
+                    INDICES[i as usize];
+            }
+            i += ABI_INDEXER_TOPK_THREADS;
+        }
+    }
+
+    #[kernel]
     pub fn abi_topk_mask_kernel(
         count: u64,
         n_comp: u32,
@@ -7507,6 +8231,15 @@ pub(crate) struct AbiKernelModule {
     indexer_scores_wmma32_kernel: CudaFunction,
     indexer_scores_wmma64_kernel: CudaFunction,
     indexer_scores_wmma128_kernel: CudaFunction,
+    indexer_topk_kernel: CudaFunction,
+    indexer_topk_1024_kernel: CudaFunction,
+    indexer_topk_pow2_2048_kernel: CudaFunction,
+    indexer_topk_pow2_4096_kernel: CudaFunction,
+    indexer_topk_pow2_u16_8192_kernel: CudaFunction,
+    indexer_topk_8192_packed_key_equivalent_kernel: CudaFunction,
+    indexer_topk_chunk_pow2_4096_kernel: CudaFunction,
+    indexer_topk_tree_merge_pow2_4096_kernel: CudaFunction,
+    indexer_topk_merge_pow2_4096_kernel: CudaFunction,
     topk_mask_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
     dsv4_qkv_rms_norm_rows_kernel: CudaFunction,
@@ -7765,6 +8498,33 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             indexer_scores_wmma128_kernel: module
                 .load_function("abi_indexer_scores_wmma128_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_kernel: module
+                .load_function("abi_indexer_topk_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_1024_kernel: module
+                .load_function("abi_indexer_topk_1024_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_pow2_2048_kernel: module
+                .load_function("abi_indexer_topk_pow2_2048_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_pow2_4096_kernel: module
+                .load_function("abi_indexer_topk_pow2_4096_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_pow2_u16_8192_kernel: module
+                .load_function("abi_indexer_topk_pow2_u16_8192_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_8192_packed_key_equivalent_kernel: module
+                .load_function("abi_indexer_topk_8192_packed_key_equivalent_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_chunk_pow2_4096_kernel: module
+                .load_function("abi_indexer_topk_chunk_pow2_4096_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_tree_merge_pow2_4096_kernel: module
+                .load_function("abi_indexer_topk_tree_merge_pow2_4096_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexer_topk_merge_pow2_4096_kernel: module
+                .load_function("abi_indexer_topk_merge_pow2_4096_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             topk_mask_kernel: module
                 .load_function("abi_topk_mask_kernel")
@@ -12909,6 +13669,292 @@ impl AbiKernelModule {
                 }
                 .is_ok()
             }
+        }
+    }
+
+    pub(crate) fn indexer_topk_packed_dynamic_shared_available(&self) -> bool {
+        self.indexer_topk_8192_packed_key_equivalent_kernel
+            .set_max_dynamic_shared_memory_size(ABI_INDEXER_TOPK_PACKED_SHARED_KEY_BYTES as i32)
+            .is_ok()
+    }
+
+    unsafe fn launch_indexer_topk_simple(
+        &self,
+        kernel: &CudaFunction,
+        stream: &CudaStream,
+        config: LaunchConfig,
+        selected_ptr: u64,
+        scores_ptr: u64,
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+    ) -> bool {
+        let mut n_comp = n_comp;
+        let mut n_tokens = n_tokens;
+        let mut top_k = top_k;
+        let mut scores_ptr = scores_ptr;
+        let mut scores_len = u64::from(n_comp) * u64::from(n_tokens);
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(top_k) * u64::from(n_tokens);
+        let mut params = [
+            (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut top_k as *mut u32).cast::<c_void>(),
+            (&mut scores_ptr as *mut u64).cast::<c_void>(),
+            (&mut scores_len as *mut u64).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn indexer_topk_chunked_tree_tensor(
+        &self,
+        stream: &CudaStream,
+        selected_ptr: u64,
+        scores_ptr: u64,
+        scratch_ptr: u64,
+        scratch_len: u64,
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+    ) -> bool {
+        let n_chunks = n_comp.div_ceil(ABI_INDEXER_TOPK_4096_SORT_N as u32);
+        let Some(initial_stride) = n_chunks.checked_mul(top_k) else {
+            return false;
+        };
+        let Some(mut required) = n_tokens.checked_mul(initial_stride) else {
+            return false;
+        };
+        let mut n_sets = n_chunks;
+        while n_sets > ABI_INDEXER_TOPK_MERGE_GROUP {
+            n_sets = n_sets.div_ceil(ABI_INDEXER_TOPK_MERGE_GROUP);
+            let Some(next_stride) = n_sets.checked_mul(top_k) else {
+                return false;
+            };
+            let Some(next_size) = n_tokens.checked_mul(next_stride) else {
+                return false;
+            };
+            let Some(next_required) = required.checked_add(next_size) else {
+                return false;
+            };
+            required = next_required;
+        }
+        if scratch_len < u64::from(required) {
+            return false;
+        }
+
+        let mut n_comp_arg = n_comp;
+        let mut n_tokens_arg = n_tokens;
+        let mut top_k_arg = top_k;
+        let mut candidate_stride = n_chunks * top_k;
+        let mut scores_ptr_arg = scores_ptr;
+        let mut scores_len = u64::from(n_comp) * u64::from(n_tokens);
+        let mut scratch_ptr_arg = scratch_ptr;
+        let mut scratch_len_arg = scratch_len;
+        let mut chunk_params = [
+            (&mut n_comp_arg as *mut u32).cast::<c_void>(),
+            (&mut n_tokens_arg as *mut u32).cast::<c_void>(),
+            (&mut top_k_arg as *mut u32).cast::<c_void>(),
+            (&mut candidate_stride as *mut u32).cast::<c_void>(),
+            (&mut scores_ptr_arg as *mut u64).cast::<c_void>(),
+            (&mut scores_len as *mut u64).cast::<c_void>(),
+            (&mut scratch_ptr_arg as *mut u64).cast::<c_void>(),
+            (&mut scratch_len_arg as *mut u64).cast::<c_void>(),
+        ];
+        if unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.indexer_topk_chunk_pow2_4096_kernel,
+                (n_tokens, n_chunks, 1),
+                (ABI_INDEXER_TOPK_THREADS, 1, 1),
+                0,
+                stream,
+                &mut chunk_params,
+            )
+        }
+        .is_err()
+        {
+            return false;
+        }
+
+        let mut n_sets = n_chunks;
+        let mut current_offset = 0_u32;
+        let mut current_stride = n_chunks * top_k;
+        let mut current_total = n_tokens * current_stride;
+        while n_sets > ABI_INDEXER_TOPK_MERGE_GROUP {
+            let next_sets = n_sets.div_ceil(ABI_INDEXER_TOPK_MERGE_GROUP);
+            let next_stride = next_sets * top_k;
+            let next_offset = current_total;
+            let mut n_comp_arg = n_comp;
+            let mut n_tokens_arg = n_tokens;
+            let mut top_k_arg = top_k;
+            let mut n_sets_arg = n_sets;
+            let mut merge_group = ABI_INDEXER_TOPK_MERGE_GROUP;
+            let mut candidate_offset = current_offset;
+            let mut candidate_stride = current_stride;
+            let mut out_offset = next_offset;
+            let mut out_stride = next_stride;
+            let mut scores_ptr_arg = scores_ptr;
+            let mut scores_len = u64::from(n_comp) * u64::from(n_tokens);
+            let mut scratch_ptr_arg = scratch_ptr;
+            let mut scratch_len_arg = scratch_len;
+            let mut merge_params = [
+                (&mut n_comp_arg as *mut u32).cast::<c_void>(),
+                (&mut n_tokens_arg as *mut u32).cast::<c_void>(),
+                (&mut top_k_arg as *mut u32).cast::<c_void>(),
+                (&mut n_sets_arg as *mut u32).cast::<c_void>(),
+                (&mut merge_group as *mut u32).cast::<c_void>(),
+                (&mut candidate_offset as *mut u32).cast::<c_void>(),
+                (&mut candidate_stride as *mut u32).cast::<c_void>(),
+                (&mut out_offset as *mut u32).cast::<c_void>(),
+                (&mut out_stride as *mut u32).cast::<c_void>(),
+                (&mut scores_ptr_arg as *mut u64).cast::<c_void>(),
+                (&mut scores_len as *mut u64).cast::<c_void>(),
+                (&mut scratch_ptr_arg as *mut u64).cast::<c_void>(),
+                (&mut scratch_len_arg as *mut u64).cast::<c_void>(),
+            ];
+            if unsafe {
+                cuda_core::launch_kernel_on_stream(
+                    &self.indexer_topk_tree_merge_pow2_4096_kernel,
+                    (n_tokens, next_sets, 1),
+                    (ABI_INDEXER_TOPK_THREADS, 1, 1),
+                    0,
+                    stream,
+                    &mut merge_params,
+                )
+            }
+            .is_err()
+            {
+                return false;
+            }
+            current_total += n_tokens * next_stride;
+            current_offset = next_offset;
+            current_stride = next_stride;
+            n_sets = next_sets;
+        }
+
+        let mut n_comp_arg = n_comp;
+        let mut n_tokens_arg = n_tokens;
+        let mut top_k_arg = top_k;
+        let mut candidate_offset = current_offset;
+        let mut candidate_count = n_sets * top_k;
+        let mut candidate_stride = current_stride;
+        let mut scratch_ptr_arg = scratch_ptr;
+        let mut scratch_len_arg = scratch_len;
+        let mut scores_ptr_arg = scores_ptr;
+        let mut scores_len = u64::from(n_comp) * u64::from(n_tokens);
+        let mut selected_ptr_arg = selected_ptr;
+        let mut selected_len = u64::from(top_k) * u64::from(n_tokens);
+        let mut final_params = [
+            (&mut n_comp_arg as *mut u32).cast::<c_void>(),
+            (&mut n_tokens_arg as *mut u32).cast::<c_void>(),
+            (&mut top_k_arg as *mut u32).cast::<c_void>(),
+            (&mut candidate_offset as *mut u32).cast::<c_void>(),
+            (&mut candidate_count as *mut u32).cast::<c_void>(),
+            (&mut candidate_stride as *mut u32).cast::<c_void>(),
+            (&mut scratch_ptr_arg as *mut u64).cast::<c_void>(),
+            (&mut scratch_len_arg as *mut u64).cast::<c_void>(),
+            (&mut scores_ptr_arg as *mut u64).cast::<c_void>(),
+            (&mut scores_len as *mut u64).cast::<c_void>(),
+            (&mut selected_ptr_arg as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.indexer_topk_merge_pow2_4096_kernel,
+                (n_tokens, 1, 1),
+                (ABI_INDEXER_TOPK_THREADS, 1, 1),
+                0,
+                stream,
+                &mut final_params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn indexer_topk_tensor(
+        &self,
+        stream: &CudaStream,
+        path: IndexerTopkKernel,
+        selected_ptr: u64,
+        scores_ptr: u64,
+        scratch: Option<(u64, u64)>,
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+    ) -> bool {
+        let (kernel, block_dim, shared_mem_bytes) = match path {
+            IndexerTopkKernel::Scalar => (&self.indexer_topk_kernel, (1, 1, 1), 0),
+            IndexerTopkKernel::Topk1024 => (
+                &self.indexer_topk_1024_kernel,
+                (ABI_INDEXER_TOPK_THREADS, 1, 1),
+                0,
+            ),
+            IndexerTopkKernel::Pow2U32x2048 => (
+                &self.indexer_topk_pow2_2048_kernel,
+                (ABI_INDEXER_TOPK_THREADS, 1, 1),
+                0,
+            ),
+            IndexerTopkKernel::Pow2U32x4096 => (
+                &self.indexer_topk_pow2_4096_kernel,
+                (ABI_INDEXER_TOPK_THREADS, 1, 1),
+                0,
+            ),
+            IndexerTopkKernel::Pow2U16x8192 => (
+                &self.indexer_topk_pow2_u16_8192_kernel,
+                (ABI_INDEXER_TOPK_THREADS, 1, 1),
+                0,
+            ),
+            IndexerTopkKernel::PackedKeyEquivalent => (
+                &self.indexer_topk_8192_packed_key_equivalent_kernel,
+                (ABI_INDEXER_TOPK_PACKED_THREADS, 1, 1),
+                ABI_INDEXER_TOPK_PACKED_SHARED_KEY_BYTES,
+            ),
+            IndexerTopkKernel::ChunkedTree => {
+                let Some((scratch_ptr, scratch_len)) = scratch else {
+                    return false;
+                };
+                return unsafe {
+                    self.indexer_topk_chunked_tree_tensor(
+                        stream,
+                        selected_ptr,
+                        scores_ptr,
+                        scratch_ptr,
+                        scratch_len,
+                        n_comp,
+                        n_tokens,
+                        top_k,
+                    )
+                };
+            }
+        };
+        unsafe {
+            self.launch_indexer_topk_simple(
+                kernel,
+                stream,
+                LaunchConfig {
+                    grid_dim: (n_tokens, 1, 1),
+                    block_dim,
+                    shared_mem_bytes,
+                },
+                selected_ptr,
+                scores_ptr,
+                n_comp,
+                n_tokens,
+                top_k,
+            )
         }
     }
 

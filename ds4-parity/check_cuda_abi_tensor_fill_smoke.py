@@ -104,7 +104,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
     "ds4_gpu_dsv4_topk_mask_tensor",
     "ds4_gpu_indexer_score_one_tensor",
     "ds4_gpu_indexer_scores_prefill_tensor",
-    "ds4_gpu_indexer_scores_decode_batch_tensor",
+    "ds4_gpu_indexer_scores_decode_batch_tensor", "ds4_gpu_indexer_topk_tensor",
 ]
 
 

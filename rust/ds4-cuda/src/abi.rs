@@ -22,10 +22,11 @@ use crate::substrate::CudaOxideSubstrate;
 use crate::{
     q8_dp4a_enabled, select_attention_output_a_path, select_attention_prefill_path,
     select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
-    select_indexer_score_kernel, select_q8_matmul_path, select_router_select_path,
-    AttentionOutputADispatchOptions, AttentionOutputAPath, AttentionPrefillDispatchOptions,
-    AttentionPrefillPath, F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch,
-    IndexerScoreDispatchOptions, Q8MatmulDispatchOptions, Q8MatmulPath,
+    select_indexer_score_kernel, select_indexer_topk_kernel, select_q8_matmul_path,
+    select_router_select_path, AttentionOutputADispatchOptions, AttentionOutputAPath,
+    AttentionPrefillDispatchOptions, AttentionPrefillPath, F16PairProjectionDispatch,
+    F16PairProjectionPath, F16ProjectionDispatch, IndexerScoreDispatchOptions,
+    IndexerTopkDispatchOptions, IndexerTopkKernel, Q8MatmulDispatchOptions, Q8MatmulPath,
     RouterSelectDispatchOptions, RouterSelectPath, DS4_CUDA_ATTENTION_RAW_SCORE_CAP,
     DS4_CUDA_ATTENTION_SCORE_CAP,
 };
@@ -43,6 +44,8 @@ static ABI_MOE_IQ2_TABLES: Mutex<Option<AbiMoeIq2Tables>> = Mutex::new(None);
 static ABI_ROUTED_MOE_BATCH_SCRATCH: Mutex<Option<AbiRoutedMoeBatchScratch>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_INDEXED_TOPK_SORT_SCRATCH: Mutex<Option<DeviceBuffer<i32>>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_INDEXER_TOPK_TREE_SCRATCH: Mutex<Option<DeviceBuffer<u32>>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH: Mutex<Option<AbiAttentionOutputCublasScratch>> =
     Mutex::new(None);
@@ -627,6 +630,41 @@ fn with_abi_indexed_topk_sort_scratch<T>(
         *scratch = Some(backend.zeroed::<i32>(elements).ok()?);
     }
     operation(scratch.as_mut()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_indexer_topk_tree_scratch<T>(
+    backend: &CudaOxideSubstrate,
+    elements: usize,
+    operation: impl FnOnce(&mut DeviceBuffer<u32>) -> Option<T>,
+) -> Option<T> {
+    if elements == 0 {
+        return None;
+    }
+    let mut scratch = ABI_INDEXER_TOPK_TREE_SCRATCH.lock().ok()?;
+    if scratch
+        .as_ref()
+        .is_none_or(|current| current.len() < elements)
+    {
+        if scratch.is_some() {
+            backend.synchronize().ok()?;
+        }
+        *scratch = Some(backend.zeroed::<u32>(elements).ok()?);
+    }
+    operation(scratch.as_mut()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn abi_indexer_topk_tree_scratch_elements(n_comp: u32, n_tokens: u32, top_k: u32) -> Option<usize> {
+    const CHUNK_N: u32 = 4096;
+    const MERGE_GROUP: u32 = 8;
+    let mut n_sets = n_comp.div_ceil(CHUNK_N);
+    let mut elements_per_token = n_sets.checked_mul(top_k)?;
+    while n_sets > MERGE_GROUP {
+        n_sets = n_sets.div_ceil(MERGE_GROUP);
+        elements_per_token = elements_per_token.checked_add(n_sets.checked_mul(top_k)?)?;
+    }
+    usize::try_from(n_tokens.checked_mul(elements_per_token)?).ok()
 }
 
 fn abi_no_tf32_selected() -> bool {
@@ -2116,6 +2154,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
                 *scratch = None;
             }
             #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut scratch) = ABI_INDEXER_TOPK_TREE_SCRATCH.lock() {
+                *scratch = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut scratch) = ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH.lock() {
                 *scratch = None;
             }
@@ -3301,6 +3343,99 @@ pub unsafe extern "C" fn ds4_gpu_indexer_scores_decode_batch_tensor(
             scores, q, weights, index_comp, n_comp, n_tokens, pos0, n_head, head_dim, ratio, scale,
             true,
         )
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_indexer_topk_tensor(
+    selected: *mut Ds4GpuTensor,
+    scores: *const Ds4GpuTensor,
+    n_comp: u32,
+    n_tokens: u32,
+    top_k: u32,
+) -> c_int {
+    status(|| {
+        let Some(selected) = (unsafe { tensor_ref(selected.cast_const()) }) else {
+            return false;
+        };
+        let Some(scores) = (unsafe { tensor_ref(scores) }) else {
+            return false;
+        };
+        let Some(score_count) = u64::from(n_tokens).checked_mul(u64::from(n_comp)) else {
+            return false;
+        };
+        let Some(selected_count) = u64::from(n_tokens).checked_mul(u64::from(top_k)) else {
+            return false;
+        };
+        let Some(score_bytes) = score_count.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(selected_bytes) = selected_count.checked_mul(size_of::<u32>() as u64) else {
+            return false;
+        };
+        if n_comp == 0
+            || n_tokens == 0
+            || top_k == 0
+            || top_k > n_comp
+            || scores.bytes < score_bytes
+            || selected.bytes < selected_bytes
+        {
+            return false;
+        }
+        let no_topk1024 = std::env::var_os("DS4_CUDA_NO_TOPK1024").is_some();
+        let no_topk2048 = std::env::var_os("DS4_CUDA_NO_TOPK2048").is_some();
+        let no_topk8192 = std::env::var_os("DS4_CUDA_NO_TOPK8192").is_some();
+        let no_topk_chunked = std::env::var_os("DS4_CUDA_NO_TOPK_CHUNKED").is_some();
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                let packed_candidate = top_k == 512
+                    && !no_topk2048
+                    && ((n_comp == 4096) || (n_comp > 4096 && n_comp <= 8192 && !no_topk8192));
+                let path = select_indexer_topk_kernel(IndexerTopkDispatchOptions {
+                    n_comp,
+                    top_k,
+                    no_topk1024,
+                    no_topk2048,
+                    no_topk8192,
+                    no_topk_chunked,
+                    packed_dynamic_shared_available: packed_candidate
+                        && kernels.indexer_topk_packed_dynamic_shared_available(),
+                });
+                if path == IndexerTopkKernel::ChunkedTree {
+                    let elements = abi_indexer_topk_tree_scratch_elements(n_comp, n_tokens, top_k)?;
+                    return with_abi_indexer_topk_tree_scratch(backend, elements, |scratch| {
+                        // SAFETY: input/output spans and scratch capacity are checked above.
+                        Some(unsafe {
+                            kernels.indexer_topk_tensor(
+                                backend.stream(),
+                                path,
+                                selected.device_ptr(),
+                                scores.device_ptr(),
+                                Some((scratch.cu_deviceptr(), scratch.len() as u64)),
+                                n_comp,
+                                n_tokens,
+                                top_k,
+                            )
+                        })
+                    });
+                }
+                // SAFETY: input/output spans and nonzero dimensions are checked above.
+                Some(unsafe {
+                    kernels.indexer_topk_tensor(
+                        backend.stream(),
+                        path,
+                        selected.device_ptr(),
+                        scores.device_ptr(),
+                        None,
+                        n_comp,
+                        n_tokens,
+                        top_k,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
     })
 }
 
