@@ -4253,6 +4253,20 @@ promotion: all `14` measured throughput fields fail the within-`5%` policy.
 Default routing and current-C CUDA remain retained while Rust CUDA graph
 benchmark performance is repaired.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA cached MoE dispatch performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_cached_moe_dispatch_performance_repair.py --negative-test
+```
+
+The opt-in Rust CUDA batched routed-MoE dispatcher now uses its retained
+shared-cache row-span kernels only within their bounded capacities. On B300
+this lowers the profiled `2048`-token routed-MoE stage by `26.0%` and
+improves prefill by `21.6%`, while the official-vector graph comparator
+continues to match all exercised selections. Current-C routing remains the
+default because the wider graph performance gap is still open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

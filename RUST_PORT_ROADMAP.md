@@ -13233,6 +13233,39 @@ Stage split:
   against same-session current-C on B300 before repeating any default-route
   promotion decision.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached MoE Dispatch Performance Repair
+
+- Status: done.
+- Goal: dispatch bounded batched routed-MoE row-span work through the
+  retained Rust CUDA shared-cache kernels and measure its B300 effect without
+  overclaiming graph benchmark closure.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-cached-moe-dispatch-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_cached_moe_dispatch_performance_repair.py --negative-test`.
+- Evidence:
+  - `ds4_gpu_routed_moe_batch_tensor` now selects the retained cached gate
+    row-span kernel only when `xq_blocks <= 16` and the retained cached down
+    row-span kernel only when `midq_blocks <= 8`; larger shapes retain the
+    previous uncached dispatch.
+  - On the identical instrumented `2048`-token B300 graph row, routed-MoE
+    stage time falls from `16515.705 ms` to `12225.556 ms` (`26.0%`) and
+    Rust prefill rises from `87.16` to `105.98 tok/s` (`21.6%`).
+  - The repair does not close promotion: the identical profiled current-C
+    reference completes routed MoE in `925.079 ms` and prefill at
+    `1319.06 tok/s`; the repaired Rust routed-MoE path remains `13.22x`
+    slower.
+  - The rebuilt B300 DSO SHA-256 is
+    `0588303b251de67fdb9963436c4b6bb5acf8f11f0478e83f771e68a46873a174`.
+    Its official-vector graph run passes `1958` checks plus `8` negative
+    checks, matching all `13` exercised selected tokens while retaining the
+    existing explicit `long_memory_archive` skip.
+  - Local `ds4-cuda` tests pass with `169` tests and B300 feature tests pass
+    with `176` tests. Default current-C routing remains retained; kernel-wide
+    Rust CUDA throughput diagnosis continues under this active performance
+    stage. The required pre-implementation and final non-interactive Claude
+    review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

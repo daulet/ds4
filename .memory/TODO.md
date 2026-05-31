@@ -12431,3 +12431,25 @@
 - Status: active
 - Goal: diagnose and repair the Rust CUDA graph benchmark performance gap on
   B300, then rerun same-session current-C comparison before any route change.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached MoE Dispatch Performance Repair
+
+- Status: done
+- Goal: dispatch bounded batched routed-MoE row-span work through the retained
+  Rust CUDA shared-cache kernels and measure the B300 effect without promoting
+  the runtime route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-cached-moe-dispatch-performance-repair.json`
+- Evidence:
+  - The Rust dispatcher uses cached gate row-span work for `xq_blocks <= 16`
+    and cached down row-span work for `midq_blocks <= 8`, with uncached
+    fallback preserved beyond those retained capacities.
+  - Identical instrumented B300 profiling improves routed-MoE from
+    `16515.705 ms` to `12225.556 ms` and prefill from `87.16` to
+    `105.98 tok/s`; current-C still records `925.079 ms` and
+    `1319.06 tok/s` on that row.
+  - The rebuilt DSO passes official graph vectors with all `13` exercised
+    selected tokens matching and passes the B300 feature suite with `176`
+    tests. Default current-C routing and removal blockers remain in force.
+  - The required pre-implementation and final non-interactive Claude review
+    attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.

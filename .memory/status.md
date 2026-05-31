@@ -4,6 +4,20 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached MoE Dispatch Performance Repair
+  is validated on B300. The batched routed-MoE dispatcher now selects the
+  retained shared-cache row-span kernels within their proved bounds
+  (`xq_blocks <= 16`, `midq_blocks <= 8`) and preserves uncached fallback.
+  On the identical profiled `2048`-token graph row, Rust routed-MoE time
+  falls from `16515.705 ms` to `12225.556 ms` and prefill improves from
+  `87.16` to `105.98 tok/s`; current-C remains much faster at `925.079 ms`
+  and `1319.06 tok/s`. The repaired DSO SHA-256 is
+  `0588303b251de67fdb9963436c4b6bb5acf8f11f0478e83f771e68a46873a174`;
+  it passes the official-vector graph comparator with all `13` exercised
+  selected tokens matching and B300 feature tests with `176` tests. Default
+  routing remains current-C and broader Rust CUDA performance repair stays
+  active. The required pre-implementation and final non-interactive Claude
+  review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Benchmark Performance Blocker
   is validated on B300. The repaired Rust DSO and linked graph-benchmark
   candidate complete both retained workloads and emit the backend identity

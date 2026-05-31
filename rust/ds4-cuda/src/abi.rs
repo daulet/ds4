@@ -8182,7 +8182,50 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                                     }
                                                     let gate_ok = if use_expert_tiles
                                                         && use_gate_rowspan
+                                                        && xq_blocks <= 16
                                                     {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_gate_up_mid_expert_tile8_rowspan_cached_tensor(
+                                                                    backend.stream(),
+                                                                    gate.device_ptr(),
+                                                                    up.device_ptr(),
+                                                                    mid.device_ptr(),
+                                                                    gate_weights_ptr,
+                                                                    up_weights_ptr,
+                                                                    down.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    scratch.offsets.cu_deviceptr(),
+                                                                    scratch.counts.cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_total
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_experts
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_starts
+                                                                        .cu_deviceptr(),
+                                                                    weights.device_ptr(),
+                                                                    tables.grid.cu_deviceptr(),
+                                                                    tables.signs.cu_deviceptr(),
+                                                                    gate_model_bytes,
+                                                                    xq_bytes,
+                                                                    xq_blocks,
+                                                                    expert_mid_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    tile_capacity,
+                                                                    gate_row_span,
+                                                                    gate_expert_bytes,
+                                                                    gate_row_bytes,
+                                                                    write_gate_up,
+                                                                    clamp,
+                                                                )
+                                                        }
+                                                    } else if use_expert_tiles && use_gate_rowspan {
                                                         unsafe {
                                                             kernels
                                                                 .moe_gate_up_mid_expert_tile8_rowspan_tensor(
@@ -8430,7 +8473,41 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                                                 tile_capacity,
                                                             )
                                                         };
-                                                        if use_down_rowspan {
+                                                        if use_down_rowspan && midq_blocks <= 8 {
+                                                            unsafe {
+                                                                kernels
+                                                                    .moe_down_expert_tile16_rowspan_cached_tensor(
+                                                                        backend.stream(),
+                                                                        down_ptr,
+                                                                        down_weights_ptr,
+                                                                        gate.device_ptr(),
+                                                                        scratch
+                                                                            .sorted_pairs
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .offsets
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .counts
+                                                                            .cu_deviceptr(),
+                                                                        down_tile_total,
+                                                                        down_tile_experts,
+                                                                        down_tile_starts,
+                                                                        down_model_bytes,
+                                                                        midq_bytes,
+                                                                        midq_blocks,
+                                                                        out_dim,
+                                                                        n_expert,
+                                                                        n_tokens,
+                                                                        pair_count,
+                                                                        down_tile_capacity,
+                                                                        down_row_span,
+                                                                        down_expert_bytes,
+                                                                        down_row_bytes,
+                                                                        use_atomic_down,
+                                                                    )
+                                                            }
+                                                        } else if use_down_rowspan {
                                                             unsafe {
                                                                 kernels
                                                                     .moe_down_expert_tile16_rowspan_tensor(

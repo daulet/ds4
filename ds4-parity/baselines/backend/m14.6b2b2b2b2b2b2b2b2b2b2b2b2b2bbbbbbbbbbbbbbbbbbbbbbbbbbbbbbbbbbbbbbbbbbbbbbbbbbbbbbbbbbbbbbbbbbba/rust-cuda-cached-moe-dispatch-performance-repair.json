@@ -1,0 +1,113 @@
+{
+  "schema": "ds4.cuda_rust_cached_moe_dispatch_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-bounded-moe-improvement-official-vectors",
+  "goal": "Route bounded batched Rust CUDA MoE row-span work through the retained shared-cache kernels and measure the B300 graph effect without promoting the runtime route.",
+  "ownership": {
+    "changes_rust_cuda_moe_dispatch": true,
+    "uses_existing_cached_kernel_surfaces": true,
+    "changes_kernel_implementation": false,
+    "bounded_performance_improvement_observed": true,
+    "official_vector_gate_preserved": true,
+    "same_session_promotion_gate_reexecuted": false,
+    "default_current_c_route_preserved": true,
+    "runtime_route_promoted": false,
+    "c_host_removal_allowed": false,
+    "c_cuda_removal_allowed": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi.rs",
+    "public_entry": "ds4_gpu_routed_moe_batch_tensor",
+    "gate_cached_kernel": "moe_gate_up_mid_expert_tile8_rowspan_cached_tensor",
+    "gate_cache_bound": "use_expert_tiles && use_gate_rowspan && xq_blocks <= 16",
+    "down_cached_kernel": "moe_down_expert_tile16_rowspan_cached_tensor",
+    "down_cache_bound": "use_down_rowspan && midq_blocks <= 8",
+    "fallback_preserved": "larger row-span requests continue to call the prior uncached row-span kernels"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "pre_repair_shared_library_sha256": "223542460727037720a65a43961692ff9b42bbd75ddabea16344eb1094e69903",
+    "repaired_shared_library_sha256": "0588303b251de67fdb9963436c4b6bb5acf8f11f0478e83f771e68a46873a174",
+    "official_vector_binary_sha256": "15dca8e084e787bc7beceee2e705142ccbfd1a63d16260582469fa083572b9fa",
+    "bounded_profile": {
+      "workload": "runtime graph benchmark, ctx-start=2048, ctx-max=2048, gen-tokens=1, stage profiling enabled",
+      "pre_repair_rust": {
+        "csv_sha256": "2a96ce1f5f9c366ea86471970087d941a1d2286c3c112d8192ab065aea739515",
+        "stderr_sha256": "395d37e99ed0a2c2a50e0ff0c44cf0095c5e20a857b1e3ed38fd335916b6e1b7",
+        "prefill_tps": 87.16,
+        "decode_tps": 16.28,
+        "routed_moe_ms": 16515.705,
+        "profiled_prefill_total_ms": 21834.157
+      },
+      "repaired_rust": {
+        "csv_sha256": "71eb2cf64518bc1cbe1592951461b955e2e7ba82e0486f486371734c0833f36e",
+        "stderr_sha256": "6774051e95666e3ae154f954a9f8e04bed231b0dedfdcf1ecd767d9b85a168d0",
+        "prefill_tps": 105.98,
+        "decode_tps": 16.29,
+        "routed_moe_ms": 12225.556,
+        "profiled_prefill_total_ms": 17633.703
+      },
+      "current_c_reference": {
+        "csv_sha256": "98eb052baa280eb14aed83bdfaf1bf9f0fb516ff640750af7f4d117d18cbec46",
+        "stderr_sha256": "41d523d3ea5f892b07914f3648e491e1c502be10d7318a1a9b737fdb1c866230",
+        "prefill_tps": 1319.06,
+        "decode_tps": 38.09,
+        "routed_moe_ms": 925.079,
+        "profiled_prefill_total_ms": 1364.320
+      },
+      "repair_effect": {
+        "rust_prefill_tps_increase_percent": 21.6,
+        "rust_routed_moe_time_reduction_percent": 26.0,
+        "remaining_rust_to_current_c_routed_moe_ratio": 13.22,
+        "remaining_rust_to_current_c_prefill_tps_ratio": 0.0803
+      }
+    },
+    "official_vector_probe": {
+      "runtime_graph_route": "graph",
+      "wrapper_wall_elapsed_seconds": 211,
+      "summary_sha256": "bf0ba85d8e2cdec2c8d4601ca94ba97e101fdee05dadad70cc384f774aa11d98",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "case_count": 5,
+      "exercised_case_count": 4,
+      "selected_step_count": 13,
+      "selected_match_count": 13,
+      "known_skipped_cases": [
+        {
+          "id": "long_memory_archive",
+          "reason": "API/official graph mismatch"
+        }
+      ],
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "c_cuda_removal": "blocked",
+    "c_host_removal": "not-in-scope-and-not-allowed",
+    "bounded_repair_result": "The retained cache-specialized MoE dispatch improves the measured Rust path but does not close the same-session current-C performance gap.",
+    "required_next_work": "Continue graph benchmark performance repair across the remaining slow Rust CUDA kernel families before repeating promotion acceptance."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 265,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}
