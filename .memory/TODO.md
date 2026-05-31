@@ -11576,14 +11576,49 @@
     passed, 45 skipped, and 0 failed. The pre-implementation and final
     pass-end non-interactive Claude review attempts each returned
     `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
-  - Batched routed MoE remains pending because the public `mid_is_f16` result
-    is missing from the CUDA definition; route promotion and C CUDA removal
-    remain open.
+  - At this leaf, batched routed MoE remained pending because the public
+    `mid_is_f16` result was missing from the CUDA definition; the following
+    contract-repair leaf resolves that prerequisite without claiming Rust
+    batch execution.
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active
-- Goal: resolve or scope the batched routed-MoE ABI contract, then connect
-  remaining graph compute, whole-archive retention policy, and production
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the missing CUDA `mid_is_f16` result can be repaired separately
+  from full Rust batch execution.
+- Goal: repair the batched routed-MoE result contract, then connect remaining
+  graph compute, whole-archive retention policy, and production
   route-promotion work without claiming C CUDA removal before those gates
   pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: CUDA Batched Routed MoE Mid Precision Contract Repair
+
+- Status: done
+- Goal: repair the retained CUDA public batch result contract by reporting
+  its F32 `mid` representation while leaving Rust batch execution pending.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/cuda-routed-moe-batch-mid-contract-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_routed_moe_batch_mid_contract_smoke.py --negative-test`.
+- Evidence:
+  - `ds4_cuda.cu` accepts the declared `bool *mid_is_f16` result and writes
+    `false` only after successful `routed_moe_launch` submission.
+  - The original-CUDA C-linked B300 witness compiles for `sm_103` and proves
+    nonzero two-token output, F32 reporting, null result handling, and
+    rejected-call result preservation.
+  - Local `ds4-cuda` library tests pass with 154 tests; all 68 Rust CUDA ABI
+    comparators pass; and the unified report passes with 241 passed, 45
+    skipped, and 0 failed. The pre-implementation and final pass-end
+    non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Rust batch export, full batched scheduling ownership, route promotion,
+    and C CUDA removal remain open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active
+- Goal: Rust-own or further scope batched routed-MoE execution now that its
+  CUDA result contract is explicit, then connect remaining graph compute,
+  whole-archive retention policy, and production route-promotion work without
+  claiming C CUDA removal before those gates pass.

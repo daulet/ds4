@@ -10423,14 +10423,16 @@ extern "C" int ds4_gpu_routed_moe_one_tensor(ds4_gpu_tensor *out, ds4_gpu_tensor
                              expert_in_dim, expert_mid_dim, out_dim,
                              selected, weights, n_expert, clamp, x, 1);
 }
-extern "C" int ds4_gpu_routed_moe_batch_tensor(ds4_gpu_tensor *out, ds4_gpu_tensor *gate, ds4_gpu_tensor *up, ds4_gpu_tensor *mid, ds4_gpu_tensor *down, const void *model_map, uint64_t model_size, uint64_t gate_offset, uint64_t up_offset, uint64_t down_offset, uint32_t gate_type, uint32_t down_type, uint64_t gate_expert_bytes, uint64_t gate_row_bytes, uint64_t down_expert_bytes, uint64_t down_row_bytes, uint32_t expert_in_dim, uint32_t expert_mid_dim, uint32_t out_dim, const ds4_gpu_tensor *selected, const ds4_gpu_tensor *weights, uint32_t n_expert, float clamp, const ds4_gpu_tensor *x, uint32_t n_tokens) {
-    return routed_moe_launch(out, gate, up, mid, down, model_map, model_size,
-                             gate_offset, up_offset, down_offset,
-                             gate_type, down_type,
-                             gate_expert_bytes, gate_row_bytes,
-                             down_expert_bytes, down_row_bytes,
-                             expert_in_dim, expert_mid_dim, out_dim,
-                             selected, weights, n_expert, clamp, x, n_tokens);
+extern "C" int ds4_gpu_routed_moe_batch_tensor(ds4_gpu_tensor *out, ds4_gpu_tensor *gate, ds4_gpu_tensor *up, ds4_gpu_tensor *mid, ds4_gpu_tensor *down, const void *model_map, uint64_t model_size, uint64_t gate_offset, uint64_t up_offset, uint64_t down_offset, uint32_t gate_type, uint32_t down_type, uint64_t gate_expert_bytes, uint64_t gate_row_bytes, uint64_t down_expert_bytes, uint64_t down_row_bytes, uint32_t expert_in_dim, uint32_t expert_mid_dim, uint32_t out_dim, const ds4_gpu_tensor *selected, const ds4_gpu_tensor *weights, uint32_t n_expert, float clamp, const ds4_gpu_tensor *x, uint32_t n_tokens, bool *mid_is_f16) {
+    const int ok = routed_moe_launch(out, gate, up, mid, down, model_map, model_size,
+                                     gate_offset, up_offset, down_offset,
+                                     gate_type, down_type,
+                                     gate_expert_bytes, gate_row_bytes,
+                                     down_expert_bytes, down_row_bytes,
+                                     expert_in_dim, expert_mid_dim, out_dim,
+                                     selected, weights, n_expert, clamp, x, n_tokens);
+    if (ok && mid_is_f16) *mid_is_f16 = false;
+    return ok;
 }
 extern "C" int ds4_gpu_hc_split_sinkhorn_tensor(ds4_gpu_tensor *out, const ds4_gpu_tensor *mix, const void *model_map, uint64_t model_size, uint64_t scale_offset, uint64_t base_offset, uint32_t n_hc, uint32_t sinkhorn_iters, float eps) {
     if (!out || !mix || !model_map || n_hc != 4) return 0;

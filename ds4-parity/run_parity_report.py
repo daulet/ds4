@@ -1936,6 +1936,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba CUDA batched routed-MoE mid contract repair",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_routed_moe_batch_mid_contract_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

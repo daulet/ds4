@@ -3,7 +3,19 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: CUDA Batched Routed MoE Mid Precision Contract Repair
+  is validated on B300. The retained CUDA public batch wrapper now accepts
+  the declared `bool *mid_is_f16` result and reports `false` after successful
+  F32-mid execution. A C-linked original-CUDA witness compiled for `sm_103`
+  and proves nonzero two-token output, F32 result reporting, null result
+  handling, and rejected-call result preservation. Local `ds4-cuda` library
+  tests pass with 154 tests; all 68 Rust CUDA ABI comparators pass; and the
+  unified report passes with 241 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Rust batch
+  export, full batched scheduling ownership, route promotion, whole-archive
+  retention policy, and C CUDA removal remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Single-Token Routed MoE ABI
   is validated on B300. Rust exports `ds4_gpu_routed_moe_one_tensor` through
   the reachable F32 fallback, IQ2/Q2 quantized, Q4_K, and environment-forced
@@ -16,10 +28,10 @@
   ABI comparators pass, and the unified report passes with 240 passed, 45
   skipped, and 0 failed. The pre-implementation and final pass-end
   non-interactive Claude review attempts each returned
-  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Batched routed MoE remains pending
-  because the public `mid_is_f16` result is absent from its current CUDA
-  definition; remaining graph compute, whole-archive/route promotion, C CUDA
-  removal, and the warning remain open.
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. At this leaf, batched routed MoE
+  remained pending because the public `mid_is_f16` result was absent from the
+  CUDA definition; the subsequent contract repair resolves that prerequisite
+  without claiming Rust batch execution.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Router Selection ABI
   is validated on B300. Rust exports `ds4_gpu_router_select_tensor` and
   `ds4_gpu_router_select_batch_tensor` through the current-C scalar,

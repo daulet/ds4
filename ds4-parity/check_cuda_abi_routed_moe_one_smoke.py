@@ -16,7 +16,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
-NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
 FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-routed-moe-one-smoke.json"
 HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_routed_moe_one_link_smoke.c"
 
@@ -89,13 +89,13 @@ def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]
         'getenv("DS4_CUDA_MOE_NO_DIRECT_DOWN_SUM6") == NULL',
     ]:
         report.check(marker in texts["cuda_c"], f"current-C routed-MoE marker missing: {marker}")
-    validate_contract_gap(report, texts)
+    validate_successor_contract_repair(report, texts)
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
     validate_wiring(report, fixture, texts)
 
 
-def validate_contract_gap(report: ReportState, texts: dict[str, str]) -> None:
+def validate_successor_contract_repair(report: ReportState, texts: dict[str, str]) -> None:
     batch_c = re.search(
         r'extern "C" int ds4_gpu_routed_moe_batch_tensor\((.*?)\) \{',
         texts["cuda_c"],
@@ -103,9 +103,13 @@ def validate_contract_gap(report: ReportState, texts: dict[str, str]) -> None:
     )
     report.check(batch_c is not None, "current-C batched routed-MoE definition missing")
     c_args = batch_c.group(1) if batch_c else ""
-    report.check("mid_is_f16" not in c_args, "current-C batch unexpectedly implements mid_is_f16")
-    report.check("bool                   *mid_is_f16" in texts["gpu_h"], "public header gap marker missing")
-    report.check("mid_is_f16: *mut bool" in texts["gpu_sys"], "Rust FFI gap marker missing")
+    report.check("bool *mid_is_f16" in c_args, "CUDA batch result repair missing")
+    report.check(
+        "if (ok && mid_is_f16) *mid_is_f16 = false;" in texts["cuda_c"],
+        "CUDA batch F32 result report missing",
+    )
+    report.check("bool                   *mid_is_f16" in texts["gpu_h"], "public header result contract missing")
+    report.check("mid_is_f16: *mut bool" in texts["gpu_sys"], "Rust FFI result contract missing")
 
 
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:

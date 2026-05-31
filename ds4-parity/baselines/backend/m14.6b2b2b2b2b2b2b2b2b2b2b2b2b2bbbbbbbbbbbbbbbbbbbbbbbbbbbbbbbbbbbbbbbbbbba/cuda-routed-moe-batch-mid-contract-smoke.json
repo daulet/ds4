@@ -1,0 +1,66 @@
+{
+  "schema": "ds4.cuda_routed_moe_batch_mid_contract_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-original-cuda-public-contract-repair",
+  "goal": "Repair only the existing CUDA public batched routed-MoE mid-precision result contract while leaving Rust batch export, route ownership, and C CUDA removal pending.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_routed_moe_batch_tensor"
+    ],
+    "semantics": [
+      "the CUDA routed_moe_launch implementation stores F32 mid intermediates on every successful batch route",
+      "the public header, Rust FFI, and Metal implementation already expose a bool mid_is_f16 result pointer",
+      "successful CUDA batch submission reports false through a non-null result pointer while failed validation leaves it unmodified"
+    ]
+  },
+  "implementation": {
+    "cuda_source": "ds4_cuda.cu",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/cuda_routed_moe_batch_mid_contract_smoke.c",
+    "contract_repair": "the CUDA public wrapper now accepts bool *mid_is_f16 and writes false after successful routed_moe_launch submission",
+    "remaining_compute_boundary": "Rust still does not export ds4_gpu_routed_moe_batch_tensor; promotion of sorted, tiled, atomic, and row-span batch dispatch remains pending",
+    "linkage_requirement": "the proof compiles and links the original ds4_cuda.cu object with nvcc for sm_103 rather than using the Rust static library"
+  },
+  "ownership": {
+    "repairs_current_cuda_mid_is_f16_result": true,
+    "reports_f32_mid_on_success": true,
+    "preserves_failed_call_result_sentinel": true,
+    "owns_routed_moe_batch_tensor_in_rust": false,
+    "owns_batched_routed_moe_scheduling_in_rust": false,
+    "changes_default_route": false,
+    "removes_c_cuda": false
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "linked_cubin_target": "sm_103",
+    "observed": {
+      "c_linked_original_cuda": true,
+      "successful_batch_reports_f32_mid": true,
+      "successful_null_result_pointer_accepted": true,
+      "invalid_batch_preserves_mid_precision_result": true,
+      "batched_output_nonzero": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 154,
+    "cuda_abi_comparators_passed": 68,
+    "unified_report_passed": 241,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "integration_risks": [
+    "Rust public batched routed-MoE export remains pending because its full sorted, tiled, atomic, and row-span runtime dispatch has not been promoted into the public archive",
+    "this prerequisite modifies the retained CUDA oracle intentionally to match its already-declared public result contract and actual F32 intermediate representation",
+    "whole-archive retention policy, production route promotion, and C CUDA removal remain pending"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

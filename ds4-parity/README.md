@@ -3932,9 +3932,24 @@ through F32 fallback, default IQ2/Q2 quantized, forced generic gate/down, and
 Q4_K direct-six paths. It proves packed public Q8 scratch visibility,
 optional gate/up writes, negative-expert fallback, and reject-before-write
 controls. Batched routed-MoE remains unclaimed because its public
-`mid_is_f16` result contract is missing from the current CUDA definition;
-route promotion, C CUDA removal, and the embedded-object executable-stack
-warning remain open.
+`mid_is_f16` result contract was missing from the CUDA definition at this
+leaf; the successor contract repair below resolves that prerequisite without
+claiming Rust batch execution. Route promotion, C CUDA removal, and the
+embedded-object executable-stack warning remain open.
+
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+CUDA batched routed-MoE mid precision contract repair:
+
+```sh
+python3 ds4-parity/check_cuda_routed_moe_batch_mid_contract_smoke.py --negative-test
+```
+
+The C-linked B300 fixture compiles the retained original CUDA backend for
+`sm_103` and executes a two-token batched routed-MoE call. It proves that
+successful CUDA execution reports an F32 mid intermediate, permits a null
+result pointer, and leaves the result sentinel unchanged on rejected calls.
+Rust batched routed-MoE export, route promotion, and C CUDA removal remain
+open.
 
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 

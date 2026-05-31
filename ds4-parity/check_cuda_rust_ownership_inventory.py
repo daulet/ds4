@@ -30,7 +30,7 @@ EXPECTED_SCHEMA = "ds4.cuda_rust_ownership_inventory.v1"
 EXPECTED_MILESTONE = "M14.0"
 EXPECTED_STAGES = ["M14.1", "M14.2", "M14.3", "M14.4", "M14.5", "M14.6"]
 EXPECTED_DS4_HASHES = {
-    "ds4_cuda.cu": "d819ff2ad0945b58057b1b0ff95f1d17550f0e12fd639b3e20dbfddd8431c0c7",
+    "ds4_cuda.cu": "9375034f6c7ca5b2f0afc833ceaea06e6a6edcc097df54fbaa5d355bd15e5f33",
     "ds4_gpu.h": "317349630b134b86cdb7cd293f267357b969f5899bb6c55bce7cc7aab9187554",
     "rust/ds4-gpu-sys/src/lib.rs": "4ba693fa05f4f5d13759d94705ca84cb2c4975754b95134651f566cd0df512a1",
     "rust/ds4-gpu/build.rs": "ba411f880038856702541185790994cf888e1c3cf54ac42a57a5319fc8f94ee7",
