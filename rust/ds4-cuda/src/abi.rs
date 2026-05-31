@@ -7009,6 +7009,7 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_one_tensor(
                                                 if !unsafe {
                                                     kernels.moe_gate_up_mid_f32_tensor(
                                                         backend.stream(),
+                                                        1,
                                                         gate.device_ptr(),
                                                         up.device_ptr(),
                                                         mid.device_ptr(),
@@ -7033,6 +7034,7 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_one_tensor(
                                                 if !unsafe {
                                                     kernels.moe_down_f32_tensor(
                                                         backend.stream(),
+                                                        1,
                                                         down.device_ptr(),
                                                         down_weights_ptr,
                                                         mid.device_ptr(),
@@ -7050,6 +7052,7 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_one_tensor(
                                                 return Some(unsafe {
                                                     kernels.moe_sum_tensor(
                                                         backend.stream(),
+                                                        1,
                                                         out.device_ptr(),
                                                         down.device_ptr(),
                                                         out_dim,
@@ -7186,6 +7189,7 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_one_tensor(
                                             Some(unsafe {
                                                 kernels.moe_sum_tensor(
                                                     backend.stream(),
+                                                    1,
                                                     out.device_ptr(),
                                                     down.device_ptr(),
                                                     out_dim,

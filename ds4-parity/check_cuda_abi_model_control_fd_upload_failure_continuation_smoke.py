@@ -244,7 +244,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
         in texts["status"],
         "active item missing",
     )

@@ -4066,6 +4066,42 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiRoutedMoeBatchedF32ModuleScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub embedded_kernel_count: u32,
+    pub consumes_shared_cache_module: bool,
+    pub widens_f32_gate_up_mid_entry_for_batch_layout: bool,
+    pub widens_f32_down_entry_for_batch_layout: bool,
+    pub widens_sum_entry_for_batch_layout: bool,
+    pub preserves_public_single_token_launch: bool,
+    pub owns_batched_f32_launch_prerequisite: bool,
+    pub owns_routed_moe_batch_tensor: bool,
+    pub owns_complete_routed_moe_abi: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE:
+    CudaAbiRoutedMoeBatchedF32ModuleScope = CudaAbiRoutedMoeBatchedF32ModuleScope {
+    exported_abi_symbol_count: 74,
+    exported_compute_symbol_count: 72,
+    embedded_kernel_count: 91,
+    consumes_shared_cache_module: true,
+    widens_f32_gate_up_mid_entry_for_batch_layout: true,
+    widens_f32_down_entry_for_batch_layout: true,
+    widens_sum_entry_for_batch_layout: true,
+    preserves_public_single_token_launch: true,
+    owns_batched_f32_launch_prerequisite: true,
+    owns_routed_moe_batch_tensor: false,
+    owns_complete_routed_moe_abi: false,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -4164,6 +4200,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -7593,6 +7630,69 @@ mod tests {
         );
         assert!(
             !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .changes_default_route
+        );
+    }
+
+    #[test]
+    fn retained_batched_f32_entries_defer_public_batch_and_route_ownership() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_abi_symbol_count,
+            74
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_compute_symbol_count,
+            72
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .embedded_kernel_count,
+            91
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .consumes_shared_cache_module
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .widens_f32_gate_up_mid_entry_for_batch_layout
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .widens_f32_down_entry_for_batch_layout
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .widens_sum_entry_for_batch_layout
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .preserves_public_single_token_launch
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_batched_f32_launch_prerequisite
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_routed_moe_batch_tensor
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_routed_moe_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_remaining_graph_compute_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_ds4_gpu_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
                 .changes_default_route
         );
     }

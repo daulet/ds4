@@ -3,7 +3,21 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Batched F32 Routed MoE ABI Prerequisite
+  is validated on B300. The retained Rust CUDA ABI F32 gate, down, and sum
+  entries and their launch methods now accept `n_tokens` over the previously
+  proved flattened batched layout. The existing public single-token
+  routed-MoE wrapper passes `n_tokens = 1`; it still does not export
+  `ds4_gpu_routed_moe_batch_tensor`. The rebuilt static library still
+  exposes 74 Rust ABI symbols and embeds 91 kernels, and links/runs the
+  existing C-linked public single-token consumer. Local tests pass with 162
+  tests; B300 feature tests pass with 169 tests; all 76 CUDA ABI comparators
+  pass; and the unified report passes with 249 passed, 45 skipped, and 0
+  failed. The pre-implementation and final pass-end non-interactive Claude
+  review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  Host-side batched orchestration, public batch ownership, route promotion,
+  and C CUDA removal remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Shared Cache Routed MoE ABI Module
   is validated on B300. The retained Rust CUDA ABI module now embeds cached
   tile8 gate and tile16 atomic down row-span entries with synchronized packed

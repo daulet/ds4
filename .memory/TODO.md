@@ -11862,8 +11862,45 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the retained F32 fallback and sum entries need batched-layout
+  shaping before public batched-wrapper orchestration.
+- Goal: widen retained fallback entries, then implement host-side batched
+  routed-MoE orchestration and route-promotion policy before claiming the
+  public batch surface or C CUDA removal.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Batched F32 Routed MoE ABI Prerequisite
+
+- Status: done
+- Goal: widen already-retained F32 fallback and sum ABI entries for the
+  previously proved batched layout without claiming public batched
+  routed-MoE ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-batched-f32-module-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_batched_f32_module_smoke.py --negative-test`.
+- Evidence:
+  - The retained F32 gate, down, and sum entries and their launch methods now
+    accept `n_tokens` over the prior-proved flattened batched layout.
+  - The existing public single-token routed-MoE wrapper passes `n_tokens = 1`;
+    it still does not export `ds4_gpu_routed_moe_batch_tensor`.
+  - The B300 rebuilt-staticlib regression consumer loads 91 embedded kernels
+    while the archive continues to expose 74 Rust ABI symbols.
+  - Local tests pass with 162 tests; B300 feature tests pass with 169 tests;
+    all 76 CUDA ABI comparators pass; and the unified report passes with 249
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Host-side sorted, tiled, cached, and fallback batch orchestration, public
+    batched routed-MoE ownership, route promotion, and C CUDA removal remain
+    pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: define the public batched routed-MoE ABI wrapper and route-promotion
-  policy now that bounded cached compute entries are embedded, then connect
-  remaining graph compute and whole-archive retention policy without
-  claiming C CUDA removal before those gates pass.
+- Goal: implement host-side sorted, tiled, cached, and fallback batched
+  routed-MoE orchestration before defining the public batch wrapper and
+  route-promotion policy, then connect remaining graph compute and
+  whole-archive retention policy without claiming C CUDA removal before
+  those gates pass.

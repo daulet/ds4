@@ -2689,6 +2689,7 @@ mod kernels {
     #[allow(clippy::too_many_arguments)]
     #[kernel]
     pub fn abi_moe_gate_up_mid_f32_kernel(
+        n_tokens: u32,
         expert_in_dim: u32,
         expert_mid_dim: u32,
         n_expert: u32,
@@ -2712,15 +2713,17 @@ mod kernels {
         let row = thread::blockIdx_x();
         let pair = thread::blockIdx_y();
         let lane = thread::threadIdx_x();
-        if row >= expert_mid_dim || pair >= n_expert || lane >= THREADS_PER_BLOCK {
+        if row >= expert_mid_dim || pair >= n_tokens * n_expert || lane >= THREADS_PER_BLOCK {
             return;
         }
+        let token = pair / n_expert;
         let mut expert = selected[pair as usize];
         if expert < 0 {
             expert = 0;
         }
         let blocks = expert_in_dim / ABI_MOE_QK_K as u32;
         let row_base = expert as u64 * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+        let x_base = token as usize * expert_in_dim as usize;
         let mut gate = 0.0_f32;
         let mut up = 0.0_f32;
         let mut block = lane;
@@ -2730,7 +2733,7 @@ mod kernels {
                 gate_weights,
                 packed as usize,
                 x,
-                block as usize * ABI_MOE_QK_K,
+                x_base + block as usize * ABI_MOE_QK_K,
                 iq2_grid,
                 iq2_signs,
             );
@@ -2738,7 +2741,7 @@ mod kernels {
                 up_weights,
                 packed as usize,
                 x,
-                block as usize * ABI_MOE_QK_K,
+                x_base + block as usize * ABI_MOE_QK_K,
                 iq2_grid,
                 iq2_signs,
             );
@@ -2777,6 +2780,7 @@ mod kernels {
     #[allow(clippy::too_many_arguments)]
     #[kernel]
     pub fn abi_moe_down_f32_kernel(
+        n_tokens: u32,
         expert_mid_dim: u32,
         out_dim: u32,
         n_expert: u32,
@@ -2792,7 +2796,7 @@ mod kernels {
         let row = thread::blockIdx_x();
         let pair = thread::blockIdx_y();
         let lane = thread::threadIdx_x();
-        if row >= out_dim || pair >= n_expert || lane >= THREADS_PER_BLOCK {
+        if row >= out_dim || pair >= n_tokens * n_expert || lane >= THREADS_PER_BLOCK {
             return;
         }
         let mut expert = selected[pair as usize];
@@ -3272,23 +3276,26 @@ mod kernels {
 
     #[kernel]
     pub fn abi_moe_sum_kernel(
+        n_tokens: u32,
         out_dim: u32,
         n_expert: u32,
         down: &[f32],
         mut out: DisjointSlice<f32>,
     ) {
-        let row = thread::index_1d().get() as u32;
-        if row >= out_dim {
+        let index = thread::index_1d().get() as u32;
+        if index >= n_tokens * out_dim {
             return;
         }
+        let token = index / out_dim;
+        let row = index - token * out_dim;
         let mut accumulator = 0.0_f32;
         let mut slot = 0_u32;
         while slot < n_expert {
-            accumulator += down[(slot * out_dim + row) as usize];
+            accumulator += down[((token * n_expert + slot) * out_dim + row) as usize];
             slot += 1;
         }
         unsafe {
-            *out.get_unchecked_mut(row as usize) = accumulator;
+            *out.get_unchecked_mut(index as usize) = accumulator;
         }
     }
 
@@ -8205,6 +8212,7 @@ impl AbiKernelModule {
     pub(crate) unsafe fn moe_gate_up_mid_f32_tensor(
         &self,
         stream: &CudaStream,
+        n_tokens: u32,
         gate_ptr: u64,
         up_ptr: u64,
         mid_ptr: u64,
@@ -8224,11 +8232,12 @@ impl AbiKernelModule {
         clamp: f32,
     ) -> bool {
         let config = LaunchConfig {
-            grid_dim: (expert_mid_dim, n_expert, 1),
+            grid_dim: (expert_mid_dim, n_tokens * n_expert, 1),
             block_dim: (THREADS_PER_BLOCK, 1, 1),
             shared_mem_bytes: 0,
         };
-        let elements = u64::from(n_expert) * u64::from(expert_mid_dim);
+        let elements = u64::from(n_tokens) * u64::from(n_expert) * u64::from(expert_mid_dim);
+        let mut n_tokens = n_tokens;
         let mut expert_in_dim = expert_in_dim;
         let mut expert_mid_dim = expert_mid_dim;
         let mut n_expert = n_expert;
@@ -8240,11 +8249,11 @@ impl AbiKernelModule {
         let mut up_weights_ptr = up_weights_ptr;
         let mut up_weights_len = gate_weight_bytes;
         let mut x_ptr = x_ptr;
-        let mut x_len = u64::from(expert_in_dim);
+        let mut x_len = u64::from(n_tokens) * u64::from(expert_in_dim);
         let mut selected_ptr = selected_ptr;
-        let mut selected_len = u64::from(n_expert);
+        let mut selected_len = u64::from(n_tokens) * u64::from(n_expert);
         let mut weights_ptr = weights_ptr;
-        let mut weights_len = u64::from(n_expert);
+        let mut weights_len = u64::from(n_tokens) * u64::from(n_expert);
         let mut iq2_grid_ptr = iq2_grid_ptr;
         let mut iq2_grid_len = 256_u64;
         let mut iq2_signs_ptr = iq2_signs_ptr;
@@ -8256,6 +8265,7 @@ impl AbiKernelModule {
         let mut mid_ptr = mid_ptr;
         let mut mid_len = elements;
         let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
             (&mut expert_in_dim as *mut u32).cast::<c_void>(),
             (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
             (&mut n_expert as *mut u32).cast::<c_void>(),
@@ -8300,6 +8310,7 @@ impl AbiKernelModule {
     pub(crate) unsafe fn moe_down_f32_tensor(
         &self,
         stream: &CudaStream,
+        n_tokens: u32,
         down_ptr: u64,
         down_weights_ptr: u64,
         mid_ptr: u64,
@@ -8312,10 +8323,11 @@ impl AbiKernelModule {
         down_row_bytes: u64,
     ) -> bool {
         let config = LaunchConfig {
-            grid_dim: (out_dim, n_expert, 1),
+            grid_dim: (out_dim, n_tokens * n_expert, 1),
             block_dim: (THREADS_PER_BLOCK, 1, 1),
             shared_mem_bytes: 0,
         };
+        let mut n_tokens = n_tokens;
         let mut expert_mid_dim = expert_mid_dim;
         let mut out_dim = out_dim;
         let mut n_expert = n_expert;
@@ -8324,12 +8336,13 @@ impl AbiKernelModule {
         let mut down_weights_ptr = down_weights_ptr;
         let mut down_weights_len = down_weight_bytes;
         let mut mid_ptr = mid_ptr;
-        let mut mid_len = u64::from(n_expert) * u64::from(expert_mid_dim);
+        let mut mid_len = u64::from(n_tokens) * u64::from(n_expert) * u64::from(expert_mid_dim);
         let mut selected_ptr = selected_ptr;
-        let mut selected_len = u64::from(n_expert);
+        let mut selected_len = u64::from(n_tokens) * u64::from(n_expert);
         let mut down_ptr = down_ptr;
-        let mut down_len = u64::from(n_expert) * u64::from(out_dim);
+        let mut down_len = u64::from(n_tokens) * u64::from(n_expert) * u64::from(out_dim);
         let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
             (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
             (&mut out_dim as *mut u32).cast::<c_void>(),
             (&mut n_expert as *mut u32).cast::<c_void>(),
@@ -8739,23 +8752,26 @@ impl AbiKernelModule {
     pub(crate) unsafe fn moe_sum_tensor(
         &self,
         stream: &CudaStream,
+        n_tokens: u32,
         out_ptr: u64,
         down_ptr: u64,
         out_dim: u32,
         n_expert: u32,
     ) -> bool {
         let config = LaunchConfig {
-            grid_dim: (out_dim.div_ceil(THREADS_PER_BLOCK), 1, 1),
+            grid_dim: ((n_tokens * out_dim).div_ceil(THREADS_PER_BLOCK), 1, 1),
             block_dim: (THREADS_PER_BLOCK, 1, 1),
             shared_mem_bytes: 0,
         };
+        let mut n_tokens = n_tokens;
         let mut out_dim = out_dim;
         let mut n_expert = n_expert;
         let mut down_ptr = down_ptr;
-        let mut down_len = u64::from(out_dim) * u64::from(n_expert);
+        let mut down_len = u64::from(n_tokens) * u64::from(out_dim) * u64::from(n_expert);
         let mut out_ptr = out_ptr;
-        let mut out_len = u64::from(out_dim);
+        let mut out_len = u64::from(n_tokens) * u64::from(out_dim);
         let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
             (&mut out_dim as *mut u32).cast::<c_void>(),
             (&mut n_expert as *mut u32).cast::<c_void>(),
             (&mut down_ptr as *mut u64).cast::<c_void>(),

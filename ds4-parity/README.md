@@ -4047,6 +4047,17 @@ C-linked B300 public single-token regression consumer proves that the 91-entry
 module loads without expanding the public Rust ABI. Public batched dispatch
 and route promotion remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA batched F32 routed-MoE ABI prerequisite:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_batched_f32_module_smoke.py --negative-test
+```
+
+The retained F32 gate, down, and sum entries now accept the previously proved
+batched layout while the public single-token caller continues to pass one
+token. The public batched wrapper and route promotion remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
