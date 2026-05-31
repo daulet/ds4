@@ -4,6 +4,23 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Packed-Weight Raw-Load Performance Repair
+  is validated on B300. The cached gate/up row-span kernel now reads its ten
+  hot packed IQ2 halfwords through `abi_moe_cached_weight_load_u16!` over
+  host-validated cached model spans. Arithmetic, dispatch, row-span policy,
+  the benchmark executable, and default current-C routing remain unchanged.
+  Rejected probes establish the boundary: row32 gate fallback records
+  `15046.777 ms` gate/up, row32 down fallback records `10690.146 ms` down,
+  and fixed-row512 gate specialization records `1483.618 ms` gate/up.
+  Parent/candidate B300 measurements reduce gate/up from `1482.196 ms` to
+  `1461.528 ms` and total from `2337.688 ms` to `2316.378 ms`; a candidate
+  confirmation records `1462.521 ms` gate/up. Its DSO SHA-256 is
+  `109503f9476b2fa29e1753cf3d207167c12a9c59a28077b1d40808b696def47a`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. The unified report passes with `271`
+  passed, `50` skipped, and `0` failed. Both required Claude review attempts
+  timed out after `60s` with no output. Routed-MoE remains `2.51x`
+  current-C, so promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Row-Span Default Performance Repair
   is validated on B300. Only the opt-in Rust DSO host-dispatch
   `down_row_span` no-override choice changes from `2048` to `512`; the

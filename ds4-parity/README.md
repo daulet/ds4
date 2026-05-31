@@ -4392,6 +4392,19 @@ selection. B300 no-override measurement lowers down from `908.823 ms` to
 `839.144 ms`; official-vector correctness is preserved and the default
 current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA gate packed-weight raw-load performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_gate_weight_raw_load_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up kernel now reads ten packed IQ2 weight halfwords
+through unchecked loads over host-validated cached model spans. Adjacent B300
+measurements lower gate/up from `1482.196 ms` to `1461.528 ms`;
+official-vector correctness is preserved and the default current-C route
+remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

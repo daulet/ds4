@@ -12704,3 +12704,30 @@
     unified report passes with `270` passed, `50` skipped, and `0` failed.
     Total routed-MoE remains `2.53x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Packed-Weight Raw-Load Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE gate/up overhead by replacing
+  repeated checked packed IQ2 weight-byte reads with unchecked reads over the
+  host-validated cached model spans.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-gate-weight-raw-load-performance-repair.json`
+- Evidence:
+  - The cached gate/up kernel uses `abi_moe_cached_weight_load_u16!` at ten
+    packed IQ2 weight read sites while retaining DP4A topology, cached down,
+    row-span policy, and default current-C routing.
+  - Row32 fallback probes regress gate/up to `15046.777 ms` and down to
+    `10690.146 ms`; a fixed-row512 codegen probe also regresses gate/up to
+    `1483.618 ms`, so none are retained.
+  - Adjacent B300 parent/candidate measurements lower gate/up from
+    `1482.196 ms` to `1461.528 ms` and total routed-MoE from `2337.688 ms`
+    to `2316.378 ms`; a second candidate records `1462.521 ms` gate/up.
+  - The candidate DSO SHA-256 is
+    `109503f9476b2fa29e1753cf3d207167c12a9c59a28077b1d40808b696def47a`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `271`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final Claude
+    review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `2.51x` current-C, so default routing and
+    promotion blockers remain in force.

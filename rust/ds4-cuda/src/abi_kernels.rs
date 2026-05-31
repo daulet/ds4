@@ -2307,6 +2307,14 @@ mod kernels {
         }};
     }
 
+    macro_rules! abi_moe_cached_weight_load_u16 {
+        ($values:expr, $offset:expr) => {{
+            let values = $values.as_ptr();
+            let offset = $offset;
+            unsafe { *values.add(offset) as u16 | ((*values.add(offset + 1) as u16) << 8) }
+        }};
+    }
+
     #[allow(clippy::too_many_arguments, static_mut_refs)]
     #[kernel]
     pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(
@@ -2395,15 +2403,19 @@ mod kernels {
                     let packed = (row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES) as usize;
                     {
                         let weight_scale =
-                            f16::from_bits(abi_moe_load_u16(gate_weights, packed)) as f32;
+                            f16::from_bits(abi_moe_cached_weight_load_u16!(gate_weights, packed))
+                                as f32;
                         let mut block_sums = [0_i32; 8];
                         let mut ib32 = 0_usize;
                         while ib32 < ABI_MOE_QK_K / 32 {
                             let q2 = packed + 2 + ib32 * 8;
-                            let aux_g = abi_moe_load_u16(gate_weights, q2) as u32
-                                | ((abi_moe_load_u16(gate_weights, q2 + 2) as u32) << 16);
-                            let aux_s = abi_moe_load_u16(gate_weights, q2 + 4) as u32
-                                | ((abi_moe_load_u16(gate_weights, q2 + 6) as u32) << 16);
+                            let aux_g = abi_moe_cached_weight_load_u16!(gate_weights, q2) as u32
+                                | ((abi_moe_cached_weight_load_u16!(gate_weights, q2 + 2) as u32)
+                                    << 16);
+                            let aux_s = abi_moe_cached_weight_load_u16!(gate_weights, q2 + 4)
+                                as u32
+                                | ((abi_moe_cached_weight_load_u16!(gate_weights, q2 + 6) as u32)
+                                    << 16);
                             let multiplier = (2 * (aux_s >> 28) + 1) as i32;
                             let grid0 = unsafe { S_IQ2_GRID[(aux_g & 0xff) as usize] };
                             let signs0 = unsafe { S_IQ2_SIGNS[(aux_s & 127) as usize] };
@@ -2515,15 +2527,18 @@ mod kernels {
                     }
                     {
                         let weight_scale =
-                            f16::from_bits(abi_moe_load_u16(up_weights, packed)) as f32;
+                            f16::from_bits(abi_moe_cached_weight_load_u16!(up_weights, packed))
+                                as f32;
                         let mut block_sums = [0_i32; 8];
                         let mut ib32 = 0_usize;
                         while ib32 < ABI_MOE_QK_K / 32 {
                             let q2 = packed + 2 + ib32 * 8;
-                            let aux_g = abi_moe_load_u16(up_weights, q2) as u32
-                                | ((abi_moe_load_u16(up_weights, q2 + 2) as u32) << 16);
-                            let aux_s = abi_moe_load_u16(up_weights, q2 + 4) as u32
-                                | ((abi_moe_load_u16(up_weights, q2 + 6) as u32) << 16);
+                            let aux_g = abi_moe_cached_weight_load_u16!(up_weights, q2) as u32
+                                | ((abi_moe_cached_weight_load_u16!(up_weights, q2 + 2) as u32)
+                                    << 16);
+                            let aux_s = abi_moe_cached_weight_load_u16!(up_weights, q2 + 4) as u32
+                                | ((abi_moe_cached_weight_load_u16!(up_weights, q2 + 6) as u32)
+                                    << 16);
                             let multiplier = (2 * (aux_s >> 28) + 1) as i32;
                             let grid0 = unsafe { S_IQ2_GRID[(aux_g & 0xff) as usize] };
                             let signs0 = unsafe { S_IQ2_SIGNS[(aux_s & 127) as usize] };
