@@ -1,0 +1,109 @@
+{
+  "schema": "ds4.cuda_rust_rsqrt_route_correctness_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-short-correctness-full-route-performance-blocked",
+  "goal": "Align the Rust CUDA RMS and attention scale primitive with current C rsqrtf semantics, close the known short official-vector mismatch, and retain the full-route promotion gate.",
+  "ownership": {
+    "changes_rust_cuda_numeric_primitive": true,
+    "changes_public_abi_surface": false,
+    "default_current_c_route_preserved": true,
+    "short_official_vector_correctness_closed": true,
+    "full_official_vector_gate_closed": false,
+    "runtime_route_promoted": false,
+    "c_cuda_removal_allowed": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "current_c_primitive": "rsqrtf",
+    "rust_device_primitive": "__nv_rsqrtf",
+    "scale_sites_changed": [
+      "hyperconnection normalized weighted sum",
+      "plain RMS norm",
+      "weighted RMS norm",
+      "fused Q/KV RMS rows",
+      "head RMS norm",
+      "generic and indexed attention scale"
+    ],
+    "host_dso_resolution": "The cuda-oxide device extern remains represented in the host shared object; a non-computing-route host definition resolves dynamic loading while embedded device modules link __nv_rsqrtf from libdevice."
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "shared_library": "/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+    "shared_library_sha256": "c64dda39104483ee28a25babef8c140d8e59a83d1a2e889fd6e4c44eeeda9ddd",
+    "build_path": "cargo-oxide build --features cuda-oxide-kernels",
+    "device_libdevice_reference_present": true,
+    "host_libdevice_symbol_resolved": true,
+    "two_step_reproducer": {
+      "case": "short_code_completion",
+      "wall_elapsed_seconds": 54,
+      "report_sha256": "f83ee9bb23a70f5c172147c3953c55aad66011e6334e3d3b7fdfaadee7fec3c5",
+      "stderr_sha256": "dfc48ef9a83a1bf3a332e0d16bd4ba2a02404e18968cd1161f2de7bc34082d94",
+      "selected_steps": [
+        {
+          "step": 0,
+          "expected_selected_hex": "606060",
+          "selected_hex": "606060",
+          "selected_matches_expected": true
+        },
+        {
+          "step": 1,
+          "expected_selected_hex": "63",
+          "selected_hex": "63",
+          "selected_matches_expected": true
+        }
+      ],
+      "gpu_memory_mib_after_process": 0
+    },
+    "short_vector_probe": {
+      "cases": [
+        "short_italian_fact",
+        "short_code_completion",
+        "short_reasoning_plain"
+      ],
+      "case_count": 3,
+      "step_count": 9,
+      "selected_match_count": 9,
+      "all_selected_match": true,
+      "report_sha256": "c2fced10708b4373d18235d0c674d8cb3e2dc8eacc39b926fd85862ba99933d0",
+      "stderr_sha256": "fb94fbf79e5f795fb33c47d638f941808e995512a9d472c8c8afe0f350c1842e",
+      "gpu_memory_mib_after_process": 0
+    },
+    "full_official_vector_probe": {
+      "completed": false,
+      "observation_seconds_at_least": 935,
+      "gpu_utilization_percent_while_observed": 100,
+      "gpu_memory_mib_while_observed": 104450,
+      "report_bytes_at_termination": 0,
+      "stderr_bytes_at_termination": 521,
+      "stderr_sha256": "c6f9592b22ca047b002957cb626a57a028e80f15115f1007e6cea7dc65f3699c",
+      "terminated_after_bound": true,
+      "gpu_memory_mib_after_termination": 0,
+      "remaining_blocker": "Full official-vector execution remains compute-active beyond the retained 900-second bound; source inspection leaves serialized generic prefill attention as the next measured performance boundary."
+    },
+    "affected_public_abi_smokes": {
+      "plain_rms_norm_passed": true,
+      "weighted_rms_norm_passed": true,
+      "head_rms_norm_passed": true,
+      "fused_qkv_rms_rows_passed": true,
+      "attention_decode_heads_passed": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "b300_affected_public_abi_smokes_passed": true,
+    "unified_report_passed": 260,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Long-Prefill Performance And C CUDA Removal Policy"
+}

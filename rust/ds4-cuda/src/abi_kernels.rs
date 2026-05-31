@@ -13,11 +13,23 @@ use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, 
 use cuda_device::mma::{load_a_m16n8k16, load_b_m16n8k16, mma_m16n8k16_f32_f16, zero_accumulator};
 use cuda_device::{
     atomic::{AtomicOrdering, DeviceAtomicF32, DeviceAtomicU32},
-    cuda_module, integer, kernel, thread, warp, DisjointSlice, DynamicSharedArray, SharedArray,
+    cuda_module, device, integer, kernel, thread, warp, DisjointSlice, DynamicSharedArray,
+    SharedArray,
 };
 use cuda_host::ltoir::{self, LtoirError};
 
 use crate::{IndexerScoreKernel, IndexerTopkKernel};
+
+#[device]
+unsafe extern "C" {
+    fn __nv_rsqrtf(value: f32) -> f32;
+}
+
+// Device extern wrappers remain in the host DSO; satisfy that unused host edge.
+#[unsafe(export_name = "__nv_rsqrtf")]
+extern "C" fn host_libdevice_rsqrtf_stub(value: f32) -> f32 {
+    1.0_f32 / value.sqrt()
+}
 
 const THREADS_PER_BLOCK: u32 = 256;
 const ABI_KERNEL_ARTIFACT: &str = "ds4-cuda";
@@ -617,7 +629,8 @@ mod kernels {
             thread::sync_threads();
             stride >>= 1;
         }
-        let norm_scale = 1.0_f32 / (unsafe { PARTIAL[0] } / n_embd as f32 + norm_eps).sqrt();
+        let mean_square = unsafe { PARTIAL[0] } / n_embd as f32 + norm_eps;
+        let norm_scale = unsafe { __nv_rsqrtf(mean_square) };
         dimension = u64::from(lane);
         while dimension < u64::from(n_embd) {
             let index = (u64::from(token) * u64::from(n_embd) + dimension) as usize;
@@ -859,7 +872,8 @@ mod kernels {
             stride >>= 1;
         }
 
-        let scale = 1.0_f32 / (unsafe { PARTIAL[0] } / n as f32 + eps).sqrt();
+        let mean_square = unsafe { PARTIAL[0] } / n as f32 + eps;
+        let scale = unsafe { __nv_rsqrtf(mean_square) };
         i = tid;
         while i < n {
             unsafe {
@@ -912,7 +926,8 @@ mod kernels {
             stride >>= 1;
         }
 
-        let scale = 1.0_f32 / (unsafe { PARTIAL[0] } / head_dim as f32 + eps).sqrt();
+        let mean_square = unsafe { PARTIAL[0] } / head_dim as f32 + eps;
+        let scale = unsafe { __nv_rsqrtf(mean_square) };
         i = tid;
         while i < head_dim {
             unsafe {
@@ -4104,7 +4119,7 @@ mod kernels {
         }
         let query_base =
             ((token as usize * n_head as usize + head as usize) * head_dim as usize) as usize;
-        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        let scale = unsafe { __nv_rsqrtf(head_dim as f32) };
         let mut raw_row = thread::threadIdx_x();
         while raw_row < raw_count {
             unsafe {
@@ -4380,7 +4395,7 @@ mod kernels {
         }
         let query_base =
             ((token as usize * n_head as usize + head as usize) * head_dim as usize) as usize;
-        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        let scale = unsafe { __nv_rsqrtf(head_dim as f32) };
         let dimension0 = tid;
         let dimension1 = tid + 256;
         let mut accumulator0 = 0.0_f32;
@@ -4836,7 +4851,7 @@ mod kernels {
         heads: &mut DisjointSlice<f32>,
     ) {
         let query_base = ((token * n_head + head) * head_dim) as usize;
-        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        let scale = unsafe { __nv_rsqrtf(head_dim as f32) };
         let mut max_score = sinks[head as usize];
         let mut row = 0_u32;
         while row < raw_count {
@@ -5141,7 +5156,7 @@ mod kernels {
         };
         let query_base =
             ((token as usize * n_head as usize + head as usize) * head_dim as usize) as usize;
-        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        let scale = unsafe { __nv_rsqrtf(head_dim as f32) };
         let mut max_score = sinks[head as usize];
         let mut row = 0_u32;
         while row < raw_count {
@@ -7326,7 +7341,8 @@ mod kernels {
             stride >>= 1;
         }
 
-        let scale = 1.0_f32 / (unsafe { PARTIAL[0] } / n as f32 + eps).sqrt();
+        let mean_square = unsafe { PARTIAL[0] } / n as f32 + eps;
+        let scale = unsafe { __nv_rsqrtf(mean_square) };
         i = tid;
         while i < n {
             unsafe {
@@ -7389,7 +7405,8 @@ mod kernels {
             stride >>= 1;
         }
 
-        let scale = 1.0_f32 / (unsafe { PARTIAL[0] } / n as f32 + eps).sqrt();
+        let mean_square = unsafe { PARTIAL[0] } / n as f32 + eps;
+        let scale = unsafe { __nv_rsqrtf(mean_square) };
         i = tid;
         while i < n {
             unsafe {

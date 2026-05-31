@@ -4182,6 +4182,21 @@ per layer to `4.578 ms` total across 43 layers; output parity remains blocked
 in the prefill Q path, so default route promotion and C CUDA removal remain
 pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA reciprocal-square-root route correctness repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_rsqrt_route_correctness_repair.py --negative-test
+```
+
+The Rust CUDA kernels now use device `__nv_rsqrtf` at current-C-equivalent
+RMS and attention scale sites. On B300 the formerly mismatching
+`short_code_completion` step `1` and the full three-short-case slice pass,
+while a full official-vector route attempt remains compute-active beyond the
+retained 900-second bound. Route promotion and C CUDA removal remain pending
+on long-prefill performance. The unified report passes with `260` passed,
+`45` skipped, and `0` failed.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

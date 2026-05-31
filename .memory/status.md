@@ -3,7 +3,25 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Prefill Q-Path Correctness And C CUDA Removal Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Long-Prefill Performance And C CUDA Removal Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Reciprocal-Square-Root Route Correctness Repair
+  is validated on B300 for the known short-route correctness failure. Rust
+  now calls device `__nv_rsqrtf` at the current-C-equivalent RMS and
+  attention scale sites; a host definition resolves the unused dynamic
+  symbol edge introduced by the cuda-oxide device-extern wrapper without
+  changing the device libdevice path. The two-step
+  `short_code_completion` replay now selects expected hex `63` at step `1`
+  in 54 seconds, and the three-short-case official-vector slice passes all
+  9 selected-token checks. Plain RMS, weighted RMS, head RMS, fused Q/KV
+  RMS rows, and attention decode ABI consumers pass; B300 feature tests pass
+  with 176 tests. Local `ds4-cuda` tests pass with 169 tests and the unified
+  report passes with 260 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The full
+  official-vector run remains compute-active at 100% GPU use after 935
+  seconds and is terminated with zero allocation;
+  serialized generic prefill attention is the next performance boundary.
+  Route promotion and C CUDA removal remain blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Generic Decode Attention Parallel Repair
   is validated on B300 as a performance-only repair. The generic mixed
   attention kernel now uses block-parallel score staging, reductions, and

@@ -13018,10 +13018,48 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Prefill Q-Path Correctness And C CUDA Removal Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because current C uses `rsqrtf` at the first observed Q/KV normalization
+  boundary while the Rust kernels used division by `sqrt`.
+- Goal: align the numeric primitive and rerun end-to-end route gates without
+  weakening the full-route promotion threshold.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Reciprocal-Square-Root Route Correctness Repair
+
+- Status: done.
+- Goal: use CUDA libdevice reciprocal square root at the current-C-equivalent
+  RMS and attention scale sites, while preserving the opt-in route boundary.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-rsqrt-route-correctness-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_rsqrt_route_correctness_repair.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` now calls device `__nv_rsqrtf` for
+    the C-equivalent RMS and attention scale operations. The shared object
+    defines the otherwise-unused host symbol needed by the cuda-oxide
+    device-extern wrapper, while embedded modules continue to link libdevice.
+  - On B300, the two-step `short_code_completion` replay now selects expected
+    hex `63` at step `1` and completes in `54` seconds. The three-short-case
+    official-vector slice passes all `9` selected-token checks.
+  - The plain RMS, weighted RMS, head RMS, fused Q/KV RMS rows, and attention
+    decode public ABI consumers all pass against the rebuilt Rust DSO; the
+    B300 feature suite passes with `176` tests.
+  - Local `ds4-cuda` library tests pass with `169` tests and the unified
+    report passes with `260` passed, `45` skipped, and `0` failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - The full official-vector route remains compute-active at 100% B300 use
+    after `935` seconds and is terminated with zero GPU allocation afterward.
+    Source inspection leaves serialized generic prefill attention as the next
+    performance boundary. Route promotion and C CUDA removal remain blocked.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Long-Prefill Performance And C CUDA Removal Policy
+
 - Status: active.
-- Goal: repair the layer-0 prefill Q projection/head-normalization divergence,
-  rerun end-to-end correctness gates, and only then consider route promotion
-  or C CUDA removal.
+- Goal: close the full official-vector runtime gate by repairing the measured
+  long-prefill performance boundary, then reconsider route promotion or C
+  CUDA removal.
 
 ## Removal Criteria for C Host Code
 
