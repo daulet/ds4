@@ -11617,8 +11617,44 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the B300-proved sorted metadata and P2/no-P2 projection subset can
+  be retained independently while the remaining batch scheduling matrix is
+  still incomplete in the public Rust archive.
+- Goal: retain the sorted batched routed-MoE kernel subset, then connect
+  remaining graph compute,
+  whole-archive retention policy, and production route-promotion work without
+  claiming C CUDA removal before those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Sorted Batched Routed MoE ABI Module
+
+- Status: done
+- Goal: retain the already-proved sorted-pair metadata and sorted P2/no-P2
+  routed-MoE kernels in the Rust CUDA ABI module without exporting the
+  incomplete public batch wrapper.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-sorted-module-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_sorted_module_smoke.py --negative-test`.
+- Evidence:
+  - The retained ABI module embeds sorted-pair count/prefix/scatter and the
+    sorted P2/no-P2 IQ2/Q2 gate/down entries promoted from prior B300 proofs.
+  - A rebuilt-staticlib B300 regression run loads the enlarged module while
+    preserving the published single-token routed-MoE behavior; the archive
+    retains 74 Rust ABI exports and embeds 79 kernels.
+  - Local tests pass with 155 tests; B300 feature tests pass with 162 tests;
+    all 69 CUDA ABI comparators pass; and the unified report passes with 242
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Public batched routed-MoE ownership remains deferred until expert-tile,
+    atomic-down, tile16, and row-span scheduling are integrated.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: Rust-own or further scope batched routed-MoE execution now that its
-  CUDA result contract is explicit, then connect remaining graph compute,
+- Goal: integrate or further scope expert-tile, atomic-down, tile16, and
+  row-span routed-MoE batch dispatch, then connect remaining graph compute,
   whole-archive retention policy, and production route-promotion work without
   claiming C CUDA removal before those gates pass.

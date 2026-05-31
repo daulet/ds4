@@ -3,7 +3,20 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Sorted Batched Routed MoE ABI Module
+  is validated on B300. The retained Rust CUDA ABI module now embeds
+  sorted-pair count/prefix/scatter plus sorted P2 and no-P2 IQ2/Q2 gate/down
+  entries already exercised by earlier B300 route proofs. The rebuilt
+  static library still exposes 74 Rust ABI symbols, now embeds 79 kernels,
+  and links/runs the existing public single-token C consumer while loading
+  the enlarged module. Local tests pass with 155 tests; B300 feature tests
+  pass with 162 tests; all 69 CUDA ABI comparators pass; and the unified
+  report passes with 242 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Public Rust
+  batched routed-MoE export remains deferred until expert-tile, atomic-down,
+  tile16, and row-span dispatch are integrated.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: CUDA Batched Routed MoE Mid Precision Contract Repair
   is validated on B300. The retained CUDA public batch wrapper now accepts
   the declared `bool *mid_is_f16` result and reports `false` after successful

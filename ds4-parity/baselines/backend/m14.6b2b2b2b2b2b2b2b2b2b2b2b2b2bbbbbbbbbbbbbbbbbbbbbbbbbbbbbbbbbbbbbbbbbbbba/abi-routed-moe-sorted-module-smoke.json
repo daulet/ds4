@@ -1,0 +1,94 @@
+{
+  "schema": "ds4.cuda_abi_routed_moe_sorted_module_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-embedded-sorted-routed-moe-module",
+  "goal": "Retain the already-proved sorted-pair metadata and sorted P2/no-P2 routed-MoE batch projection kernels in the Rust CUDA ABI module without exporting the public batch wrapper before all reachable batch scheduling paths are integrated.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_routed_moe_batch_tensor"
+    ],
+    "prior_proof_sources": [
+      "rust/ds4-cuda/src/bin/routed_moe_sorted_p2_smoke.rs",
+      "ds4-parity/baselines/backend/m14.5c2b1/routed-moe-sorted-pairs-smoke.json",
+      "ds4-parity/baselines/backend/m14.5c2b2/routed-moe-sorted-p2-smoke.json",
+      "ds4-parity/baselines/backend/m14.5c2f/routed-moe-qwarp-fallback-smoke.json"
+    ],
+    "semantics": [
+      "multi-token quantized routed-MoE dispatch creates expert-sorted pair metadata before selecting expert-tile or no-expert-tile branches",
+      "the no-expert-tiles branch can select sorted P2 or sorted no-P2 IQ2/Q2 gate and down projections",
+      "expert-tile, atomic-down, tile16, and row-span branches remain reachable current-C behavior and prevent a bounded public Rust batch wrapper in this leaf"
+    ]
+  },
+  "implementation": {
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "regression_harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_routed_moe_one_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_moe_count_sorted_pairs_kernel",
+      "abi_moe_prefix_sorted_pairs_kernel",
+      "abi_moe_scatter_sorted_pairs_kernel",
+      "abi_moe_gate_up_mid_sorted_qwarp32_kernel",
+      "abi_moe_gate_up_mid_sorted_p2_qwarp32_kernel",
+      "abi_moe_down_sorted_qwarp32_kernel",
+      "abi_moe_down_sorted_p2_qwarp32_kernel"
+    ],
+    "adapter_boundary": "the retained ABI module now loads sorted-pair metadata plus sorted P2 and no-P2 IQ2/Q2 projection entries using the packed Q8_K storage convention already used by the public single-token ABI",
+    "reuse_boundary": "this leaf embeds kernels whose numerical behavior was already executed on B300 in M14.5c2b1, M14.5c2b2, and M14.5c2f",
+    "remaining_compute_boundary": "Rust still does not export ds4_gpu_routed_moe_batch_tensor; expert-tile, atomic-down, tile16, and row-span batch dispatch remain to be integrated before public batch ownership",
+    "linkage_requirement": "the existing C-linked public single-token consumer retains and loads the enlarged Rust static-library kernel module with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 74,
+    "exported_compute_symbol_count": 72,
+    "embedded_kernel_count": 79,
+    "consumes_published_routed_moe_one_abi": true,
+    "embeds_sorted_pair_metadata_kernels": true,
+    "embeds_sorted_p2_and_no_p2_projection_kernels": true,
+    "owns_routed_moe_batch_tensor": false,
+    "owns_expert_tile_atomic_or_rowspan_batch_dispatch": false,
+    "owns_complete_routed_moe_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "target": "sm_80",
+    "local_library_test_count": 155,
+    "feature_release_test_count": 162,
+    "staticlib_export_count": 74,
+    "embedded_kernel_count": 79,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "embedded_routed_moe_kernels_loaded": true,
+      "single_token_public_regression_remains_passing": true,
+      "sorted_pair_metadata_entries_generated": true,
+      "sorted_no_p2_projection_entries_generated": true,
+      "sorted_p2_projection_entries_generated": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 155,
+    "b300_feature_release_test_count": 162,
+    "cuda_abi_comparators_passed": 69,
+    "unified_report_passed": 242,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "integration_risks": [
+    "the public Rust batched routed-MoE wrapper remains deferred because current CUDA still reaches expert-tile, atomic-down, tile16, and row-span branches not embedded in this leaf",
+    "these retained sorted kernels enlarge the static-library module but are not host-dispatched by a new public ABI symbol in this prerequisite",
+    "whole-archive retention policy, production route promotion, and C CUDA removal remain pending"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

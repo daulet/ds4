@@ -12303,11 +12303,53 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
-- Goal: Rust-own or further scope batched routed-MoE execution now that its
-  CUDA result contract is explicit, then connect remaining graph compute,
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because sorted-pair metadata and sorted P2/no-P2 quantized projections are
+  already proved on B300, while expert-tile, atomic-down, tile16, and
+  row-span dispatch still prevent a bounded public batch wrapper.
+- Goal: retain the already-proved sorted batched routed-MoE kernel subset in
+  the ABI module, then connect remaining graph compute,
   whole-archive retention policy, and production route-promotion work without
   claiming C CUDA removal before those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Sorted Batched Routed MoE ABI Module
+
+- Status: done.
+- Goal: retain the already-proved sorted-pair metadata and sorted P2/no-P2
+  routed-MoE kernels in the Rust CUDA ABI module without exporting
+  `ds4_gpu_routed_moe_batch_tensor` before every reachable batch scheduling
+  path is integrated.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-sorted-module-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_sorted_module_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds and retains seven new module
+    entries: sorted-pair count/prefix/scatter plus sorted P2 and no-P2
+    IQ2/Q2 gate/down projections.
+  - `rust/ds4-cuda/src/lib.rs` records this as module retention only: the
+    public batched routed-MoE symbol and expert-tile/atomic/row-span
+    scheduling remain unowned.
+  - The rebuilt Rust static library links and runs the existing C-linked
+    public single-token B300 consumer while loading the expanded embedded
+    module; it still exports 74 Rust ABI symbols and now embeds 79 kernels.
+  - Local `ds4-cuda` library tests pass with 155 tests; B300 release-feature
+    tests pass with 162 tests; all 69 CUDA ABI comparators pass; and the
+    unified report passes with 242 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Rust still does not export `ds4_gpu_routed_moe_batch_tensor`; expert-tile,
+    atomic-down, tile16, row-span, route promotion, whole-archive retention
+    policy, and C CUDA removal remain open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: integrate or further scope the remaining expert-tile, atomic-down,
+  tile16, and row-span routed-MoE batch routes, then connect remaining graph
+  compute, whole-archive retention policy, and production route-promotion
+  work without claiming C CUDA removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 

@@ -3951,6 +3951,20 @@ result pointer, and leaves the result sentinel unchanged on rejected calls.
 Rust batched routed-MoE export, route promotion, and C CUDA removal remain
 open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA embedded sorted batched routed-MoE ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_sorted_module_smoke.py --negative-test
+```
+
+The retained Rust static-library module now embeds the previously measured
+sorted-pair metadata plus sorted P2 and no-P2 IQ2/Q2 projection kernels. A
+C-linked B300 public single-token regression consumer proves that the
+expanded embedded module loads without changing the published ABI surface.
+Rust batched routed-MoE export remains pending until the expert-tile,
+atomic-down, tile16, and row-span paths are integrated.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

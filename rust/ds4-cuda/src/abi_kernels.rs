@@ -7,7 +7,10 @@ use cuda_core::embedded::{
     embedded_modules_from_current_exe, ArtifactPayloadKind, EmbeddedModuleError,
 };
 use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, LaunchConfig};
-use cuda_device::{cuda_module, integer, kernel, thread, warp, DisjointSlice, SharedArray};
+use cuda_device::{
+    atomic::{AtomicOrdering, DeviceAtomicU32},
+    cuda_module, integer, kernel, thread, warp, DisjointSlice, SharedArray,
+};
 use cuda_host::ltoir::{self, LtoirError};
 
 const THREADS_PER_BLOCK: u32 = 256;
@@ -20,6 +23,7 @@ const ABI_MOE_IQ2_BLOCK_BYTES: u64 = 66;
 const ABI_MOE_Q2_BLOCK_BYTES: u64 = 84;
 const ABI_MOE_Q4_BLOCK_BYTES: u64 = 144;
 const ABI_MOE_Q8_K_BLOCK_BYTES: u64 = 292;
+const ABI_MOE_SORTED_EXPERTS: usize = 256;
 pub(crate) const ABI_MOE_IQ2_SIGNS: [u8; 128] = [
     0, 129, 130, 3, 132, 5, 6, 135, 136, 9, 10, 139, 12, 141, 142, 15, 144, 17, 18, 147, 20, 149,
     150, 23, 24, 153, 154, 27, 156, 29, 30, 159, 160, 33, 34, 163, 36, 165, 166, 39, 40, 169, 170,
@@ -1933,6 +1937,66 @@ mod kernels {
         }
     }
 
+    #[kernel]
+    pub fn abi_moe_count_sorted_pairs_kernel(pair_count: u32, selected: &[i32], counts: &[u32]) {
+        let pair = thread::index_1d().get();
+        if pair >= pair_count as usize {
+            return;
+        }
+        let mut expert = selected[pair];
+        if expert < 0 {
+            expert = 0;
+        }
+        let counter = unsafe { &*(counts.as_ptr().add(expert as usize) as *const DeviceAtomicU32) };
+        counter.fetch_add(1, AtomicOrdering::Relaxed);
+    }
+
+    #[kernel]
+    pub fn abi_moe_prefix_sorted_pairs_kernel(
+        counts: &[u32],
+        mut offsets: DisjointSlice<u32>,
+        mut cursors: DisjointSlice<u32>,
+    ) {
+        if thread::threadIdx_x() != 0 {
+            return;
+        }
+        let mut sum = 0_u32;
+        let mut expert = 0_usize;
+        while expert < ABI_MOE_SORTED_EXPERTS {
+            unsafe {
+                *offsets.get_unchecked_mut(expert) = sum;
+                *cursors.get_unchecked_mut(expert) = sum;
+            }
+            sum += counts[expert];
+            expert += 1;
+        }
+        unsafe {
+            *offsets.get_unchecked_mut(ABI_MOE_SORTED_EXPERTS) = sum;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_moe_scatter_sorted_pairs_kernel(
+        pair_count: u32,
+        selected: &[i32],
+        cursors: &[u32],
+        mut sorted_pairs: DisjointSlice<u32>,
+    ) {
+        let pair = thread::index_1d().get();
+        if pair >= pair_count as usize {
+            return;
+        }
+        let mut expert = selected[pair];
+        if expert < 0 {
+            expert = 0;
+        }
+        let cursor = unsafe { &*(cursors.as_ptr().add(expert as usize) as *const DeviceAtomicU32) };
+        let position = cursor.fetch_add(1, AtomicOrdering::Relaxed);
+        unsafe {
+            *sorted_pairs.get_unchecked_mut(position as usize) = pair as u32;
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[kernel]
     pub fn abi_moe_gate_up_mid_f32_kernel(
@@ -2126,6 +2190,125 @@ mod kernels {
 
     #[allow(clippy::too_many_arguments)]
     #[kernel]
+    pub fn abi_moe_gate_up_mid_sorted_qwarp32_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        sorted_pairs: &[u32],
+        selected: &[i32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        let pair = sorted_pairs[thread::blockIdx_y() as usize];
+        if row >= expert_mid_dim {
+            return;
+        }
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_base = expert as u64 * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+        let mut gate = 0.0_f32;
+        let mut up = 0.0_f32;
+        let mut block = lane;
+        while block < xq_blocks {
+            let q8_block = (u64::from(token) * u64::from(xq_blocks) + u64::from(block)) as usize;
+            let packed = (row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES) as usize;
+            gate += abi_moe_iq2_q8_k_dot(gate_weights, packed, xq, q8_block, iq2_grid, iq2_signs);
+            up += abi_moe_iq2_q8_k_dot(up_weights, packed, xq, q8_block, iq2_grid, iq2_signs);
+            block += 8;
+        }
+        gate = abi_moe_quarter_warp_sum(gate);
+        up = abi_moe_quarter_warp_sum(up);
+        if lane == 0 {
+            abi_moe_apply_clamp(&mut gate, &mut up, clamp);
+            let offset = (pair * expert_mid_dim + row) as usize;
+            unsafe {
+                *gate_out.get_unchecked_mut(offset) = gate;
+                *up_out.get_unchecked_mut(offset) = up;
+                *mid_out.get_unchecked_mut(offset) =
+                    (gate / (1.0 + (-gate).exp())) * up * weights[pair as usize];
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_gate_up_mid_sorted_p2_qwarp32_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        sorted_pairs: &[u32],
+        selected: &[i32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let pair_lane = (thread::threadIdx_x() >> 3) & 1;
+        let row = thread::blockIdx_x() * 16 + (thread::threadIdx_x() >> 4);
+        let sorted_index = thread::blockIdx_y() * 2 + pair_lane;
+        if row >= expert_mid_dim || sorted_index >= pair_count {
+            return;
+        }
+        let pair = sorted_pairs[sorted_index as usize];
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_base = expert as u64 * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+        let mut gate = 0.0_f32;
+        let mut up = 0.0_f32;
+        let mut block = lane;
+        while block < xq_blocks {
+            let q8_block = (u64::from(token) * u64::from(xq_blocks) + u64::from(block)) as usize;
+            let packed = (row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES) as usize;
+            gate += abi_moe_iq2_q8_k_dot(gate_weights, packed, xq, q8_block, iq2_grid, iq2_signs);
+            up += abi_moe_iq2_q8_k_dot(up_weights, packed, xq, q8_block, iq2_grid, iq2_signs);
+            block += 8;
+        }
+        gate = abi_moe_quarter_warp_sum(gate);
+        up = abi_moe_quarter_warp_sum(up);
+        if lane == 0 {
+            abi_moe_apply_clamp(&mut gate, &mut up, clamp);
+            let offset = (pair * expert_mid_dim + row) as usize;
+            unsafe {
+                *gate_out.get_unchecked_mut(offset) = gate;
+                *up_out.get_unchecked_mut(offset) = up;
+                *mid_out.get_unchecked_mut(offset) =
+                    (gate / (1.0 + (-gate).exp())) * up * weights[pair as usize];
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
     pub fn abi_moe_gate_up_mid_decode_lut_qwarp32_kernel(
         write_aux: u32,
         xq_blocks: u32,
@@ -2230,6 +2413,101 @@ mod kernels {
             return;
         }
         let mut expert = selected[pair as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_base = expert as u64 * down_expert_bytes + u64::from(row) * down_row_bytes;
+        let mut accumulator = 0.0_f32;
+        let mut block = lane;
+        while block < midq_blocks {
+            accumulator += abi_moe_q2_q8_k_dot(
+                down_weights,
+                (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize,
+                midq,
+                (u64::from(pair) * u64::from(midq_blocks) + u64::from(block)) as usize,
+            );
+            block += 8;
+        }
+        accumulator = abi_moe_quarter_warp_sum(accumulator);
+        if lane == 0 {
+            unsafe {
+                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) = accumulator;
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_down_sorted_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        sorted_pairs: &[u32],
+        selected: &[i32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        let pair = sorted_pairs[thread::blockIdx_y() as usize];
+        if row >= out_dim {
+            return;
+        }
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_base = expert as u64 * down_expert_bytes + u64::from(row) * down_row_bytes;
+        let mut accumulator = 0.0_f32;
+        let mut block = lane;
+        while block < midq_blocks {
+            accumulator += abi_moe_q2_q8_k_dot(
+                down_weights,
+                (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize,
+                midq,
+                (u64::from(pair) * u64::from(midq_blocks) + u64::from(block)) as usize,
+            );
+            block += 8;
+        }
+        accumulator = abi_moe_quarter_warp_sum(accumulator);
+        if lane == 0 {
+            unsafe {
+                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) = accumulator;
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_down_sorted_p2_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        sorted_pairs: &[u32],
+        selected: &[i32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let pair_lane = (thread::threadIdx_x() >> 3) & 1;
+        let row = thread::blockIdx_x() * 16 + (thread::threadIdx_x() >> 4);
+        let sorted_index = thread::blockIdx_y() * 2 + pair_lane;
+        if row >= out_dim || sorted_index >= pair_count {
+            return;
+        }
+        let pair = sorted_pairs[sorted_index as usize];
+        let token = pair / n_expert;
+        let slot = pair - token * n_expert;
+        let mut expert = selected[(token * n_expert + slot) as usize];
         if expert < 0 {
             expert = 0;
         }
@@ -4980,6 +5258,20 @@ pub(crate) struct AbiKernelModule {
     moe_gate_up_mid_f32_kernel: CudaFunction,
     moe_down_f32_kernel: CudaFunction,
     moe_gate_up_mid_qwarp32_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_count_sorted_pairs_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_prefix_sorted_pairs_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_scatter_sorted_pairs_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_gate_up_mid_sorted_qwarp32_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_gate_up_mid_sorted_p2_qwarp32_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_down_sorted_qwarp32_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_down_sorted_p2_qwarp32_kernel: CudaFunction,
     moe_gate_up_mid_decode_lut_qwarp32_kernel: CudaFunction,
     moe_gate_up_mid_decode_q4_k_qwarp32_kernel: CudaFunction,
     moe_down_qwarp32_kernel: CudaFunction,
@@ -5115,6 +5407,27 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_gate_up_mid_qwarp32_kernel: module
                 .load_function("abi_moe_gate_up_mid_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_count_sorted_pairs_kernel: module
+                .load_function("abi_moe_count_sorted_pairs_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_prefix_sorted_pairs_kernel: module
+                .load_function("abi_moe_prefix_sorted_pairs_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_scatter_sorted_pairs_kernel: module
+                .load_function("abi_moe_scatter_sorted_pairs_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_sorted_qwarp32_kernel: module
+                .load_function("abi_moe_gate_up_mid_sorted_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_sorted_p2_qwarp32_kernel: module
+                .load_function("abi_moe_gate_up_mid_sorted_p2_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_sorted_qwarp32_kernel: module
+                .load_function("abi_moe_down_sorted_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_sorted_p2_qwarp32_kernel: module
+                .load_function("abi_moe_down_sorted_p2_qwarp32_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_gate_up_mid_decode_lut_qwarp32_kernel: module
                 .load_function("abi_moe_gate_up_mid_decode_lut_qwarp32_kernel")
