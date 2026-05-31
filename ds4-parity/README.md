@@ -3978,6 +3978,20 @@ single-token regression consumer proves that the 81-entry module loads
 without expanding the public Rust ABI. Tile projections, atomic accumulation,
 tile16, row-span dispatch, and the public batched wrapper remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA embedded row32 tiled and atomic-down routed-MoE ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_row32_tiled_atomic_module_smoke.py --negative-test
+```
+
+The retained module now embeds the previously measured tile4 and tile8
+row32 gate/down entries and their atomic-output zeroing prerequisite. A
+C-linked B300 public single-token regression consumer proves that the
+86-entry module loads without expanding the public Rust ABI. Tile16,
+row-span dispatch, shared-cache specialization, and the public batched
+wrapper remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

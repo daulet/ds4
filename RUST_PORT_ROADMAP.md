@@ -12386,11 +12386,50 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
-- Goal: integrate or further scope tile4/tile8 projection, atomic-down,
-  tile16, and row-span routed-MoE batch routes, then connect remaining graph
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the row32 tile4/tile8 down entries contain their atomic-output
+  branch and must be retained with its output-zeroing prerequisite.
+- Goal: retain row32 tiled and atomic-down routed-MoE kernels, then integrate
+  tile16 and row-span batch routes before connecting remaining graph
   compute, whole-archive retention policy, and production route-promotion
   work without claiming C CUDA removal before those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Row32 Tiled And Atomic Routed MoE ABI Module
+
+- Status: done.
+- Goal: retain the B300-proved tile4/tile8 row32 routed-MoE gate/down
+  kernels and row32 atomic-output zeroing prerequisite in the Rust CUDA ABI
+  module without exporting the incomplete public batched wrapper.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-row32-tiled-atomic-module-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_row32_tiled_atomic_module_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` now retains row32 tile4/tile8
+    gate/up/mid projection kernels, tile4/tile8 down kernels with their
+    `atomic_out` branch, and the atomic-output zeroing prerequisite.
+  - `rust/ds4-cuda/src/lib.rs` records 86 embedded kernels while preserving
+    74 public Rust ABI symbols and expressly not claiming tile16, row-span,
+    or public batch ownership.
+  - B300 `sm_80` compilation lowered the retained float atomic path and the
+    rebuilt static library links/runs the existing C-linked public
+    single-token routed-MoE consumer while loading the 86-entry module.
+  - Local library tests pass with 157 tests; B300 release-feature tests pass
+    with 164 tests; all 71 CUDA ABI comparators pass; and the unified report
+    passes with 244 passed, 45 skipped, and 0 failed. The pre-implementation
+    and final pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Tile16, row-span, shared-cache specialization, public batched routed-MoE
+    export, route promotion, and C CUDA removal remain open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: integrate or further scope tile16, row-span, and shared-cache
+  routed-MoE batch routes, then connect remaining graph compute,
+  whole-archive retention policy, and production route-promotion work
+  without claiming C CUDA removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 
