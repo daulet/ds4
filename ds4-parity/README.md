@@ -4418,6 +4418,19 @@ packed row/block. A C-linked B300 public-route harness proves the fixed
 `1` and `2`; earlier cached-down timing remains provenance from pre-correction
 arithmetic, not a correctness baseline.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA gate row-span 256 default performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_gate_rowspan_256_default_performance_repair.py --negative-test
+```
+
+On corrected cached-down arithmetic, the opt-in Rust DSO now selects row-256
+for cached gate/up unless an explicit row-span override is present. A
+same-DSO B300 comparison lowers gate/up from `1462.508 ms` at explicit
+row-512 to `1447.708 ms` by default; PTX is unchanged, official-vector
+correctness is preserved, and the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

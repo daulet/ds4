@@ -2232,6 +2232,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust CUDA gate row-span 256 default performance repair",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_rust_gate_rowspan_256_default_performance_repair.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

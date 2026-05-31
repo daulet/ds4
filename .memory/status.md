@@ -4,6 +4,25 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Row-Span 256 Default Performance Repair
+  is validated on B300 from corrected cached-down arithmetic. The opt-in Rust
+  DSO host dispatch now honors the existing row-256 and row-128 gate controls
+  and selects row-256 by default within the cached gate route; explicit
+  row-512 and row-2048 controls remain available. The repaired DSO SHA-256 is
+  `0f835118466070058b1aaf1488262ba8121af707e272ac61ecbc5c8adffa509f`,
+  while the PTX remains identical to the corrected parent at
+  `3da678adc63c955636ab363b489f8c3f43d15601f73ca661f4ae779bc8517b8e`.
+  On the same repaired DSO, the row-512 control records `1462.508 ms`
+  gate/up and `2339.976 ms` total, while the new default records
+  `1447.708 ms` and `2324.995 ms`, reductions of `1.01%` and `0.64%`.
+  A separate quarter-warp reduction-inline probe is rejected at
+  `2339.215 ms` total because its `1.365 ms` reduction versus the corrected
+  parent is below a defensible threshold. Official vectors pass `1958`
+  checks plus `8` negative checks and B300 feature tests pass `176` tests.
+  The unified report passes with `273` passed, `50` skipped, and `0` failed.
+  Both pre-implementation review attempts and final Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains `2.52x`
+  current-C, so default routing and promotion blockers remain in force.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Scale-Base Correctness Repair
   is validated on B300. The cached down row-span kernel now starts its
   low-nibble Q2 scale cursor at the active packed row/block, matching both

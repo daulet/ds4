@@ -96,9 +96,14 @@ def validate_implementation(report: Report, fixture: dict[str, Any], texts: dict
     report.check('"DS4_CUDA_MOE_GATE_ROW512"' in span_block, "explicit row-512 control missing")
     report.check('"DS4_CUDA_MOE_GATE_ROW2048"' in span_block, "explicit row-2048 control missing")
     report.check("1024" not in span_block, "parent no-override row span retained")
+    successor_registered = "check_cuda_rust_gate_rowspan_256_default_performance_repair.py" in texts["report"]
     report.check(
-        "} else {\n                                                512\n                                            };" in span_block,
-        "repaired no-override row span missing",
+        "} else {\n                                                512\n                                            };" in span_block
+        or (
+            successor_registered
+            and "} else {\n                                                256\n                                            };" in span_block
+        ),
+        "validated no-override row-span lineage missing",
     )
     report.check(
         "macro_rules! abi_moe_down_accumulate_q2_group" in texts["kernels"],

@@ -12759,3 +12759,35 @@
     Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
     Default current-C routing and promotion blockers remain in force while
     performance work resumes on corrected arithmetic.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Row-Span 256 Default Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE gate/up overhead on corrected
+  arithmetic by selecting the measured row-256 policy on the opt-in Rust
+  route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-gate-rowspan-256-default-performance-repair.json`
+- Evidence:
+  - Only `gate_row_span` selection in `rust/ds4-cuda/src/abi.rs` changes:
+    no-override cached gate execution selects `256`; existing row-256 and
+    row-128 controls are honored; explicit row-512 and row-2048 controls are
+    retained. Corrected down arithmetic, kernel PTX, the benchmark executable,
+    and default current-C routing are unchanged.
+  - Measurement-only probes on one DSO record row-512 at `1462.051 ms`
+    gate/up, row-256 twice at `1448.505 ms` and `1448.424 ms`, and row-128
+    at `1449.764 ms`, identifying row-256 as the retained policy.
+  - On the retained DSO, explicit row-512 records `1462.508 ms` gate/up and
+    `2339.976 ms` total, while default row-256 records `1447.708 ms` and
+    `2324.995 ms`, reductions of `1.01%` and `0.64%`.
+  - A quarter-warp reduction-inline probe is rejected at `2339.215 ms`
+    total because its improvement versus the corrected parent is only
+    `1.365 ms`. The retained DSO SHA-256 is
+    `0f835118466070058b1aaf1488262ba8121af707e272ac61ecbc5c8adffa509f`;
+    PTX remains `3da678adc63c955636ab363b489f8c3f43d15601f73ca661f4ae779bc8517b8e`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `273`
+    passed, `50` skipped, and `0` failed. Both pre-implementation Claude
+    review attempts and final review returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains `2.52x`
+    current-C, so default routing and promotion blockers remain in force.
