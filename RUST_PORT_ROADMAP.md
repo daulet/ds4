@@ -12464,8 +12464,48 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the prior B300 gate row-span proof is an isolated functional
+  module prerequisite for later down row-span and shared-cache dispatch.
+- Goal: retain tile8 gate row-span projection, then integrate or further
+  scope tile16 down row-span and shared-cache routed-MoE batch routes before
+  connecting remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Gate Rowspan Routed MoE ABI Module
+
+- Status: done.
+- Goal: retain the B300-proved tile8 gate row-span functional projection
+  kernel in the Rust CUDA ABI module without claiming down row-span,
+  shared-cache optimization, or public batched-wrapper ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-gate-rowspan-module-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_gate_rowspan_module_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` now retains one tile8 gate row-span
+    entry spanning the functional row512, row1024, and row2048 route surface
+    while preserving optional auxiliary writes and clamp behavior.
+  - `rust/ds4-cuda/src/lib.rs` records 88 embedded kernels while preserving
+    74 public Rust ABI symbols and expressly not claiming tile16 down
+    row-span, shared-cache dispatch, or public batch ownership.
+  - B300 `sm_80` compilation generated the gate row-span entry, and the
+    rebuilt static library links/runs the existing C-linked public
+    single-token routed-MoE consumer while loading the 88-entry module.
+  - Local library tests pass with 159 tests; B300 release-feature tests pass
+    with 166 tests; all 73 CUDA ABI comparators pass; and the unified report
+    passes with 246 passed, 45 skipped, and 0 failed. The pre-implementation
+    and final pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Tile16 down row-span, shared-cache specialization, public batched
+    routed-MoE export, route promotion, and C CUDA removal remain open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
-- Goal: integrate or further scope widened row-span and shared-cache
+- Goal: integrate or further scope tile16 down row-span and shared-cache
   routed-MoE batch routes, then connect remaining graph compute,
   whole-archive retention policy, and production route-promotion work
   without claiming C CUDA removal before those gates pass.

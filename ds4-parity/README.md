@@ -4006,6 +4006,20 @@ regression consumer proves that the 87-entry module loads without expanding
 the public Rust ABI. Widened row-span dispatch, shared-cache specialization,
 and the public batched wrapper remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA embedded gate row-span routed-MoE ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_gate_rowspan_module_smoke.py --negative-test
+```
+
+The retained module now embeds the previously measured functional tile8 gate
+row-span entry over row512, row1024, and row2048 scheduling while preserving
+auxiliary-write and clamp semantics. A C-linked B300 public single-token
+regression consumer proves that the 88-entry module loads without expanding
+the public Rust ABI. Tile16 down row-span dispatch, shared-cache
+specialization, and the public batched wrapper remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

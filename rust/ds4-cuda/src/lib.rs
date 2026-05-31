@@ -3966,6 +3966,40 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiRoutedMoeGateRowspanModuleScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub embedded_kernel_count: u32,
+    pub consumes_tile16_row32_atomic_module: bool,
+    pub reuses_tile8_expert_tile_metadata: bool,
+    pub embeds_gate_tile8_rowspan_kernel: bool,
+    pub owns_gate_rowspan_functional_surface: bool,
+    pub owns_down_rowspan_or_shared_cache_dispatch: bool,
+    pub owns_routed_moe_batch_tensor: bool,
+    pub owns_complete_routed_moe_abi: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE:
+    CudaAbiRoutedMoeGateRowspanModuleScope = CudaAbiRoutedMoeGateRowspanModuleScope {
+    exported_abi_symbol_count: 74,
+    exported_compute_symbol_count: 72,
+    embedded_kernel_count: 88,
+    consumes_tile16_row32_atomic_module: true,
+    reuses_tile8_expert_tile_metadata: true,
+    embeds_gate_tile8_rowspan_kernel: true,
+    owns_gate_rowspan_functional_surface: true,
+    owns_down_rowspan_or_shared_cache_dispatch: false,
+    owns_routed_moe_batch_tensor: false,
+    owns_complete_routed_moe_abi: false,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -4061,6 +4095,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -7317,6 +7352,65 @@ mod tests {
         );
         assert!(
             !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .changes_default_route
+        );
+    }
+
+    #[test]
+    fn retained_gate_rowspan_kernel_defers_down_cache_and_public_batch_ownership() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_abi_symbol_count,
+            74
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_compute_symbol_count,
+            72
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .embedded_kernel_count,
+            88
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .consumes_tile16_row32_atomic_module
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .reuses_tile8_expert_tile_metadata
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .embeds_gate_tile8_rowspan_kernel
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_gate_rowspan_functional_surface
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_down_rowspan_or_shared_cache_dispatch
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_routed_moe_batch_tensor
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_routed_moe_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_remaining_graph_compute_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_ds4_gpu_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
                 .changes_default_route
         );
     }

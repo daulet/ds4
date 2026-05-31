@@ -2152,6 +2152,97 @@ mod kernels {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        row_span: u32,
+        write_aux: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        let mut row_offset = 0_u32;
+        while row_offset < row_span {
+            let row = thread::blockIdx_x() * row_span + row_lane + row_offset;
+            if row < expert_mid_dim {
+                let row_base =
+                    u64::from(expert) * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+                let mut entry = 0_u32;
+                while entry < 8 {
+                    let local_pair = local_start + entry;
+                    if local_pair < counts[expert as usize] {
+                        let pair = sorted_pairs[(offsets[expert as usize] + local_pair) as usize];
+                        let token = pair / n_expert;
+                        let mut gate = 0.0_f32;
+                        let mut up = 0.0_f32;
+                        let mut block = lane;
+                        while block < xq_blocks {
+                            let q8_block = (u64::from(token) * u64::from(xq_blocks)
+                                + u64::from(block))
+                                as usize;
+                            let packed =
+                                (row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES) as usize;
+                            gate += abi_moe_iq2_q8_k_dot(
+                                gate_weights,
+                                packed,
+                                xq,
+                                q8_block,
+                                iq2_grid,
+                                iq2_signs,
+                            );
+                            up += abi_moe_iq2_q8_k_dot(
+                                up_weights, packed, xq, q8_block, iq2_grid, iq2_signs,
+                            );
+                            block += 8;
+                        }
+                        gate = abi_moe_quarter_warp_sum(gate);
+                        up = abi_moe_quarter_warp_sum(up);
+                        if lane == 0 {
+                            abi_moe_apply_clamp(&mut gate, &mut up, clamp);
+                            let output = (pair * expert_mid_dim + row) as usize;
+                            unsafe {
+                                if write_aux != 0 {
+                                    *gate_out.get_unchecked_mut(output) = gate;
+                                    *up_out.get_unchecked_mut(output) = up;
+                                }
+                                *mid_out.get_unchecked_mut(output) =
+                                    (gate / (1.0 + (-gate).exp())) * up * weights[pair as usize];
+                            }
+                        }
+                    }
+                    entry += 1;
+                }
+            }
+            row_offset += 32;
+        }
+    }
+
     #[kernel]
     pub fn abi_moe_atomic_output_zero_kernel(mut output: DisjointSlice<f32>, count: u64) {
         let index = thread::index_1d().get();
@@ -5712,6 +5803,8 @@ pub(crate) struct AbiKernelModule {
     #[allow(dead_code)]
     moe_gate_up_mid_expert_tile8_row32_kernel: CudaFunction,
     #[allow(dead_code)]
+    moe_gate_up_mid_expert_tile8_rowspan_kernel: CudaFunction,
+    #[allow(dead_code)]
     moe_atomic_output_zero_kernel: CudaFunction,
     #[allow(dead_code)]
     moe_down_expert_tile4_row32_kernel: CudaFunction,
@@ -5883,6 +5976,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_gate_up_mid_expert_tile8_row32_kernel: module
                 .load_function("abi_moe_gate_up_mid_expert_tile8_row32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_expert_tile8_rowspan_kernel: module
+                .load_function("abi_moe_gate_up_mid_expert_tile8_rowspan_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_atomic_output_zero_kernel: module
                 .load_function("abi_moe_atomic_output_zero_kernel")

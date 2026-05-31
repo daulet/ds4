@@ -1,0 +1,86 @@
+{
+  "schema": "ds4.cuda_abi_routed_moe_gate_rowspan_module_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-embedded-gate-rowspan-module",
+  "goal": "Retain the B300-proved tile8 routed-MoE functional gate row-span kernel in the Rust CUDA ABI module without exporting the incomplete public batch wrapper or claiming shared-cache optimization.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_routed_moe_batch_tensor"
+    ],
+    "prior_proof_sources": [
+      "rust/ds4-cuda/src/bin/routed_moe_tile8_row32_smoke.rs",
+      "ds4-parity/baselines/backend/m14.5c2c6/routed-moe-gate-rowspan-smoke.json"
+    ],
+    "semantics": [
+      "current CUDA selects tile8 widened-row gate projection at row spans 512, 1024, and 2048 after expert-tile construction",
+      "the retained functional kernel preserves weighted SwiGLU, auxiliary-write, and clamp behavior while shared-memory staging and down row-span dispatch remain separate later surfaces"
+    ]
+  },
+  "implementation": {
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "regression_harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_routed_moe_one_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_moe_gate_up_mid_expert_tile8_rowspan_kernel"
+    ],
+    "reuse_boundary": "this module leaf embeds the functionally proved tile8 gate row-span entry with an explicit row_span argument while reusing retained expert-tile metadata and IQ2/Q8 math",
+    "remaining_compute_boundary": "Rust still does not export ds4_gpu_routed_moe_batch_tensor; tile16 down row-span, shared-cache specialization, public batch dispatch, and route promotion remain pending",
+    "optimization_boundary": "this leaf owns widened gate functional projection only and does not claim the shared-memory staging present in optimized current-C row-span kernels",
+    "linkage_requirement": "the existing C-linked public single-token consumer retains and loads the enlarged Rust static-library kernel module with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 74,
+    "exported_compute_symbol_count": 72,
+    "embedded_kernel_count": 88,
+    "consumes_tile16_row32_atomic_module": true,
+    "reuses_tile8_expert_tile_metadata": true,
+    "embeds_gate_tile8_rowspan_kernel": true,
+    "owns_gate_rowspan_functional_surface": true,
+    "owns_down_rowspan_or_shared_cache_dispatch": false,
+    "owns_routed_moe_batch_tensor": false,
+    "owns_complete_routed_moe_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "target": "sm_80",
+    "local_library_test_count": 159,
+    "feature_release_test_count": 166,
+    "staticlib_export_count": 74,
+    "embedded_kernel_count": 88,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "embedded_routed_moe_kernels_loaded": true,
+      "single_token_public_regression_remains_passing": true,
+      "gate_rowspan_entry_generated": true,
+      "write_aux_and_clamp_semantics_retained": true,
+      "functional_non_cached_surface_only": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 159,
+    "b300_feature_release_test_count": 166,
+    "cuda_abi_comparators_passed": 73,
+    "unified_report_passed": 246,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "integration_risks": [
+    "the public Rust batched routed-MoE wrapper remains deferred because down row-span and shared-cache dispatch are still not retained in the ABI module",
+    "the retained gate row-span kernel is functional and loaded but does not yet claim current-C shared-memory staging optimization",
+    "whole-archive retention policy, production route promotion, and C CUDA removal remain pending"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
