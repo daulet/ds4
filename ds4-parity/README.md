@@ -4212,6 +4212,20 @@ seconds with all `13` exercised selected tokens matching; the existing
 `long_memory_archive` API/official graph mismatch skip remains explicit.
 Default-route promotion and C CUDA removal remain pending broader acceptance.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA promotion acceptance matrix and rerun contract:
+
+```sh
+python3 ds4-parity/check_cuda_rust_promotion_acceptance_matrix.py --negative-test
+```
+
+The contract separates proven Rust-DSO official-vector behavior from the
+older M10.9 quality artifacts, whose builds did not enable
+`cuda-rust-backend`. The pending B300 reruns cover default one-shot CLI,
+long-context, server/tool quality, and benchmark behavior with
+`DS4_CUDA_RUST_DYLIB` set. Current-C routing and C host sources remain
+retained while those gates are pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -12322,6 +12322,47 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Acceptance
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because previous M10.9 quality runs do not link the Rust CUDA DSO and the
+  first B300 rerun probes hit a transient `kubectl exec` cluster proxy error.
+- Goal: define the remaining Rust-DSO promotion evidence separately from the
+  live reruns.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Acceptance Matrix And Rerun Contract
+
+- Status: done
+- Goal: pin the exact live evidence required before promoting the Rust CUDA
+  engine link or removing current-C CUDA.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-promotion-acceptance-matrix.json`
+- Comparator:
+  `ds4-parity/check_cuda_rust_promotion_acceptance_matrix.py --negative-test`.
+- Evidence:
+  - Official-vector evidence is already green through `libds4_cuda.so` from
+    the preceding leaf, with all `13` exercised selected tokens matching.
+  - The historical M10.9 long-context, tool/server, and benchmark artifacts
+    are not Rust CUDA DSO evidence because their captured builds omit
+    `--features cuda-rust-backend` and `DS4_CUDA_RUST_DYLIB`.
+  - Pending live gates are the regular one-shot CLI through supported
+    `target-stream`, Rust-DSO long-context, Rust-DSO server/tool quality, and
+    same-session benchmark capture. The regular CLI deliberately still
+    rejects `--runtime-graph graph`.
+  - `cuda-rust-backend` retains the C host engine sources but excludes
+    `ds4_cuda.cu`; C host removal remains disallowed regardless of the
+    eventual CUDA-backend decision.
+  - On 2026-05-31 the B300 pod remained `Running` with `/workspace` on PVC;
+    initial `kubectl exec` checks failed with the apiserver-kubelet-client
+    `nodes/proxy` authorization error, and a later bounded `exec -- true`
+    check succeeded. No GPU rerun started before recording this contract and
+    the pod was not replaced to bypass the transient failure.
+  - Local comparator negative tests and the unified parity report pass. The
+    pre-implementation and final non-interactive Claude review attempts each
+    returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Execution
+
 - Status: active
-- Goal: evaluate default CLI/server and long-context quality criteria before
-  promoting the opt-in Rust CUDA route or removing current-C CUDA.
+- Goal: execute the pending CLI, long-context, server/tool, and benchmark
+  gates through `cuda-rust-backend`, then decide default routing and
+  current-C CUDA retention.

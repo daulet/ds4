@@ -13101,10 +13101,55 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Acceptance
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because previous M10.9 runtime quality evidence did not link the Rust CUDA
+  DSO and the first new B300 execution probes were blocked by transient
+  Kubernetes `nodes/proxy` authorization.
+- Goal: separate the promotion acceptance contract from the live reruns and
+  retain current-C routing until the missing Rust-DSO evidence exists.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Acceptance Matrix And Rerun Contract
+
+- Status: done.
+- Goal: define the exact Rust CUDA DSO evidence required before default-route
+  promotion or removal of current-C CUDA is considered.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-promotion-acceptance-matrix.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_promotion_acceptance_matrix.py --negative-test`.
+- Evidence:
+  - The preceding Rust CUDA long-route leaf already closes the
+    official-vector route through `libds4_cuda.so`, with all `13` exercised
+    selected tokens matching on B300.
+  - M10.9c through M10.9f do not prove Rust CUDA backend acceptance: their
+    captured `ds4-engine` build commands omit `--features cuda-rust-backend`
+    and `DS4_CUDA_RUST_DYLIB`, so they exercised the current-C CUDA link.
+  - The remaining live matrix requires the regular one-shot CLI,
+    long-context runner, server/tool quality runner, and benchmark runner to
+    be rebuilt through `cuda-rust-backend` with the Rust DSO. The normal CLI
+    still fails closed for `--runtime-graph graph`; its retained acceptance
+    probe must use its supported default `target-stream` behavior.
+  - This feature boundary still compiles `ds4.c` and `ds4_kvstore.c` while
+    excluding `ds4_cuda.cu`; therefore it can justify a CUDA-backend route
+    decision but cannot claim C host removal.
+  - During initial rerun access checks on 2026-05-31, API reads confirmed the
+    B300 pod is `Running` with `/workspace` PVC storage, while
+    `kubectl exec` failed with apiserver-to-kubelet `nodes/proxy`
+    authorization. A later bounded `exec -- true` probe succeeded; no GPU
+    validation process was started before this contract was recorded and the
+    reusable pod was not replaced to bypass the transient failure.
+  - Local comparator negative tests and the unified parity report pass. The
+    pre-implementation and final non-interactive Claude review attempts each
+    returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Execution
+
 - Status: active.
-- Goal: evaluate the now-completing opt-in Rust CUDA route against the
-  remaining default CLI/server, long-context quality, and removal criteria
-  before changing default routing or deleting current-C CUDA.
+- Goal: run the remaining CLI, long-context, server/tool, and benchmark
+  acceptance gates through the opt-in Rust CUDA DSO on B300, then decide
+  default-route promotion and current-C CUDA retention without overclaiming
+  C host removal.
 
 ## Removal Criteria for C Host Code
 

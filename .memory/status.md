@@ -3,7 +3,26 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Default-Route Promotion And C CUDA Removal Acceptance
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Default-Route Promotion And C CUDA Removal Execution
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Acceptance Matrix And Rerun Contract
+  is defined without promoting a runtime route. The prior Rust CUDA
+  official-vector leaf proves all `13` exercised selected tokens through
+  `libds4_cuda.so`, but the M10.9 long-context, tool/server, and benchmark
+  artifacts were built without `--features cuda-rust-backend` or
+  `DS4_CUDA_RUST_DYLIB` and cannot be reused as Rust CUDA DSO acceptance.
+  Remaining live evidence requires the regular one-shot CLI through its
+  supported `target-stream` path, long-context, server/tool quality, and
+  same-session benchmark binaries built with the opt-in Rust DSO feature.
+  The feature still compiles `ds4.c` and `ds4_kvstore.c` while excluding
+  `ds4_cuda.cu`, so it cannot justify C host removal. API reads on
+  2026-05-31 found the B300 pod `Running` with `/workspace` PVC storage;
+  initial `kubectl exec` checks failed with the apiserver-kubelet-client
+  `nodes/proxy` authorization error and a later bounded `exec -- true` check
+  succeeded. No new GPU validation was started before recording this
+  contract or overclaimed.
+  Local comparator negative tests and the unified report pass. The
+  pre-implementation and final non-interactive Claude review attempts each
+  returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Long-Route Attention Parallel Repair
   is validated on B300. The selected static prefill, indexed prefill, and
   generic indexed decode attention kernels now implement current-C parallel

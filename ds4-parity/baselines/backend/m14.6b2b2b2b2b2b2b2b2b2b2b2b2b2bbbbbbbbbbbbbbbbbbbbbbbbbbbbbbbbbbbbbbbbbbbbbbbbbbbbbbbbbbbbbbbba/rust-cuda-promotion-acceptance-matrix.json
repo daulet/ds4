@@ -1,0 +1,129 @@
+{
+  "schema": "ds4.cuda_rust_promotion_acceptance_matrix.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "contract-defined-transient-kubernetes-exec-authorization-recovered",
+  "goal": "Define the evidence required before promoting the opt-in Rust CUDA engine link or removing current-C CUDA.",
+  "ownership": {
+    "engine_feature": "cuda-rust-backend",
+    "rust_cuda_dylib_required": true,
+    "rust_cuda_dylib_environment": "DS4_CUDA_RUST_DYLIB",
+    "feature_compiles_c_host_engine": true,
+    "feature_compiles_ds4_cuda_cu": false,
+    "current_c_default_route_preserved": true,
+    "runtime_route_promoted": false,
+    "c_host_removal_allowed": false,
+    "c_cuda_removal_allowed": false
+  },
+  "existing_evidence_partition": {
+    "rust_cuda_official_vectors": {
+      "source_fixture": "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-long-route-attention-parallel-repair.json",
+      "status": "passed",
+      "shared_library_sha256": "299ec502207cece357323516d7c1273d3658917878503c201a97557a4eb79fad",
+      "selected_step_count": 13,
+      "selected_match_count": 13
+    },
+    "m10_9_artifacts": {
+      "status": "not-rust-cuda-dylib-evidence",
+      "reason": "M10.9c through M10.9f build ds4-engine without --features cuda-rust-backend or DS4_CUDA_RUST_DYLIB.",
+      "artifacts": [
+        "ds4-parity/baselines/graph/m10.9c/runtime-official-vectors.json",
+        "ds4-parity/baselines/graph/m10.9d/runtime-long-context.json",
+        "ds4-parity/baselines/graph/m10.9e/runtime-tool-server.json",
+        "ds4-parity/baselines/graph/m10.9f/runtime-benchmark-closure.json"
+      ]
+    }
+  },
+  "acceptance_matrix": [
+    {
+      "id": "default_cli",
+      "status": "pending-live-rerun",
+      "binary": "target-engine-rust-facade/release/ds4-cli-one-shot-rs",
+      "runtime_graph_route": "target-stream",
+      "acceptance": "The regular one-shot CLI generates a retained deterministic prompt result through the Rust CUDA DSO without enabling the still-unsupported CLI graph selector."
+    },
+    {
+      "id": "official_vectors",
+      "status": "passed-predecessor",
+      "binary": "target-engine-rust-facade/release/ds4-runtime-official-vectors-rs",
+      "runtime_graph_route": "graph",
+      "acceptance": "All exercised selected tokens match through the Rust CUDA DSO and known skips remain explicit."
+    },
+    {
+      "id": "long_context",
+      "status": "pending-live-rerun",
+      "binary": "target-engine-rust-facade/release/ds4-runtime-long-context-rs",
+      "runtime_graph_route": "graph",
+      "acceptance": "The retained long-context fact-recall gate passes through the Rust CUDA DSO with exact cache and route evidence."
+    },
+    {
+      "id": "server_tool_quality",
+      "status": "pending-live-rerun",
+      "binary": "target-engine-rust-facade/release/ds4-server-runtime-rs",
+      "runtime_graph_route": "graph",
+      "acceptance": "The Rust server returns the expected tool call and trace/cache ledger through the Rust CUDA DSO."
+    },
+    {
+      "id": "benchmark",
+      "status": "pending-live-rerun",
+      "binary": "target-engine-rust-facade/release/ds4-runtime-graph-bench-rs",
+      "runtime_graph_route": "graph",
+      "acceptance": "Short and long same-session Rust CUDA DSO throughput is recorded against current-C before default-route promotion."
+    },
+    {
+      "id": "default_route_promotion",
+      "status": "blocked-pending-runtime-gates",
+      "acceptance": "No default-route switch occurs until all pending runtime gates pass."
+    },
+    {
+      "id": "c_host_removal",
+      "status": "blocked-by-host-engine-boundary",
+      "acceptance": "C host removal cannot be claimed while cuda-rust-backend still compiles ds4.c and ds4_kvstore.c."
+    },
+    {
+      "id": "c_cuda_removal",
+      "status": "blocked-pending-runtime-gates",
+      "acceptance": "ds4_cuda.cu remains the default current-C oracle until promotion gates pass."
+    }
+  ],
+  "rerun_contract": {
+    "shared_library": "/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+    "build_environment": {
+      "DS4_CUDA_RUST_DYLIB": "/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+      "CARGO_TARGET_DIR": "/workspace/ds4/target-engine-rust-facade"
+    },
+    "required_feature": "cuda-rust-backend",
+    "required_binaries": [
+      "ds4-cli-one-shot-rs",
+      "ds4-runtime-long-context-rs",
+      "ds4-server-runtime-rs",
+      "ds4-runtime-graph-bench-rs"
+    ],
+    "required_backend": "cuda",
+    "required_device": "NVIDIA B300 SXM6 AC"
+  },
+  "infrastructure_blocker": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "pod_phase": "Running",
+    "workspace_pvc_mounted_at": "/workspace",
+    "api_read_succeeds": true,
+    "exec_succeeds": false,
+    "exec_error_contains": "Authorization error (user=apiserver-kubelet-client, verb=create, resource=nodes, subresource=proxy)",
+    "exec_restored_before_commit": true,
+    "gpu_validation_started": false,
+    "pod_replacement_not_attempted": true
+  },
+  "validation": {
+    "local_comparator_negative_test_passed": true,
+    "unified_report_passed": 262,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Default-Route Promotion And C CUDA Removal Execution"
+}
