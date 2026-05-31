@@ -8325,6 +8325,98 @@ impl AbiKernelModule {
         .is_ok()
     }
 
+    #[allow(dead_code)]
+    pub(crate) unsafe fn moe_build_expert_tile_offsets_tensor(
+        &self,
+        stream: &CudaStream,
+        block_m: u32,
+        counts_ptr: u64,
+        tile_offsets_ptr: u64,
+        tile_total_ptr: u64,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (1, 1, 1),
+            block_dim: (1, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut block_m = block_m;
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut tile_offsets_ptr = tile_offsets_ptr;
+        let mut tile_offsets_len = ABI_MOE_SORTED_EXPERTS as u64 + 1;
+        let mut tile_total_ptr = tile_total_ptr;
+        let mut tile_total_len = 1_u64;
+        let mut params = [
+            (&mut block_m as *mut u32).cast::<c_void>(),
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_offsets_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_offsets_len as *mut u64).cast::<c_void>(),
+            (&mut tile_total_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_total_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_build_expert_tile_offsets_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) unsafe fn moe_build_expert_tiles_tensor(
+        &self,
+        stream: &CudaStream,
+        block_m: u32,
+        tile_capacity: u32,
+        counts_ptr: u64,
+        tile_offsets_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (1, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut block_m = block_m;
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut tile_offsets_ptr = tile_offsets_ptr;
+        let mut tile_offsets_len = ABI_MOE_SORTED_EXPERTS as u64 + 1;
+        let mut tile_experts_ptr = tile_experts_ptr;
+        let mut tile_experts_len = u64::from(tile_capacity);
+        let mut tile_starts_ptr = tile_starts_ptr;
+        let mut tile_starts_len = u64::from(tile_capacity);
+        let mut params = [
+            (&mut block_m as *mut u32).cast::<c_void>(),
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_offsets_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_offsets_len as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_build_expert_tiles_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) unsafe fn moe_gate_up_mid_f32_tensor(
         &self,
@@ -8808,6 +8900,530 @@ impl AbiKernelModule {
         }
     }
 
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_expert_tile4_row32_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        write_aux: bool,
+        clamp: f32,
+    ) -> bool {
+        unsafe {
+            self.moe_gate_up_mid_expert_tile_row32_tensor(
+                &self.moe_gate_up_mid_expert_tile4_row32_kernel,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                pair_count,
+                tile_capacity,
+                gate_expert_bytes,
+                gate_row_bytes,
+                write_aux,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_expert_tile8_row32_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        write_aux: bool,
+        clamp: f32,
+    ) -> bool {
+        unsafe {
+            self.moe_gate_up_mid_expert_tile_row32_tensor(
+                &self.moe_gate_up_mid_expert_tile8_row32_kernel,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                pair_count,
+                tile_capacity,
+                gate_expert_bytes,
+                gate_row_bytes,
+                write_aux,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    unsafe fn moe_gate_up_mid_expert_tile_row32_tensor(
+        &self,
+        function: &CudaFunction,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        write_aux: bool,
+        clamp: f32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (expert_mid_dim.div_ceil(32), tile_capacity, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let elements = u64::from(pair_count) * u64::from(expert_mid_dim);
+        let mut xq_blocks = xq_blocks;
+        let mut expert_mid_dim = expert_mid_dim;
+        let mut n_expert = n_expert;
+        let mut write_aux = u32::from(write_aux);
+        let mut clamp = clamp;
+        let mut gate_expert_bytes = gate_expert_bytes;
+        let mut gate_row_bytes = gate_row_bytes;
+        let mut gate_weights_ptr = gate_weights_ptr;
+        let mut gate_weights_len = gate_weight_bytes;
+        let mut up_weights_ptr = up_weights_ptr;
+        let mut up_weights_len = gate_weight_bytes;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = xq_bytes;
+        let mut sorted_pairs_ptr = sorted_pairs_ptr;
+        let mut sorted_pairs_len = u64::from(pair_count);
+        let mut offsets_ptr = offsets_ptr;
+        let mut offsets_len = ABI_MOE_SORTED_EXPERTS as u64 + 1;
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut tile_total_ptr = tile_total_ptr;
+        let mut tile_total_len = 1_u64;
+        let mut tile_experts_ptr = tile_experts_ptr;
+        let mut tile_experts_len = u64::from(tile_capacity);
+        let mut tile_starts_ptr = tile_starts_ptr;
+        let mut tile_starts_len = u64::from(tile_capacity);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = u64::from(pair_count);
+        let mut iq2_grid_ptr = iq2_grid_ptr;
+        let mut iq2_grid_len = 256_u64;
+        let mut iq2_signs_ptr = iq2_signs_ptr;
+        let mut iq2_signs_len = 128_u64;
+        let mut gate_ptr = gate_ptr;
+        let mut gate_len = elements;
+        let mut up_ptr = up_ptr;
+        let mut up_len = elements;
+        let mut mid_ptr = mid_ptr;
+        let mut mid_len = elements;
+        let mut params = [
+            (&mut xq_blocks as *mut u32).cast::<c_void>(),
+            (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut write_aux as *mut u32).cast::<c_void>(),
+            (&mut clamp as *mut f32).cast::<c_void>(),
+            (&mut gate_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut gate_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut gate_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut gate_weights_len as *mut u64).cast::<c_void>(),
+            (&mut up_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut up_weights_len as *mut u64).cast::<c_void>(),
+            (&mut xq_ptr as *mut u64).cast::<c_void>(),
+            (&mut xq_len as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+            (&mut offsets_ptr as *mut u64).cast::<c_void>(),
+            (&mut offsets_len as *mut u64).cast::<c_void>(),
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_total_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_total_len as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_len as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut iq2_grid_ptr as *mut u64).cast::<c_void>(),
+            (&mut iq2_grid_len as *mut u64).cast::<c_void>(),
+            (&mut iq2_signs_ptr as *mut u64).cast::<c_void>(),
+            (&mut iq2_signs_len as *mut u64).cast::<c_void>(),
+            (&mut gate_ptr as *mut u64).cast::<c_void>(),
+            (&mut gate_len as *mut u64).cast::<c_void>(),
+            (&mut up_ptr as *mut u64).cast::<c_void>(),
+            (&mut up_len as *mut u64).cast::<c_void>(),
+            (&mut mid_ptr as *mut u64).cast::<c_void>(),
+            (&mut mid_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_expert_tile8_rowspan_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        row_span: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        write_aux: bool,
+        clamp: f32,
+    ) -> bool {
+        unsafe {
+            self.moe_gate_up_mid_expert_tile_rowspan_tensor(
+                &self.moe_gate_up_mid_expert_tile8_rowspan_kernel,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                pair_count,
+                tile_capacity,
+                row_span,
+                gate_expert_bytes,
+                gate_row_bytes,
+                write_aux,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_expert_tile8_rowspan_cached_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        row_span: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        write_aux: bool,
+        clamp: f32,
+    ) -> bool {
+        unsafe {
+            self.moe_gate_up_mid_expert_tile_rowspan_tensor(
+                &self.moe_gate_up_mid_expert_tile8_rowspan_cached_kernel,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                pair_count,
+                tile_capacity,
+                row_span,
+                gate_expert_bytes,
+                gate_row_bytes,
+                write_aux,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    unsafe fn moe_gate_up_mid_expert_tile_rowspan_tensor(
+        &self,
+        function: &CudaFunction,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        row_span: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        write_aux: bool,
+        clamp: f32,
+    ) -> bool {
+        if row_span == 0 {
+            return false;
+        }
+        let config = LaunchConfig {
+            grid_dim: (expert_mid_dim.div_ceil(row_span), tile_capacity, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let elements = u64::from(pair_count) * u64::from(expert_mid_dim);
+        let mut xq_blocks = xq_blocks;
+        let mut expert_mid_dim = expert_mid_dim;
+        let mut n_expert = n_expert;
+        let mut row_span = row_span;
+        let mut write_aux = u32::from(write_aux);
+        let mut clamp = clamp;
+        let mut gate_expert_bytes = gate_expert_bytes;
+        let mut gate_row_bytes = gate_row_bytes;
+        let mut gate_weights_ptr = gate_weights_ptr;
+        let mut gate_weights_len = gate_weight_bytes;
+        let mut up_weights_ptr = up_weights_ptr;
+        let mut up_weights_len = gate_weight_bytes;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = xq_bytes;
+        let mut sorted_pairs_ptr = sorted_pairs_ptr;
+        let mut sorted_pairs_len = u64::from(pair_count);
+        let mut offsets_ptr = offsets_ptr;
+        let mut offsets_len = ABI_MOE_SORTED_EXPERTS as u64 + 1;
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut tile_total_ptr = tile_total_ptr;
+        let mut tile_total_len = 1_u64;
+        let mut tile_experts_ptr = tile_experts_ptr;
+        let mut tile_experts_len = u64::from(tile_capacity);
+        let mut tile_starts_ptr = tile_starts_ptr;
+        let mut tile_starts_len = u64::from(tile_capacity);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = u64::from(pair_count);
+        let mut iq2_grid_ptr = iq2_grid_ptr;
+        let mut iq2_grid_len = 256_u64;
+        let mut iq2_signs_ptr = iq2_signs_ptr;
+        let mut iq2_signs_len = 128_u64;
+        let mut gate_ptr = gate_ptr;
+        let mut gate_len = elements;
+        let mut up_ptr = up_ptr;
+        let mut up_len = elements;
+        let mut mid_ptr = mid_ptr;
+        let mut mid_len = elements;
+        let mut params = [
+            (&mut xq_blocks as *mut u32).cast::<c_void>(),
+            (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut row_span as *mut u32).cast::<c_void>(),
+            (&mut write_aux as *mut u32).cast::<c_void>(),
+            (&mut clamp as *mut f32).cast::<c_void>(),
+            (&mut gate_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut gate_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut gate_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut gate_weights_len as *mut u64).cast::<c_void>(),
+            (&mut up_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut up_weights_len as *mut u64).cast::<c_void>(),
+            (&mut xq_ptr as *mut u64).cast::<c_void>(),
+            (&mut xq_len as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+            (&mut offsets_ptr as *mut u64).cast::<c_void>(),
+            (&mut offsets_len as *mut u64).cast::<c_void>(),
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_total_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_total_len as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_len as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut iq2_grid_ptr as *mut u64).cast::<c_void>(),
+            (&mut iq2_grid_len as *mut u64).cast::<c_void>(),
+            (&mut iq2_signs_ptr as *mut u64).cast::<c_void>(),
+            (&mut iq2_signs_len as *mut u64).cast::<c_void>(),
+            (&mut gate_ptr as *mut u64).cast::<c_void>(),
+            (&mut gate_len as *mut u64).cast::<c_void>(),
+            (&mut up_ptr as *mut u64).cast::<c_void>(),
+            (&mut up_len as *mut u64).cast::<c_void>(),
+            (&mut mid_ptr as *mut u64).cast::<c_void>(),
+            (&mut mid_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) unsafe fn moe_gate_up_mid_decode_tensor(
         &self,
@@ -9264,6 +9880,508 @@ impl AbiKernelModule {
             }
             .is_ok()
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) unsafe fn moe_atomic_output_zero_tensor(
+        &self,
+        stream: &CudaStream,
+        output_ptr: u64,
+        count: u64,
+    ) -> bool {
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut output_ptr = output_ptr;
+        let mut output_len = count;
+        let mut count = count;
+        let mut params = [
+            (&mut output_ptr as *mut u64).cast::<c_void>(),
+            (&mut output_len as *mut u64).cast::<c_void>(),
+            (&mut count as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_atomic_output_zero_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_expert_tile4_row32_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        n_tokens: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        atomic_out: bool,
+    ) -> bool {
+        unsafe {
+            self.moe_down_expert_tile_row32_tensor(
+                &self.moe_down_expert_tile4_row32_kernel,
+                stream,
+                down_ptr,
+                down_weights_ptr,
+                midq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                down_weight_bytes,
+                midq_bytes,
+                midq_blocks,
+                out_dim,
+                n_expert,
+                n_tokens,
+                pair_count,
+                tile_capacity,
+                down_expert_bytes,
+                down_row_bytes,
+                atomic_out,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_expert_tile8_row32_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        n_tokens: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        atomic_out: bool,
+    ) -> bool {
+        unsafe {
+            self.moe_down_expert_tile_row32_tensor(
+                &self.moe_down_expert_tile8_row32_kernel,
+                stream,
+                down_ptr,
+                down_weights_ptr,
+                midq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                down_weight_bytes,
+                midq_bytes,
+                midq_blocks,
+                out_dim,
+                n_expert,
+                n_tokens,
+                pair_count,
+                tile_capacity,
+                down_expert_bytes,
+                down_row_bytes,
+                atomic_out,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_expert_tile16_row32_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        n_tokens: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        atomic_out: bool,
+    ) -> bool {
+        unsafe {
+            self.moe_down_expert_tile_row32_tensor(
+                &self.moe_down_expert_tile16_row32_kernel,
+                stream,
+                down_ptr,
+                down_weights_ptr,
+                midq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                down_weight_bytes,
+                midq_bytes,
+                midq_blocks,
+                out_dim,
+                n_expert,
+                n_tokens,
+                pair_count,
+                tile_capacity,
+                down_expert_bytes,
+                down_row_bytes,
+                atomic_out,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    unsafe fn moe_down_expert_tile_row32_tensor(
+        &self,
+        function: &CudaFunction,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        n_tokens: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        atomic_out: bool,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (out_dim.div_ceil(32), tile_capacity, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut midq_blocks = midq_blocks;
+        let mut out_dim = out_dim;
+        let mut n_expert = n_expert;
+        let mut atomic_out = u32::from(atomic_out);
+        let mut down_expert_bytes = down_expert_bytes;
+        let mut down_row_bytes = down_row_bytes;
+        let mut down_weights_ptr = down_weights_ptr;
+        let mut down_weights_len = down_weight_bytes;
+        let mut midq_ptr = midq_ptr;
+        let mut midq_len = midq_bytes;
+        let mut sorted_pairs_ptr = sorted_pairs_ptr;
+        let mut sorted_pairs_len = u64::from(pair_count);
+        let mut offsets_ptr = offsets_ptr;
+        let mut offsets_len = ABI_MOE_SORTED_EXPERTS as u64 + 1;
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut tile_total_ptr = tile_total_ptr;
+        let mut tile_total_len = 1_u64;
+        let mut tile_experts_ptr = tile_experts_ptr;
+        let mut tile_experts_len = u64::from(tile_capacity);
+        let mut tile_starts_ptr = tile_starts_ptr;
+        let mut tile_starts_len = u64::from(tile_capacity);
+        let mut down_ptr = down_ptr;
+        let mut down_len = if atomic_out != 0 {
+            u64::from(n_tokens) * u64::from(out_dim)
+        } else {
+            u64::from(pair_count) * u64::from(out_dim)
+        };
+        let mut params = [
+            (&mut midq_blocks as *mut u32).cast::<c_void>(),
+            (&mut out_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut atomic_out as *mut u32).cast::<c_void>(),
+            (&mut down_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_weights_len as *mut u64).cast::<c_void>(),
+            (&mut midq_ptr as *mut u64).cast::<c_void>(),
+            (&mut midq_len as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+            (&mut offsets_ptr as *mut u64).cast::<c_void>(),
+            (&mut offsets_len as *mut u64).cast::<c_void>(),
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_total_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_total_len as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_len as *mut u64).cast::<c_void>(),
+            (&mut down_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_expert_tile16_rowspan_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        n_tokens: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        row_span: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        atomic_out: bool,
+    ) -> bool {
+        unsafe {
+            self.moe_down_expert_tile_rowspan_tensor(
+                &self.moe_down_expert_tile16_rowspan_kernel,
+                stream,
+                down_ptr,
+                down_weights_ptr,
+                midq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                down_weight_bytes,
+                midq_bytes,
+                midq_blocks,
+                out_dim,
+                n_expert,
+                n_tokens,
+                pair_count,
+                tile_capacity,
+                row_span,
+                down_expert_bytes,
+                down_row_bytes,
+                atomic_out,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_expert_tile16_rowspan_cached_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        n_tokens: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        row_span: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        atomic_out: bool,
+    ) -> bool {
+        unsafe {
+            self.moe_down_expert_tile_rowspan_tensor(
+                &self.moe_down_expert_tile16_rowspan_cached_kernel,
+                stream,
+                down_ptr,
+                down_weights_ptr,
+                midq_ptr,
+                sorted_pairs_ptr,
+                offsets_ptr,
+                counts_ptr,
+                tile_total_ptr,
+                tile_experts_ptr,
+                tile_starts_ptr,
+                down_weight_bytes,
+                midq_bytes,
+                midq_blocks,
+                out_dim,
+                n_expert,
+                n_tokens,
+                pair_count,
+                tile_capacity,
+                row_span,
+                down_expert_bytes,
+                down_row_bytes,
+                atomic_out,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    unsafe fn moe_down_expert_tile_rowspan_tensor(
+        &self,
+        function: &CudaFunction,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        offsets_ptr: u64,
+        counts_ptr: u64,
+        tile_total_ptr: u64,
+        tile_experts_ptr: u64,
+        tile_starts_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        n_tokens: u32,
+        pair_count: u32,
+        tile_capacity: u32,
+        row_span: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        atomic_out: bool,
+    ) -> bool {
+        if row_span == 0 {
+            return false;
+        }
+        let config = LaunchConfig {
+            grid_dim: (out_dim.div_ceil(row_span), tile_capacity, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut midq_blocks = midq_blocks;
+        let mut out_dim = out_dim;
+        let mut n_expert = n_expert;
+        let mut row_span = row_span;
+        let mut atomic_out = u32::from(atomic_out);
+        let mut down_expert_bytes = down_expert_bytes;
+        let mut down_row_bytes = down_row_bytes;
+        let mut down_weights_ptr = down_weights_ptr;
+        let mut down_weights_len = down_weight_bytes;
+        let mut midq_ptr = midq_ptr;
+        let mut midq_len = midq_bytes;
+        let mut sorted_pairs_ptr = sorted_pairs_ptr;
+        let mut sorted_pairs_len = u64::from(pair_count);
+        let mut offsets_ptr = offsets_ptr;
+        let mut offsets_len = ABI_MOE_SORTED_EXPERTS as u64 + 1;
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut tile_total_ptr = tile_total_ptr;
+        let mut tile_total_len = 1_u64;
+        let mut tile_experts_ptr = tile_experts_ptr;
+        let mut tile_experts_len = u64::from(tile_capacity);
+        let mut tile_starts_ptr = tile_starts_ptr;
+        let mut tile_starts_len = u64::from(tile_capacity);
+        let mut down_ptr = down_ptr;
+        let mut down_len = if atomic_out != 0 {
+            u64::from(n_tokens) * u64::from(out_dim)
+        } else {
+            u64::from(pair_count) * u64::from(out_dim)
+        };
+        let mut params = [
+            (&mut midq_blocks as *mut u32).cast::<c_void>(),
+            (&mut out_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut row_span as *mut u32).cast::<c_void>(),
+            (&mut atomic_out as *mut u32).cast::<c_void>(),
+            (&mut down_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_weights_len as *mut u64).cast::<c_void>(),
+            (&mut midq_ptr as *mut u64).cast::<c_void>(),
+            (&mut midq_len as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+            (&mut offsets_ptr as *mut u64).cast::<c_void>(),
+            (&mut offsets_len as *mut u64).cast::<c_void>(),
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_total_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_total_len as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_experts_len as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_ptr as *mut u64).cast::<c_void>(),
+            (&mut tile_starts_len as *mut u64).cast::<c_void>(),
+            (&mut down_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
     }
 
     #[allow(clippy::too_many_arguments)]

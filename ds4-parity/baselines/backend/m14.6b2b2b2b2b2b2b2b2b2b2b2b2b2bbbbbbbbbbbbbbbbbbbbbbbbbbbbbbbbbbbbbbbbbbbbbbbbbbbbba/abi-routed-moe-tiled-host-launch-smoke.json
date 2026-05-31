@@ -1,0 +1,96 @@
+{
+  "schema": "ds4.cuda_abi_routed_moe_tiled_host_launch_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-tiled-host-launch-methods",
+  "goal": "Add internal Rust ABI-module host launch methods for the already embedded expert-tile, row-span, cached, and atomic-output routed-MoE kernels without exporting the incomplete public batch wrapper.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "routed_moe_launch",
+      "ds4_gpu_routed_moe_batch_tensor"
+    ],
+    "semantics": [
+      "the current CUDA batch dispatcher builds expert-tile descriptors after sorted-pair metadata when tiled routing is enabled",
+      "the tiled path selects row32, row-span, or cached gate and down submissions and zeros aggregate output before atomic down accumulation",
+      "this internal launch-method leaf exposes those retained submission building blocks but does not compose public batch orchestration"
+    ]
+  },
+  "implementation": {
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "host_launch_methods": [
+      "moe_build_expert_tile_offsets_tensor",
+      "moe_build_expert_tiles_tensor",
+      "moe_gate_up_mid_expert_tile4_row32_tensor",
+      "moe_gate_up_mid_expert_tile8_row32_tensor",
+      "moe_gate_up_mid_expert_tile8_rowspan_tensor",
+      "moe_gate_up_mid_expert_tile8_rowspan_cached_tensor",
+      "moe_atomic_output_zero_tensor",
+      "moe_down_expert_tile4_row32_tensor",
+      "moe_down_expert_tile8_row32_tensor",
+      "moe_down_expert_tile16_row32_tensor",
+      "moe_down_expert_tile16_rowspan_tensor",
+      "moe_down_expert_tile16_rowspan_cached_tensor"
+    ],
+    "scratch_boundary": "tiled launch methods accept caller-provided validated scratch spans, including sorted metadata, tile descriptors, tile capacity, and atomic output storage",
+    "remaining_compute_boundary": "Rust still does not export ds4_gpu_routed_moe_batch_tensor; composed public batch orchestration and route promotion remain pending",
+    "linkage_requirement": "the existing C-linked public single-token consumer retains and loads the Rust static-library kernel module with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 74,
+    "exported_compute_symbol_count": 72,
+    "embedded_kernel_count": 91,
+    "consumes_sorted_host_launch_methods": true,
+    "adds_expert_tile_metadata_launch_methods": true,
+    "adds_row32_tile_launch_methods": true,
+    "adds_tile16_launch_methods": true,
+    "adds_rowspan_launch_methods": true,
+    "adds_cached_launch_methods": true,
+    "adds_atomic_output_zero_launch_method": true,
+    "owns_batched_quantized_orchestration": false,
+    "owns_routed_moe_batch_tensor": false,
+    "owns_complete_routed_moe_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "target": "sm_80",
+    "local_library_test_count": 164,
+    "feature_release_test_count": 171,
+    "staticlib_export_count": 74,
+    "embedded_kernel_count": 91,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "single_token_public_regression_remains_passing": true,
+      "expert_tile_launch_methods_compile": true,
+      "rowspan_cached_launch_methods_compile": true,
+      "atomic_down_launch_methods_compile": true,
+      "public_batch_route_not_yet_invoked": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 164,
+    "b300_feature_release_test_count": 171,
+    "cuda_abi_comparators_passed": 78,
+    "unified_report_passed": 251,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "integration_risks": [
+    "the launch adapters compile into the static library but are not yet exercised by a public Rust batch export",
+    "caller-provided scratch initialization and dispatch selection remain to be composed before public batch ownership",
+    "whole-archive retention policy, production route promotion, and C CUDA removal remain pending"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

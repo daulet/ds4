@@ -12668,12 +12668,54 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the retained expert-tile, row-span, cached, and atomic-down entries
+  need internal launch adapters before they can be composed into one public
+  batched routed-MoE route.
+- Goal: add internal tiled launch adapters, then compose and validate the
+  public batch wrapper and route-promotion policy without claiming C CUDA
+  removal before those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Tiled Routed MoE Host Launch Methods
+
+- Status: done.
+- Goal: add internal Rust ABI-module host launch methods for the already
+  embedded expert-tile metadata, tiled projection, row-span, cached, and
+  atomic-output entries without exporting the incomplete public batch
+  wrapper.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-tiled-host-launch-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_tiled_host_launch_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` now exposes internal tile metadata,
+    tile4/tile8/tile16, row-span, shared-cache, and atomic-output-zero launch
+    adapters over caller-provided validated scratch spans.
+  - Down adapters compute the visible output span from `n_tokens` when
+    `atomic_out` aggregates pairs and from `pair_count` otherwise; row-span
+    methods reject a zero span before configuring their grid.
+  - `rust/ds4-cuda/src/lib.rs` records this tiled host-launch boundary while
+    preserving 74 public Rust ABI symbols and 91 embedded kernels; no Rust
+    public batch route invokes these methods yet.
+  - B300 `sm_80` compilation succeeds with the existing 91 embedded entries,
+    and the rebuilt static library links/runs the existing C-linked public
+    single-token consumer without exporting a public batch symbol.
+  - Local library tests pass with 164 tests; B300 release-feature tests pass
+    with 171 tests; all 78 CUDA ABI comparators pass; and the unified report
+    passes with 251 passed, 45 skipped, and 0 failed. The pre-implementation
+    and final pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Composed public batched routed-MoE orchestration, route promotion, and C
+    CUDA removal remain open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
-- Goal: implement internal expert-tile, row-span, cached, and atomic-down
-  batched routed-MoE host orchestration before composing the public batch
-  wrapper and route-promotion policy, then connect remaining graph compute
-  and whole-archive retention policy without claiming C CUDA removal before
-  those gates pass.
+- Goal: compose and validate the public batched routed-MoE wrapper across
+  fallback, sorted, and tiled routes, then define route-promotion policy and
+  connect remaining graph compute and whole-archive retention without
+  claiming C CUDA removal before those gates pass.
 
 ## Removal Criteria for C Host Code
 

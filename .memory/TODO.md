@@ -11935,9 +11935,44 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because retained tiled, row-span, cached, and atomic-down kernels require
+  launch adapters before public batch orchestration.
+- Goal: add internal tiled launch adapters, then compose and validate the
+  public batch wrapper and route-promotion policy without claiming C CUDA
+  removal before those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Tiled Routed MoE Host Launch Methods
+
+- Status: done
+- Goal: add internal host launch methods for retained expert-tile metadata,
+  tiled projection, row-span, cached, and atomic-output kernels without
+  claiming public batched routed-MoE ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-tiled-host-launch-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_tiled_host_launch_smoke.py --negative-test`.
+- Evidence:
+  - Internal adapters cover expert-tile offset/descriptor construction,
+    row32 tile4/tile8/tile16, row-span/shared-cache, and atomic-output-zero
+    submissions over caller-validated scratch and output spans.
+  - Atomic down adapters distinguish aggregated `n_tokens * out_dim` output
+    from per-pair `pair_count * out_dim` intermediate storage.
+  - No public Rust batch route invokes these methods; the rebuilt B300
+    staticlib still loads 91 embedded kernels and exposes 74 Rust ABI symbols.
+  - Local tests pass with 164 tests; B300 feature tests pass with 171 tests;
+    all 78 CUDA ABI comparators pass; and the unified report passes with 251
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Public batched routed-MoE ownership, route promotion, and C CUDA removal
+    remain pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: implement internal expert-tile, row-span, cached, and atomic-down
-  batched routed-MoE host orchestration before composing the public batch
-  wrapper and route-promotion policy, then connect remaining graph compute
-  and whole-archive retention policy without claiming C CUDA removal before
-  those gates pass.
+- Goal: compose and validate the public batched routed-MoE wrapper across
+  fallback, sorted, and tiled routes, then define route-promotion policy and
+  connect remaining graph compute and whole-archive retention without
+  claiming C CUDA removal before those gates pass.

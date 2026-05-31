@@ -3,7 +3,22 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Tiled Routed MoE Host Launch Methods
+  is validated on B300. The Rust ABI module now contains internal launch
+  adapters for expert-tile descriptor construction, tiled row32 projection,
+  row-span/shared-cache projection, and atomic-output zeroing over
+  caller-validated scratch spans. Atomic down adapters size final aggregate
+  output from `n_tokens` and non-atomic intermediates from `pair_count`. No
+  public Rust batch route invokes these methods yet. The rebuilt static
+  library still exposes 74 Rust ABI symbols and embeds 91 kernels, and
+  links/runs the existing C-linked public single-token consumer. Local tests
+  pass with 164 tests; B300 feature tests pass with 171 tests; all 78 CUDA
+  ABI comparators pass; and the unified report passes with 251 passed, 45
+  skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Public batch ownership, route
+  promotion, and C CUDA removal remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Sorted Routed MoE Host Launch Methods
   is validated on B300. The Rust ABI module now contains internal launch
   adapters for sorted count/prefix/scatter metadata and sorted P2 or no-P2
