@@ -13584,6 +13584,37 @@ Stage split:
     Total routed-MoE remains `2.51x` current-C, so default current-C routing
     and promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Scale-Base Correctness Repair
+
+- Status: done.
+- Goal: repair cached Rust CUDA routed-MoE down output after inspection found
+  that low-nibble Q2 scales were read from the cached range base instead of
+  the active packed row/block.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-scale-base-correctness-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_down_scale_base_correctness_repair.py --negative-test`.
+- Evidence:
+  - `abi_moe_down_expert_tile16_rowspan_cached_kernel` now initializes its
+    low-nibble scale cursor at `packed`, matching current-C
+    `dev_dot_q2_K_q8_K_block8` and the scalar Rust `abi_moe_q2_q8_k_dot`
+    path. The existing packed-relative minimum correction was already right.
+  - A C-linked public-route B300 regression harness invokes
+    `ds4_gpu_routed_moe_batch_tensor` with `128` tokens and two otherwise
+    identical Q2 down rows with low scales `1` and `2`; the corrected cached
+    route returns the exact `row1 == 2 * row0` relation.
+  - The rebuilt corrected DSO SHA-256 is
+    `b47c4c17773b279264ef92fccf70b2e719cd331834fe7fdd63b68ab081f33709`.
+    Its measured profile records `1463.339 ms` gate/up, `860.566 ms` down,
+    and `2340.580 ms` total. The preceding `838.492 ms` down measurement was
+    taken with incorrect scale addressing and remains provenance only.
+  - Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `272`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Default current-C routing and promotion blockers remain in force while
+    graph benchmark repair continues from corrected arithmetic.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

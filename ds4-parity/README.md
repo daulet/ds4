@@ -4405,6 +4405,19 @@ measurements lower gate/up from `1482.196 ms` to `1461.528 ms`;
 official-vector correctness is preserved and the default current-C route
 remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA down scale-base correctness repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_down_scale_base_correctness_repair.py --negative-test
+```
+
+The cached Rust down kernel now reads each low-nibble Q2 scale from the active
+packed row/block. A C-linked B300 public-route harness proves the fixed
+`row1 == 2 * row0` relation for two identical Q2 rows whose low scales are
+`1` and `2`; earlier cached-down timing remains provenance from pre-correction
+arithmetic, not a correctness baseline.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

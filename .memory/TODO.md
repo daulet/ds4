@@ -12731,3 +12731,31 @@
     review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
     Total routed-MoE remains `2.51x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Scale-Base Correctness Repair
+
+- Status: done
+- Goal: correct cached Rust CUDA routed-MoE down output by basing low-nibble
+  Q2 scales on the selected packed row/block.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-scale-base-correctness-repair.json`
+- Evidence:
+  - The cached down row-span kernel changes only `scale_index` initialization
+    from the cached-slice base to `packed`; its high-nibble minimum path was
+    already packed-relative, and gate/up, dispatch, and default current-C
+    routing remain unchanged.
+  - A C-linked public-route B300 harness runs
+    `ds4_gpu_routed_moe_batch_tensor` on `128` tokens with identical Q2
+    payload rows carrying low scale factors `1` and `2`; the repaired cached
+    route returns the required `row1 == 2 * row0` invariant.
+  - The repaired DSO SHA-256 is
+    `b47c4c17773b279264ef92fccf70b2e719cd331834fe7fdd63b68ab081f33709`.
+    Its corrected profile records `860.566 ms` down and `2340.580 ms`
+    total. Previously retained optimized cached-down timing was measured with
+    wrong low-nibble scales and is preserved only as historical provenance.
+  - Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `272`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Default current-C routing and promotion blockers remain in force while
+    performance work resumes on corrected arithmetic.

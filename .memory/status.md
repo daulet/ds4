@@ -4,6 +4,25 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Scale-Base Correctness Repair
+  is validated on B300. The cached down row-span kernel now starts its
+  low-nibble Q2 scale cursor at the active packed row/block, matching both
+  current-C `dev_dot_q2_K_q8_K_block8` and the scalar Rust dot reference.
+  A C-linked production staticlib harness invokes
+  `ds4_gpu_routed_moe_batch_tensor` with `128` tokens and two identical
+  output rows whose low Q2 scales differ by exactly `2x`; the fixed public
+  cached route preserves the expected `row1 == 2 * row0` invariant. The
+  repaired DSO SHA-256 is
+  `b47c4c17773b279264ef92fccf70b2e719cd331834fe7fdd63b68ab081f33709`.
+  On corrected arithmetic, the profiled route records `1463.339 ms` gate/up,
+  `860.566 ms` down, and `2340.580 ms` total. The previously recorded
+  `838.492 ms` down/`2316.378 ms` total values predate this correction and
+  remain provenance only, not a valid correctness baseline. Official vectors
+  pass `1958` checks plus `8` negative checks and B300 feature tests pass
+  `176` tests. The unified report passes with `272` passed, `50` skipped,
+  and `0` failed. Pre-implementation and final Claude review attempts each
+  returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Promotion remains blocked and
+  performance work continues from the corrected path.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Packed-Weight Raw-Load Performance Repair
   is validated on B300. The cached gate/up row-span kernel now reads its ten
   hot packed IQ2 halfwords through `abi_moe_cached_weight_load_u16!` over

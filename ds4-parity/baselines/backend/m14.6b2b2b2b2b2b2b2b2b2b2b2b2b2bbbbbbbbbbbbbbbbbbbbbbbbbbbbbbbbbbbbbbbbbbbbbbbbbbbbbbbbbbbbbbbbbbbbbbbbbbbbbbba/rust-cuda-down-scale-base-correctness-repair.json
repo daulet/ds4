@@ -1,0 +1,104 @@
+{
+  "schema": "ds4.cuda_rust_down_scale_base_correctness_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-cached-down-scale-base-corrected-route-blocked",
+  "goal": "Repair cached Rust CUDA routed-MoE down output by reading low-nibble Q2 scales from the active packed row/block instead of the start of the cached down-weight range.",
+  "ownership": {
+    "changes_cached_down_scale_addressing": true,
+    "adds_public_cached_down_regression_harness": true,
+    "preserves_cached_down_dp4a_topology": true,
+    "preserves_gate_kernel": true,
+    "preserves_dispatch_policy": true,
+    "marks_prior_cached_down_timings_as_pre_correction_provenance": true,
+    "official_vector_gate_preserved": true,
+    "changes_default_current_c_route": false,
+    "runtime_route_promoted": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "kernel": "abi_moe_down_expert_tile16_rowspan_cached_kernel",
+    "previous_scale_cursor": "0_usize",
+    "repaired_scale_cursor": "packed",
+    "current_c_reference": "ds4_cuda.cu dev_dot_q2_K_q8_K_block8 initializes sc from the active Q2 block and consumes sc[is++] low nibbles",
+    "scalar_rust_reference": "abi_moe_q2_q8_k_dot consumes down_weights[packed + scale_index] low nibbles",
+    "bug_boundary": "only the cached multi-pair down kernel's low-nibble scale cursor was unbased; its high-nibble minimum correction already used packed-relative bytes"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "candidate_benchmark_binary_sha256": "908f184bf5175d6dc84105a571d6fc7f33c109006c6108e8f3625555186cd9ae",
+    "buggy_parent_shared_library_sha256": "109503f9476b2fa29e1753cf3d207167c12a9c59a28077b1d40808b696def47a",
+    "repaired_shared_library_sha256": "b47c4c17773b279264ef92fccf70b2e719cd331834fe7fdd63b68ab081f33709",
+    "buggy_parent_profile": {
+      "source_fixture": "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-gate-weight-raw-load-performance-repair.json",
+      "gateup_ms": 1461.528,
+      "down_ms": 838.492,
+      "total_ms": 2316.378,
+      "interpretation": "provenance only; cached down used incorrect low-nibble scale addressing"
+    },
+    "repaired_profile": {
+      "csv_sha256": "aebea7e33724600080b0bc33aa73dff545a526873248fbd6a2ef23f255499d95",
+      "stderr_sha256": "b2c305d67952ffa07fb41089e82557e2a1f340ee36cb7dc7348d927a365e63eb",
+      "prefill_tps": 153.90,
+      "decode_tps": 16.35,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.229,
+      "sort_ms": 4.496,
+      "gateup_ms": 1463.339,
+      "midq_ms": 8.902,
+      "down_ms": 860.566,
+      "sum_ms": 0.043,
+      "total_ms": 2340.580
+    },
+    "correction_effect": {
+      "down_ms_increase_from_buggy_parent": 22.074,
+      "total_ms_increase_from_buggy_parent": 24.202,
+      "interpretation": "The increase is the cost of corrected arithmetic, not a performance regression against a valid output baseline."
+    },
+    "public_route_regression_probe": {
+      "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_routed_moe_cached_down_scale_base_link_smoke.c",
+      "staticlib_sha256": "c4c69a70dd221988db94fb4dc478656b990c5bca12e374268ff7e351bc4a7ed9",
+      "executable_sha256": "84fbb4a66a65fe8b6d6930b45cf415147450071984b40cd6e31605de0edb3bcf",
+      "stdout_sha256": "3d2bcbf35ae41b2697516b37cdb8e2001e1c6550bcf3e9002f21ef9a4b85aa1a",
+      "stderr_sha256": "c75f7cac2c902a4b90357c38e8711989db28eb88db41e381385a8d47e64cce73",
+      "public_entry": "ds4_gpu_routed_moe_batch_tensor",
+      "n_tokens": 128,
+      "output_invariant": "row1 == 2 * row0 for identical Q2 values with low scales 2 versus 1",
+      "passed": true
+    },
+    "official_vector_probe": {
+      "summary_sha256": "d815d16c7aec7721c3c52c27d26899363d97ca5b3112d4765ef2a6f2eb33a3a2",
+      "stdout_sha256": "c5d015f9da7baf94515c74eb03ea30356682d2dbfeab7bb3e03f2145ec6a508f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true,
+      "limitation": "The official vector aggregate gate passed before and after this repair; the public cached-down ratio probe is the defect-specific witness."
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "historical_timing_policy": "Retain prior performance fixtures as implementation provenance, but do not use pre-correction cached-down timings as a correctness baseline.",
+    "next_scoped_repair": "Continue Rust CUDA graph benchmark performance repair from corrected cached-down arithmetic."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "public_route_regression_probe_passed": true,
+    "unified_report_passed": 272,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

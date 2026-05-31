@@ -3055,7 +3055,7 @@ mod kernels {
                         scale += 1;
                     }
                     let mut quant_sums = [0_i32; 16];
-                    let mut scale_index = 0_usize;
+                    let mut scale_index = packed;
                     let mut chunk = 0_usize;
                     while chunk < 2 {
                         let q = packed + 16 + chunk * 32;
