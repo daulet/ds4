@@ -24,6 +24,8 @@ const ABI_MOE_Q2_BLOCK_BYTES: u64 = 84;
 const ABI_MOE_Q4_BLOCK_BYTES: u64 = 144;
 const ABI_MOE_Q8_K_BLOCK_BYTES: u64 = 292;
 const ABI_MOE_SORTED_EXPERTS: usize = 256;
+const ABI_MOE_CACHED_GATE_MAX_BLOCKS: usize = 16;
+const ABI_MOE_CACHED_DOWN_MAX_BLOCKS: usize = 8;
 pub(crate) const ABI_MOE_IQ2_SIGNS: [u8; 128] = [
     0, 129, 130, 3, 132, 5, 6, 135, 136, 9, 10, 139, 12, 141, 142, 15, 144, 17, 18, 147, 20, 149,
     150, 23, 24, 153, 154, 27, 156, 29, 30, 159, 160, 33, 34, 163, 36, 165, 166, 39, 40, 169, 170,
@@ -2243,6 +2245,137 @@ mod kernels {
         }
     }
 
+    #[allow(clippy::too_many_arguments, static_mut_refs)]
+    #[kernel]
+    pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        row_span: u32,
+        write_aux: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        static mut SXQ: SharedArray<
+            u8,
+            { 8 * ABI_MOE_CACHED_GATE_MAX_BLOCKS * ABI_MOE_Q8_K_BLOCK_BYTES as usize },
+        > = SharedArray::UNINIT;
+        static mut S_IQ2_GRID: SharedArray<u64, 256> = SharedArray::UNINIT;
+        static mut S_IQ2_SIGNS: SharedArray<u8, 128> = SharedArray::UNINIT;
+
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] || xq_blocks as usize > ABI_MOE_CACHED_GATE_MAX_BLOCKS {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        let mut np = 0_u32;
+        while np < 8 && local_start + np < counts[expert as usize] {
+            np += 1;
+        }
+        let block_bytes = ABI_MOE_Q8_K_BLOCK_BYTES as usize;
+        let thread_index = thread::threadIdx_x() as usize;
+        let staged_blocks = np as usize * xq_blocks as usize;
+        let mut staged_byte = thread_index;
+        while staged_byte < staged_blocks * block_bytes {
+            let staged_block = staged_byte / block_bytes;
+            let byte_index = staged_byte - staged_block * block_bytes;
+            let entry = staged_block / xq_blocks as usize;
+            let block = staged_block - entry * xq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let token = pair / n_expert;
+            let input_block = token as usize * xq_blocks as usize + block;
+            unsafe {
+                SXQ[staged_byte] = xq[input_block * block_bytes + byte_index];
+            }
+            staged_byte += THREADS_PER_BLOCK as usize;
+        }
+        if thread_index < 256 {
+            unsafe {
+                S_IQ2_GRID[thread_index] = iq2_grid[thread_index];
+            }
+        }
+        if thread_index < 128 {
+            unsafe {
+                S_IQ2_SIGNS[thread_index] = iq2_signs[thread_index];
+            }
+        }
+        thread::sync_threads();
+        let mut row_offset = 0_u32;
+        while row_offset < row_span {
+            let row = thread::blockIdx_x() * row_span + row_lane + row_offset;
+            if row < expert_mid_dim {
+                let row_base =
+                    u64::from(expert) * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+                let mut entry = 0_u32;
+                while entry < np {
+                    let pair =
+                        sorted_pairs[(offsets[expert as usize] + local_start + entry) as usize];
+                    let mut gate = 0.0_f32;
+                    let mut up = 0.0_f32;
+                    let mut block = lane;
+                    while block < xq_blocks {
+                        let packed =
+                            (row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES) as usize;
+                        let staged_block = entry as usize * xq_blocks as usize + block as usize;
+                        gate += abi_moe_iq2_q8_k_cached_dot(
+                            gate_weights,
+                            packed,
+                            unsafe { SXQ.as_ptr() },
+                            staged_block,
+                            unsafe { S_IQ2_GRID.as_ptr() },
+                            unsafe { S_IQ2_SIGNS.as_ptr() },
+                        );
+                        up += abi_moe_iq2_q8_k_cached_dot(
+                            up_weights,
+                            packed,
+                            unsafe { SXQ.as_ptr() },
+                            staged_block,
+                            unsafe { S_IQ2_GRID.as_ptr() },
+                            unsafe { S_IQ2_SIGNS.as_ptr() },
+                        );
+                        block += 8;
+                    }
+                    gate = abi_moe_quarter_warp_sum(gate);
+                    up = abi_moe_quarter_warp_sum(up);
+                    if lane == 0 {
+                        abi_moe_apply_clamp(&mut gate, &mut up, clamp);
+                        let output = (pair * expert_mid_dim + row) as usize;
+                        unsafe {
+                            if write_aux != 0 {
+                                *gate_out.get_unchecked_mut(output) = gate;
+                                *up_out.get_unchecked_mut(output) = up;
+                            }
+                            *mid_out.get_unchecked_mut(output) =
+                                (gate / (1.0 + (-gate).exp())) * up * weights[pair as usize];
+                        }
+                    }
+                    entry += 1;
+                }
+            }
+            row_offset += 32;
+        }
+    }
+
     #[kernel]
     pub fn abi_moe_atomic_output_zero_kernel(mut output: DisjointSlice<f32>, count: u64) {
         let index = thread::index_1d().get();
@@ -2441,6 +2574,108 @@ mod kernels {
                                     *down_out.get_unchecked_mut((pair * out_dim + row) as usize) =
                                         accumulator;
                                 }
+                            }
+                        }
+                    }
+                    entry += 1;
+                }
+            }
+            row_offset += 32;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments, static_mut_refs)]
+    #[kernel]
+    pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        row_span: u32,
+        atomic_out: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        static mut SMIDQ: SharedArray<
+            u8,
+            { 16 * ABI_MOE_CACHED_DOWN_MAX_BLOCKS * ABI_MOE_Q8_K_BLOCK_BYTES as usize },
+        > = SharedArray::UNINIT;
+
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] || midq_blocks as usize > ABI_MOE_CACHED_DOWN_MAX_BLOCKS {
+            return;
+        }
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        if local_start & 8 != 0 {
+            return;
+        }
+        let mut np = 0_u32;
+        while np < 16 && local_start + np < counts[expert as usize] {
+            np += 1;
+        }
+        let block_bytes = ABI_MOE_Q8_K_BLOCK_BYTES as usize;
+        let thread_index = thread::threadIdx_x() as usize;
+        let staged_blocks = np as usize * midq_blocks as usize;
+        let mut staged_byte = thread_index;
+        while staged_byte < staged_blocks * block_bytes {
+            let staged_block = staged_byte / block_bytes;
+            let byte_index = staged_byte - staged_block * block_bytes;
+            let entry = staged_block / midq_blocks as usize;
+            let block = staged_block - entry * midq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let input_block = pair as usize * midq_blocks as usize + block;
+            unsafe {
+                SMIDQ[staged_byte] = midq[input_block * block_bytes + byte_index];
+            }
+            staged_byte += THREADS_PER_BLOCK as usize;
+        }
+        thread::sync_threads();
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let mut row_offset = 0_u32;
+        while row_offset < row_span {
+            let row = thread::blockIdx_x() * row_span + row_lane + row_offset;
+            if row < out_dim {
+                let row_base =
+                    u64::from(expert) * down_expert_bytes + u64::from(row) * down_row_bytes;
+                let mut entry = 0_u32;
+                while entry < np {
+                    let pair =
+                        sorted_pairs[(offsets[expert as usize] + local_start + entry) as usize];
+                    let mut accumulator = 0.0_f32;
+                    let mut block = lane;
+                    while block < midq_blocks {
+                        accumulator += abi_moe_q2_q8_k_cached_dot(
+                            down_weights,
+                            (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize,
+                            unsafe { SMIDQ.as_ptr() },
+                            entry as usize * midq_blocks as usize + block as usize,
+                        );
+                        block += 8;
+                    }
+                    accumulator = abi_moe_quarter_warp_sum(accumulator);
+                    if lane == 0 {
+                        if atomic_out != 0 {
+                            let token = pair / n_expert;
+                            let output = (token * out_dim + row) as usize;
+                            let cell = unsafe {
+                                &*(down_out.as_mut_ptr().add(output) as *const DeviceAtomicF32)
+                            };
+                            cell.fetch_add(accumulator, AtomicOrdering::Relaxed);
+                        } else {
+                            unsafe {
+                                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) =
+                                    accumulator;
                             }
                         }
                     }
@@ -3474,6 +3709,51 @@ mod kernels {
         0.125 * weight_scale * abi_moe_q8_scale(q8, q8_block) * block_sum as f32
     }
 
+    fn abi_moe_iq2_q8_k_cached_dot(
+        packed: &[u8],
+        base: usize,
+        q8: *const u8,
+        q8_block: usize,
+        iq2_grid: *const u64,
+        iq2_signs: *const u8,
+    ) -> f32 {
+        let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base)) as f32;
+        let mut block_sum = 0_i32;
+        let mut ib32 = 0_usize;
+        while ib32 < ABI_MOE_QK_K / 32 {
+            let q2 = base + 2 + ib32 * 8;
+            let aux_g = abi_moe_load_u16(packed, q2) as u32
+                | ((abi_moe_load_u16(packed, q2 + 2) as u32) << 16);
+            let aux_s = abi_moe_load_u16(packed, q2 + 4) as u32
+                | ((abi_moe_load_u16(packed, q2 + 6) as u32) << 16);
+            let multiplier = (2 * (aux_s >> 28) + 1) as i32;
+            let mut subtotal = 0_i32;
+            let mut group = 0_u32;
+            while group < 4 {
+                let grid = unsafe { *iq2_grid.add(((aux_g >> (8 * group)) & 0xff) as usize) };
+                let signs = unsafe { *iq2_signs.add(((aux_s >> (7 * group)) & 127) as usize) };
+                let mut lane = 0_u32;
+                while lane < 8 {
+                    let mut value = ((grid >> (8 * lane)) & 0xff) as i32;
+                    if signs & (1_u8 << lane) != 0 {
+                        value = -value;
+                    }
+                    subtotal += value
+                        * abi_moe_cached_q8_value(
+                            q8,
+                            q8_block,
+                            ib32 * 32 + group as usize * 8 + lane as usize,
+                        );
+                    lane += 1;
+                }
+                group += 1;
+            }
+            block_sum += subtotal * multiplier;
+            ib32 += 1;
+        }
+        0.125 * weight_scale * abi_moe_cached_q8_scale(q8, q8_block) * block_sum as f32
+    }
+
     fn abi_moe_q2_q8_k_dot(packed: &[u8], base: usize, q8: &[u8], q8_block: usize) -> f32 {
         let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base + 80)) as f32;
         let weight_min = f16::from_bits(abi_moe_load_u16(packed, base + 82)) as f32;
@@ -3513,6 +3793,54 @@ mod kernels {
             chunk += 1;
         }
         abi_moe_q8_scale(q8, q8_block)
+            * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
+    }
+
+    fn abi_moe_q2_q8_k_cached_dot(
+        packed: &[u8],
+        base: usize,
+        q8: *const u8,
+        q8_block: usize,
+    ) -> f32 {
+        let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base + 80)) as f32;
+        let weight_min = f16::from_bits(abi_moe_load_u16(packed, base + 82)) as f32;
+        let mut min_sum = 0_i32;
+        let mut scale = 0_usize;
+        while scale < 16 {
+            min_sum +=
+                abi_moe_cached_q8_bsum(q8, q8_block, scale) * (packed[base + scale] >> 4) as i32;
+            scale += 1;
+        }
+        let mut quant_sum = 0_i32;
+        let mut scale_index = 0_usize;
+        let mut chunk = 0_usize;
+        while chunk < 2 {
+            let mut shift = 0_u32;
+            let mut group = 0_usize;
+            while group < 4 {
+                let first_scale = (packed[base + scale_index] & 0x0f) as i32;
+                scale_index += 1;
+                let second_scale = (packed[base + scale_index] & 0x0f) as i32;
+                scale_index += 1;
+                let q = base + 16 + chunk * 32;
+                let q8_base = chunk * 128 + group * 32;
+                let mut lane = 0_usize;
+                let mut first = 0_i32;
+                let mut second = 0_i32;
+                while lane < 16 {
+                    first += ((packed[q + lane] >> shift) & 3) as i32
+                        * abi_moe_cached_q8_value(q8, q8_block, q8_base + lane);
+                    second += ((packed[q + 16 + lane] >> shift) & 3) as i32
+                        * abi_moe_cached_q8_value(q8, q8_block, q8_base + 16 + lane);
+                    lane += 1;
+                }
+                quant_sum += first_scale * first + second_scale * second;
+                shift += 2;
+                group += 1;
+            }
+            chunk += 1;
+        }
+        abi_moe_cached_q8_scale(q8, q8_block)
             * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
     }
 
@@ -3571,6 +3899,24 @@ mod kernels {
         ) as i16 as i32
     }
 
+    fn abi_moe_cached_q8_scale(q8: *const u8, block: usize) -> f32 {
+        f32::from_bits(abi_moe_cached_load_u32(
+            q8,
+            block * ABI_MOE_Q8_K_BLOCK_BYTES as usize,
+        ))
+    }
+
+    fn abi_moe_cached_q8_value(q8: *const u8, block: usize, index: usize) -> i32 {
+        unsafe { *q8.add(block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index) as i8 as i32 }
+    }
+
+    fn abi_moe_cached_q8_bsum(q8: *const u8, block: usize, index: usize) -> i32 {
+        abi_moe_cached_load_u16(
+            q8,
+            block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 260 + index * 2,
+        ) as i16 as i32
+    }
+
     fn abi_moe_quarter_warp_sum(mut value: f32) -> f32 {
         let mut offset = 4_u32;
         while offset > 0 {
@@ -3589,6 +3935,19 @@ mod kernels {
             | ((values[offset + 1] as u32) << 8)
             | ((values[offset + 2] as u32) << 16)
             | ((values[offset + 3] as u32) << 24)
+    }
+
+    fn abi_moe_cached_load_u16(values: *const u8, offset: usize) -> u16 {
+        unsafe { *values.add(offset) as u16 | ((*values.add(offset + 1) as u16) << 8) }
+    }
+
+    fn abi_moe_cached_load_u32(values: *const u8, offset: usize) -> u32 {
+        unsafe {
+            *values.add(offset) as u32
+                | ((*values.add(offset + 1) as u32) << 8)
+                | ((*values.add(offset + 2) as u32) << 16)
+                | ((*values.add(offset + 3) as u32) << 24)
+        }
     }
 
     fn abi_moe_store_u32(values: &mut DisjointSlice<u8>, offset: usize, value: u32) {
@@ -5883,6 +6242,8 @@ pub(crate) struct AbiKernelModule {
     #[allow(dead_code)]
     moe_gate_up_mid_expert_tile8_rowspan_kernel: CudaFunction,
     #[allow(dead_code)]
+    moe_gate_up_mid_expert_tile8_rowspan_cached_kernel: CudaFunction,
+    #[allow(dead_code)]
     moe_atomic_output_zero_kernel: CudaFunction,
     #[allow(dead_code)]
     moe_down_expert_tile4_row32_kernel: CudaFunction,
@@ -5892,6 +6253,8 @@ pub(crate) struct AbiKernelModule {
     moe_down_expert_tile16_row32_kernel: CudaFunction,
     #[allow(dead_code)]
     moe_down_expert_tile16_rowspan_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_down_expert_tile16_rowspan_cached_kernel: CudaFunction,
     #[allow(dead_code)]
     moe_gate_up_mid_sorted_qwarp32_kernel: CudaFunction,
     #[allow(dead_code)]
@@ -6060,6 +6423,9 @@ impl AbiKernelModule {
             moe_gate_up_mid_expert_tile8_rowspan_kernel: module
                 .load_function("abi_moe_gate_up_mid_expert_tile8_rowspan_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_expert_tile8_rowspan_cached_kernel: module
+                .load_function("abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
             moe_atomic_output_zero_kernel: module
                 .load_function("abi_moe_atomic_output_zero_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
@@ -6074,6 +6440,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_down_expert_tile16_rowspan_kernel: module
                 .load_function("abi_moe_down_expert_tile16_rowspan_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_expert_tile16_rowspan_cached_kernel: module
+                .load_function("abi_moe_down_expert_tile16_rowspan_cached_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_gate_up_mid_sorted_qwarp32_kernel: module
                 .load_function("abi_moe_gate_up_mid_sorted_qwarp32_kernel")

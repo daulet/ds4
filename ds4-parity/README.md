@@ -4034,6 +4034,19 @@ C-linked B300 public single-token regression consumer proves that the 89-entry
 module loads without expanding the public Rust ABI. Shared-cache
 specialization and the public batched wrapper remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA embedded shared-cache routed-MoE ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_shared_cache_module_smoke.py --negative-test
+```
+
+The retained module now embeds the previously measured cached tile8 gate and
+tile16 atomic down row-span entries at the proved bounded cache capacities. A
+C-linked B300 public single-token regression consumer proves that the 91-entry
+module loads without expanding the public Rust ABI. Public batched dispatch
+and route promotion remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

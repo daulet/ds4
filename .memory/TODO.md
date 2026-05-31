@@ -11828,8 +11828,42 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because cached gate/down row-span entries are already B300-proved and can
+  be embedded independently of public batch orchestration.
+- Goal: retain bounded cached gate/down row-span entries, then define public
+  batched routed-MoE ownership and route-promotion policy before claiming C
+  CUDA removal.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Shared Cache Routed MoE ABI Module
+
+- Status: done
+- Goal: retain the B300-proved cached tile8 gate and tile16 atomic down
+  row-span kernels in the Rust CUDA ABI module without claiming public
+  batched routed-MoE ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-shared-cache-module-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_shared_cache_module_smoke.py --negative-test`.
+- Evidence:
+  - Two new retained entries embed cached gate/down row-span behavior with
+    synchronized packed Q8 staging and gate IQ2 lookup/sign staging, bounded
+    to `xq_blocks <= 16` and `midq_blocks <= 8`.
+  - The B300 rebuilt-staticlib regression consumer loads 91 embedded kernels
+    while the archive continues to expose 74 Rust ABI symbols.
+  - Local tests pass with 161 tests; B300 feature tests pass with 168 tests;
+    all 75 CUDA ABI comparators pass; and the unified report passes with 248
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Public batched routed-MoE ownership, route promotion, and C CUDA removal
+    remain pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: integrate or further scope shared-cache routed-MoE batch dispatch,
-  then connect remaining graph compute, whole-archive retention policy, and
-  production route-promotion work without claiming C CUDA removal before
-  those gates pass.
+- Goal: define the public batched routed-MoE ABI wrapper and route-promotion
+  policy now that bounded cached compute entries are embedded, then connect
+  remaining graph compute and whole-archive retention policy without
+  claiming C CUDA removal before those gates pass.
