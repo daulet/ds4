@@ -1,0 +1,96 @@
+{
+  "schema": "ds4.cuda_abi_attention_prefill_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-attention-prefill-abi",
+  "goal": "Rust-own the final public attention-prefill family through its generic, static-heads8-online, and safe-SGEMM paths without claiming routed MoE, route-promotion, whole-archive policy, or C CUDA removal.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_attention_prefill_raw_heads_tensor",
+      "ds4_gpu_attention_prefill_static_mixed_heads_tensor",
+      "ds4_gpu_attention_prefill_masked_mixed_heads_tensor"
+    ],
+    "semantics": [
+      "raw prefill rejects invalid public spans or windows above 256 before launch, and its generic zero-window path produces sink-only zero output while its optimized branches retain current-C full-causal zero-window behavior",
+      "static mixed prefill requires nonzero token count and ratio, supports zero window as full causal raw visibility, and selects generic, online, or cuBLAS paths with the current-C environment and quality priority",
+      "masked mixed prefill validates mask coverage, excludes the online path, and applies compressed-key additive masking in generic and cuBLAS branches"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_attention_prefill_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_attention_prefill_raw_kernel",
+      "abi_attention_prefill_mixed_kernel",
+      "abi_attention_static_mixed_heads8_online_kernel",
+      "abi_attention_prefill_pack_mixed_kv_kernel",
+      "abi_attention_prefill_pack_q_heads_kernel",
+      "abi_attention_prefill_replicate_kv_kernel",
+      "abi_attention_prefill_raw_softmax_kernel",
+      "abi_attention_prefill_mixed_softmax_kernel",
+      "abi_attention_prefill_unpack_heads_kernel"
+    ],
+    "adapter_boundary": "the public cuBLAS path preserves the proven cuda-oxide safe SGEMM adapter by packing query heads and replicating packed key/value rows per attention head",
+    "reuse_boundary": "the public family reuses the measured M14.4d4 generic and M14.4d5 optimized kernel contracts, retained model-range resolution, and current-C dispatch selector",
+    "remaining_compute_boundary": "all public attention ABI exports are Rust-owned; routed MoE, remaining graph compute, whole-archive retention policy, production route promotion, and C CUDA removal remain unowned",
+    "linkage_requirement": "the C-linked proof retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 71,
+    "exported_compute_symbol_count": 59,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "uses_retained_cublas_scratch": true,
+    "owns_attention_prefill_raw_heads_tensor": true,
+    "owns_attention_prefill_static_mixed_heads_tensor": true,
+    "owns_attention_prefill_masked_mixed_heads_tensor": true,
+    "preserves_generic_online_and_cublas_dispatch": true,
+    "owns_complete_attention_abi": true,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 152,
+    "feature_release_test_count": 159,
+    "staticlib_export_count": 71,
+    "embedded_kernel_count": 59,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "generic_raw_output_matches": true,
+      "raw_zero_window_generic_sink_only_matches": true,
+      "static_mixed_zero_window_matches": true,
+      "masked_mixed_output_matches": true,
+      "online_static_output_matches": true,
+      "cublas_static_output_matches": true,
+      "masked_cublas_output_matches": true,
+      "raw_zero_window_optimized_full_causal_matches": true,
+      "invalid_range_preserves_output": true,
+      "invalid_shape_rejected": true,
+      "null_rejected": true,
+      "embedded_prefill_kernels_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 62,
+      "predecessor_relink_executable_stack_warning_count": 62
+    }
+  },
+  "integration_risks": [
+    "raw zero-window behavior remains deliberately dispatch-sensitive because that is the present C contract: generic is sink-only while optimized branches are full causal",
+    "the prefill cuBLAS adapter deliberately replicates packed key/value rows for cuda-oxide safe SGEMM because the public wrapper does not expose current-C zero-stride batched GEMM directly",
+    "routed MoE, remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

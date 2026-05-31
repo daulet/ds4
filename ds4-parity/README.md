@@ -3889,6 +3889,21 @@ Prefill attention, routed MoE, remaining graph compute, whole-archive
 retention policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public attention-prefill ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_attention_prefill_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the final three public attention-prefill
+wrappers through generic, static-heads8-online, and safe-SGEMM paths. It
+proves generic raw/static/masked output, the dispatch-sensitive raw
+zero-window contract, forced optimized output, masked cuBLAS behavior, and
+rejection controls. Public attention ABI ownership is complete; routed MoE,
+remaining graph compute, whole-archive retention policy, route promotion, C
+CUDA removal, and the embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

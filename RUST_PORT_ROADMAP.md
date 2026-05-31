@@ -12128,6 +12128,52 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the remaining raw, static mixed, and masked mixed public prefill
+  wrappers share a single current-C dispatcher and complete the public
+  attention ABI as one comparable leaf.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Attention Prefill ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_attention_prefill_raw_heads_tensor`,
+  `ds4_gpu_attention_prefill_static_mixed_heads_tensor`, and
+  `ds4_gpu_attention_prefill_masked_mixed_heads_tensor` through current-C
+  generic, online heads8, and safe-SGEMM dispatch without claiming routed
+  MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-attention-prefill-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_attention_prefill_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports all three checked prefill wrappers,
+    applies the existing dispatcher, retains safe-SGEMM scratch, and clears
+    it during public cleanup.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds generic raw/mixed, online
+    heads8, pack/replicate/softmax/unpack kernels promoted from the measured
+    internal prefill milestones.
+  - A C-linked B300 consumer proves generic raw/static/masked output,
+    raw zero-window branch sensitivity, forced online and cuBLAS output,
+    masked cuBLAS behavior, and reject-before-write controls.
+  - Local library tests pass with 152 tests; B300 release-feature tests pass
+    with 159 tests; the static library exposes 71 Rust ABI symbols and embeds
+    59 kernels.
+  - All 62 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 66 CUDA ABI comparators
+    pass.
+  - The unified report passes with 238 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Public attention ABI ownership is complete; routed MoE, remaining graph
+    compute, production route promotion, whole-archive retention policy, and
+    C CUDA removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

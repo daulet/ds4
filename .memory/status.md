@@ -3,7 +3,26 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Attention Prefill ABI
+  is validated on B300. Rust exports
+  `ds4_gpu_attention_prefill_raw_heads_tensor`,
+  `ds4_gpu_attention_prefill_static_mixed_heads_tensor`, and
+  `ds4_gpu_attention_prefill_masked_mixed_heads_tensor` through the current-C
+  generic, static-heads8-online, and safe-SGEMM paths. A C-linked B300
+  witness proves generic raw/static/masked output, branch-sensitive raw
+  zero-window behavior, forced online and cuBLAS output, masked cuBLAS
+  behavior, invalid model-range output preservation, invalid-shape rejection,
+  and null rejection. Local tests pass with 152 tests; B300 feature tests
+  pass with 159 tests; the static library exposes 71 symbols and embeds 59
+  kernels. All 62 preceding linked ABI consumers pass against the rebuilt
+  archive with the known executable-stack warning. All 66 CUDA ABI
+  comparators pass, and the unified report passes with 238 passed, 45
+  skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Public attention ABI ownership is
+  complete; routed MoE, remaining graph compute, whole-archive/route
+  promotion, C CUDA removal, and the executable-stack warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Batched Q8 Attention Output ABI
   is validated on B300. Rust exports
   `ds4_gpu_attention_output_q8_batch_tensor` through native grouped Q8

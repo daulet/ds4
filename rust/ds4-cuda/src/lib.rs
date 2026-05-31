@@ -3734,6 +3734,38 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiAttentionPrefillScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub consumes_cached_model_ranges: bool,
+    pub uses_retained_cublas_scratch: bool,
+    pub owns_attention_prefill_raw_heads_tensor: bool,
+    pub owns_attention_prefill_static_mixed_heads_tensor: bool,
+    pub owns_attention_prefill_masked_mixed_heads_tensor: bool,
+    pub preserves_generic_online_and_cublas_dispatch: bool,
+    pub owns_complete_attention_abi: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE:
+    CudaAbiAttentionPrefillScope = CudaAbiAttentionPrefillScope {
+    exported_abi_symbol_count: 71,
+    exported_compute_symbol_count: 59,
+    consumes_cached_model_ranges: true,
+    uses_retained_cublas_scratch: true,
+    owns_attention_prefill_raw_heads_tensor: true,
+    owns_attention_prefill_static_mixed_heads_tensor: true,
+    owns_attention_prefill_masked_mixed_heads_tensor: true,
+    preserves_generic_online_and_cublas_dispatch: true,
+    owns_complete_attention_abi: true,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -3822,6 +3854,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -6680,6 +6713,60 @@ mod tests {
         );
         assert!(
             !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .changes_default_route
+        );
+    }
+
+    #[test]
+    fn public_attention_prefill_scope_completes_attention_without_claiming_graph_route() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_abi_symbol_count,
+            71
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_compute_symbol_count,
+            59
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .consumes_cached_model_ranges
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .uses_retained_cublas_scratch
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_attention_prefill_raw_heads_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_attention_prefill_static_mixed_heads_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_attention_prefill_masked_mixed_heads_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .preserves_generic_online_and_cublas_dispatch
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_attention_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_remaining_graph_compute_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_ds4_gpu_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
                 .changes_default_route
         );
     }

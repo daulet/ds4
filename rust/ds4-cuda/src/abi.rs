@@ -20,9 +20,10 @@ use crate::q8_policy::{
 use crate::substrate::CudaOxideSubstrate;
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::{
-    q8_dp4a_enabled, select_attention_output_a_path, select_f16_pair_projection_path,
-    select_f16_projection_path, select_f32_projection_path, select_q8_matmul_path,
-    AttentionOutputADispatchOptions, AttentionOutputAPath, F16PairProjectionDispatch,
+    q8_dp4a_enabled, select_attention_output_a_path, select_attention_prefill_path,
+    select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
+    select_q8_matmul_path, AttentionOutputADispatchOptions, AttentionOutputAPath,
+    AttentionPrefillDispatchOptions, AttentionPrefillPath, F16PairProjectionDispatch,
     F16PairProjectionPath, F16ProjectionDispatch, Q8MatmulDispatchOptions, Q8MatmulPath,
     DS4_CUDA_ATTENTION_RAW_SCORE_CAP, DS4_CUDA_ATTENTION_SCORE_CAP,
 };
@@ -38,6 +39,9 @@ static ABI_Q8_ACTIVATIONS: Mutex<Option<AbiQ8Activations>> = Mutex::new(None);
 static ABI_INDEXED_TOPK_SORT_SCRATCH: Mutex<Option<DeviceBuffer<i32>>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH: Mutex<Option<AbiAttentionOutputCublasScratch>> =
+    Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_ATTENTION_PREFILL_CUBLAS_SCRATCH: Mutex<Option<AbiAttentionPrefillCublasScratch>> =
     Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_Q8_CACHE: Mutex<AbiQ8Cache> = Mutex::new(AbiQ8Cache {
@@ -131,6 +135,16 @@ struct AbiAttentionOutputCublasScratch {
     packed_heads: DeviceBuffer<f32>,
     transposed_weights: DeviceBuffer<f32>,
     packed_low: DeviceBuffer<f32>,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiAttentionPrefillCublasScratch {
+    kv: DeviceBuffer<f32>,
+    q_heads: DeviceBuffer<f32>,
+    keys: DeviceBuffer<f32>,
+    keys_transposed: DeviceBuffer<f32>,
+    scores: DeviceBuffer<f32>,
+    output_by_head: DeviceBuffer<f32>,
 }
 
 #[cfg(target_os = "linux")]
@@ -448,6 +462,43 @@ fn with_abi_attention_output_cublas_scratch<T>(
             packed_heads: backend.zeroed::<f32>(packed_head_elements).ok()?,
             transposed_weights: backend.zeroed::<f32>(transposed_weight_elements).ok()?,
             packed_low: backend.zeroed::<f32>(packed_low_elements).ok()?,
+        });
+    }
+    operation(scratch.as_mut()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+fn with_abi_attention_prefill_cublas_scratch<T>(
+    backend: &CudaOxideSubstrate,
+    kv_elements: usize,
+    output_elements: usize,
+    head_kv_elements: usize,
+    score_elements: usize,
+    operation: impl FnOnce(&mut AbiAttentionPrefillCublasScratch) -> Option<T>,
+) -> Option<T> {
+    if kv_elements == 0 || output_elements == 0 || head_kv_elements == 0 || score_elements == 0 {
+        return None;
+    }
+    let mut scratch = ABI_ATTENTION_PREFILL_CUBLAS_SCRATCH.lock().ok()?;
+    if scratch.as_ref().is_none_or(|current| {
+        current.kv.len() < kv_elements
+            || current.q_heads.len() < output_elements
+            || current.keys.len() < head_kv_elements
+            || current.keys_transposed.len() < head_kv_elements
+            || current.scores.len() < score_elements
+            || current.output_by_head.len() < output_elements
+    }) {
+        if scratch.is_some() {
+            backend.synchronize().ok()?;
+        }
+        *scratch = Some(AbiAttentionPrefillCublasScratch {
+            kv: backend.zeroed::<f32>(kv_elements).ok()?,
+            q_heads: backend.zeroed::<f32>(output_elements).ok()?,
+            keys: backend.zeroed::<f32>(head_kv_elements).ok()?,
+            keys_transposed: backend.zeroed::<f32>(head_kv_elements).ok()?,
+            scores: backend.zeroed::<f32>(score_elements).ok()?,
+            output_by_head: backend.zeroed::<f32>(output_elements).ok()?,
         });
     }
     operation(scratch.as_mut()?)
@@ -1955,6 +2006,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             }
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut scratch) = ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH.lock() {
+                *scratch = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut scratch) = ABI_ATTENTION_PREFILL_CUBLAS_SCRATCH.lock() {
                 *scratch = None;
             }
             #[cfg(feature = "cuda-oxide-kernels")]
@@ -4960,6 +5015,611 @@ pub unsafe extern "C" fn ds4_gpu_attention_indexed_mixed_batch_heads_tensor(
         })
         .unwrap_or(false)
     })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_prefill_raw_heads_tensor(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    n_tokens: u32,
+    window: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| {
+        let Some(heads) = (unsafe { tensor_ref(heads.cast_const()) }) else {
+            return false;
+        };
+        let Some(q) = (unsafe { tensor_ref(q) }) else {
+            return false;
+        };
+        let Some(raw_kv) = (unsafe { tensor_ref(raw_kv) }) else {
+            return false;
+        };
+        let Some(output_elements) = u64::from(n_tokens)
+            .checked_mul(u64::from(n_head))
+            .and_then(|value| value.checked_mul(u64::from(head_dim)))
+        else {
+            return false;
+        };
+        let Some(raw_elements) = u64::from(n_tokens).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let sink_elements = u64::from(n_head);
+        let Some(output_bytes) = output_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(raw_bytes) = raw_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(sink_bytes) = sink_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_tokens == 0
+            || n_head == 0
+            || head_dim == 0
+            || window > 256
+            || sinks_offset > model_size
+            || sink_bytes > model_size - sinks_offset
+            || heads.bytes < output_bytes
+            || q.bytes < output_bytes
+            || raw_kv.bytes < raw_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                sinks_offset,
+                sink_bytes,
+                |sinks_ptr| {
+                    let blas = backend.blas_handle().ok();
+                    let path = select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                        use_comp_mask: false,
+                        n_tokens,
+                        head_dim,
+                        cublas_ready: blas.is_some(),
+                        no_cublas_attention: std::env::var_os("DS4_CUDA_NO_CUBLAS_ATTENTION")
+                            .is_some(),
+                        no_window_attention: std::env::var_os("DS4_CUDA_NO_WINDOW_ATTENTION")
+                            .is_some(),
+                        window_attention: std::env::var_os("DS4_CUDA_WINDOW_ATTENTION").is_some(),
+                        quality_mode: ABI_QUALITY_MODE.load(Ordering::Relaxed),
+                    });
+                    match path {
+                        AttentionPrefillPath::StaticHeads8Online => {
+                            with_abi_kernels(backend, |kernels| {
+                                Some(unsafe {
+                                    kernels.attention_static_mixed_heads8_online_tensor(
+                                        backend.stream(),
+                                        heads.device_ptr(),
+                                        sinks_ptr,
+                                        q.device_ptr(),
+                                        raw_kv.device_ptr(),
+                                        raw_kv.device_ptr(),
+                                        output_elements,
+                                        sink_elements,
+                                        raw_elements,
+                                        raw_elements,
+                                        n_tokens,
+                                        0,
+                                        window,
+                                        1,
+                                        n_head,
+                                        head_dim,
+                                    )
+                                })
+                            })
+                        }
+                        AttentionPrefillPath::Cublas => Some(unsafe {
+                            attention_prefill_cublas_impl(
+                                backend,
+                                blas.as_ref()?,
+                                heads,
+                                sinks_ptr,
+                                q,
+                                raw_kv,
+                                raw_kv,
+                                raw_kv,
+                                false,
+                                n_tokens,
+                                0,
+                                window,
+                                1,
+                                n_head,
+                                head_dim,
+                            )
+                        }),
+                        AttentionPrefillPath::Generic => with_abi_kernels(backend, |kernels| {
+                            Some(unsafe {
+                                kernels.attention_prefill_raw_tensor(
+                                    backend.stream(),
+                                    heads.device_ptr(),
+                                    sinks_ptr,
+                                    q.device_ptr(),
+                                    raw_kv.device_ptr(),
+                                    output_elements,
+                                    sink_elements,
+                                    raw_elements,
+                                    n_tokens,
+                                    window,
+                                    n_head,
+                                    head_dim,
+                                )
+                            })
+                        }),
+                    }
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_prefill_static_mixed_heads_tensor(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    comp_kv: *const Ds4GpuTensor,
+    n_tokens: u32,
+    n_comp: u32,
+    window: u32,
+    ratio: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| unsafe {
+        attention_prefill_mixed_impl(
+            heads,
+            model_map,
+            model_size,
+            sinks_offset,
+            q,
+            raw_kv,
+            comp_kv,
+            ptr::null(),
+            false,
+            n_tokens,
+            n_comp,
+            window,
+            ratio,
+            n_head,
+            head_dim,
+        )
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_prefill_masked_mixed_heads_tensor(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    comp_kv: *const Ds4GpuTensor,
+    comp_mask: *const Ds4GpuTensor,
+    n_tokens: u32,
+    n_comp: u32,
+    window: u32,
+    ratio: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| unsafe {
+        attention_prefill_mixed_impl(
+            heads,
+            model_map,
+            model_size,
+            sinks_offset,
+            q,
+            raw_kv,
+            comp_kv,
+            comp_mask,
+            true,
+            n_tokens,
+            n_comp,
+            window,
+            ratio,
+            n_head,
+            head_dim,
+        )
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn attention_prefill_mixed_impl(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    comp_kv: *const Ds4GpuTensor,
+    comp_mask: *const Ds4GpuTensor,
+    use_comp_mask: bool,
+    n_tokens: u32,
+    n_comp: u32,
+    window: u32,
+    ratio: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> bool {
+    let Some(heads) = (unsafe { tensor_ref(heads.cast_const()) }) else {
+        return false;
+    };
+    let Some(q) = (unsafe { tensor_ref(q) }) else {
+        return false;
+    };
+    let Some(raw_kv) = (unsafe { tensor_ref(raw_kv) }) else {
+        return false;
+    };
+    let comp_kv = if n_comp != 0 {
+        let Some(comp_kv) = (unsafe { tensor_ref(comp_kv) }) else {
+            return false;
+        };
+        comp_kv
+    } else {
+        raw_kv
+    };
+    let comp_mask = if use_comp_mask {
+        let Some(comp_mask) = (unsafe { tensor_ref(comp_mask) }) else {
+            return false;
+        };
+        comp_mask
+    } else {
+        raw_kv
+    };
+    let Some(output_elements) = u64::from(n_tokens)
+        .checked_mul(u64::from(n_head))
+        .and_then(|value| value.checked_mul(u64::from(head_dim)))
+    else {
+        return false;
+    };
+    let Some(raw_elements) = u64::from(n_tokens).checked_mul(u64::from(head_dim)) else {
+        return false;
+    };
+    let Some(comp_elements) = u64::from(n_comp).checked_mul(u64::from(head_dim)) else {
+        return false;
+    };
+    let Some(mask_elements) = u64::from(n_tokens).checked_mul(u64::from(n_comp)) else {
+        return false;
+    };
+    let sink_elements = u64::from(n_head);
+    let Some(output_bytes) = output_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(raw_bytes) = raw_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(comp_bytes) = comp_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(mask_bytes) = mask_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(sink_bytes) = sink_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    if model_map.is_null()
+        || n_tokens == 0
+        || ratio == 0
+        || n_head == 0
+        || head_dim == 0
+        || n_tokens.checked_add(n_comp).is_none()
+        || sinks_offset > model_size
+        || sink_bytes > model_size - sinks_offset
+        || heads.bytes < output_bytes
+        || q.bytes < output_bytes
+        || raw_kv.bytes < raw_bytes
+        || (n_comp != 0 && comp_kv.bytes < comp_bytes)
+        || (use_comp_mask && comp_mask.bytes < mask_bytes)
+    {
+        return false;
+    }
+    with_backend(|backend| {
+        with_cached_abi_model_range(
+            backend,
+            model_map,
+            model_size,
+            sinks_offset,
+            sink_bytes,
+            |sinks_ptr| {
+                let blas = backend.blas_handle().ok();
+                let path = select_attention_prefill_path(AttentionPrefillDispatchOptions {
+                    use_comp_mask,
+                    n_tokens,
+                    head_dim,
+                    cublas_ready: blas.is_some(),
+                    no_cublas_attention: std::env::var_os("DS4_CUDA_NO_CUBLAS_ATTENTION").is_some(),
+                    no_window_attention: std::env::var_os("DS4_CUDA_NO_WINDOW_ATTENTION").is_some(),
+                    window_attention: std::env::var_os("DS4_CUDA_WINDOW_ATTENTION").is_some(),
+                    quality_mode: ABI_QUALITY_MODE.load(Ordering::Relaxed),
+                });
+                match path {
+                    AttentionPrefillPath::StaticHeads8Online => {
+                        with_abi_kernels(backend, |kernels| {
+                            Some(unsafe {
+                                kernels.attention_static_mixed_heads8_online_tensor(
+                                    backend.stream(),
+                                    heads.device_ptr(),
+                                    sinks_ptr,
+                                    q.device_ptr(),
+                                    raw_kv.device_ptr(),
+                                    comp_kv.device_ptr(),
+                                    output_elements,
+                                    sink_elements,
+                                    raw_elements,
+                                    comp_elements,
+                                    n_tokens,
+                                    n_comp,
+                                    window,
+                                    ratio,
+                                    n_head,
+                                    head_dim,
+                                )
+                            })
+                        })
+                    }
+                    AttentionPrefillPath::Cublas => Some(unsafe {
+                        attention_prefill_cublas_impl(
+                            backend,
+                            blas.as_ref()?,
+                            heads,
+                            sinks_ptr,
+                            q,
+                            raw_kv,
+                            comp_kv,
+                            comp_mask,
+                            use_comp_mask,
+                            n_tokens,
+                            n_comp,
+                            window,
+                            ratio,
+                            n_head,
+                            head_dim,
+                        )
+                    }),
+                    AttentionPrefillPath::Generic => with_abi_kernels(backend, |kernels| {
+                        Some(unsafe {
+                            kernels.attention_prefill_mixed_tensor(
+                                backend.stream(),
+                                heads.device_ptr(),
+                                sinks_ptr,
+                                q.device_ptr(),
+                                raw_kv.device_ptr(),
+                                comp_kv.device_ptr(),
+                                comp_mask.device_ptr(),
+                                output_elements,
+                                sink_elements,
+                                raw_elements,
+                                comp_elements,
+                                mask_elements,
+                                n_tokens,
+                                n_comp,
+                                window,
+                                ratio,
+                                u32::from(use_comp_mask),
+                                n_head,
+                                head_dim,
+                            )
+                        })
+                    }),
+                }
+            },
+        )
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn attention_prefill_cublas_impl(
+    backend: &CudaOxideSubstrate,
+    blas: &cuda_core::Blas,
+    heads: &Ds4GpuTensor,
+    sinks_ptr: u64,
+    q: &Ds4GpuTensor,
+    raw_kv: &Ds4GpuTensor,
+    comp_kv: &Ds4GpuTensor,
+    comp_mask: &Ds4GpuTensor,
+    use_comp_mask: bool,
+    n_tokens: u32,
+    n_comp: u32,
+    window: u32,
+    ratio: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> bool {
+    let Some(n_keys) = n_tokens.checked_add(n_comp) else {
+        return false;
+    };
+    let Some(kv_elements) = u64::from(n_keys).checked_mul(u64::from(head_dim)) else {
+        return false;
+    };
+    let Some(output_elements) = u64::from(n_tokens)
+        .checked_mul(u64::from(n_head))
+        .and_then(|value| value.checked_mul(u64::from(head_dim)))
+    else {
+        return false;
+    };
+    let Some(head_kv_elements) = u64::from(n_head).checked_mul(kv_elements) else {
+        return false;
+    };
+    let Some(score_elements) = u64::from(n_head)
+        .checked_mul(u64::from(n_tokens))
+        .and_then(|value| value.checked_mul(u64::from(n_keys)))
+    else {
+        return false;
+    };
+    let Ok(kv_count) = usize::try_from(kv_elements) else {
+        return false;
+    };
+    let Ok(output_count) = usize::try_from(output_elements) else {
+        return false;
+    };
+    let Ok(head_kv_count) = usize::try_from(head_kv_elements) else {
+        return false;
+    };
+    let Ok(score_count) = usize::try_from(score_elements) else {
+        return false;
+    };
+    let Ok(n_tokens_usize) = usize::try_from(n_tokens) else {
+        return false;
+    };
+    let Ok(n_keys_usize) = usize::try_from(n_keys) else {
+        return false;
+    };
+    let Ok(n_head_usize) = usize::try_from(n_head) else {
+        return false;
+    };
+    let Ok(head_dim_usize) = usize::try_from(head_dim) else {
+        return false;
+    };
+    if !apply_abi_blas_math(blas) {
+        return false;
+    }
+    with_abi_attention_prefill_cublas_scratch(
+        backend,
+        kv_count,
+        output_count,
+        head_kv_count,
+        score_count,
+        |scratch| {
+            with_abi_kernels(backend, |kernels| {
+                if !unsafe {
+                    kernels.attention_prefill_pack_mixed_kv_tensor(
+                        backend.stream(),
+                        raw_kv.device_ptr(),
+                        comp_kv.device_ptr(),
+                        scratch.kv.cu_deviceptr(),
+                        n_tokens,
+                        n_comp,
+                        head_dim,
+                    ) && kernels.attention_prefill_pack_q_heads_tensor(
+                        backend.stream(),
+                        q.device_ptr(),
+                        scratch.q_heads.cu_deviceptr(),
+                        n_tokens,
+                        n_head,
+                        head_dim,
+                    ) && kernels.attention_prefill_replicate_kv_tensor(
+                        backend.stream(),
+                        scratch.kv.cu_deviceptr(),
+                        scratch.keys.cu_deviceptr(),
+                        scratch.keys_transposed.cu_deviceptr(),
+                        n_keys,
+                        n_head,
+                        head_dim,
+                    )
+                } {
+                    return Some(false);
+                }
+                let Ok(mut score_config) = StridedBatchedSgemmConfig::packed(
+                    n_tokens_usize,
+                    n_keys_usize,
+                    head_dim_usize,
+                    n_head_usize,
+                ) else {
+                    return Some(false);
+                };
+                score_config.alpha = 1.0 / (head_dim as f32).sqrt();
+                if blas
+                    .sgemm_strided_batched(
+                        backend.stream(),
+                        score_config,
+                        &scratch.q_heads,
+                        &scratch.keys_transposed,
+                        &mut scratch.scores,
+                    )
+                    .is_err()
+                {
+                    return Some(false);
+                }
+                let softmax_ok = if n_comp == 0 {
+                    unsafe {
+                        kernels.attention_prefill_raw_softmax_tensor(
+                            backend.stream(),
+                            sinks_ptr,
+                            scratch.scores.cu_deviceptr(),
+                            n_tokens,
+                            window,
+                            n_keys,
+                            n_head,
+                        )
+                    }
+                } else {
+                    unsafe {
+                        kernels.attention_prefill_mixed_softmax_tensor(
+                            backend.stream(),
+                            sinks_ptr,
+                            comp_mask.device_ptr(),
+                            scratch.scores.cu_deviceptr(),
+                            n_tokens,
+                            n_comp,
+                            window,
+                            ratio,
+                            n_keys,
+                            n_head,
+                            u32::from(use_comp_mask),
+                        )
+                    }
+                };
+                if !softmax_ok {
+                    return Some(false);
+                }
+                let Ok(value_config) = StridedBatchedSgemmConfig::packed(
+                    n_tokens_usize,
+                    head_dim_usize,
+                    n_keys_usize,
+                    n_head_usize,
+                ) else {
+                    return Some(false);
+                };
+                if blas
+                    .sgemm_strided_batched(
+                        backend.stream(),
+                        value_config,
+                        &scratch.scores,
+                        &scratch.keys,
+                        &mut scratch.output_by_head,
+                    )
+                    .is_err()
+                {
+                    return Some(false);
+                }
+                Some(unsafe {
+                    kernels.attention_prefill_unpack_heads_tensor(
+                        backend.stream(),
+                        scratch.output_by_head.cu_deviceptr(),
+                        heads.device_ptr(),
+                        n_tokens,
+                        n_head,
+                        head_dim,
+                    )
+                })
+            })
+        },
+    )
+    .unwrap_or(false)
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
