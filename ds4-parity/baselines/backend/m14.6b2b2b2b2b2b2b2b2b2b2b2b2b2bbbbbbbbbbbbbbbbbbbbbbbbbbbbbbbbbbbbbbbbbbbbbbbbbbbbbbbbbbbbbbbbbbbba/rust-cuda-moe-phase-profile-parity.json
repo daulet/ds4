@@ -1,0 +1,97 @@
+{
+  "schema": "ds4.cuda_rust_moe_phase_profile_parity.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-gate-down-bottleneck-isolated",
+  "goal": "Add an opt-in Rust CUDA routed-MoE phase profile matching current-C output and use it to identify the remaining B300 performance bottleneck.",
+  "ownership": {
+    "adds_opt_in_rust_moe_profile": true,
+    "matches_current_c_profile_schema": true,
+    "changes_kernel_math": false,
+    "changes_default_dispatch": false,
+    "profile_requires_environment_flag": true,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false,
+    "default_current_c_route_preserved": true
+  },
+  "implementation": {
+    "entry_source": "rust/ds4-cuda/src/abi.rs",
+    "substrate_source": "rust/ds4-cuda/src/substrate.rs",
+    "public_entry": "ds4_gpu_routed_moe_batch_tensor",
+    "environment_flag": "DS4_CUDA_MOE_PROFILE",
+    "phase_boundaries": ["xq", "sort", "gateup", "midq", "down", "sum", "total"],
+    "profiling_contract": "seven timing-enabled CUDA events are allocated only after opt-in on the quantized multi-token routed-MoE route; elapsed measurement and reporting occur only after successful completion, and profiling failure does not fail dispatch"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "profiled_shared_library_sha256": "fd29d851b9d35a599f035913e6f8cb985641e90636537b714075675f9d98bd68",
+    "workload": "one 2048-token prefill frontier plus one generated token; Rust graph candidate versus supported current-C ds4-bench route; DS4_CUDA_MOE_PROFILE=1",
+    "rust_profile": {
+      "csv_sha256": "43f68062dbc78e2300baeb7bd7637ca8a5799542aa3eeb77f26cf5ba8624b54e",
+      "stderr_sha256": "1d01024aa682c0180e73c9357f89c9eeb260b70d46ad8b150a776786624c0a9e",
+      "prefill_tps": 106.95,
+      "decode_tps": 16.15,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.053,
+      "sort_ms": 4.293,
+      "gateup_ms": 8217.639,
+      "midq_ms": 8.896,
+      "down_ms": 3998.630,
+      "sum_ms": 0.043,
+      "total_ms": 12232.557
+    },
+    "current_c_profile": {
+      "csv_sha256": "91221d193fb6d51aaaa056b0eb416af86dd3f31b6ff48569083c97912d22e253",
+      "stderr_sha256": "aacb97bee23ce7fa1d2cd16af982bc43fcd15182d8fbff59da3d56c259139854",
+      "prefill_tps": 1365.31,
+      "decode_tps": 36.02,
+      "profiled_layer_count": 43,
+      "xq_ms": 2.456,
+      "sort_ms": 3.161,
+      "gateup_ms": 517.818,
+      "midq_ms": 7.589,
+      "down_ms": 393.200,
+      "sum_ms": 0.043,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "rust_to_current_c_total_ratio": 13.23,
+      "rust_to_current_c_gateup_ratio": 15.87,
+      "rust_to_current_c_down_ratio": 10.17,
+      "rust_gateup_share_percent": 67.2,
+      "rust_down_share_percent": 32.7
+    },
+    "official_vector_probe": {
+      "runtime_graph_route": "graph",
+      "summary_sha256": "7675278252b9ff0ff80c120a5be47e33ff257ea195a7853f5903369d9b41daef",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Replace scalar per-pair Rust MoE gate/up and down dot computation with current-C-style packed multi-pair DP4A work before repeating benchmark acceptance."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 266,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

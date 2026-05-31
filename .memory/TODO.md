@@ -12453,3 +12453,25 @@
     tests. Default current-C routing and removal blockers remain in force.
   - The required pre-implementation and final non-interactive Claude review
     attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA MoE Phase-Profile Parity
+
+- Status: done
+- Goal: add current-C-compatible opt-in routed-MoE phase timing to the Rust
+  CUDA DSO and isolate the remaining B300 performance work.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-phase-profile-parity.json`
+- Evidence:
+  - The Rust quantized batch route emits the existing `DS4_CUDA_MOE_PROFILE`
+    schema through seven timing-enabled CUDA events only when profiling is
+    explicitly enabled; profiling failures do not fail dispatch.
+  - On B300, `43` Rust prefill MoE phases total `12232.557 ms` versus
+    current-C `924.283 ms`. Gate/up is `8217.639 ms` versus `517.818 ms`,
+    and down is `3998.630 ms` versus `393.200 ms`.
+  - Source comparison isolates the next repair: current C uses packed
+    multi-pair DP4A dot work in both dominant phases while the Rust cached
+    kernels still iterate scalar per-pair dot helpers.
+  - Official vectors and B300 feature tests remain green; default current-C
+    routing and promotion blockers remain in force. The pre-implementation
+    and final Claude review attempts returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.

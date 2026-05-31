@@ -4267,6 +4267,18 @@ improves prefill by `21.6%`, while the official-vector graph comparator
 continues to match all exercised selections. Current-C routing remains the
 default because the wider graph performance gap is still open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA MoE phase-profile parity leaf:
+
+```sh
+python3 ds4-parity/check_cuda_rust_moe_phase_profile_parity.py --negative-test
+```
+
+The opt-in Rust route now emits the established `DS4_CUDA_MOE_PROFILE`
+phase breakdown. B300 evidence isolates the remaining routed-MoE gap in
+gate/up and down dot computation, where the Rust cached kernels remain scalar
+per pair while current C uses packed multi-pair DP4A work.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -219,6 +219,11 @@ impl CudaOxideSubstrate {
         self.stream.record_event(None)
     }
 
+    pub fn new_timing_event(&self) -> Result<CudaEvent, DriverError> {
+        self.context
+            .new_event(Some(cuda_core::sys::CUevent_flags_enum_CU_EVENT_DEFAULT))
+    }
+
     /// Copies a selected range from a live pinned staging buffer and completes it.
     pub fn upload_pinned_u8_range(
         &self,

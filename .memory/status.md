@@ -4,6 +4,18 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA MoE Phase-Profile Parity
+  is validated on B300. `DS4_CUDA_MOE_PROFILE=1` now emits the current-C
+  phase schema from the Rust quantized batched routed-MoE path through
+  timing-enabled CUDA events, without allocating or synchronizing when the
+  flag is absent. Across `43` profiled `2048`-token layers, Rust routed-MoE
+  totals `12232.557 ms` against current-C `924.283 ms`; gate/up contributes
+  `8217.639 ms` (`15.87x` current-C) and down contributes `3998.630 ms`
+  (`10.17x`). The profiler DSO SHA-256 is
+  `fd29d851b9d35a599f035913e6f8cb985641e90636537b714075675f9d98bd68`;
+  unprofiled official vectors pass `1958` checks plus `8` negative checks and
+  B300 feature tests pass `176` tests. The next repair is packed multi-pair
+  DP4A work in the dominant MoE dot paths; routing remains current-C.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached MoE Dispatch Performance Repair
   is validated on B300. The batched routed-MoE dispatcher now selects the
   retained shared-cache row-span kernels within their proved bounds

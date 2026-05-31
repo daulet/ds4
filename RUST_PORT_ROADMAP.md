@@ -13266,6 +13266,34 @@ Stage split:
     stage. The required pre-implementation and final non-interactive Claude
     review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA MoE Phase-Profile Parity
+
+- Status: done.
+- Goal: add an opt-in Rust CUDA routed-MoE phase profiler with the current-C
+  output contract and use live B300 evidence to select the next repair.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-phase-profile-parity.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_moe_phase_profile_parity.py --negative-test`.
+- Evidence:
+  - `DS4_CUDA_MOE_PROFILE=1` on the Rust quantized batched route creates
+    timing-enabled CUDA events for the current-C phase boundaries and emits
+    the established stderr schema; without the flag the path allocates no
+    timing events and introduces no synchronization.
+  - Across `43` profiled `2048`-token B300 layers, Rust routed-MoE takes
+    `12232.557 ms` versus current-C `924.283 ms` (`13.23x`). Rust gate/up is
+    `8217.639 ms` versus `517.818 ms` (`15.87x`) and Rust down is
+    `3998.630 ms` versus `393.200 ms` (`10.17x`).
+  - The evidence directs the next scoped repair to the paired dot primitives:
+    current C computes multiple pairs with packed DP4A work, while the Rust
+    cached gate/up and down kernels still loop through scalar per-pair helpers.
+  - The B300 DSO SHA-256 is
+    `fd29d851b9d35a599f035913e6f8cb985641e90636537b714075675f9d98bd68`.
+    Unprofiled official vectors pass `1958` checks plus `8` negative checks,
+    B300 feature tests pass `176` tests, and default current-C routing remains
+    retained. The required Claude review attempts returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

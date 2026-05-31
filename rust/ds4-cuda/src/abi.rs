@@ -162,6 +162,66 @@ struct AbiRoutedMoeBatchScratch {
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+struct AbiRoutedMoeProfile {
+    events: Option<[CudaEvent; 7]>,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+impl AbiRoutedMoeProfile {
+    fn new(backend: &CudaOxideSubstrate) -> Self {
+        if std::env::var_os("DS4_CUDA_MOE_PROFILE").is_none() {
+            return Self { events: None };
+        }
+        let events = (|| {
+            Some([
+                backend.new_timing_event().ok()?,
+                backend.new_timing_event().ok()?,
+                backend.new_timing_event().ok()?,
+                backend.new_timing_event().ok()?,
+                backend.new_timing_event().ok()?,
+                backend.new_timing_event().ok()?,
+                backend.new_timing_event().ok()?,
+            ])
+        })();
+        let mut profile = Self { events };
+        profile.record(backend, 0);
+        profile
+    }
+
+    fn record(&mut self, backend: &CudaOxideSubstrate, index: usize) {
+        if self
+            .events
+            .as_ref()
+            .is_some_and(|events| events[index].record(backend.stream()).is_err())
+        {
+            self.events = None;
+        }
+    }
+
+    fn report(&self, n_tokens: u32, pair_count: u32) {
+        let Some(events) = self.events.as_ref() else {
+            return;
+        };
+        let Some((xq, sort, gateup, midq, down, sum, total)) = (|| {
+            Some((
+                events[0].elapsed_ms(&events[1]).ok()?,
+                events[1].elapsed_ms(&events[2]).ok()?,
+                events[2].elapsed_ms(&events[3]).ok()?,
+                events[3].elapsed_ms(&events[4]).ok()?,
+                events[4].elapsed_ms(&events[5]).ok()?,
+                events[5].elapsed_ms(&events[6]).ok()?,
+                events[0].elapsed_ms(&events[6]).ok()?,
+            ))
+        })() else {
+            return;
+        };
+        eprintln!(
+            "ds4: CUDA MoE profile tokens={n_tokens} pairs={pair_count} xq={xq:.3} sort={sort:.3} gateup={gateup:.3} midq={midq:.3} down={down:.3} sum={sum:.3} total={total:.3} ms"
+        );
+    }
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 struct AbiAttentionOutputCublasScratch {
     packed_heads: DeviceBuffer<f32>,
     transposed_weights: DeviceBuffer<f32>,
@@ -7910,6 +7970,7 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                                     )
                                                 });
                                             }
+                                            let mut profile = AbiRoutedMoeProfile::new(backend);
                                             if !unsafe {
                                                 kernels.moe_q8_k_quantize_tensor(
                                                     backend.stream(),
@@ -7922,6 +7983,7 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                             } {
                                                 return Some(false);
                                             }
+                                            profile.record(backend, 1);
 
                                             let use_expert_tiles = std::env::var_os(
                                                 "DS4_CUDA_MOE_NO_EXPERT_TILES",
@@ -8180,6 +8242,7 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                                     {
                                                         return Some(false);
                                                     }
+                                                    profile.record(backend, 2);
                                                     let gate_ok = if use_expert_tiles
                                                         && use_gate_rowspan
                                                         && xq_blocks <= 16
@@ -8410,20 +8473,23 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                                                 )
                                                         }
                                                     };
-                                                    if !gate_ok
-                                                        || !unsafe {
-                                                            kernels.moe_q8_k_quantize_tensor(
-                                                                backend.stream(),
-                                                                mid.device_ptr(),
-                                                                gate.device_ptr(),
-                                                                midq_bytes,
-                                                                expert_mid_dim,
-                                                                pair_count,
-                                                            )
-                                                        }
-                                                    {
+                                                    if !gate_ok {
                                                         return Some(false);
                                                     }
+                                                    profile.record(backend, 3);
+                                                    if !unsafe {
+                                                        kernels.moe_q8_k_quantize_tensor(
+                                                            backend.stream(),
+                                                            mid.device_ptr(),
+                                                            gate.device_ptr(),
+                                                            midq_bytes,
+                                                            expert_mid_dim,
+                                                            pair_count,
+                                                        )
+                                                    } {
+                                                        return Some(false);
+                                                    }
+                                                    profile.record(backend, 4);
                                                     if use_atomic_down
                                                         && !unsafe {
                                                             kernels.moe_atomic_output_zero_tensor(
@@ -8689,10 +8755,11 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                                     if !down_ok {
                                                         return Some(false);
                                                     }
-                                                    if use_atomic_down {
-                                                        Some(true)
+                                                    profile.record(backend, 5);
+                                                    let sum_ok = if use_atomic_down {
+                                                        true
                                                     } else {
-                                                        Some(unsafe {
+                                                        unsafe {
                                                             kernels.moe_sum_tensor(
                                                                 backend.stream(),
                                                                 n_tokens,
@@ -8701,8 +8768,14 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                                                 out_dim,
                                                                 n_expert,
                                                             )
-                                                        })
+                                                        }
+                                                    };
+                                                    if !sum_ok {
+                                                        return Some(false);
                                                     }
+                                                    profile.record(backend, 6);
+                                                    profile.report(n_tokens, pair_count);
+                                                    Some(true)
                                                 },
                                             )
                                         })
