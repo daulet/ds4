@@ -4105,6 +4105,19 @@ wrappers. The B300-linked consumer proves fused and fallback output for
 asymmetric Q/KV widths. Indexer graph wrappers, route promotion, and C CUDA
 removal remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA public DSV4 top-k mask ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_topk_mask_smoke.py --negative-test
+```
+
+The Rust ABI now exports the public top-k mask wrapper. The B300-linked
+consumer proves selected `0.0` and excluded negative infinity output over
+multiple tokens while retaining the current C rejection contract. Indexer
+score/top-k selection wrappers, route promotion, and C CUDA removal remain
+pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

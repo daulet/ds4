@@ -12791,8 +12791,46 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public top-k mask wrapper is independently executable and
+  comparable before score/top-k selection wrappers and route promotion.
+- Goal: expose and validate the Rust public top-k mask wrapper while
+  preserving the current selected-zero/excluded-negative-infinity contract.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public DSV4 TopK Mask ABI
+
+- Status: done.
+- Goal: export `ds4_gpu_dsv4_topk_mask_tensor` from the Rust CUDA ABI and
+  execute its multi-token selected-mask behavior through a linked B300
+  consumer.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-topk-mask-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_topk_mask_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` now exports the public DSV4 top-k mask
+    wrapper and preserves current-C null, zero-dimension, and span
+    validation without introducing a new `top_k <= n_comp` restriction.
+  - `rust/ds4-cuda/src/abi_kernels.rs` retains `abi_topk_mask_kernel`; the
+    linked B300 harness verifies selected `0.0` and excluded negative
+    infinity values across two tokens plus rejection controls.
+  - The B300 `sm_80` rebuilt static library exposes 77 Rust ABI symbols and
+    embeds 93 kernels; the public fused QKV RMS linked regression remains
+    passing.
+  - Local library tests pass with 167 tests; B300 release-feature tests pass
+    with 174 tests; all 81 CUDA ABI comparators pass; and the unified report
+    passes with 254 passed, 45 skipped, and 0 failed. The pre-implementation
+    and final pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Four indexer score/top-k selection public exports, graph-wide route
+    promotion, whole-archive production policy, and C CUDA removal remain
+    open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
-- Goal: export the remaining indexer/top-k graph-compute wrappers, then
+- Goal: export the remaining indexer score/top-k selection graph-compute wrappers, then
   define route-promotion and whole-archive retention policy without claiming
   C CUDA removal before those gates pass.
 

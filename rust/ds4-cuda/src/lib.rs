@@ -4238,6 +4238,34 @@ pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
     changes_default_route: false,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaAbiTopkMaskScope {
+    pub exported_abi_symbol_count: u32,
+    pub exported_compute_symbol_count: u32,
+    pub embedded_kernel_count: u32,
+    pub owns_dsv4_topk_mask_tensor: bool,
+    pub owns_topk_mask_kernel: bool,
+    pub owns_indexer_score_abi: bool,
+    pub owns_indexer_topk_selection_abi: bool,
+    pub owns_remaining_graph_compute_abi: bool,
+    pub owns_complete_ds4_gpu_abi: bool,
+    pub changes_default_route: bool,
+}
+
+pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE:
+    CudaAbiTopkMaskScope = CudaAbiTopkMaskScope {
+    exported_abi_symbol_count: 77,
+    exported_compute_symbol_count: 75,
+    embedded_kernel_count: 93,
+    owns_dsv4_topk_mask_tensor: true,
+    owns_topk_mask_kernel: true,
+    owns_indexer_score_abi: false,
+    owns_indexer_topk_selection_abi: false,
+    owns_remaining_graph_compute_abi: false,
+    owns_complete_ds4_gpu_abi: false,
+    changes_default_route: false,
+};
+
 pub mod allocation_policy;
 pub mod q8_policy;
 
@@ -4341,6 +4369,7 @@ mod tests {
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
         M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
+        M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE,
     };
 
     #[test]
@@ -8069,6 +8098,53 @@ mod tests {
         );
         assert!(
             !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .changes_default_route
+        );
+    }
+
+    #[test]
+    fn public_topk_mask_scope_leaves_indexer_selection_and_route_pending() {
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_abi_symbol_count,
+            77
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .exported_compute_symbol_count,
+            75
+        );
+        assert_eq!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .embedded_kernel_count,
+            93
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_dsv4_topk_mask_tensor
+        );
+        assert!(
+            M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_topk_mask_kernel
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_indexer_score_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_indexer_topk_selection_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_remaining_graph_compute_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
+                .owns_complete_ds4_gpu_abi
+        );
+        assert!(
+            !M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE
                 .changes_default_route
         );
     }

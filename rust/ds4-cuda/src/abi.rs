@@ -3136,6 +3136,62 @@ pub unsafe extern "C" fn ds4_gpu_dsv4_indexer_qat_tensor(
 
 #[cfg(feature = "cuda-oxide-kernels")]
 #[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_dsv4_topk_mask_tensor(
+    mask: *mut Ds4GpuTensor,
+    topk: *const Ds4GpuTensor,
+    n_comp: u32,
+    n_tokens: u32,
+    top_k: u32,
+) -> c_int {
+    status(|| {
+        let Some(mask) = (unsafe { tensor_ref(mask.cast_const()) }) else {
+            return false;
+        };
+        let Some(topk) = (unsafe { tensor_ref(topk) }) else {
+            return false;
+        };
+        let Some(count) = u64::from(n_tokens).checked_mul(u64::from(n_comp)) else {
+            return false;
+        };
+        let Some(selected_count) = u64::from(n_tokens).checked_mul(u64::from(top_k)) else {
+            return false;
+        };
+        let Some(mask_bytes) = count.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(topk_bytes) = selected_count.checked_mul(size_of::<u32>() as u64) else {
+            return false;
+        };
+        if n_comp == 0
+            || n_tokens == 0
+            || top_k == 0
+            || mask.bytes < mask_bytes
+            || topk.bytes < topk_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_abi_kernels(backend, |kernels| {
+                // SAFETY: both device spans and nonzero launch dimensions
+                // are validated before submission.
+                Some(unsafe {
+                    kernels.dsv4_topk_mask_tensor(
+                        backend.stream(),
+                        mask.device_ptr(),
+                        topk.device_ptr(),
+                        n_comp,
+                        n_tokens,
+                        top_k,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn ds4_gpu_rope_tail_tensor(
     x: *mut Ds4GpuTensor,

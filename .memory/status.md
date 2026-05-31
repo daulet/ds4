@@ -3,7 +3,22 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public DSV4 TopK Mask ABI
+  is validated on B300. The Rust ABI now exports
+  `ds4_gpu_dsv4_topk_mask_tensor`, embeds `abi_topk_mask_kernel`, and
+  preserves current-C null, zero-dimension, and span validation without
+  adding a `top_k <= n_comp` restriction. The rebuilt static library
+  exposes 77 Rust ABI symbols and embeds 93 kernels. A C-linked consumer
+  passes selected `0.0` and excluded negative infinity output checks over
+  two tokens plus rejection controls; the public fused QKV RMS consumer
+  remains passing. Local tests pass with 167 tests; B300 feature tests pass
+  with 174 tests; all 81 CUDA ABI comparators pass; and the unified report
+  passes with 254 passed, 45 skipped, and 0 failed. The pre-implementation
+  and final pass-end non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Four indexer score/top-k selection
+  public exports, graph-wide route promotion, whole-archive policy, and C
+  CUDA removal remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Fused QKV RMS Rows ABI
   is validated on B300. The Rust ABI now exports
   `ds4_gpu_dsv4_qkv_rms_norm_rows_tensor`, embeds the fused Q/KV

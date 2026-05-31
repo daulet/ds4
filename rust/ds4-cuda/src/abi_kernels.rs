@@ -5252,6 +5252,35 @@ mod kernels {
         }
     }
 
+    #[kernel]
+    pub fn abi_topk_mask_kernel(
+        count: u64,
+        n_comp: u32,
+        top_k: u32,
+        topk: &[u32],
+        mut mask: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d();
+        let gid = index.get();
+        if gid as u64 >= count {
+            return;
+        }
+        let token = gid / n_comp as usize;
+        let comp = gid - token * n_comp as usize;
+        let mut value = f32::NEG_INFINITY;
+        let mut k = 0;
+        while k < top_k {
+            if topk[token * top_k as usize + k as usize] == comp as u32 {
+                value = 0.0;
+                break;
+            }
+            k += 1;
+        }
+        if let Some(element) = mask.get_mut(index) {
+            *element = value;
+        }
+    }
+
     fn abi_e2m1fn_value(value: i32) -> f32 {
         match value & 7 {
             0 => 0.0,
@@ -6360,6 +6389,7 @@ pub(crate) struct AbiKernelModule {
     attention_indexed_mixed_heads8_rb4_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
+    topk_mask_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
     dsv4_qkv_rms_norm_rows_kernel: CudaFunction,
     dequant_q8_0_to_f16_kernel: CudaFunction,
@@ -6599,6 +6629,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             indexer_hadamard_fp4_kernel: module
                 .load_function("abi_indexer_hadamard_fp4_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            topk_mask_kernel: module
+                .load_function("abi_topk_mask_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
@@ -11572,6 +11605,60 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.indexer_hadamard_fp4_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn dsv4_topk_mask_tensor(
+        &self,
+        stream: &CudaStream,
+        mask_ptr: u64,
+        topk_ptr: u64,
+        n_comp: u32,
+        n_tokens: u32,
+        top_k: u32,
+    ) -> bool {
+        let count = u64::from(n_tokens) * u64::from(n_comp);
+        let selected_count = u64::from(n_tokens) * u64::from(top_k);
+        let Ok(grid_x) = u32::try_from(
+            count
+                .max(selected_count)
+                .div_ceil(u64::from(THREADS_PER_BLOCK)),
+        ) else {
+            return false;
+        };
+        let config = LaunchConfig {
+            grid_dim: (grid_x, 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut count = count;
+        let mut n_comp = n_comp;
+        let mut top_k = top_k;
+        let mut topk_ptr = topk_ptr;
+        let mut topk_len = selected_count;
+        let mut mask_ptr = mask_ptr;
+        let mut mask_len = count;
+        let mut params = [
+            (&mut count as *mut u64).cast::<c_void>(),
+            (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut top_k as *mut u32).cast::<c_void>(),
+            (&mut topk_ptr as *mut u64).cast::<c_void>(),
+            (&mut topk_len as *mut u64).cast::<c_void>(),
+            (&mut mask_ptr as *mut u64).cast::<c_void>(),
+            (&mut mask_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates both tensor spans and all dimensions
+        // before submitting a launch that writes exactly count mask values.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.topk_mask_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

@@ -214,7 +214,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(item in texts["todo"], "TODO item missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy" in texts["status"],
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy" in texts["status"],
         "active item missing",
     )
     report.check("M14.6b2b2b2b2b2b2b2b1 Direct-I/O Error Disable ABI" in texts["status"], "status evidence missing")
