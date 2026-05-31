@@ -5338,6 +5338,73 @@ mod kernels {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_dsv4_qkv_rms_norm_rows_kernel(
+        q_n: u32,
+        kv_n: u32,
+        rows: u32,
+        eps: f32,
+        q: &[f32],
+        q_weight: &[f32],
+        mut q_out: DisjointSlice<f32>,
+        kv: &[f32],
+        kv_weight: &[f32],
+        mut kv_out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x();
+        let which = thread::blockIdx_y();
+        if row >= rows || which > 1 {
+            return;
+        }
+        let tid = thread::threadIdx_x() as usize;
+        let nth = thread::blockDim_x() as usize;
+        let n = (if which == 0 { q_n } else { kv_n }) as usize;
+        let base = row as usize * n;
+
+        let mut sum = 0.0_f32;
+        let mut i = tid;
+        while i < n {
+            let value = if which == 0 {
+                q[base + i]
+            } else {
+                kv[base + i]
+            };
+            sum += value * value;
+            i += nth;
+        }
+        unsafe {
+            PARTIAL[tid] = sum;
+        }
+        thread::sync_threads();
+
+        let mut stride = nth >> 1;
+        while stride > 0 {
+            if tid < stride {
+                unsafe {
+                    PARTIAL[tid] += PARTIAL[tid + stride];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+
+        let scale = 1.0_f32 / (unsafe { PARTIAL[0] } / n as f32 + eps).sqrt();
+        i = tid;
+        while i < n {
+            unsafe {
+                if which == 0 {
+                    *q_out.get_unchecked_mut(base + i) = q[base + i] * scale * q_weight[i];
+                } else {
+                    *kv_out.get_unchecked_mut(base + i) = kv[base + i] * scale * kv_weight[i];
+                }
+            }
+            i += nth;
+        }
+    }
+
     #[kernel]
     pub fn abi_dequant_q8_0_to_f16_kernel(
         in_dim: u64,
@@ -6294,6 +6361,7 @@ pub(crate) struct AbiKernelModule {
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
+    dsv4_qkv_rms_norm_rows_kernel: CudaFunction,
     dequant_q8_0_to_f16_kernel: CudaFunction,
     dequant_q8_0_to_f32_kernel: CudaFunction,
     quantize_q8_0_f32_kernel: CudaFunction,
@@ -6534,6 +6602,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             rms_norm_weight_kernel: module
                 .load_function("abi_rms_norm_weight_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            dsv4_qkv_rms_norm_rows_kernel: module
+                .load_function("abi_dsv4_qkv_rms_norm_rows_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             dequant_q8_0_to_f16_kernel: module
                 .load_function("abi_dequant_q8_0_to_f16_kernel")
@@ -11552,6 +11623,77 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.rms_norm_weight_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn dsv4_qkv_rms_norm_rows_tensor(
+        &self,
+        stream: &CudaStream,
+        q_out_ptr: u64,
+        q_ptr: u64,
+        q_weight_ptr: u64,
+        q_n: u32,
+        kv_out_ptr: u64,
+        kv_ptr: u64,
+        kv_weight_ptr: u64,
+        kv_n: u32,
+        rows: u32,
+        eps: f32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (rows, 2, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let q_count = u64::from(q_n) * u64::from(rows);
+        let kv_count = u64::from(kv_n) * u64::from(rows);
+        let mut q_n = q_n;
+        let mut kv_n = kv_n;
+        let mut rows = rows;
+        let mut eps = eps;
+        let mut q_ptr = q_ptr;
+        let mut q_len = q_count;
+        let mut q_weight_ptr = q_weight_ptr;
+        let mut q_weight_len = u64::from(q_n);
+        let mut q_out_ptr = q_out_ptr;
+        let mut q_out_len = q_count;
+        let mut kv_ptr = kv_ptr;
+        let mut kv_len = kv_count;
+        let mut kv_weight_ptr = kv_weight_ptr;
+        let mut kv_weight_len = u64::from(kv_n);
+        let mut kv_out_ptr = kv_out_ptr;
+        let mut kv_out_len = kv_count;
+        let mut params = [
+            (&mut q_n as *mut u32).cast::<c_void>(),
+            (&mut kv_n as *mut u32).cast::<c_void>(),
+            (&mut rows as *mut u32).cast::<c_void>(),
+            (&mut eps as *mut f32).cast::<c_void>(),
+            (&mut q_ptr as *mut u64).cast::<c_void>(),
+            (&mut q_len as *mut u64).cast::<c_void>(),
+            (&mut q_weight_ptr as *mut u64).cast::<c_void>(),
+            (&mut q_weight_len as *mut u64).cast::<c_void>(),
+            (&mut q_out_ptr as *mut u64).cast::<c_void>(),
+            (&mut q_out_len as *mut u64).cast::<c_void>(),
+            (&mut kv_ptr as *mut u64).cast::<c_void>(),
+            (&mut kv_len as *mut u64).cast::<c_void>(),
+            (&mut kv_weight_ptr as *mut u64).cast::<c_void>(),
+            (&mut kv_weight_len as *mut u64).cast::<c_void>(),
+            (&mut kv_out_ptr as *mut u64).cast::<c_void>(),
+            (&mut kv_out_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates all four tensor spans and both cached
+        // model-weight ranges before issuing the fused Q/KV grid.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.dsv4_qkv_rms_norm_rows_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

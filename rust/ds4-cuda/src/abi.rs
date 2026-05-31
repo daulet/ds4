@@ -9704,6 +9704,136 @@ pub unsafe extern "C" fn ds4_gpu_rms_norm_weight_rows_tensor(
     })
 }
 
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_dsv4_qkv_rms_norm_rows_tensor(
+    q_out: *mut Ds4GpuTensor,
+    q: *const Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    q_weight_offset: u64,
+    q_n: u32,
+    kv_out: *mut Ds4GpuTensor,
+    kv: *const Ds4GpuTensor,
+    kv_weight_offset: u64,
+    kv_n: u32,
+    rows: u32,
+    eps: f32,
+) -> c_int {
+    if std::env::var_os("DS4_CUDA_DISABLE_QKV_RMS_FUSED").is_some() {
+        return if unsafe {
+            ds4_gpu_rms_norm_weight_rows_tensor(
+                q_out,
+                q,
+                model_map,
+                model_size,
+                q_weight_offset,
+                q_n,
+                rows,
+                eps,
+            ) != 0
+                && ds4_gpu_rms_norm_weight_rows_tensor(
+                    kv_out,
+                    kv,
+                    model_map,
+                    model_size,
+                    kv_weight_offset,
+                    kv_n,
+                    rows,
+                    eps,
+                ) != 0
+        } {
+            1
+        } else {
+            0
+        };
+    }
+    status(|| {
+        let Some(q_out) = (unsafe { tensor_ref(q_out.cast_const()) }) else {
+            return false;
+        };
+        let Some(q) = (unsafe { tensor_ref(q) }) else {
+            return false;
+        };
+        let Some(kv_out) = (unsafe { tensor_ref(kv_out.cast_const()) }) else {
+            return false;
+        };
+        let Some(kv) = (unsafe { tensor_ref(kv) }) else {
+            return false;
+        };
+        let Some(q_count) = u64::from(q_n).checked_mul(u64::from(rows)) else {
+            return false;
+        };
+        let Some(kv_count) = u64::from(kv_n).checked_mul(u64::from(rows)) else {
+            return false;
+        };
+        let Some(q_bytes) = q_count.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(kv_bytes) = kv_count.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let q_weight_bytes = u64::from(q_n) * size_of::<f32>() as u64;
+        let kv_weight_bytes = u64::from(kv_n) * size_of::<f32>() as u64;
+        if model_map.is_null()
+            || q_n == 0
+            || kv_n == 0
+            || rows == 0
+            || q_weight_offset > model_size
+            || q_weight_bytes > model_size - q_weight_offset
+            || kv_weight_offset > model_size
+            || kv_weight_bytes > model_size - kv_weight_offset
+            || q_out.bytes < q_bytes
+            || q.bytes < q_bytes
+            || kv_out.bytes < kv_bytes
+            || kv.bytes < kv_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                q_weight_offset,
+                q_weight_bytes,
+                |q_weight_ptr| {
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        kv_weight_offset,
+                        kv_weight_bytes,
+                        |kv_weight_ptr| {
+                            with_abi_kernels(backend, |kernels| {
+                                // SAFETY: all tensor and cached model-weight
+                                // spans are validated before the fused launch.
+                                Some(unsafe {
+                                    kernels.dsv4_qkv_rms_norm_rows_tensor(
+                                        backend.stream(),
+                                        q_out.device_ptr(),
+                                        q.device_ptr(),
+                                        q_weight_ptr,
+                                        q_n,
+                                        kv_out.device_ptr(),
+                                        kv.device_ptr(),
+                                        kv_weight_ptr,
+                                        kv_n,
+                                        rows,
+                                        eps,
+                                    )
+                                })
+                            })
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn ds4_gpu_tensor_write(
     tensor: *mut Ds4GpuTensor,

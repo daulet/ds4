@@ -12007,7 +12007,43 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the fused Q/KV weighted-RMS public wrapper is independently
+  executable before remaining indexer graph wrappers and route promotion.
+- Goal: expose and validate the Rust public fused Q/KV weighted-RMS wrapper
+  while preserving its disabled-fusion public-wrapper fallback.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Fused QKV RMS Rows ABI
+
+- Status: done
+- Goal: export `ds4_gpu_dsv4_qkv_rms_norm_rows_tensor` from the Rust CUDA ABI
+  and execute its fused and disabled-fusion paths through a linked B300
+  consumer.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-fused-qkv-rms-rows-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_fused_qkv_rms_rows_smoke.py --negative-test`.
+- Evidence:
+  - Rust exports the public fused Q/KV weighted-RMS rows wrapper and
+    preserves `DS4_CUDA_DISABLE_QKV_RMS_FUSED` via existing public
+    weighted-row wrappers.
+  - A linked B300 consumer validates fused and disabled-fusion output with
+    asymmetric Q/KV widths, short-span/null/zero-dimension rejection, and
+    the 92-entry embedded module; the public batch-MoE linked predecessor
+    remains passing.
+  - The rebuilt staticlib exposes 76 Rust ABI symbols and embeds 92 kernels.
+    Local tests pass with 166 tests; B300 feature tests pass with 173 tests;
+    all 80 CUDA ABI comparators pass; and the unified report passes with 253
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Five indexer/top-k public exports, route promotion, whole-archive policy,
+    and C CUDA removal remain pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: define route-promotion policy and connect remaining graph compute and
-  whole-archive retention without claiming C CUDA removal before those gates
-  pass.
+- Goal: export the remaining indexer/top-k graph-compute wrappers, then
+  define route-promotion and whole-archive retention policy without claiming
+  C CUDA removal before those gates pass.

@@ -4092,6 +4092,19 @@ The Rust ABI now exports the public batch wrapper and schedules F32 fallback,
 sorted, tiled, atomic, and row-span routes through the B300-linked consumer.
 Graph-wide route promotion and C CUDA removal remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA public fused QKV RMS rows ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_fused_qkv_rms_rows_smoke.py --negative-test
+```
+
+The Rust ABI now exports the public fused Q/KV weighted-RMS rows wrapper and
+preserves its disabled-fusion delegation through existing public weighted-row
+wrappers. The B300-linked consumer proves fused and fallback output for
+asymmetric Q/KV widths. Indexer graph wrappers, route promotion, and C CUDA
+removal remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -3,7 +3,23 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Fused QKV RMS Rows ABI
+  is validated on B300. The Rust ABI now exports
+  `ds4_gpu_dsv4_qkv_rms_norm_rows_tensor`, embeds the fused Q/KV
+  weighted-RMS rows kernel, and preserves
+  `DS4_CUDA_DISABLE_QKV_RMS_FUSED` by delegating to the existing public
+  weighted-row wrappers. The rebuilt static library exposes 76 Rust ABI
+  symbols and embeds 92 kernels. A C-linked consumer passes fused and
+  disabled-fusion output checks with asymmetric Q/KV widths and rejection
+  controls; the existing public batch-MoE consumer remains passing. Local
+  tests pass with 166 tests; B300 feature tests pass with 173 tests; all 80
+  CUDA ABI comparators pass; and the unified report passes with 253 passed,
+  45 skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Five indexer/top-k public exports,
+  graph-wide route promotion, whole-archive policy, and C CUDA removal
+  remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Batched Routed MoE ABI Dispatch
   is validated on B300. The Rust ABI now exports
   `ds4_gpu_routed_moe_batch_tensor`, preserves single-token delegation, and

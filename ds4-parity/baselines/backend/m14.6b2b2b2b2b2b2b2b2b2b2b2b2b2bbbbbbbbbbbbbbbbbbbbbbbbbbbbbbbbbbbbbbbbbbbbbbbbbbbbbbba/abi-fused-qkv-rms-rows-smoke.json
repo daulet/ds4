@@ -1,0 +1,66 @@
+{
+  "schema": "ds4.cuda_abi_fused_qkv_rms_rows_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-fused-qkv-rms-rows-abi",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbol": "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
+    "disabled_fusion_fallback": "DS4_CUDA_DISABLE_QKV_RMS_FUSED delegates to public weighted-row wrappers."
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 76,
+    "exported_compute_symbol_count": 74,
+    "embedded_kernel_count": 92,
+    "public_gpu_abi_function_count": 81,
+    "owns_dsv4_qkv_rms_norm_rows_tensor": true,
+    "owns_dsv4_qkv_rms_norm_rows_kernel": true,
+    "preserves_disabled_fusion_fallback": true,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "implementation": {
+    "public_export": "ds4_gpu_dsv4_qkv_rms_norm_rows_tensor",
+    "kernel_entry": "abi_dsv4_qkv_rms_norm_rows_kernel",
+    "linkage_requirement": "The C consumer links the Rust staticlib with --whole-archive so the embedded PTX object is retained.",
+    "remaining_compute_boundary": "Indexer score, indexer top-k, graph-wide route promotion, whole-archive production policy, and C CUDA removal remain pending."
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "target": "sm_80",
+    "local_library_test_count": 166,
+    "feature_release_test_count": 173,
+    "staticlib_export_count": 76,
+    "embedded_kernel_count": 92,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "predecessor_public_batch_consumer_passed": true,
+      "fused_output_matches": true,
+      "disabled_fusion_fallback_matches": true,
+      "asymmetric_q_kv_widths_match": true,
+      "short_tensor_rejected": true,
+      "zero_dimension_rejected": true,
+      "null_rejected": true,
+      "embedded_fused_qkv_rms_kernel_loaded": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 166,
+    "b300_feature_release_test_count": 173,
+    "cuda_abi_comparators_passed": 80,
+    "unified_report_passed": 253,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

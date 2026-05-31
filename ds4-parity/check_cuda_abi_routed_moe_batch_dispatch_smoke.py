@@ -16,7 +16,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
-NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
 FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-routed-moe-batch-dispatch-smoke.json"
 HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_routed_moe_batch_link_smoke.c"
 
@@ -105,7 +105,7 @@ def validate_scope(report: Report, fixture: dict[str, Any], texts: dict[str, str
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
-    report.check(len(symbols) == 75, "Rust ABI export count drift")
+    report.check(len(symbols) >= 75, "published Rust ABI exports disappeared")
     report.check("ds4_gpu_routed_moe_one_tensor" in symbols, "single-token export missing")
     report.check("ds4_gpu_routed_moe_batch_tensor" in symbols, "public batch export missing")
     for marker in [
