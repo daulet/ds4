@@ -7,6 +7,9 @@ fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("target OS");
     match target_os.as_str() {
         "macos" => build_macos_backend(),
+        "linux" if env::var_os("CARGO_FEATURE_CUDA_RUST_BACKEND").is_some() => {
+            build_linux_rust_cuda_backend()
+        }
         "linux" if env::var_os("CARGO_FEATURE_CUDA_BACKEND").is_some() => {
             build_linux_cuda_backend()
         }
@@ -99,6 +102,51 @@ fn build_linux_cuda_backend() {
     println!("cargo:rustc-link-lib=pthread");
     println!("cargo:rustc-link-lib=dl");
     println!("cargo:rustc-link-lib=rt");
+}
+
+fn build_linux_rust_cuda_backend() {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("manifest dir"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .expect("repo root")
+        .to_path_buf();
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("out dir"));
+    let rust_dylib = rust_cuda_dylib();
+
+    rerun_for_backend_sources(&repo_root);
+    println!("cargo:rerun-if-env-changed=DS4_CUDA_RUST_DYLIB");
+    println!("cargo:rerun-if-changed={}", rust_dylib.display());
+
+    let ds4_obj = out_dir.join("ds4.o");
+    compile_c_linux(&repo_root, &out_dir, "ds4.c", &ds4_obj);
+
+    let lib_path = out_dir.join("libds4_backend.a");
+    run(Command::new("ar").arg("crs").arg(&lib_path).arg(&ds4_obj));
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=ds4_backend");
+    println!(
+        "cargo:rustc-link-search=native={}",
+        rust_dylib
+            .parent()
+            .expect("Rust CUDA dynamic library directory")
+            .display()
+    );
+    println!("cargo:rustc-link-lib=dylib=ds4_cuda");
+    println!(
+        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        rust_dylib
+            .parent()
+            .expect("Rust CUDA dynamic library directory")
+            .display()
+    );
+    println!("cargo:rustc-link-lib=dylib=cuda");
+    println!("cargo:rustc-link-lib=m");
+    println!("cargo:rustc-link-lib=pthread");
+    println!("cargo:rustc-link-lib=dl");
+    println!("cargo:rustc-link-lib=rt");
+    println!("cargo:rustc-link-lib=util");
 }
 
 fn rerun_for_backend_sources(repo_root: &Path) {
@@ -224,6 +272,24 @@ fn nvcc_path() -> PathBuf {
     env::var_os("NVCC")
         .map(PathBuf::from)
         .unwrap_or_else(|| cuda_home().join("bin/nvcc"))
+}
+
+fn rust_cuda_dylib() -> PathBuf {
+    let path = env::var_os("DS4_CUDA_RUST_DYLIB")
+        .map(PathBuf::from)
+        .expect("DS4_CUDA_RUST_DYLIB must point to the prebuilt Rust CUDA dynamic library");
+    assert!(
+        path.is_file(),
+        "DS4_CUDA_RUST_DYLIB is not a file: {}",
+        path.display()
+    );
+    assert_eq!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some("libds4_cuda.so"),
+        "DS4_CUDA_RUST_DYLIB must name libds4_cuda.so"
+    );
+    path.canonicalize()
+        .expect("canonicalize Rust CUDA dynamic library")
 }
 
 fn cuda_arch() -> Option<String> {

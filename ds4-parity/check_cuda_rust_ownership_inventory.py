@@ -33,7 +33,7 @@ EXPECTED_DS4_HASHES = {
     "ds4_cuda.cu": "9375034f6c7ca5b2f0afc833ceaea06e6a6edcc097df54fbaa5d355bd15e5f33",
     "ds4_gpu.h": "317349630b134b86cdb7cd293f267357b969f5899bb6c55bce7cc7aab9187554",
     "rust/ds4-gpu-sys/src/lib.rs": "4ba693fa05f4f5d13759d94705ca84cb2c4975754b95134651f566cd0df512a1",
-    "rust/ds4-gpu/build.rs": "ba411f880038856702541185790994cf888e1c3cf54ac42a57a5319fc8f94ee7",
+    "rust/ds4-gpu/build.rs": "d7a2adc913c067e98230d5ac0b06734404753565e16de6bb401d67ec54963b5a",
 }
 EXPECTED_CUDA_OXIDE_REVISION = "0ab9a13bfd7caf28d241fb5f42f76b90a4d1b200"
 EXPECTED_CAPABILITIES = {

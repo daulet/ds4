@@ -4142,6 +4142,18 @@ consumer proves scalar, specialized, packed-key, chunked-tree, disabled-path
 fallback, and rejection behavior while leaving route promotion,
 whole-archive production policy, and C CUDA removal pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+opt-in Rust CUDA production-facade shared-library link:
+
+```sh
+python3 ds4-parity/check_cuda_rust_production_facade_link.py --negative-test
+```
+
+The opt-in `cuda-rust-backend` facade links `libds4_cuda.so` without
+compiling `ds4_cuda.cu`. B300 execution covers the existing facade resource
+and model-map tests plus an embedded-add kernel; the current-C static archive
+oracle remains validated separately under `--whole-archive`.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

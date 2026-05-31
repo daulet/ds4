@@ -1,0 +1,64 @@
+{
+  "schema": "ds4.cuda_rust_production_facade_link.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-opt-in-rust-cuda-production-facade-dylib",
+  "ownership": {
+    "public_gpu_abi_function_count": 81,
+    "embedded_kernel_count": 108,
+    "current_c_oracle_preserved": true,
+    "staticlib_c_consumer_still_requires_whole_archive": true,
+    "production_facade_opt_in": true,
+    "production_facade_uses_rust_cuda_dylib": true,
+    "production_facade_uses_rust_cuda_staticlib": false,
+    "changes_default_route": false,
+    "runtime_route_promoted": false,
+    "removes_ds4_cuda_cu": false
+  },
+  "implementation": {
+    "feature": "cuda-rust-backend",
+    "artifact_environment": "DS4_CUDA_RUST_DYLIB",
+    "artifact_name": "libds4_cuda.so",
+    "artifact_contract": "The Rust facade links a Rust CUDA shared library through the C ABI; the external C archive consumer retains libds4_cuda.a under --whole-archive.",
+    "module_discovery_contract": "The Rust CUDA loader reads the executable first for static consumers and uses dladdr to read the loaded ABI shared object when the module is supplied dynamically.",
+    "remaining_boundary": "Default runtime route promotion and C CUDA removal remain pending."
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "target": "sm_80",
+    "shared_library_export_count": 81,
+    "embedded_kernel_count": 108,
+    "local_library_test_count": 169,
+    "feature_release_test_count": 176,
+    "facade_integration_test_count": 3,
+    "observed": {
+      "shared_library_has_public_abi": true,
+      "shared_library_embeds_add_kernel_ptx": true,
+      "shared_library_resolves_cuda_driver": true,
+      "fresh_target_facade_link_passed": true,
+      "existing_backend_abi_passed": true,
+      "existing_model_map_abi_passed": true,
+      "embedded_add_kernel_passed": true,
+      "staticlib_topk_regression_passed": true,
+      "staticlib_gnu_stack_warning_remains": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "local_ds4_gpu_library_test_count": 83,
+    "b300_feature_release_test_count": 176,
+    "previous_cuda_abi_comparators_passed": 83,
+    "unified_report_passed": 257,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Runtime Route Promotion And C CUDA Removal Policy"
+}

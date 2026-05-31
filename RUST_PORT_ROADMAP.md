@@ -12906,9 +12906,48 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the Rust production facade can link the completed public ABI
+  through an opt-in shared-library boundary before default runtime route
+  promotion or C CUDA removal.
+- Goal: validate a production-facade Rust CUDA link boundary while keeping
+  current-C as the default oracle.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Production Facade Shared-Library Link
+
+- Status: done.
+- Goal: provide an opt-in `ds4-gpu` facade route backed by the Rust CUDA
+  public ABI without compiling `ds4_cuda.cu` for that route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-production-facade-link.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_production_facade_link.py --negative-test`.
+- Evidence:
+  - `rust/ds4-gpu` adds opt-in `cuda-rust-backend`; its Linux build path
+    compiles `ds4.c`, links `libds4_cuda.so`, and does not compile
+    `ds4_cuda.cu`. The existing `cuda-backend` current-C path remains.
+  - `rust/ds4-cuda` now emits a `cdylib`. Its embedded-module loader keeps
+    executable discovery for static C consumers and uses `dladdr` to read
+    embedded PTX from the ABI shared object for the facade route.
+  - On B300, the `sm_80` shared library exposes 81 public ABI symbols and
+    embeds the validated 108-kernel module. A fresh `cuda-rust-backend`
+    target passes existing tensor/resource and model-map integration tests
+    plus an embedded-add-kernel execution test.
+  - The C-linked static archive top-k regression still passes under
+    `--whole-archive`; its existing missing `.note.GNU-stack` warning remains
+    visible. Local tests pass with 169 `ds4-cuda` and 83 `ds4-gpu` library
+    tests; B300 feature tests pass with 176 tests; and the unified report
+    passes with 257 passed, 45 skipped, and 0 failed. The pre-implementation
+    and final pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Default runtime route promotion and C CUDA removal remain open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Route Promotion And C CUDA Removal Policy
+
 - Status: active.
-- Goal: define route-promotion and whole-archive retention policy without
-  claiming C CUDA removal before those gates pass.
+- Goal: promote the validated Rust CUDA facade into runtime graph flows and
+  remove C CUDA only after end-to-end route gates pass.
 
 ## Removal Criteria for C Host Code
 

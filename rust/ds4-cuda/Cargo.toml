@@ -17,7 +17,7 @@ cuda-oxide-kernels = ["cuda-oxide-backend", "dep:cuda-device", "dep:cuda-host"]
 
 [lib]
 path = "src/lib.rs"
-crate-type = ["rlib", "staticlib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [[bin]]
 name = "ds4-cuda-substrate-smoke"

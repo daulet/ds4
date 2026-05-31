@@ -192,7 +192,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(set(EXPECTED_SYMBOLS) <= ffi_symbols, "resource symbols do not match public GPU ABI")
     for marker in [
-        'crate-type = ["rlib", "staticlib"]',
+        'crate-type = ["rlib", "staticlib", "cdylib"]',
         'name = "ds4-cuda-abi-resource-smoke"',
         'required-features = ["cuda-oxide-backend"]',
     ]:

@@ -12151,6 +12151,41 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because an opt-in shared-library facade route is independently executable
+  before default runtime promotion and C CUDA removal.
+- Goal: validate an opt-in Rust CUDA production facade while retaining
+  current-C as the default oracle.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Production Facade Shared-Library Link
+
+- Status: done
+- Goal: link `ds4-gpu` through an opt-in Rust CUDA shared-library ABI route
+  without compiling `ds4_cuda.cu` for that route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-production-facade-link.json`
+- Comparator:
+  `ds4-parity/check_cuda_rust_production_facade_link.py --negative-test`.
+- Evidence:
+  - `cuda-rust-backend` links `libds4_cuda.so` and keeps `cuda-backend` as
+    the current-C oracle; the Rust branch compiles `ds4.c` but not
+    `ds4_cuda.cu`.
+  - The Rust CUDA shared object exposes 81 ABI symbols and embeds 108
+    kernels. Its loader reads embedded PTX from either the final executable
+    or its own shared object, preserving static archive consumers.
+  - A fresh B300 facade target passes existing resource and model-map tests
+    and an embedded-add compute test; the C-linked static archive top-k
+    regression remains passing under `--whole-archive`.
+  - Local tests pass with 169 `ds4-cuda` and 83 `ds4-gpu` library tests;
+    B300 feature tests pass with 176 tests; and the unified report passes
+    with 257 passed, 45 skipped, and 0 failed. The pre-implementation and
+    final pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Runtime route promotion and C CUDA removal remain pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Route Promotion And C CUDA Removal Policy
+
 - Status: active
-- Goal: define route-promotion and whole-archive retention policy without
-  claiming C CUDA removal before those gates pass.
+- Goal: exercise the Rust CUDA facade through runtime graph routes before
+  considering C CUDA removal.

@@ -211,7 +211,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     report.check(implementation.get("float_bit_source") == "value.to_bits()", "float bit source drift")
     report.check(implementation.get("embedded_kernel_required") is False, "embedded kernel claim drift")
     for marker in [
-        'crate-type = ["rlib", "staticlib"]',
+        'crate-type = ["rlib", "staticlib", "cdylib"]',
         'name = "ds4-cuda-abi-tensor-fill-smoke"',
         'path = "src/bin/abi_tensor_fill_smoke.rs"',
         'required-features = ["cuda-oxide-backend"]',

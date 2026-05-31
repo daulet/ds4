@@ -3,7 +3,22 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Runtime Route Promotion And C CUDA Removal Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Production Facade Shared-Library Link
+  is validated on B300. The opt-in `cuda-rust-backend` facade route links
+  `libds4_cuda.so`, compiles `ds4.c` without compiling `ds4_cuda.cu`, and
+  keeps `cuda-backend` as the current-C default oracle. The shared library
+  exposes 81 public ABI symbols and embeds 108 kernels; its loader discovers
+  embedded PTX from either the final executable or its own loaded image. A
+  fresh B300 facade target passes existing tensor/resource and model-map
+  integration tests plus an embedded-add execution test. The static archive
+  top-k regression remains passing with `--whole-archive`, while the known
+  `.note.GNU-stack` warning remains visible. Local tests pass with 169
+  `ds4-cuda` and 83 `ds4-gpu` library tests; B300 feature tests pass with
+  176 tests; and the unified report passes with 257 passed, 45 skipped, and
+  0 failed. The pre-implementation and final pass-end non-interactive Claude
+  review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Runtime
+  route promotion and C CUDA removal remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexer TopK Dispatch ABI
   is validated on B300. The Rust ABI now exports
   `ds4_gpu_indexer_topk_tensor` through current-C-compatible scalar,

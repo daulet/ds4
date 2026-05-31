@@ -125,7 +125,7 @@ def validate_boundary(report: ReportState, fixture: dict[str, Any], texts: dict[
     report.check(len(set(ffi_exports)) == 81, "Rust FFI function count drift")
     report.check("[[bin]]" in texts["cuda_cargo"], "cuda-oxide executable-local proof markers missing")
     report.check(
-        'crate-type = ["rlib", "staticlib"]' in texts["cuda_cargo"],
+        'crate-type = ["rlib", "staticlib", "cdylib"]' in texts["cuda_cargo"],
         "Rust CUDA resource ABI successor staticlib missing",
     )
     report.check("pub mod abi;" in texts["cuda_lib"], "Rust CUDA resource ABI successor module missing")

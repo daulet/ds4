@@ -1,10 +1,13 @@
 use std::ffi::c_void;
 use std::fmt;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use cuda_core::embedded::{
-    embedded_modules_from_current_exe, ArtifactPayloadKind, EmbeddedModuleError,
+    artifact_bundles_from_binary_path, embedded_modules_from_current_exe, ArtifactPayloadKind,
+    EmbeddedModule, EmbeddedModuleError,
 };
 use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, LaunchConfig};
 use cuda_device::mma::{load_a_m16n8k16, load_b_m16n8k16, mma_m16n8k16_f32_f16, zero_accumulator};
@@ -15061,7 +15064,7 @@ fn launch_config(count: u64) -> Option<LaunchConfig> {
 }
 
 fn load_abi_module(context: &Arc<CudaContext>) -> Result<Arc<CudaModule>, AbiKernelLoadError> {
-    let module = embedded_modules_from_current_exe()
+    let module = embedded_abi_modules()
         .map_err(AbiKernelLoadError::Embedded)?
         .into_iter()
         .find(|module| module.name() == ABI_KERNEL_ARTIFACT)
@@ -15098,6 +15101,44 @@ fn load_abi_module(context: &Arc<CudaContext>) -> Result<Arc<CudaModule>, AbiKer
         source,
     })?;
     Ok(loaded)
+}
+
+fn embedded_abi_modules() -> Result<Vec<EmbeddedModule>, EmbeddedModuleError> {
+    let modules = embedded_modules_from_current_exe()?;
+    if modules
+        .iter()
+        .any(|module| module.name() == ABI_KERNEL_ARTIFACT)
+    {
+        return Ok(modules);
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(path) = abi_image_path() {
+        return Ok(artifact_bundles_from_binary_path(path)?
+            .into_iter()
+            .filter_map(EmbeddedModule::new)
+            .collect());
+    }
+    Ok(modules)
+}
+
+#[cfg(target_os = "linux")]
+fn abi_image_path() -> Option<PathBuf> {
+    let mut info = std::mem::MaybeUninit::<libc::Dl_info>::zeroed();
+    let found = unsafe {
+        libc::dladdr(
+            load_abi_module as *const () as *const c_void,
+            info.as_mut_ptr(),
+        )
+    };
+    if found == 0 {
+        return None;
+    }
+    let info = unsafe { info.assume_init() };
+    if info.dli_fname.is_null() {
+        return None;
+    }
+    let path = unsafe { std::ffi::CStr::from_ptr(info.dli_fname) };
+    Some(PathBuf::from(std::ffi::OsStr::from_bytes(path.to_bytes())))
 }
 
 fn link_target_arch(context: &CudaContext) -> Result<String, AbiKernelLoadError> {
