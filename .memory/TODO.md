@@ -12915,3 +12915,34 @@
     Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
     Total routed-MoE remains `1.36x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Inline Quarter-Warp Reduction Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE reduction overhead by forcing the
+  existing quarter-warp shuffle helper into its hot gate/up and down callers.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-inline-quarter-warp-reduction-performance-repair.json`
+- Evidence:
+  - Only `abi_moe_quarter_warp_sum` gains `#[inline(always)]`; reduction
+    arithmetic, PRMT sign-mask construction, DP4A topology, row-span policy,
+    benchmark executable, and default current-C routing remain unchanged.
+  - Gate/up PTX replaces `16` out-of-line reduction calls with `16` inline
+    `shfl.sync` sites and down replaces `8` calls with `8` shuffle sites;
+    neither kernel introduces local loads or stores.
+  - An adjacent B300 comparison lowers gate/up from `720.977 ms` to
+    `714.922 ms`, down from `518.667 ms` to `512.140 ms`, and total from
+    `1256.016 ms` to `1244.513 ms`; prefill rises from `244.90` to
+    `248.12 tok/s`.
+  - A preceding `vsub4` probe is rejected after its emitted PTX fails
+    assembly at all `16` sites. The repaired DSO SHA-256 is
+    `8ab594e8d203a744255f81898e4c212750105cbe3d5949935dd6044d9d622534`
+    and PTX SHA-256 is
+    `465374de2525cd2e805f183ff6c3ae6dff5478c8cda68fc921ba14f1da898456`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `278`
+    passed, `50` skipped, and `0` failed. Pre-implementation review risks
+    are covered by PTX inspection and full device validation; final Claude
+    review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE
+    remains `1.35x` current-C, so default routing and promotion blockers
+    remain in force.

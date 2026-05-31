@@ -1,5 +1,31 @@
 # DS4 Rust Port Status
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Inline Quarter-Warp Reduction Performance Repair
+  is validated on B300 from the retained PRMT sign-mask parent. Only
+  `abi_moe_quarter_warp_sum` gains `#[inline(always)]`, preserving its
+  reduction tree, the PRMT transform, DP4A topology, row-span policy, and
+  default current-C routing. Cached gate/up PTX replaces `16` out-of-line
+  reduction calls with `16` inline `shfl.sync` sites and cached down replaces
+  `8` calls with `8` shuffle sites; neither kernel introduces local loads or
+  stores. The repaired DSO SHA-256 is
+  `8ab594e8d203a744255f81898e4c212750105cbe3d5949935dd6044d9d622534`
+  and PTX SHA-256 is
+  `465374de2525cd2e805f183ff6c3ae6dff5478c8cda68fc921ba14f1da898456`.
+  An adjacent B300 comparison lowers gate/up from `720.977 ms` to
+  `714.922 ms`, down from `518.667 ms` to `512.140 ms`, and total
+  routed-MoE from `1256.016 ms` to `1244.513 ms`; prefill rises from
+  `244.90` to `248.12 tok/s`. A preceding `vsub4` probe was rejected
+  because its PTX fails assembly at all `16` emitted sites. Official vectors
+  pass `1958` checks plus `8` negative checks and B300 feature tests pass
+  `176` tests. The unified report passes with `278` passed, `50` skipped,
+  and `0` failed. Pre-implementation review risks are covered by PTX
+  inspection and full device validation; final Claude review returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains `1.35x`
+  current-C, so default routing and promotion blockers remain in force.
+- Date: 2026-05-31 UTC
+- Branch: `main`
+- Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 PRMT Sign-Mask Performance Repair
   is validated on B300 from the retained sequential half-tile down parent.
   DS4 now pins the additive cuda-oxide PRMT revision
@@ -23,10 +49,6 @@
   review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total
   routed-MoE remains `1.36x` current-C, so default routing and promotion
   blockers remain in force.
-- Date: 2026-05-31 UTC
-- Branch: `main`
-- Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Sequential Half-Tile Scalar Expansion Performance Repair
   is validated on B300 from the retained aligned cached-Q8 parent. The
   cached down kernel processes its staged entries as sequential eight-entry

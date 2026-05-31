@@ -4488,6 +4488,20 @@ retaining packed negation and DP4A topology. On B300, gate/up decreases from
 `1287.763 ms` to `1256.699 ms`; official-vector correctness is preserved and
 the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA inline quarter-warp reduction performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_inline_quarter_warp_reduction_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up and down kernels now inline their existing
+quarter-warp shuffle reduction helper. On B300, gate/up decreases from
+`720.977 ms` to `714.922 ms`, down decreases from `518.667 ms` to
+`512.140 ms`, and total routed-MoE decreases from `1256.016 ms` to
+`1244.513 ms`; official-vector correctness is preserved and the default
+current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

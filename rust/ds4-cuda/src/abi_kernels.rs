@@ -4441,6 +4441,7 @@ mod kernels {
         ) as i16 as i32
     }
 
+    #[inline(always)]
     fn abi_moe_quarter_warp_sum(mut value: f32) -> f32 {
         let mut offset = 4_u32;
         while offset > 0 {

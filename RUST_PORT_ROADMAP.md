@@ -13787,6 +13787,45 @@ Stage split:
     Total routed-MoE remains `1.36x` current-C, so default routing and
     promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Inline Quarter-Warp Reduction Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE reduction overhead by forcing the
+  existing quarter-warp shuffle helper into its hot gate/up and down callers.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-inline-quarter-warp-reduction-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_inline_quarter_warp_reduction_performance_repair.py --negative-test`.
+- Evidence:
+  - Only `abi_moe_quarter_warp_sum` gains `#[inline(always)]`; its XOR-shuffle
+    reduction tree, the retained PRMT transform, gate/up and down DP4A
+    topology, row-span policy, benchmark executable, and default current-C
+    route remain unchanged.
+  - Cached gate/up PTX replaces `16` quarter-warp helper calls with `16`
+    inline `shfl.sync` sites and reduces all `call.uni` sites from `24` to
+    `8`; cached down replaces `8` helper calls with `8` inline shuffle sites
+    and eliminates all `call.uni` sites. Neither kernel introduces local
+    stores or loads.
+  - An adjacent B300 parent/candidate comparison lowers gate/up from
+    `720.977 ms` to `714.922 ms`, down from `518.667 ms` to `512.140 ms`,
+    and total routed-MoE from `1256.016 ms` to `1244.513 ms`; resident
+    prefill rises from `244.90` to `248.12 tok/s`.
+  - A preceding cuda-oxide `vsub4` intrinsic probe is rejected because its
+    generated PTX fails assembly at all `16` emitted sites and CUDA 13.2
+    lowers `__vsub4` to scalar emulation for `compute_80`.
+  - The repaired DSO SHA-256 is
+    `8ab594e8d203a744255f81898e4c212750105cbe3d5949935dd6044d9d622534`
+    and PTX SHA-256 is
+    `465374de2525cd2e805f183ff6c3ae6dff5478c8cda68fc921ba14f1da898456`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `278`
+    passed, `50` skipped, and `0` failed. Pre-implementation review raised
+    shuffle convergence and coverage risks, which are covered by PTX
+    inspection and full device validation; the final Claude review attempt
+    returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains
+    `1.35x` current-C, so default routing and promotion blockers remain in
+    force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

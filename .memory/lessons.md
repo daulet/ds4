@@ -277,3 +277,15 @@ available directly from the repo.
   load, then remove successful process-local link artifacts. Record
   whole-archive retention and non-release codegen behavior as production
   integration requirements.
+
+## 2026-05-31: Do Not Port CUDA `__vsub4` As A Three-Operand PTX Video Op
+
+- Symptom: a cuda-oxide packed byte-subtraction probe built Rust PTX with
+  `vsub4.u32.u32.u32`, but the B300 assembler rejected all `16` hot-kernel
+  sites with argument mismatch errors.
+- Root cause: the legacy PTX `vsub4` video instruction requires its selector
+  operand, while CUDA 13.2 lowers `__vsub4` for `compute_80` to scalar
+  emulation rather than emitting that video instruction.
+- Permanent rule: keep the retained packed sign transform for portable Rust
+  gate/up code; do not pursue a `vsub4` intrinsic unless a valid, measured
+  target-specific lowering is first proven by assembly and end-to-end tests.
