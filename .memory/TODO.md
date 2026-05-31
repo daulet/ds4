@@ -12497,3 +12497,24 @@
   - Official vectors pass `1958` checks plus `8` negative checks and B300
     feature tests pass `176` tests. Cached down still takes `3993.670 ms`
     versus current-C `393.200 ms`; default routing remains current-C.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Down DP4A Performance Repair
+
+- Status: done
+- Goal: accelerate the cached Rust CUDA routed-MoE down phase by sharing
+  packed Q2 DP4A weight work across the tile's staged pairs.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-down-multi-pair-dp4a-performance-repair.json`
+- Evidence:
+  - The cached down row-span kernel now holds sixteen pair accumulators and
+    uses packed DP4A words for Q2 values while retaining each pair's Q8 scale,
+    minimum correction, reduction, and output path.
+  - On B300, down improves from `3993.670 ms` to `1126.795 ms` (`3.54x`)
+    and total routed-MoE improves from `6802.279 ms` to `3938.489 ms`
+    (`1.73x`); prefill increases from `168.88` to `186.53 tok/s`.
+  - Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests under DSO
+    `e26a3d3364367a2cc71dc6fb99be048b3a282c727d3321e15f41d14fbb8d6443`.
+  - Gate/up now dominates the remaining gap at `2795.404 ms` versus
+    current-C `517.818 ms`; total routed-MoE remains `4.26x` current-C, so
+    default routing and promotion blockers remain in force.

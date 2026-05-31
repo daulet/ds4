@@ -13322,6 +13322,33 @@ Stage split:
     current-C `393.200 ms`, so default current-C routing and promotion
     blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Down DP4A Performance Repair
+
+- Status: done.
+- Goal: accelerate cached Rust CUDA routed-MoE down work by reusing each
+  packed Q2 weight block across the tile's staged pair inputs.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-down-multi-pair-dp4a-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_moe_down_multi_pair_dp4a_performance_repair.py --negative-test`.
+- Evidence:
+  - The cached down row-span kernel now holds sixteen pair accumulators,
+    applies packed `integer::dp4a_i8` dot work after loading each Q2 word
+    once, and preserves per-pair Q8 scaling, minimum correction, output
+    reduction, and dispatch policy.
+  - Across the same `43` profiled `2048`-token B300 layers, down decreases
+    from `3993.670 ms` to `1126.795 ms` (`3.54x`) and total routed-MoE
+    decreases from `6802.279 ms` to `3938.489 ms` (`1.73x`). Prefill rises
+    from `168.88` to `186.53 tok/s`.
+  - The repaired B300 DSO SHA-256 is
+    `e26a3d3364367a2cc71dc6fb99be048b3a282c727d3321e15f41d14fbb8d6443`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests.
+  - Rust routed-MoE remains `4.26x` slower than current-C on this row.
+    Gate/up is now the largest residual phase at `2795.404 ms` versus
+    current-C `517.818 ms`, so default current-C routing and promotion
+    blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

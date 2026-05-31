@@ -4,6 +4,18 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Down DP4A Performance Repair
+  is validated on B300. The cached down row-span kernel now shares packed Q2
+  DP4A weight work across up to sixteen staged pairs while retaining per-pair
+  Q8 scaling, minimum correction, and output semantics. The repaired DSO
+  SHA-256 is
+  `e26a3d3364367a2cc71dc6fb99be048b3a282c727d3321e15f41d14fbb8d6443`.
+  On the profiled `2048`-token row, down falls from `3993.670 ms` to
+  `1126.795 ms`, total routed-MoE falls from `6802.279 ms` to
+  `3938.489 ms`, and prefill rises from `168.88` to `186.53 tok/s`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. Gate/up is now the largest residual phase
+  at `2795.404 ms` versus current-C `517.818 ms`; promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Gate DP4A Performance Repair
   is validated on B300. The cached gate/up row-span kernel now decodes each
   IQ2 weight block once and applies packed DP4A across up to eight staged

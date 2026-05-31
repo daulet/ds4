@@ -1,0 +1,102 @@
+{
+  "schema": "ds4.cuda_rust_moe_down_multi_pair_dp4a_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-down-accelerated-gateup-open",
+  "goal": "Replace scalar per-pair Q2 work in the cached Rust CUDA routed-MoE down kernel with weight-reusing multi-pair DP4A computation while retaining current-C routing.",
+  "ownership": {
+    "changes_cached_down_kernel_math": true,
+    "adds_multi_pair_q2_dp4a": true,
+    "reuses_weight_decode_across_pairs": true,
+    "inherits_cached_gate_repair": true,
+    "changes_default_dispatch": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false,
+    "default_current_c_route_preserved": true
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "kernel": "abi_moe_down_expert_tile16_rowspan_cached_kernel",
+    "new_primitives": [
+      "sixteen local pair accumulators",
+      "abi_moe_cached_q8_word",
+      "cuda_device::integer::dp4a_i8"
+    ],
+    "translation_constraint": "cuda-oxide cannot lower mutable fixed-array assignment through a device-function reference, so the multi-pair accumulator body remains inline in the down kernel",
+    "scope_boundary": "the preceding cached gate/up repair is retained without additional gate changes; dispatch and default routing remain unchanged"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "parent_profiled_shared_library_sha256": "926e67cb31746f434b994c020dfeaab9e1d124194d80bf371b599df832aaf032",
+    "repaired_profiled_shared_library_sha256": "e26a3d3364367a2cc71dc6fb99be048b3a282c727d3321e15f41d14fbb8d6443",
+    "workload": "one 2048-token prefill frontier plus one generated token through Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "parent_rust_profile": {
+      "prefill_tps": 168.88,
+      "decode_tps": 16.34,
+      "profiled_layer_count": 43,
+      "gateup_ms": 2792.292,
+      "down_ms": 3993.670,
+      "total_ms": 6802.279
+    },
+    "repaired_rust_profile": {
+      "csv_sha256": "a23e92561f71a7738aedeb4ac407ddfee5a13742693d3b12b73b8d38303d873d",
+      "stderr_sha256": "7d7c322a30a600c5eadae13d77a16bcac91db1235b3fb3d274fcf10316d3c905",
+      "prefill_tps": 186.53,
+      "decode_tps": 16.21,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.039,
+      "sort_ms": 4.299,
+      "gateup_ms": 2795.404,
+      "midq_ms": 8.906,
+      "down_ms": 1126.795,
+      "sum_ms": 0.043,
+      "total_ms": 3938.489
+    },
+    "current_c_reference": {
+      "source_fixture": "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-phase-profile-parity.json",
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "down_speedup_over_parent": 3.54,
+      "total_speedup_over_parent": 1.73,
+      "prefill_gain_percent_over_parent": 10.45,
+      "repaired_gateup_ratio_to_current_c": 5.40,
+      "repaired_down_ratio_to_current_c": 2.87,
+      "repaired_total_ratio_to_current_c": 4.26,
+      "remaining_primary_bottleneck": "cached-gateup-iq2-residual-gap"
+    },
+    "official_vector_probe": {
+      "summary_sha256": "c45998e97a1cd5fcb13785bf869bafb7346eb2c4667563c8a296a7abe3b9a03f",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Reduce the remaining cached gate/up IQ2 phase gap and repeat same-row phase profiling before reconsidering route promotion."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 268,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

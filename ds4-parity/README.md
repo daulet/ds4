@@ -4291,6 +4291,18 @@ the tile's staged pairs. On B300 this lowers the profiled gate/up phase from
 `8217.639 ms` to `2792.292 ms` while preserving official-vector correctness;
 cached down remains the next performance repair and routing remains current-C.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA multi-pair down DP4A performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_moe_down_multi_pair_dp4a_performance_repair.py --negative-test
+```
+
+The cached Rust down row-span kernel now reuses packed Q2 DP4A work across
+sixteen staged pairs. On B300 this lowers down from `3993.670 ms` to
+`1126.795 ms` while preserving official-vector correctness; gate/up remains
+the dominant gap and routing remains current-C.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
