@@ -12396,7 +12396,38 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Rust CUDA Promotion Acceptance And Route Decision
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the repaired Rust-DSO benchmark completes but fails every measured
+  same-session current-C throughput threshold.
+- Goal: retain the benchmark blocker before targeted performance repair.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Benchmark Performance Blocker
+
+- Status: done
+- Goal: capture the remaining B300 benchmark gate and decide whether the
+  opt-in Rust CUDA DSO is eligible for default-route promotion.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-promotion-benchmark-performance-blocker.json`
+- Comparator:
+  `ds4-parity/check_cuda_rust_promotion_benchmark_performance_blocker.py --negative-test`.
+- Evidence:
+  - The repaired Rust DSO and linked benchmark candidate complete short and
+    long graph workloads on B300 with backend identity markers present, and
+    all five retained runtime-graph quality gates remain green.
+  - Same-session current-C decisively rejects promotion: Rust prefill is
+    `88.64-95.04 tok/s` against current-C `1261.99-1467.28 tok/s`, and
+    Rust decode is `13.56-14.83 tok/s` against current-C
+    `30.59-34.37 tok/s`. All `14` measured throughput fields fail the `5%`
+    same-session policy.
+  - Default routing and current-C CUDA remain retained; C host removal is not
+    in scope. The next work item is Rust CUDA graph performance diagnosis and
+    repair, not promotion.
+  - The pre-execution, follow-on decision, and final non-interactive Claude
+    review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Rust CUDA Graph Benchmark Performance Repair
+
 - Status: active
-- Goal: execute the remaining benchmark gate through the repaired
-  `cuda-rust-backend` DSO, then decide default routing and current-C CUDA
-  retention without claiming C host removal.
+- Goal: diagnose and repair the Rust CUDA graph benchmark performance gap on
+  B300, then rerun same-session current-C comparison before any route change.

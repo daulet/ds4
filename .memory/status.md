@@ -3,7 +3,20 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Rust CUDA Promotion Acceptance And Route Decision
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Benchmark Performance Blocker
+  is validated on B300. The repaired Rust DSO and linked graph-benchmark
+  candidate complete both retained workloads and emit the backend identity
+  marker, while the five preceding runtime-graph quality gates remain green.
+  Same-session performance rejects route promotion: Rust prefill records
+  `88.64-95.04 tok/s` versus current-C `1261.99-1467.28 tok/s`, and Rust
+  decode records `13.56-14.83 tok/s` versus current-C `30.59-34.37 tok/s`.
+  All `14` throughput fields fail the within-`5%` current-C policy; Rust
+  prefill is only `6.1%-7.2%` and decode `42.1%-44.3%` of current-C.
+  Default routing and current-C CUDA remain retained, and C host removal is
+  not claimed. The pre-execution, follow-on decision, and final
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Backend Identity Log Compatibility Repair
   is validated on B300. The opt-in Rust CUDA DSO had already generated
   correct regular CLI, long-context, and server/tool results, but retained

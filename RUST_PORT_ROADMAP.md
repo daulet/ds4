@@ -13188,10 +13188,50 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Rust CUDA Promotion Acceptance And Route Decision
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  after the B300 benchmark completed but failed the required same-session
+  current-C performance criterion across every throughput field.
+- Goal: retain the route-decision evidence separately from the necessary Rust
+  CUDA graph performance repair.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Benchmark Performance Blocker
+
+- Status: done.
+- Goal: execute the remaining benchmark gate through the repaired opt-in Rust
+  CUDA DSO and decide promotion from same-session B300 current-C evidence.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-promotion-benchmark-performance-blocker.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_promotion_benchmark_performance_blocker.py --negative-test`.
+- Evidence:
+  - The repaired Rust DSO SHA-256
+    `223542460727037720a65a43961692ff9b42bbd75ddabea16344eb1094e69903`
+    and linked benchmark binary SHA-256
+    `908f184bf5175d6dc84105a571d6fc7f33c109006c6108e8f3625555186cd9ae`
+    complete the retained short and long graph benchmark commands on B300;
+    both Rust runs emit the required backend identity marker.
+  - All five retained runtime-graph quality gates remain green. The legacy
+    M10.9f wrapper also reports its expected missing build metadata because
+    this run deliberately reused the already-linked `cuda-rust-backend`
+    candidate under `--no-build`.
+  - The substantive acceptance result is a same-session performance failure:
+    Rust prefill is `88.64-95.04 tok/s` versus current-C
+    `1261.99-1467.28 tok/s`, while Rust decode is `13.56-14.83 tok/s`
+    versus current-C `30.59-34.37 tok/s`. All `14` measured throughput fields
+    fail the required within-`5%` current-C policy.
+  - Rust prefill reaches only `6.1%-7.2%` of same-session current-C and Rust
+    decode `42.1%-44.3%`; this blocks default-route promotion and current-C
+    CUDA removal. The GPU returned to `0 MiB` after capture.
+  - The pre-execution, follow-on decision, and final non-interactive Claude
+    review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Rust CUDA Graph Benchmark Performance Repair
+
 - Status: active.
-- Goal: capture the remaining benchmark evidence through the repaired opt-in
-  Rust CUDA DSO on B300, then decide default-route promotion and current-C
-  CUDA retention without overclaiming C host removal.
+- Goal: identify and repair the Rust CUDA graph benchmark throughput gap
+  against same-session current-C on B300 before repeating any default-route
+  promotion decision.
 
 ## Removal Criteria for C Host Code
 

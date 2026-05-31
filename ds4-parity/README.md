@@ -4240,6 +4240,19 @@ long-context fact-recall command with all `16` assignments correct, and
 passes the existing server/tool quality comparator for both tool-call cases.
 Benchmark capture and any default-route promotion decision remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA promotion benchmark performance blocker:
+
+```sh
+python3 ds4-parity/check_cuda_rust_promotion_benchmark_performance_blocker.py --negative-test
+```
+
+The repaired Rust DSO completes the retained short and long benchmark
+workloads with the B300 marker present, but same-session current-C rejects
+promotion: all `14` measured throughput fields fail the within-`5%` policy.
+Default routing and current-C CUDA remain retained while Rust CUDA graph
+benchmark performance is repaired.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

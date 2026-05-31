@@ -1,0 +1,234 @@
+{
+  "schema": "ds4.cuda_rust_promotion_benchmark_performance_blocker.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-blocked-same-session-performance-regression",
+  "goal": "Capture the remaining opt-in Rust CUDA DSO benchmark evidence on B300 and make a route decision from the same-session current-C comparison.",
+  "ownership": {
+    "benchmark_evidence_captured": true,
+    "candidate_processes_completed": true,
+    "candidate_backend_identity_markers_present": true,
+    "retained_quality_gates_passed": true,
+    "same_session_performance_gate_passed": false,
+    "default_current_c_route_preserved": true,
+    "runtime_route_promoted": false,
+    "c_host_removal_allowed": false,
+    "c_cuda_removal_allowed": false
+  },
+  "rerun_contract": {
+    "shared_library_sha256": "223542460727037720a65a43961692ff9b42bbd75ddabea16344eb1094e69903",
+    "candidate_binary": "/workspace/ds4/target-engine-rust-facade/release/ds4-runtime-graph-bench-rs",
+    "candidate_binary_sha256": "908f184bf5175d6dc84105a571d6fc7f33c109006c6108e8f3625555186cd9ae",
+    "engine_feature": "cuda-rust-backend",
+    "engine_dylib_environment": "DS4_CUDA_RUST_DYLIB=/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+    "runtime_graph_route": "graph",
+    "capture_used_prebuilt_candidate": true,
+    "legacy_wrapper_build_metadata_expected_to_fail": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "wall_elapsed_seconds": 903,
+    "summary_sha256": "c62eee8b9f9c335db55841044f86619fe08b072249be3c07a1aba87a8d749180",
+    "stdout_sha256": "ef7f3de19af14d04e97afe8833804ccf86dc81c2c1cd6cbc8ba8d16b0a29c8c2",
+    "stderr_sha256": "5bbceec23494bb6bc5483ba2a48faef844129ede0d2488497480e520178f8d7c",
+    "legacy_wrapper_primary_check_count": 366,
+    "legacy_wrapper_negative_check_count": 8,
+    "legacy_wrapper_exit_code": 1,
+    "legacy_wrapper_expected_metadata_failure": "release build command missing because capture intentionally used the already-linked Rust DSO candidate with --no-build",
+    "quality_gates": {
+      "M10.9a": true,
+      "M10.9b": true,
+      "M10.9c": true,
+      "M10.9d": true,
+      "M10.9e": true
+    },
+    "candidate_backend_identity_marker_present": {
+      "short": true,
+      "long": true
+    },
+    "current_c_backend_identity_marker_present": {
+      "short": true,
+      "long": true
+    },
+    "candidate_rows": {
+      "b300-short.csv": [
+        {
+          "ctx_tokens": 2048,
+          "prefill_tokens": 2048,
+          "prefill_tps": 88.64,
+          "gen_tokens": 32,
+          "gen_tps": 14.83,
+          "kvcache_bytes": 52184460
+        },
+        {
+          "ctx_tokens": 4096,
+          "prefill_tokens": 2048,
+          "prefill_tps": 95.04,
+          "gen_tokens": 32,
+          "gen_tps": 14.55,
+          "kvcache_bytes": 80373132
+        },
+        {
+          "ctx_tokens": 6144,
+          "prefill_tokens": 2048,
+          "prefill_tps": 94.68,
+          "gen_tokens": 32,
+          "gen_tps": 14.49,
+          "kvcache_bytes": 108561804
+        },
+        {
+          "ctx_tokens": 8192,
+          "prefill_tokens": 2048,
+          "prefill_tps": 94.86,
+          "gen_tokens": 32,
+          "gen_tps": 14.32,
+          "kvcache_bytes": 136750476
+        }
+      ],
+      "b300-long.csv": [
+        {
+          "ctx_tokens": 16384,
+          "prefill_tokens": 16384,
+          "prefill_tps": 94.33,
+          "gen_tokens": 32,
+          "gen_tps": 13.77,
+          "kvcache_bytes": 249505164
+        },
+        {
+          "ctx_tokens": 24576,
+          "prefill_tokens": 8192,
+          "prefill_tps": 93.79,
+          "gen_tokens": 32,
+          "gen_tps": 13.59,
+          "kvcache_bytes": 362259852
+        },
+        {
+          "ctx_tokens": 32768,
+          "prefill_tokens": 8192,
+          "prefill_tps": 90.63,
+          "gen_tokens": 32,
+          "gen_tps": 13.56,
+          "kvcache_bytes": 475014540
+        }
+      ]
+    },
+    "current_c_rows": {
+      "b300-short.csv": [
+        {
+          "ctx_tokens": 2048,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1460.83,
+          "gen_tokens": 32,
+          "gen_tps": 34.37,
+          "kvcache_bytes": 52184460
+        },
+        {
+          "ctx_tokens": 4096,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1467.28,
+          "gen_tokens": 32,
+          "gen_tps": 33.49,
+          "kvcache_bytes": 80373132
+        },
+        {
+          "ctx_tokens": 6144,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1443.24,
+          "gen_tokens": 32,
+          "gen_tps": 33.41,
+          "kvcache_bytes": 108561804
+        },
+        {
+          "ctx_tokens": 8192,
+          "prefill_tokens": 2048,
+          "prefill_tps": 1427.48,
+          "gen_tokens": 32,
+          "gen_tps": 32.79,
+          "kvcache_bytes": 136750476
+        }
+      ],
+      "b300-long.csv": [
+        {
+          "ctx_tokens": 16384,
+          "prefill_tokens": 16384,
+          "prefill_tps": 1403.95,
+          "gen_tokens": 32,
+          "gen_tps": 32.56,
+          "kvcache_bytes": 249505164
+        },
+        {
+          "ctx_tokens": 24576,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1318.93,
+          "gen_tokens": 32,
+          "gen_tps": 32.26,
+          "kvcache_bytes": 362259852
+        },
+        {
+          "ctx_tokens": 32768,
+          "prefill_tokens": 8192,
+          "prefill_tps": 1261.99,
+          "gen_tokens": 32,
+          "gen_tps": 30.59,
+          "kvcache_bytes": 475014540
+        }
+      ]
+    },
+    "performance": {
+      "same_session_max_regression": 0.05,
+      "same_session_status": "regression",
+      "measured_throughput_field_count": 14,
+      "same_session_regression_count": 14,
+      "candidate_prefill_tps_range": [
+        88.64,
+        95.04
+      ],
+      "current_c_prefill_tps_range": [
+        1261.99,
+        1467.28
+      ],
+      "candidate_decode_tps_range": [
+        13.56,
+        14.83
+      ],
+      "current_c_decode_tps_range": [
+        30.59,
+        34.37
+      ],
+      "prefill_ratio_to_current_c_range": [
+        0.0607,
+        0.0718
+      ],
+      "decode_ratio_to_current_c_range": [
+        0.4213,
+        0.4433
+      ]
+    },
+    "gpu_utilization_percent_after_capture": 0,
+    "gpu_memory_mib_after_capture": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "c_cuda_removal": "blocked",
+    "c_host_removal": "not-in-scope-and-not-allowed",
+    "blocker": "Rust CUDA graph benchmark throughput fails the 5 percent same-session current-C policy in all measured throughput fields.",
+    "required_next_work": "Identify and repair the Rust CUDA graph benchmark performance gap before repeating promotion acceptance."
+  },
+  "validation": {
+    "local_comparator_negative_test_passed": true,
+    "unified_report_passed": 264,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_execution": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "follow_on_decision": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}
