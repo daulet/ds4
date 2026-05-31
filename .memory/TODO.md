@@ -12186,6 +12186,39 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Route Promotion And C CUDA Removal Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because an opt-in engine link exposes end-to-end Rust CUDA route blockers
+  without changing the current-C default.
+- Goal: exercise the Rust CUDA facade through an engine runtime probe while
+  retaining the current-C route.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Engine Route Blocker Probe
+
+- Status: done
+- Goal: link `ds4-engine` through the opt-in Rust CUDA DSO route and record
+  its first model-backed correctness and latency blockers.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-engine-route-blocker.json`
+- Comparator:
+  `ds4-parity/check_cuda_rust_engine_route_blocker.py --negative-test`.
+- Evidence:
+  - The engine `cuda-rust-backend` link path compiles `ds4.c` and
+    `ds4_kvstore.c`, links `libds4_cuda.so`, and does not compile
+    `ds4_cuda.cu`; the existing default route remains current-C.
+  - B300 resolves the Rust DSO and CUDA driver. A one-step model-backed
+    `short_italian_fact` probe passes in 47 seconds.
+  - A bounded short official-vector probe completes in 180 seconds with 8 of
+    9 selected steps matching; `short_code_completion` step `1` expects
+    hex `63` and receives hex `43`. A full official-vector attempt stays
+    compute-active beyond 900 seconds and is terminated without promotion.
+  - Local `ds4-engine` library tests pass with 13 tests. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Default route
+    promotion and C CUDA removal remain blocked.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Correctness Performance And C CUDA Removal Policy
+
 - Status: active
-- Goal: exercise the Rust CUDA facade through runtime graph routes before
-  considering C CUDA removal.
+- Goal: repair Rust CUDA engine-route correctness and throughput before
+  rerunning complete promotion gates or considering C CUDA removal.

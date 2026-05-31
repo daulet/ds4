@@ -1,0 +1,89 @@
+{
+  "schema": "ds4.cuda_rust_engine_route_blocker.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "blocked-short-official-vector-mismatch-and-full-timeout",
+  "ownership": {
+    "engine_route_opt_in": true,
+    "engine_feature": "cuda-rust-backend",
+    "engine_links_rust_cuda_dylib": true,
+    "engine_compiles_ds4_cuda_cu": false,
+    "default_current_c_route_preserved": true,
+    "graph_selector_behavior_unchanged": true,
+    "runtime_route_promoted": false,
+    "c_cuda_removal_allowed": false
+  },
+  "implementation": {
+    "crate": "rust/ds4-engine",
+    "artifact_environment": "DS4_CUDA_RUST_DYLIB",
+    "artifact_name": "libds4_cuda.so",
+    "host_sources": [
+      "ds4.c",
+      "ds4_kvstore.c"
+    ],
+    "route_boundary": "The opt-in engine diagnostic path executes existing C orchestration through the Rust CUDA shared ABI; it is not the default runtime route."
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "shared_library": "/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+    "link_probe": {
+      "binary": "target-engine-rust-facade/release/ds4-runtime-official-vectors-rs",
+      "libds4_cuda_resolved": true,
+      "libcuda_resolved": true
+    },
+    "one_step_probe": {
+      "case": "short_italian_fact",
+      "step": 0,
+      "elapsed_seconds": 47,
+      "startup_cache_seconds": 39.747,
+      "selected_matches_expected": true,
+      "expected_selected_hex": "416461",
+      "selected_hex": "416461",
+      "json_sha256": "2f7957b6f593b3b285bd3153a69e7a71f9fc01bb5d7e6cf55c0df13bc8927a8b",
+      "stderr_sha256": "47b996ec69d2c2430e4c352073fd568d8e10224f9d68b02b5154b7c23637ec9e"
+    },
+    "short_vector_probe": {
+      "cases": [
+        "short_italian_fact",
+        "short_code_completion",
+        "short_reasoning_plain"
+      ],
+      "elapsed_seconds": 180,
+      "case_count": 3,
+      "step_count": 9,
+      "selected_match_count": 8,
+      "json_sha256": "136dd4a7f6ec1270b8c9d03321b3224854bc25b520dd12ae9d832b2e5524c226",
+      "stderr_sha256": "60cec3e2a99ea488f68e3e10d010a4dbfd927ca4a73dfb03bec17e17aafd88c4",
+      "mismatch": {
+        "case": "short_code_completion",
+        "step": 1,
+        "expected_selected_hex": "63",
+        "selected_hex": "43",
+        "selected_logprob": -0.166621089,
+        "expected_logprob": -1.875632167
+      }
+    },
+    "full_official_vector_probe": {
+      "completed": false,
+      "observation_seconds_at_least": 900,
+      "gpu_utilization_percent_while_observed": 100,
+      "terminated_after_bound": true,
+      "gpu_memory_mib_after_termination": 0
+    }
+  },
+  "validation": {
+    "local_ds4_engine_library_test_count": 13,
+    "unified_report_passed": 258,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Runtime Correctness Performance And C CUDA Removal Policy"
+}

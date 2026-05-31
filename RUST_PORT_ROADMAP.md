@@ -12945,9 +12945,46 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Route Promotion And C CUDA Removal Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because an opt-in engine link can expose end-to-end Rust CUDA correctness
+  and performance blockers without promoting the current-C route.
+- Goal: exercise the Rust CUDA facade through an engine runtime probe while
+  retaining current-C until full route gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Engine Route Blocker Probe
+
+- Status: done.
+- Goal: execute the existing `ds4-engine` GPU graph orchestration through the
+  Rust CUDA shared ABI and record the first end-to-end promotion blockers.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-engine-route-blocker.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_engine_route_blocker.py --negative-test`.
+- Evidence:
+  - `rust/ds4-engine` adds opt-in `cuda-rust-backend`; on Linux its diagnostic
+    route compiles `ds4.c` and `ds4_kvstore.c`, links `libds4_cuda.so`, and
+    does not compile `ds4_cuda.cu`. The existing current-C default remains.
+  - On B300, the engine binary resolves the Rust CUDA shared object and CUDA
+    driver, and a one-step `short_italian_fact` model-backed probe selects
+    expected token hex `416461` in 47 seconds after a 39.747-second model
+    cache load.
+  - A bounded three-short-case official-vector probe finishes in 180 seconds
+    but matches only 8 of 9 selected tokens: `short_code_completion` step `1`
+    expects hex `63` and receives hex `43`. A full official-vector attempt
+    remained compute-active at 100% B300 utilization for more than 900
+    seconds and was terminated; the device returned to zero allocation.
+  - The Rust engine route is therefore executable but fails correctness and
+    performance acceptance. Default route promotion and C CUDA removal remain
+    blocked. Local `ds4-engine` library tests pass with 13 tests. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Correctness Performance And C CUDA Removal Policy
+
 - Status: active.
-- Goal: promote the validated Rust CUDA facade into runtime graph flows and
-  remove C CUDA only after end-to-end route gates pass.
+- Goal: repair the Rust CUDA engine-route correctness and throughput blockers,
+  then rerun complete end-to-end gates before considering C CUDA removal.
 
 ## Removal Criteria for C Host Code
 

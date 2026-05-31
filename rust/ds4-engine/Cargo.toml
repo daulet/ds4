@@ -7,6 +7,9 @@ publish.workspace = true
 [dependencies]
 ds4-gguf = { path = "../ds4-gguf" }
 
+[features]
+cuda-rust-backend = []
+
 [lib]
 path = "src/lib.rs"
 

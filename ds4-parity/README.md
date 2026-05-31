@@ -4154,6 +4154,20 @@ compiling `ds4_cuda.cu`. B300 execution covers the existing facade resource
 and model-map tests plus an embedded-add kernel; the current-C static archive
 oracle remains validated separately under `--whole-archive`.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+opt-in Rust CUDA engine route blocker probe:
+
+```sh
+python3 ds4-parity/check_cuda_rust_engine_route_blocker.py --negative-test
+```
+
+The opt-in `ds4-engine` link path compiles the existing C engine orchestration
+without `ds4_cuda.cu` and links `libds4_cuda.so`. On B300 a one-step model
+probe executes correctly, while the bounded short official-vector probe
+diverges at `short_code_completion` step `1` and the full gate does not
+complete in 15 minutes. Default route promotion and C CUDA removal remain
+blocked.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

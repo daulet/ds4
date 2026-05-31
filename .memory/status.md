@@ -3,7 +3,22 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Runtime Route Promotion And C CUDA Removal Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Runtime Correctness Performance And C CUDA Removal Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Engine Route Blocker Probe
+  is validated as a blocker on B300. The opt-in `ds4-engine`
+  `cuda-rust-backend` link compiles `ds4.c` and `ds4_kvstore.c`, links
+  `libds4_cuda.so`, and does not compile `ds4_cuda.cu`; current-C remains
+  the default route. The B300 binary resolves the Rust DSO and CUDA driver,
+  and a one-step `short_italian_fact` probe selects expected hex `416461`
+  in 47 seconds. The three-short-case probe completes in 180 seconds with
+  only 8 of 9 selected tokens matching: `short_code_completion` step `1`
+  expects hex `63` and receives hex `43`. A full official-vector attempt
+  remains compute-active beyond 900 seconds and is terminated cleanly with
+  the B300 returning to zero allocation. Local `ds4-engine` library tests
+  pass with 13 tests. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Route promotion and C CUDA removal
+  remain blocked pending correctness and throughput repair.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Production Facade Shared-Library Link
   is validated on B300. The opt-in `cuda-rust-backend` facade route links
   `libds4_cuda.so`, compiles `ds4.c` without compiling `ds4_cuda.cu`, and

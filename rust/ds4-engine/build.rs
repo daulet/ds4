@@ -29,6 +29,12 @@ fn main() {
             return;
         }
         "linux" => {
+            if env::var_os("CARGO_FEATURE_CUDA_RUST_BACKEND").is_some() {
+                compile_c(&repo_root, &out_dir, "ds4.c", &ds4_obj, false);
+                compile_c(&repo_root, &out_dir, "ds4_kvstore.c", &kvstore_obj, false);
+                link_linux_rust_cuda(&out_dir, &rust_cuda_dylib(), &[&ds4_obj, &kvstore_obj]);
+                return;
+            }
             let cuda_home = env::var("CUDA_HOME").unwrap_or_else(|_| "/usr/local/cuda".to_owned());
             let nvcc = PathBuf::from(&cuda_home).join("bin/nvcc");
             if nvcc.is_file() {
@@ -173,6 +179,26 @@ fn link_linux_cuda(out_dir: &Path, cuda_home: &str, objects: &[&PathBuf]) {
     println!("cargo:rustc-link-lib=pthread");
 }
 
+fn link_linux_rust_cuda(out_dir: &Path, rust_dylib: &Path, objects: &[&PathBuf]) {
+    let dylib_dir = rust_dylib
+        .parent()
+        .expect("Rust CUDA dynamic library directory");
+    archive(out_dir, objects);
+    println!("cargo:rerun-if-env-changed=DS4_CUDA_RUST_DYLIB");
+    println!("cargo:rerun-if-changed={}", rust_dylib.display());
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=ds4_engine");
+    println!("cargo:rustc-link-search=native={}", dylib_dir.display());
+    println!("cargo:rustc-link-lib=dylib=ds4_cuda");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", dylib_dir.display());
+    println!("cargo:rustc-link-lib=dylib=cuda");
+    println!("cargo:rustc-link-lib=m");
+    println!("cargo:rustc-link-lib=pthread");
+    println!("cargo:rustc-link-lib=dl");
+    println!("cargo:rustc-link-lib=rt");
+    println!("cargo:rustc-link-lib=util");
+}
+
 fn link_cpu(out_dir: &Path, objects: &[&PathBuf]) {
     archive(out_dir, objects);
     println!("cargo:rustc-link-search=native={}", out_dir.display());
@@ -206,6 +232,24 @@ fn compiler_command() -> Command {
         }
         _ => Command::new(compiler),
     }
+}
+
+fn rust_cuda_dylib() -> PathBuf {
+    let path = env::var_os("DS4_CUDA_RUST_DYLIB")
+        .map(PathBuf::from)
+        .expect("DS4_CUDA_RUST_DYLIB must point to the prebuilt Rust CUDA dynamic library");
+    assert!(
+        path.is_file(),
+        "DS4_CUDA_RUST_DYLIB is not a file: {}",
+        path.display()
+    );
+    assert_eq!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some("libds4_cuda.so"),
+        "DS4_CUDA_RUST_DYLIB must name libds4_cuda.so"
+    );
+    path.canonicalize()
+        .expect("canonicalize Rust CUDA dynamic library")
 }
 
 fn run(command: &mut Command) {
