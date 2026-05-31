@@ -1470,6 +1470,302 @@ mod kernels {
         }
     }
 
+    #[kernel]
+    pub fn abi_indexed_topk_sort_512_asc_kernel(
+        n_tokens: u32,
+        source: &[i32],
+        mut sorted: DisjointSlice<i32>,
+    ) {
+        static mut ROWS: SharedArray<i32, 512> = SharedArray::UNINIT;
+
+        let token = thread::blockIdx_x();
+        let tid = thread::threadIdx_x();
+        if token >= n_tokens || tid >= 512 {
+            return;
+        }
+        let index = tid as usize;
+        let offset = token as usize * 512 + index;
+        unsafe {
+            ROWS[index] = source[offset];
+        }
+        thread::sync_threads();
+        let mut width = 2_u32;
+        while width <= 512 {
+            let mut stride = width >> 1;
+            while stride > 0 {
+                let other = tid ^ stride;
+                if other > tid && other < 512 {
+                    let other_index = other as usize;
+                    let left = unsafe { ROWS[index] };
+                    let right = unsafe { ROWS[other_index] };
+                    let ascending = (tid & width) == 0;
+                    if (ascending && left > right) || (!ascending && left < right) {
+                        unsafe {
+                            ROWS[index] = right;
+                            ROWS[other_index] = left;
+                        }
+                    }
+                }
+                thread::sync_threads();
+                stride >>= 1;
+            }
+            width <<= 1;
+        }
+        unsafe {
+            *sorted.get_unchecked_mut(offset) = ROWS[index];
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_attention_indexed_mixed_kernel(
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+        sinks: &[f32],
+        q: &[f32],
+        raw_kv: &[f32],
+        comp_kv: &[f32],
+        topk: &[i32],
+        mut heads: DisjointSlice<f32>,
+    ) {
+        let token = thread::blockIdx_x();
+        let head = thread::blockIdx_y();
+        if token >= n_tokens || head >= n_head || thread::threadIdx_x() != 0 {
+            return;
+        }
+        abi_attention_indexed_write_head(
+            token, head, n_tokens, pos0, n_raw, raw_cap, raw_start, n_comp, top_k, window, ratio,
+            n_head, head_dim, 1, sinks, q, raw_kv, comp_kv, topk, &mut heads,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_attention_indexed_mixed_heads8_online_kernel(
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+        sinks: &[f32],
+        q: &[f32],
+        raw_kv: &[f32],
+        comp_kv: &[f32],
+        topk: &[i32],
+        mut heads: DisjointSlice<f32>,
+    ) {
+        let token = thread::blockIdx_x();
+        let head_group = thread::blockIdx_y();
+        if token >= n_tokens || head_dim != 512 || thread::threadIdx_x() != 0 {
+            return;
+        }
+        let mut local_head = 0_u32;
+        while local_head < 16 {
+            let head = head_group * 16 + local_head;
+            if head < n_head {
+                abi_attention_indexed_write_head(
+                    token, head, n_tokens, pos0, n_raw, raw_cap, raw_start, n_comp, top_k, window,
+                    ratio, n_head, head_dim, 0, sinks, q, raw_kv, comp_kv, topk, &mut heads,
+                );
+            }
+            local_head += 1;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_attention_indexed_mixed_heads8_rb4_kernel(
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+        sinks: &[f32],
+        q: &[f32],
+        raw_kv: &[f32],
+        comp_kv: &[f32],
+        topk: &[i32],
+        mut heads: DisjointSlice<f32>,
+    ) {
+        let token = thread::blockIdx_x();
+        let head_group = thread::blockIdx_y();
+        if token >= n_tokens || head_dim != 512 || thread::threadIdx_x() != 0 {
+            return;
+        }
+        let mut local_head = 0_u32;
+        while local_head < 8 {
+            let head = head_group * 8 + local_head;
+            if head < n_head {
+                abi_attention_indexed_write_head(
+                    token, head, n_tokens, pos0, n_raw, raw_cap, raw_start, n_comp, top_k, window,
+                    ratio, n_head, head_dim, 1, sinks, q, raw_kv, comp_kv, topk, &mut heads,
+                );
+            }
+            local_head += 1;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn abi_attention_indexed_write_head(
+        token: u32,
+        head: u32,
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+        filter_entries: u32,
+        sinks: &[f32],
+        q: &[f32],
+        raw_kv: &[f32],
+        comp_kv: &[f32],
+        topk: &[i32],
+        heads: &mut DisjointSlice<f32>,
+    ) {
+        let qpos = pos0.wrapping_add(token);
+        let first_raw_pos = pos0.wrapping_add(n_tokens).wrapping_sub(n_raw);
+        let raw_last_pos = first_raw_pos.wrapping_add(n_raw).wrapping_sub(1);
+        let mut raw_first = 0_u32;
+        let mut raw_count = 0_u32;
+        if qpos >= first_raw_pos {
+            let mut lo = first_raw_pos;
+            if window != 0 && qpos.wrapping_add(1) > window {
+                let window_lo = qpos.wrapping_add(1).wrapping_sub(window);
+                if window_lo > lo {
+                    lo = window_lo;
+                }
+            }
+            let hi = if qpos < raw_last_pos {
+                qpos
+            } else {
+                raw_last_pos
+            };
+            if hi >= lo {
+                raw_first = lo.wrapping_sub(first_raw_pos);
+                raw_count = hi.wrapping_sub(lo).wrapping_add(1);
+                if raw_count > 256 {
+                    raw_count = 256;
+                }
+            }
+        }
+        let mut visible_comp = n_comp;
+        if ratio != 0 {
+            visible_comp = qpos.wrapping_add(1) / ratio;
+            if visible_comp > n_comp {
+                visible_comp = n_comp;
+            }
+        }
+        let selected_count = if filter_entries == 0 && visible_comp < top_k {
+            visible_comp
+        } else {
+            top_k
+        };
+        let query_base =
+            ((token as usize * n_head as usize + head as usize) * head_dim as usize) as usize;
+        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        let mut max_score = sinks[head as usize];
+        let mut row = 0_u32;
+        while row < raw_count {
+            let raw_row = raw_start.wrapping_add(raw_first).wrapping_add(row) % raw_cap;
+            max_score = abi_attention_maximum(
+                max_score,
+                abi_attention_dot(q, query_base, raw_kv, raw_row, head_dim) * scale,
+            );
+            row += 1;
+        }
+        let mut selected = 0_u32;
+        while selected < selected_count {
+            let compressed = topk[(token * top_k + selected) as usize];
+            if filter_entries == 0 || (compressed >= 0 && (compressed as u32) < visible_comp) {
+                max_score = abi_attention_maximum(
+                    max_score,
+                    abi_attention_dot(q, query_base, comp_kv, compressed as u32, head_dim) * scale,
+                );
+            }
+            selected += 1;
+        }
+        let mut denominator = (sinks[head as usize] - max_score).exp();
+        row = 0;
+        while row < raw_count {
+            let raw_row = raw_start.wrapping_add(raw_first).wrapping_add(row) % raw_cap;
+            denominator += (abi_attention_dot(q, query_base, raw_kv, raw_row, head_dim) * scale
+                - max_score)
+                .exp();
+            row += 1;
+        }
+        selected = 0;
+        while selected < selected_count {
+            let compressed = topk[(token * top_k + selected) as usize];
+            if filter_entries == 0 || (compressed >= 0 && (compressed as u32) < visible_comp) {
+                denominator +=
+                    (abi_attention_dot(q, query_base, comp_kv, compressed as u32, head_dim)
+                        * scale
+                        - max_score)
+                        .exp();
+            }
+            selected += 1;
+        }
+        let mut dimension = 0_u32;
+        while dimension < head_dim {
+            let mut accumulator = 0.0_f32;
+            row = 0;
+            while row < raw_count {
+                let raw_row = raw_start.wrapping_add(raw_first).wrapping_add(row) % raw_cap;
+                let weight = (abi_attention_dot(q, query_base, raw_kv, raw_row, head_dim) * scale
+                    - max_score)
+                    .exp();
+                accumulator += raw_kv[(raw_row * head_dim + dimension) as usize] * weight;
+                row += 1;
+            }
+            selected = 0;
+            while selected < selected_count {
+                let compressed = topk[(token * top_k + selected) as usize];
+                if filter_entries == 0 || (compressed >= 0 && (compressed as u32) < visible_comp) {
+                    let weight =
+                        (abi_attention_dot(q, query_base, comp_kv, compressed as u32, head_dim)
+                            * scale
+                            - max_score)
+                            .exp();
+                    accumulator +=
+                        comp_kv[(compressed as u32 * head_dim + dimension) as usize] * weight;
+                }
+                selected += 1;
+            }
+            unsafe {
+                *heads.get_unchecked_mut(query_base + dimension as usize) =
+                    accumulator / denominator;
+            }
+            dimension += 1;
+        }
+    }
+
     fn abi_attention_dot(q: &[f32], query_base: usize, kv: &[f32], row: u32, head_dim: u32) -> f32 {
         let mut value = 0.0_f32;
         let mut dimension = 0_u32;
@@ -2515,6 +2811,10 @@ pub(crate) struct AbiKernelModule {
     compressor_shift_ratio4_kernel: CudaFunction,
     attention_decode_mixed_kernel: CudaFunction,
     attention_decode_mixed_heads8_online_kernel: CudaFunction,
+    indexed_topk_sort_512_asc_kernel: CudaFunction,
+    attention_indexed_mixed_kernel: CudaFunction,
+    attention_indexed_mixed_heads8_online_kernel: CudaFunction,
+    attention_indexed_mixed_heads8_rb4_kernel: CudaFunction,
     fp8_kv_quantize_kernel: CudaFunction,
     indexer_hadamard_fp4_kernel: CudaFunction,
     rms_norm_weight_kernel: CudaFunction,
@@ -2609,6 +2909,18 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             attention_decode_mixed_heads8_online_kernel: module
                 .load_function("abi_attention_decode_mixed_heads8_online_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            indexed_topk_sort_512_asc_kernel: module
+                .load_function("abi_indexed_topk_sort_512_asc_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_indexed_mixed_kernel: module
+                .load_function("abi_attention_indexed_mixed_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_indexed_mixed_heads8_online_kernel: module
+                .load_function("abi_attention_indexed_mixed_heads8_online_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_indexed_mixed_heads8_rb4_kernel: module
+                .load_function("abi_attention_indexed_mixed_heads8_rb4_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             fp8_kv_quantize_kernel: module
                 .load_function("abi_fp8_kv_quantize_kernel")
@@ -4189,6 +4501,305 @@ impl AbiKernelModule {
                 stream,
                 &mut params,
             )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn indexed_topk_sort_512_asc_tensor(
+        &self,
+        stream: &CudaStream,
+        source_ptr: u64,
+        sorted_ptr: u64,
+        elements: u64,
+        n_tokens: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (n_tokens, 1, 1),
+            block_dim: (512, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut n_tokens = n_tokens;
+        let mut source_ptr = source_ptr;
+        let mut source_len = elements;
+        let mut sorted_ptr = sorted_ptr;
+        let mut sorted_len = elements;
+        let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut source_ptr as *mut u64).cast::<c_void>(),
+            (&mut source_len as *mut u64).cast::<c_void>(),
+            (&mut sorted_ptr as *mut u64).cast::<c_void>(),
+            (&mut sorted_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.indexed_topk_sort_512_asc_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn attention_indexed_mixed_tensor(
+        &self,
+        stream: &CudaStream,
+        heads_ptr: u64,
+        sinks_ptr: u64,
+        q_ptr: u64,
+        raw_ptr: u64,
+        comp_ptr: u64,
+        topk_ptr: u64,
+        output_elements: u64,
+        sink_elements: u64,
+        raw_elements: u64,
+        comp_elements: u64,
+        topk_elements: u64,
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> bool {
+        unsafe {
+            self.launch_attention_indexed(
+                &self.attention_indexed_mixed_kernel,
+                (n_tokens, n_head, 1),
+                (THREADS_PER_BLOCK, 1, 1),
+                stream,
+                heads_ptr,
+                sinks_ptr,
+                q_ptr,
+                raw_ptr,
+                comp_ptr,
+                topk_ptr,
+                output_elements,
+                sink_elements,
+                raw_elements,
+                comp_elements,
+                topk_elements,
+                n_tokens,
+                pos0,
+                n_raw,
+                raw_cap,
+                raw_start,
+                n_comp,
+                top_k,
+                window,
+                ratio,
+                n_head,
+                head_dim,
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn attention_indexed_mixed_heads8_online_tensor(
+        &self,
+        stream: &CudaStream,
+        heads_ptr: u64,
+        sinks_ptr: u64,
+        q_ptr: u64,
+        raw_ptr: u64,
+        comp_ptr: u64,
+        topk_ptr: u64,
+        output_elements: u64,
+        sink_elements: u64,
+        raw_elements: u64,
+        comp_elements: u64,
+        topk_elements: u64,
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> bool {
+        unsafe {
+            self.launch_attention_indexed(
+                &self.attention_indexed_mixed_heads8_online_kernel,
+                (n_tokens, (n_head + 15) / 16, 1),
+                (512, 1, 1),
+                stream,
+                heads_ptr,
+                sinks_ptr,
+                q_ptr,
+                raw_ptr,
+                comp_ptr,
+                topk_ptr,
+                output_elements,
+                sink_elements,
+                raw_elements,
+                comp_elements,
+                topk_elements,
+                n_tokens,
+                pos0,
+                n_raw,
+                raw_cap,
+                raw_start,
+                n_comp,
+                top_k,
+                window,
+                ratio,
+                n_head,
+                head_dim,
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn attention_indexed_mixed_heads8_rb4_tensor(
+        &self,
+        stream: &CudaStream,
+        heads_ptr: u64,
+        sinks_ptr: u64,
+        q_ptr: u64,
+        raw_ptr: u64,
+        comp_ptr: u64,
+        topk_ptr: u64,
+        output_elements: u64,
+        sink_elements: u64,
+        raw_elements: u64,
+        comp_elements: u64,
+        topk_elements: u64,
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> bool {
+        unsafe {
+            self.launch_attention_indexed(
+                &self.attention_indexed_mixed_heads8_rb4_kernel,
+                (n_tokens, (n_head + 7) / 8, 1),
+                (THREADS_PER_BLOCK, 1, 1),
+                stream,
+                heads_ptr,
+                sinks_ptr,
+                q_ptr,
+                raw_ptr,
+                comp_ptr,
+                topk_ptr,
+                output_elements,
+                sink_elements,
+                raw_elements,
+                comp_elements,
+                topk_elements,
+                n_tokens,
+                pos0,
+                n_raw,
+                raw_cap,
+                raw_start,
+                n_comp,
+                top_k,
+                window,
+                ratio,
+                n_head,
+                head_dim,
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn launch_attention_indexed(
+        &self,
+        kernel: &CudaFunction,
+        grid_dim: (u32, u32, u32),
+        block_dim: (u32, u32, u32),
+        stream: &CudaStream,
+        heads_ptr: u64,
+        sinks_ptr: u64,
+        q_ptr: u64,
+        raw_ptr: u64,
+        comp_ptr: u64,
+        topk_ptr: u64,
+        output_elements: u64,
+        sink_elements: u64,
+        raw_elements: u64,
+        comp_elements: u64,
+        topk_elements: u64,
+        n_tokens: u32,
+        pos0: u32,
+        n_raw: u32,
+        raw_cap: u32,
+        raw_start: u32,
+        n_comp: u32,
+        top_k: u32,
+        window: u32,
+        ratio: u32,
+        n_head: u32,
+        head_dim: u32,
+    ) -> bool {
+        let mut n_tokens = n_tokens;
+        let mut pos0 = pos0;
+        let mut n_raw = n_raw;
+        let mut raw_cap = raw_cap;
+        let mut raw_start = raw_start;
+        let mut n_comp = n_comp;
+        let mut top_k = top_k;
+        let mut window = window;
+        let mut ratio = ratio;
+        let mut n_head = n_head;
+        let mut head_dim = head_dim;
+        let mut sinks_ptr = sinks_ptr;
+        let mut sinks_len = sink_elements;
+        let mut q_ptr = q_ptr;
+        let mut q_len = output_elements;
+        let mut raw_ptr = raw_ptr;
+        let mut raw_len = raw_elements;
+        let mut comp_ptr = comp_ptr;
+        let mut comp_len = comp_elements;
+        let mut topk_ptr = topk_ptr;
+        let mut topk_len = topk_elements;
+        let mut heads_ptr = heads_ptr;
+        let mut heads_len = output_elements;
+        let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut pos0 as *mut u32).cast::<c_void>(),
+            (&mut n_raw as *mut u32).cast::<c_void>(),
+            (&mut raw_cap as *mut u32).cast::<c_void>(),
+            (&mut raw_start as *mut u32).cast::<c_void>(),
+            (&mut n_comp as *mut u32).cast::<c_void>(),
+            (&mut top_k as *mut u32).cast::<c_void>(),
+            (&mut window as *mut u32).cast::<c_void>(),
+            (&mut ratio as *mut u32).cast::<c_void>(),
+            (&mut n_head as *mut u32).cast::<c_void>(),
+            (&mut head_dim as *mut u32).cast::<c_void>(),
+            (&mut sinks_ptr as *mut u64).cast::<c_void>(),
+            (&mut sinks_len as *mut u64).cast::<c_void>(),
+            (&mut q_ptr as *mut u64).cast::<c_void>(),
+            (&mut q_len as *mut u64).cast::<c_void>(),
+            (&mut raw_ptr as *mut u64).cast::<c_void>(),
+            (&mut raw_len as *mut u64).cast::<c_void>(),
+            (&mut comp_ptr as *mut u64).cast::<c_void>(),
+            (&mut comp_len as *mut u64).cast::<c_void>(),
+            (&mut topk_ptr as *mut u64).cast::<c_void>(),
+            (&mut topk_len as *mut u64).cast::<c_void>(),
+            (&mut heads_ptr as *mut u64).cast::<c_void>(),
+            (&mut heads_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(kernel, grid_dim, block_dim, 0, stream, &mut params)
         }
         .is_ok()
     }

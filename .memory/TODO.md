@@ -11322,6 +11322,51 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public indexed batched-attention wrapper and its generic,
+  sorted-online, and rb4 dispatch branches are independently comparable before
+  prefill, output-Q8, routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexed Batched Attention ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_attention_indexed_mixed_batch_heads_tensor`
+  through generic, sorted-online, and rb4 indexed dispatch without claiming
+  prefill, output-Q8, routed MoE, remaining graph compute, or route
+  ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-attention-indexed-batch-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_attention_indexed_batch_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the wrapper with checked tensor/model
+    spans, cached sink resolution, retained top-k sort scratch, and current-C
+    environment-gated dispatch selection.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds top-k sort, generic indexed,
+    online heads8, and rb4 indexed kernels for the public call site.
+  - A C-linked B300 consumer proves generic indexed output, ratio-zero
+    visibility, top-k filtering/order/duplicates, causal raw window/ring
+    behavior, sink softmax, sorted online execution, sort-disable, rb4 and
+    forced-generic gates, invalid-range preservation, invalid-shape
+    rejection, and null rejection.
+  - Local library tests pass with 149 tests; B300 release-feature tests pass
+    with 156 tests; the static library exposes 66 Rust ABI symbols and embeds
+    45 kernels.
+  - All 59 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 63 CUDA ABI comparators
+    pass.
+  - The unified report passes with 235 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Prefill and output-Q8 attention, routed MoE, production route promotion,
+    and C CUDA removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before

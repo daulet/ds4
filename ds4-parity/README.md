@@ -3843,6 +3843,22 @@ single-token witness. Prefill, indexed and output-Q8 attention, routed MoE,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public indexed batched attention ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_attention_indexed_batch_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public indexed mixed batched attention
+wrapper through embedded sort, generic, online heads8, and rb4 kernels. It
+proves filtered top-k and ratio-zero compressed visibility, causal raw
+window/ring behavior, sink softmax, sorted-online dispatch, sort-disable,
+two-pass rb4 and forced-generic environment gates, and validation rejection.
+Prefill and output-Q8 attention, routed MoE, remaining graph compute,
+whole-archive retention policy, route promotion, C CUDA removal, and the
+embedded-object executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

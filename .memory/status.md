@@ -3,7 +3,26 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexed Batched Attention ABI
+  is validated on B300. Rust exports
+  `ds4_gpu_attention_indexed_mixed_batch_heads_tensor` through embedded
+  generic, sorted-online, and rb4 indexed-attention dispatch. A C-linked B300
+  witness proves generic indexed output, ratio-zero all-compressed visibility,
+  top-k filtering/order/duplicates, causal raw-window/ring behavior, sink
+  softmax, sorted online execution, sort-disable and two-pass rb4 gates,
+  forced generic dispatch, invalid model-range output preservation,
+  invalid-shape rejection, and null rejection. Local tests pass with 149
+  tests; B300 feature tests pass with 156 tests; the static library exposes 66
+  symbols and embeds 45 kernels. All 59 preceding linked ABI consumers pass
+  against the rebuilt archive with the known executable-stack warning. All 63
+  CUDA ABI comparators pass, and the unified report passes with 235 passed,
+  45 skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Prefill and output-Q8 attention, routed
+  MoE, remaining graph
+  compute, whole-archive/route promotion, C CUDA removal, and the
+  executable-stack warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Batched Attention Decode ABI
   is validated on B300. Rust exports
   `ds4_gpu_attention_decode_raw_batch_heads_tensor` and

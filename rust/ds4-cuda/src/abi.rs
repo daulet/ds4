@@ -33,6 +33,8 @@ static ABI_F16_ACTIVATIONS: Mutex<Option<DeviceBuffer<f16>>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_Q8_ACTIVATIONS: Mutex<Option<AbiQ8Activations>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
+static ABI_INDEXED_TOPK_SORT_SCRATCH: Mutex<Option<DeviceBuffer<i32>>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
 static ABI_Q8_CACHE: Mutex<AbiQ8Cache> = Mutex::new(AbiQ8Cache {
     f16_ranges: Vec::new(),
     f32_ranges: Vec::new(),
@@ -408,6 +410,28 @@ fn with_abi_q8_activations<T>(
         });
     }
     operation(activations.as_mut()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_indexed_topk_sort_scratch<T>(
+    backend: &CudaOxideSubstrate,
+    elements: usize,
+    operation: impl FnOnce(&mut DeviceBuffer<i32>) -> Option<T>,
+) -> Option<T> {
+    if elements == 0 {
+        return None;
+    }
+    let mut scratch = ABI_INDEXED_TOPK_SORT_SCRATCH.lock().ok()?;
+    if scratch
+        .as_ref()
+        .is_none_or(|current| current.len() < elements)
+    {
+        if scratch.is_some() {
+            backend.synchronize().ok()?;
+        }
+        *scratch = Some(backend.zeroed::<i32>(elements).ok()?);
+    }
+    operation(scratch.as_mut()?)
 }
 
 fn abi_no_tf32_selected() -> bool {
@@ -4677,6 +4701,220 @@ unsafe fn hc_weighted_sum_impl(
         })
     })
     .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_indexed_mixed_batch_heads_tensor(
+    heads: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    sinks_offset: u64,
+    q: *const Ds4GpuTensor,
+    raw_kv: *const Ds4GpuTensor,
+    comp_kv: *const Ds4GpuTensor,
+    topk: *const Ds4GpuTensor,
+    n_tokens: u32,
+    pos0: u32,
+    n_raw: u32,
+    raw_cap: u32,
+    raw_start: u32,
+    n_comp: u32,
+    top_k: u32,
+    window: u32,
+    ratio: u32,
+    n_head: u32,
+    head_dim: u32,
+) -> c_int {
+    status(|| unsafe {
+        let Some(heads) = tensor_ref(heads.cast_const()) else {
+            return false;
+        };
+        let Some(q) = tensor_ref(q) else {
+            return false;
+        };
+        let Some(raw_kv) = tensor_ref(raw_kv) else {
+            return false;
+        };
+        let Some(comp_kv) = tensor_ref(comp_kv) else {
+            return false;
+        };
+        let Some(topk) = tensor_ref(topk) else {
+            return false;
+        };
+        let Some(output_elements) = u64::from(n_tokens)
+            .checked_mul(u64::from(n_head))
+            .and_then(|value| value.checked_mul(u64::from(head_dim)))
+        else {
+            return false;
+        };
+        let Some(raw_elements) = u64::from(raw_cap).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(comp_elements) = u64::from(n_comp).checked_mul(u64::from(head_dim)) else {
+            return false;
+        };
+        let Some(topk_elements) = u64::from(n_tokens).checked_mul(u64::from(top_k)) else {
+            return false;
+        };
+        let sink_elements = u64::from(n_head);
+        let Some(output_bytes) = output_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(raw_bytes) = raw_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(comp_bytes) = comp_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(topk_bytes) = topk_elements.checked_mul(size_of::<i32>() as u64) else {
+            return false;
+        };
+        let Some(sink_bytes) = sink_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_tokens == 0
+            || n_raw == 0
+            || raw_cap < n_raw
+            || raw_start >= raw_cap
+            || n_comp == 0
+            || top_k == 0
+            || top_k > 512
+            || n_head == 0
+            || head_dim == 0
+            || sinks_offset > model_size
+            || sink_bytes > model_size - sinks_offset
+            || heads.bytes < output_bytes
+            || q.bytes < output_bytes
+            || raw_kv.bytes < raw_bytes
+            || comp_kv.bytes < comp_bytes
+            || topk.bytes < topk_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                sinks_offset,
+                sink_bytes,
+                |sinks_ptr| {
+                    with_abi_kernels(backend, |kernels| {
+                        let launch = |topk_ptr: u64| {
+                            if n_tokens > 1
+                                && head_dim == 512
+                                && std::env::var_os("DS4_CUDA_NO_INDEXED_HEADS8").is_none()
+                            {
+                                if std::env::var_os("DS4_CUDA_INDEXED_TWOPASS").is_none() {
+                                    kernels.attention_indexed_mixed_heads8_online_tensor(
+                                        backend.stream(),
+                                        heads.device_ptr(),
+                                        sinks_ptr,
+                                        q.device_ptr(),
+                                        raw_kv.device_ptr(),
+                                        comp_kv.device_ptr(),
+                                        topk_ptr,
+                                        output_elements,
+                                        sink_elements,
+                                        raw_elements,
+                                        comp_elements,
+                                        topk_elements,
+                                        n_tokens,
+                                        pos0,
+                                        n_raw,
+                                        raw_cap,
+                                        raw_start,
+                                        n_comp,
+                                        top_k,
+                                        window,
+                                        ratio,
+                                        n_head,
+                                        head_dim,
+                                    )
+                                } else {
+                                    kernels.attention_indexed_mixed_heads8_rb4_tensor(
+                                        backend.stream(),
+                                        heads.device_ptr(),
+                                        sinks_ptr,
+                                        q.device_ptr(),
+                                        raw_kv.device_ptr(),
+                                        comp_kv.device_ptr(),
+                                        topk_ptr,
+                                        output_elements,
+                                        sink_elements,
+                                        raw_elements,
+                                        comp_elements,
+                                        topk_elements,
+                                        n_tokens,
+                                        pos0,
+                                        n_raw,
+                                        raw_cap,
+                                        raw_start,
+                                        n_comp,
+                                        top_k,
+                                        window,
+                                        ratio,
+                                        n_head,
+                                        head_dim,
+                                    )
+                                }
+                            } else {
+                                kernels.attention_indexed_mixed_tensor(
+                                    backend.stream(),
+                                    heads.device_ptr(),
+                                    sinks_ptr,
+                                    q.device_ptr(),
+                                    raw_kv.device_ptr(),
+                                    comp_kv.device_ptr(),
+                                    topk_ptr,
+                                    output_elements,
+                                    sink_elements,
+                                    raw_elements,
+                                    comp_elements,
+                                    topk_elements,
+                                    n_tokens,
+                                    pos0,
+                                    n_raw,
+                                    raw_cap,
+                                    raw_start,
+                                    n_comp,
+                                    top_k,
+                                    window,
+                                    ratio,
+                                    n_head,
+                                    head_dim,
+                                )
+                            }
+                        };
+                        if n_tokens > 1
+                            && top_k == 512
+                            && std::env::var_os("DS4_CUDA_NO_INDEXED_TOPK_SORT").is_none()
+                        {
+                            let elements = usize::try_from(topk_elements).ok()?;
+                            with_abi_indexed_topk_sort_scratch(backend, elements, |sorted| {
+                                if !kernels.indexed_topk_sort_512_asc_tensor(
+                                    backend.stream(),
+                                    topk.device_ptr(),
+                                    sorted.cu_deviceptr(),
+                                    topk_elements,
+                                    n_tokens,
+                                ) {
+                                    return Some(false);
+                                }
+                                Some(launch(sorted.cu_deviceptr()))
+                            })
+                        } else {
+                            Some(launch(topk.device_ptr()))
+                        }
+                    })
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]

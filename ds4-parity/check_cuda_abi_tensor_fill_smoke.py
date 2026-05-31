@@ -80,6 +80,7 @@ CURRENT_SUCCESSOR_SYMBOLS = [
         "ds4_gpu_attention_decode_heads_tensor",
         "ds4_gpu_attention_decode_raw_batch_heads_tensor",
         "ds4_gpu_attention_decode_mixed_batch_heads_tensor",
+        "ds4_gpu_attention_indexed_mixed_batch_heads_tensor",
 ]
 
 

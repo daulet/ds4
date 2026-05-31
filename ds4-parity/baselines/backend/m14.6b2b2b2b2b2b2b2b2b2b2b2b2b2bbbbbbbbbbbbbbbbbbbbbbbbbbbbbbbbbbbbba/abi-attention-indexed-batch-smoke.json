@@ -1,0 +1,92 @@
+{
+  "schema": "ds4.cuda_abi_attention_indexed_batch_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-attention-indexed-batch-abi",
+  "goal": "Rust-own the public indexed mixed batched attention wrapper, preserving generic, sorted-online, rb4, and environment-gated dispatch behavior without claiming prefill, output-Q8, routed MoE, or route-promotion surface.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_attention_indexed_mixed_batch_heads_tensor"
+    ],
+    "semantics": [
+      "reject invalid model, tensor, raw-ring, compressed-row, or top-k spans before resolving learned sink weights",
+      "generic indexed attention preserves raw causal-window and ring addressing plus filtered compressed top-k order and duplicate visibility",
+      "multi-token top_k 512 calls sort top-k rows unless DS4_CUDA_NO_INDEXED_TOPK_SORT is set",
+      "multi-token head_dim 512 calls select online heads8 unless DS4_CUDA_NO_INDEXED_HEADS8 or DS4_CUDA_INDEXED_TWOPASS selects the generic or rb4 path"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_attention_indexed_batch_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_indexed_topk_sort_512_asc_kernel",
+      "abi_attention_indexed_mixed_kernel",
+      "abi_attention_indexed_mixed_heads8_online_kernel",
+      "abi_attention_indexed_mixed_heads8_rb4_kernel"
+    ],
+    "dispatch_boundary": "top_k above 512 is rejected; multi-token top_k 512 optionally sorts through retained device scratch before generic, online-heads8, or rb4 dispatch",
+    "storage_boundary": "ABI-owned persistent sort scratch is synchronized before resizing so queued indexed attention does not outlive temporary sorted rows",
+    "remaining_compute_boundary": "prefill and output-Q8 attention, routed MoE, production route promotion, and C CUDA removal stay unowned",
+    "linkage_requirement": "the C-linked proof retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 66,
+    "exported_compute_symbol_count": 45,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "consumes_persistent_sort_scratch": true,
+    "owns_attention_indexed_mixed_batch_heads_tensor": true,
+    "owns_indexed_sort_generic_online_and_rb4_kernels": true,
+    "preserves_indexed_dispatch_environment_gates": true,
+    "owns_remaining_attention_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 149,
+    "feature_release_test_count": 156,
+    "staticlib_export_count": 66,
+    "embedded_kernel_count": 45,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "generic_indexed_output_matches": true,
+      "ratio_zero_all_compressed_matches": true,
+      "topk_filter_order_and_duplicates_match": true,
+      "causal_window_matches": true,
+      "ring_wrapped_raw_rows_match": true,
+      "sink_softmax_matches": true,
+      "sorted_online_output_matches": true,
+      "sort_disable_gate_matches": true,
+      "rb4_filtered_output_matches": true,
+      "forced_generic_environment_gate_matches": true,
+      "invalid_model_range_preserves_output": true,
+      "invalid_shape_rejected": true,
+      "null_rejected": true,
+      "embedded_indexed_attention_kernels_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 59,
+      "predecessor_relink_executable_stack_warning_count": 59
+    }
+  },
+  "integration_risks": [
+    "the new wrapper consumes persistent device sort scratch, so synchronization before scratch replacement is part of the public dispatch proof",
+    "optimized indexed dispatch is selected by current-C environment gates; generic, sorted-online, rb4, and forced-generic linked witnesses are required",
+    "ratio-zero indexed calls expose all compressed rows exactly as current C rather than rejecting the request",
+    "remaining prefill and output-Q8 attention wrappers, routed MoE, remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
