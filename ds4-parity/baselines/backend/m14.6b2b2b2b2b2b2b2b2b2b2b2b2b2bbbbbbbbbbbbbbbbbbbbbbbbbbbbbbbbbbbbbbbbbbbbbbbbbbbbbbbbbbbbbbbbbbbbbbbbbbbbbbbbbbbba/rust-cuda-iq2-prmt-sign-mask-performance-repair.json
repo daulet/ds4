@@ -1,0 +1,175 @@
+{
+  "schema": "ds4.cuda_rust_iq2_prmt_sign_mask_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-rust-iq2-prmt-sign-mask-route-blocked",
+  "goal": "Reduce cached Rust CUDA gate/up IQ2 sign-mask overhead by lowering byte-mask expansion through a fixed-selector PTX PRMT intrinsic.",
+  "ownership": {
+    "advances_cuda_oxide_for_prmt_intrinsic": true,
+    "changes_iq2_sign_mask_construction": true,
+    "retains_packed_twos_complement_application": true,
+    "retains_gate_dp4a_topology": true,
+    "retains_cached_down_codegen_metrics": true,
+    "retains_rowspan_policy": true,
+    "changes_default_current_c_route": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "dependency_manifest": "rust/ds4-cuda/Cargo.toml",
+    "parent_cuda_oxide_revision": "485bdd86fc1c900ad15ebd421b3b187619fe0903",
+    "repaired_cuda_oxide_revision": "1000e653df60a7814fa996d146e3823d0a364280",
+    "repaired_cuda_oxide_branch": "ds4-prmt-b32-ba98-probe",
+    "intrinsic": "integer::prmt_b32_ba98",
+    "ptx_operation": "prmt.b32",
+    "ptx_selector": "0xba98",
+    "retained_transform": "(values ^ mask).wrapping_add(mask & 0x0101_0101)",
+    "parent_gate_kernel_ptx_sha256": "49baadcae79b74385457817bcf282f59d6cedd8b1f33190562a4a1c6d0d099c8",
+    "repaired_gate_kernel_ptx_sha256": "1033171a50986fab7c10de57ce6ec22156281b9708ac3ecc824c3976cf92801d",
+    "parent_gate_dp4a_sites": 128,
+    "repaired_gate_dp4a_sites": 128,
+    "parent_gate_prmt_sites": 0,
+    "repaired_gate_prmt_sites": 16,
+    "parent_gate_b32_register_bound": 1030,
+    "repaired_gate_b32_register_bound": 982,
+    "parent_gate_ld_local_sites": 0,
+    "repaired_gate_ld_local_sites": 0,
+    "parent_gate_st_local_sites": 0,
+    "repaired_gate_st_local_sites": 0,
+    "parent_down_dp4a_sites": 256,
+    "repaired_down_dp4a_sites": 256,
+    "parent_down_prmt_sites": 0,
+    "repaired_down_prmt_sites": 0,
+    "parent_down_b32_register_bound": 1530,
+    "repaired_down_b32_register_bound": 1530,
+    "scope_boundary": "only the additive cuda-oxide PRMT surface, DS4 dependency pin, and cached gate/up IQ2 sign-mask construction change; packed negation, down scheduling, dispatch, benchmark executable, and default current-C routing remain unchanged"
+  },
+  "equivalence_proof": {
+    "live_grid_entry_count": 256,
+    "live_sign_entry_count": 128,
+    "four_byte_half_count": 2,
+    "checked_case_count": 65536,
+    "minimum_grid_byte": 8,
+    "mismatch_count": 0,
+    "reason_no_cross_byte_carry": "all grid bytes are nonzero, so selected packed two's-complement negation cannot carry into the adjacent byte"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "candidate_benchmark_binary_sha256": "908f184bf5175d6dc84105a571d6fc7f33c109006c6108e8f3625555186cd9ae",
+    "parent_compiler_backend_sha256": "2b09580d620522eb63ad7082ea1e719443bcef78032cc93d3b410abf515c69da",
+    "repaired_compiler_backend_sha256": "833c8487d4086735ca1c90216d47d21c64bf399511d96d40e6d6007c8edff63e",
+    "parent_shared_library_sha256": "959f7d4c262a9efbf528a4b53261834a598b01941c68d8c3027e6e452fdfa275",
+    "parent_ptx_sha256": "df8e1b5eceb9ebb7d626404deecdbc4785f48e7b773e0246f26297a3aba838af",
+    "repaired_shared_library_sha256": "65faf1bff05339dd754e230e211ef97de1e2765cc788edaf1c53b94853e2ed59",
+    "repaired_ptx_sha256": "496c8f743ac6fc9202642cfdc934263f7f35ba4ec364fbf8089fc95ba7abc48b",
+    "workload": "one 2048-token prefill frontier plus one generated token through the Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "parent_control_profile": {
+      "csv_sha256": "ab1a3dbcd2d4f31659498caf817fe2bf322c836e9deacedcad4b4b6ebdbf8602",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "9fc570ec39679f8d84944a07a88b321ff5127639e831d3a509b5e23c822c681a",
+      "prefill_tps": 314.54,
+      "decode_tps": 16.30,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.015,
+      "sort_ms": 4.295,
+      "gateup_ms": 752.988,
+      "midq_ms": 8.901,
+      "down_ms": 518.526,
+      "sum_ms": 0.043,
+      "total_ms": 1287.763,
+      "use_for_prefill_attribution": false
+    },
+    "repaired_probe_profile": {
+      "csv_sha256": "714813a22dc285af4ca9bc5c5799d24c89db574b520005a2167598b60f124011",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "2915312b5c7307381e6c2d54143ea816379c6e956b5d1cc817340f3b555ffe24",
+      "prefill_tps": 167.09,
+      "decode_tps": 16.27,
+      "profiled_layer_count": 43,
+      "gateup_ms": 721.089,
+      "down_ms": 518.625,
+      "total_ms": 1256.054,
+      "use_for_prefill_attribution": false
+    },
+    "repaired_confirmation_profile": {
+      "csv_sha256": "e42c8c56446c22f3e629e1359f1cb24e0dc285cd1077e92f7cb8e8c54bd8c0a3",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e20579174fb7af92676551c11635c564b68bed491cebb047dc76e01550d549bd",
+      "prefill_tps": 243.40,
+      "decode_tps": 16.32,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.184,
+      "sort_ms": 4.338,
+      "gateup_ms": 721.447,
+      "midq_ms": 8.901,
+      "down_ms": 518.779,
+      "sum_ms": 0.043,
+      "total_ms": 1256.699
+    },
+    "current_c_reference": {
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "gateup_speedup_over_parent": 1.044,
+      "total_speedup_over_parent": 1.025,
+      "gateup_reduction_percent_over_parent": 4.19,
+      "down_reduction_percent_over_parent": -0.05,
+      "total_reduction_percent_over_parent": 2.41,
+      "repaired_gateup_ratio_to_current_c": 1.39,
+      "repaired_down_ratio_to_current_c": 1.32,
+      "repaired_total_ratio_to_current_c": 1.36,
+      "remaining_primary_bottleneck": "cached-gate-up-and-down-gap-versus-current-c-native-route"
+    },
+    "rejected_preceding_scheduling_probes": {
+      "four_entry_gate_up_scalar_halves": {
+        "shared_library_sha256": "497fc424a4320670a588b75e72ab2682597d102b3bcb991f0c8899ddd3b0c291",
+        "csv_sha256": "4abefa3b02d9d81b7b91f7bde83fad3ecd515802f854d30f9e57f7ad50cfb418",
+        "gateup_ms": 807.985,
+        "total_ms": 1342.844,
+        "decision": "rejected because reduced register footprint repeats gate/up weight traversal and regresses gate/up and total time"
+      },
+      "four_entry_down_scalar_quarters": {
+        "shared_library_sha256": "1bf2d3cdc8d92f96a10d10b1d3ec36f30ee129db163008750c3d6c62450b7e0f",
+        "csv_sha256": "82124ac6db599a8e3123de38cec17268a881de21e74b30c6d560614e6097c971",
+        "down_ms": 642.851,
+        "total_ms": 1412.130,
+        "decision": "rejected because reduced register footprint repeats down work and regresses down and total time"
+      }
+    },
+    "official_vector_probe": {
+      "summary_sha256": "d9f242e37bf92b4b2eb3d4bb36faae8d4afcc6c8f433271b561e9461aeeb0979",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "max_abs_logprob_delta": 0.619237483,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Continue reducing corrected Rust CUDA routed-MoE phase gaps; PRMT reduces total to 1.36x current-C but does not reach route promotion."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 277,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

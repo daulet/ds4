@@ -1,5 +1,28 @@
 # DS4 Rust Port Status
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 PRMT Sign-Mask Performance Repair
+  is validated on B300 from the retained sequential half-tile down parent.
+  DS4 now pins the additive cuda-oxide PRMT revision
+  `1000e653df60a7814fa996d146e3823d0a364280`, and cached gate/up expands
+  IQ2 sign masks through `integer::prmt_b32_ba98` while retaining packed
+  negation, DP4A topology, down scheduling, and default current-C routing.
+  Gate/up PTX gains `16` PRMT sites and reduces its `b32` register bound
+  from `1030` to `982`, while down codegen metrics are unchanged. The
+  repaired DSO SHA-256 is
+  `65faf1bff05339dd754e230e211ef97de1e2765cc788edaf1c53b94853e2ed59`
+  and its PTX SHA-256 is
+  `496c8f743ac6fc9202642cfdc934263f7f35ba4ec364fbf8089fc95ba7abc48b`.
+  A fresh parent/candidate comparison lowers gate/up from `752.988 ms` to
+  `721.447 ms` and total routed-MoE from `1287.763 ms` to `1256.699 ms`;
+  down remains effectively unchanged at `518.526 ms` versus `518.779 ms`.
+  Four-entry gate/up scalar halves and four-entry down scalar quarters were
+  rejected after total regressed to `1342.844 ms` and `1412.130 ms`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. The unified report passes with `277`
+  passed, `50` skipped, and `0` failed. Pre-implementation and final Claude
+  review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total
+  routed-MoE remains `1.36x` current-C, so default routing and promotion
+  blockers remain in force.
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`

@@ -13752,6 +13752,41 @@ Stage split:
     Total routed-MoE remains `1.39x` current-C, so default routing and
     promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 PRMT Sign-Mask Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE gate/up IQ2 sign-mask overhead by
+  adding and consuming a fixed-selector PTX PRMT intrinsic.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-iq2-prmt-sign-mask-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_iq2_prmt_sign_mask_performance_repair.py --negative-test`.
+- Evidence:
+  - DS4 advances its cuda-oxide pin from `485bdd8` to the additive PRMT
+    revision `1000e65`. Cached gate/up expands IQ2 sign masks with
+    `integer::prmt_b32_ba98` and retains the proven packed negation, DP4A
+    topology, down scheduling, row-span policy, and default current-C route.
+  - Exhaustive host checking reports zero PRMT transform mismatches over all
+    `65536` live grid/sign/four-byte-half cases. Emitted gate/up PTX gains
+    `16` `prmt.b32` sites and reduces its `b32` register bound from `1030`
+    to `982`; down codegen metrics remain unchanged.
+  - A fresh B300 parent/candidate comparison reduces gate/up from
+    `752.988 ms` to `721.447 ms` (`1.044x`) and total routed-MoE from
+    `1287.763 ms` to `1256.699 ms` (`1.025x`); down stays effectively
+    unchanged at `518.526 ms` versus `518.779 ms`.
+  - Four-entry scalar schedule probes are rejected because gate/up halves
+    regress total to `1342.844 ms` and down quarters regress total to
+    `1412.130 ms`. The repaired DSO SHA-256 is
+    `65faf1bff05339dd754e230e211ef97de1e2765cc788edaf1c53b94853e2ed59`
+    and PTX SHA-256 is
+    `496c8f743ac6fc9202642cfdc934263f7f35ba4ec364fbf8089fc95ba7abc48b`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `277`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `1.36x` current-C, so default routing and
+    promotion blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

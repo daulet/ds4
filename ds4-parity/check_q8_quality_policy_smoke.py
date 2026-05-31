@@ -28,7 +28,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 RECORDED_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
-CURRENT_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
+CURRENT_REVISION = "1000e653df60a7814fa996d146e3823d0a364280"
 EXPECTED_RUST_OWNED = [
     "cuda-oxide typed cuBLAS math-mode selection",
     "Q8/F16 cache eligibility, preload, and budget policy",

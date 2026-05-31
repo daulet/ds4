@@ -12881,3 +12881,37 @@
     Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
     Total routed-MoE remains `1.39x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 PRMT Sign-Mask Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA gate/up IQ2 sign-mask overhead through an
+  additive fixed-selector PRMT device intrinsic.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-iq2-prmt-sign-mask-performance-repair.json`
+- Evidence:
+  - The DS4 dependency advances from cuda-oxide `485bdd8` to the additive
+    PRMT revision `1000e65`; historical fixtures retain their original
+    recorded revisions while their current-pin assertions accept this
+    successor.
+  - Cached gate/up replaces scalar IQ2 mask expansion with
+    `integer::prmt_b32_ba98(sign_bits)` and preserves packed negation, DP4A
+    topology, cached down scheduling, row-span policy, and default routing.
+    Exhaustive validation reports zero mismatches over `65536` live
+    grid/sign/half cases.
+  - Gate/up PTX gains `16` PRMT sites and reduces `b32` registers from
+    `1030` to `982`. The candidate lowers gate/up from `752.988 ms` to
+    `721.447 ms` and total from `1287.763 ms` to `1256.699 ms`, while down
+    remains within measurement noise.
+  - Four-entry scalar scheduling probes are rejected: gate/up halves regress
+    total to `1342.844 ms`, and down quarters regress total to `1412.130 ms`.
+    The repaired DSO SHA-256 is
+    `65faf1bff05339dd754e230e211ef97de1e2765cc788edaf1c53b94853e2ed59`
+    and PTX SHA-256 is
+    `496c8f743ac6fc9202642cfdc934263f7f35ba4ec364fbf8089fc95ba7abc48b`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `277`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `1.36x` current-C, so default routing and
+    promotion blockers remain in force.

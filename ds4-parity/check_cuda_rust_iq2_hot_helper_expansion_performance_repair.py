@@ -92,7 +92,10 @@ def validate_implementation(report: Report, fixture: dict[str, Any], texts: dict
     report.check("macro_rules! abi_moe_iq2_signed_word" in kernels, "IQ2 expansion macro missing")
     report.check("fn abi_moe_iq2_signed_word(" not in kernels, "hot IQ2 device helper retained")
     report.check(kernels.count("abi_moe_iq2_signed_word!(") in (4, 16), "IQ2 hot expansion count drift")
-    report.check("0_u32.wrapping_sub" in kernels, "branchless byte masks missing")
+    report.check(
+        "0_u32.wrapping_sub" in kernels or "integer::prmt_b32_ba98(sign_bits)" in kernels,
+        "branchless byte-mask construction or PRMT successor missing",
+    )
     report.check(".wrapping_add(mask & 0x0101_0101)" in kernels, "packed transform missing")
     report.check(implementation.get("hot_invocation_count") == 4, "fixture invocation count drift")
     report.check(

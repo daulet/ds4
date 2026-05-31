@@ -4474,6 +4474,20 @@ routed-MoE from `1401.795 ms` to `1287.615 ms`; a full sixteen-entry probe is
 rejected after regressing down to `912.140 ms`. Official-vector correctness is
 preserved, and the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA IQ2 PRMT sign-mask performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_iq2_prmt_sign_mask_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up kernel now uses the additive cuda-oxide
+`integer::prmt_b32_ba98` intrinsic for IQ2 sign-mask expansion while
+retaining packed negation and DP4A topology. On B300, gate/up decreases from
+`752.988 ms` to `721.447 ms` and total routed-MoE decreases from
+`1287.763 ms` to `1256.699 ms`; official-vector correctness is preserved and
+the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

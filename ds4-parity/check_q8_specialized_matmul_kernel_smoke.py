@@ -26,7 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 RECORDED_DEPENDENCY_REVISION = "d8ccb4174e0a92b1b80424c1c7258b29a07e4bb7"
-CURRENT_DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
+CURRENT_DEPENDENCY_REVISION = "1000e653df60a7814fa996d146e3823d0a364280"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide matmul_q8_0_pair_preq_warp8_kernel launch proof",
     "executable-local cuda-oxide matmul_q8_0_hc_expand_preq_warp8_kernel launch proof",

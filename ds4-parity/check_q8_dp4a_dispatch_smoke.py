@@ -26,6 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
+CURRENT_DEPENDENCY_REVISION = "1000e653df60a7814fa996d146e3823d0a364280"
 EXPECTED_OWNED = [
     "cuda-oxide signed DP4A device/lowering support",
     "executable-local accelerated packed-Q8 matmul launch proof",
@@ -90,8 +91,8 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
     report.check(fixture.get("status") == "b300-pass", "B300 status drift")
     oxide = require_dict(report, fixture.get("cuda_oxide"), "cuda_oxide")
     report.check(oxide.get("dependency_revision") == DEPENDENCY_REVISION, "revision drift")
-    report.check(f'rev = "{DEPENDENCY_REVISION}"' in texts["cargo"], "dependency pin missing")
-    report.check(f"#{DEPENDENCY_REVISION}" in texts["lock"], "lock pin missing")
+    report.check(f'rev = "{CURRENT_DEPENDENCY_REVISION}"' in texts["cargo"], "dependency pin missing")
+    report.check(f"#{CURRENT_DEPENDENCY_REVISION}" in texts["lock"], "lock pin missing")
     report.check('name = "ds4-cuda-q8-dp4a-dispatch-smoke"' in texts["cargo"], "binary missing")
     validate_oracle(report, fixture, texts)
     validate_ownership(report, fixture, texts)

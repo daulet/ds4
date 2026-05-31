@@ -2298,10 +2298,9 @@ mod kernels {
         ($grid:expr, $signs:expr, $lane:expr) => {{
             let lane = $lane as u32;
             let bits = ($signs >> lane) as u32;
-            let mask = (0_u32.wrapping_sub(bits & 1) & 0x0000_00ff)
-                | (0_u32.wrapping_sub((bits >> 1) & 1) & 0x0000_ff00)
-                | (0_u32.wrapping_sub((bits >> 2) & 1) & 0x00ff_0000)
-                | (0_u32.wrapping_sub((bits >> 3) & 1) & 0xff00_0000);
+            let sign_bits =
+                ((bits & 1) << 7) | ((bits & 2) << 14) | ((bits & 4) << 21) | ((bits & 8) << 28);
+            let mask = integer::prmt_b32_ba98(sign_bits);
             let values = ($grid >> (8 * lane)) as u32;
             ((values ^ mask).wrapping_add(mask & 0x0101_0101)) as i32
         }};
