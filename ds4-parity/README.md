@@ -4081,6 +4081,17 @@ atomic-output launch adapters over caller-validated scratch spans. They
 compile into the B300-validated static library without exporting or invoking
 a public Rust batch route.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA public batched routed-MoE ABI dispatch:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_batch_dispatch_smoke.py --negative-test
+```
+
+The Rust ABI now exports the public batch wrapper and schedules F32 fallback,
+sorted, tiled, atomic, and row-span routes through the B300-linked consumer.
+Graph-wide route promotion and C CUDA removal remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -39,6 +39,8 @@ static ABI_Q8_ACTIVATIONS: Mutex<Option<AbiQ8Activations>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_MOE_IQ2_TABLES: Mutex<Option<AbiMoeIq2Tables>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
+static ABI_ROUTED_MOE_BATCH_SCRATCH: Mutex<Option<AbiRoutedMoeBatchScratch>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
 static ABI_INDEXED_TOPK_SORT_SCRATCH: Mutex<Option<DeviceBuffer<i32>>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH: Mutex<Option<AbiAttentionOutputCublasScratch>> =
@@ -137,6 +139,22 @@ struct AbiQ8Activations {
 struct AbiMoeIq2Tables {
     grid: DeviceBuffer<u64>,
     signs: DeviceBuffer<u8>,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiRoutedMoeBatchScratch {
+    counts: DeviceBuffer<u32>,
+    offsets: DeviceBuffer<u32>,
+    cursors: DeviceBuffer<u32>,
+    sorted_pairs: DeviceBuffer<u32>,
+    tile_offsets: DeviceBuffer<u32>,
+    tile_total: DeviceBuffer<u32>,
+    tile_experts: DeviceBuffer<u32>,
+    tile_starts: DeviceBuffer<u32>,
+    tile16_offsets: DeviceBuffer<u32>,
+    tile16_total: DeviceBuffer<u32>,
+    tile16_experts: DeviceBuffer<u32>,
+    tile16_starts: DeviceBuffer<u32>,
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -460,6 +478,66 @@ fn with_abi_moe_iq2_tables<T>(
         });
     }
     operation(tables.as_ref()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_routed_moe_batch_scratch<T>(
+    backend: &CudaOxideSubstrate,
+    pair_count: usize,
+    tile_capacity: usize,
+    tile16_capacity: usize,
+    operation: impl FnOnce(&mut AbiRoutedMoeBatchScratch) -> Option<T>,
+) -> Option<T> {
+    if pair_count == 0 || tile_capacity == 0 || tile16_capacity == 0 {
+        return None;
+    }
+    let mut scratch = ABI_ROUTED_MOE_BATCH_SCRATCH.lock().ok()?;
+    if scratch.as_ref().is_none_or(|current| {
+        current.sorted_pairs.len() < pair_count
+            || current.tile_experts.len() < tile_capacity
+            || current.tile_starts.len() < tile_capacity
+            || current.tile16_experts.len() < tile16_capacity
+            || current.tile16_starts.len() < tile16_capacity
+    }) {
+        if scratch.is_some() {
+            backend.synchronize().ok()?;
+        }
+        *scratch = Some(AbiRoutedMoeBatchScratch {
+            counts: backend.zeroed::<u32>(256).ok()?,
+            offsets: backend.zeroed::<u32>(257).ok()?,
+            cursors: backend.zeroed::<u32>(256).ok()?,
+            sorted_pairs: backend.zeroed::<u32>(pair_count).ok()?,
+            tile_offsets: backend.zeroed::<u32>(257).ok()?,
+            tile_total: backend.zeroed::<u32>(1).ok()?,
+            tile_experts: backend.zeroed::<u32>(tile_capacity).ok()?,
+            tile_starts: backend.zeroed::<u32>(tile_capacity).ok()?,
+            tile16_offsets: backend.zeroed::<u32>(257).ok()?,
+            tile16_total: backend.zeroed::<u32>(1).ok()?,
+            tile16_experts: backend.zeroed::<u32>(tile16_capacity).ok()?,
+            tile16_starts: backend.zeroed::<u32>(tile16_capacity).ok()?,
+        });
+    }
+    operation(scratch.as_mut()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn clear_abi_routed_moe_counts(
+    backend: &CudaOxideSubstrate,
+    counts: &DeviceBuffer<u32>,
+) -> Option<()> {
+    backend.context().bind_to_thread().ok()?;
+    // SAFETY: `counts` is a 256-element device buffer in the active context
+    // and the clear is enqueued on the same stream as the consuming kernels.
+    unsafe {
+        cuda_core::sys::cuMemsetD32Async(
+            counts.cu_deviceptr(),
+            0,
+            counts.len(),
+            backend.stream().cu_stream(),
+        )
+    }
+    .result()
+    .ok()
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -2031,6 +2109,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut tables) = ABI_MOE_IQ2_TABLES.lock() {
                 *tables = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut scratch) = ABI_ROUTED_MOE_BATCH_SCRATCH.lock() {
+                *scratch = None;
             }
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut scratch) = ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH.lock() {
@@ -7206,6 +7288,994 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_one_tensor(
             )
         })
         .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
+    out: *mut Ds4GpuTensor,
+    gate: *mut Ds4GpuTensor,
+    up: *mut Ds4GpuTensor,
+    mid: *mut Ds4GpuTensor,
+    down: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    gate_offset: u64,
+    up_offset: u64,
+    down_offset: u64,
+    gate_type: u32,
+    down_type: u32,
+    gate_expert_bytes: u64,
+    gate_row_bytes: u64,
+    down_expert_bytes: u64,
+    down_row_bytes: u64,
+    expert_in_dim: u32,
+    expert_mid_dim: u32,
+    out_dim: u32,
+    selected: *const Ds4GpuTensor,
+    weights: *const Ds4GpuTensor,
+    n_expert: u32,
+    clamp: f32,
+    x: *const Ds4GpuTensor,
+    n_tokens: u32,
+    mid_is_f16: *mut bool,
+) -> c_int {
+    if n_tokens == 1 {
+        let ok = unsafe {
+            ds4_gpu_routed_moe_one_tensor(
+                out,
+                gate,
+                up,
+                mid,
+                down,
+                model_map,
+                model_size,
+                gate_offset,
+                up_offset,
+                down_offset,
+                gate_type,
+                down_type,
+                gate_expert_bytes,
+                gate_row_bytes,
+                down_expert_bytes,
+                down_row_bytes,
+                expert_in_dim,
+                expert_mid_dim,
+                out_dim,
+                selected,
+                weights,
+                n_expert,
+                clamp,
+                x,
+            )
+        };
+        if ok != 0 && !mid_is_f16.is_null() {
+            unsafe { *mid_is_f16 = false };
+        }
+        return ok;
+    }
+    status(|| {
+        const MOE_EXPERT_COUNT: u64 = 256;
+        const QK_K: u32 = 256;
+        const Q8_K_BYTES: u64 = 292;
+
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(gate) = (unsafe { tensor_ref(gate.cast_const()) }) else {
+            return false;
+        };
+        let Some(up) = (unsafe { tensor_ref(up.cast_const()) }) else {
+            return false;
+        };
+        let Some(mid) = (unsafe { tensor_ref(mid.cast_const()) }) else {
+            return false;
+        };
+        let Some(down) = (unsafe { tensor_ref(down.cast_const()) }) else {
+            return false;
+        };
+        let Some(selected) = (unsafe { tensor_ref(selected) }) else {
+            return false;
+        };
+        let Some(weights) = (unsafe { tensor_ref(weights) }) else {
+            return false;
+        };
+        let Some(x) = (unsafe { tensor_ref(x) }) else {
+            return false;
+        };
+        let Some(pair_count) = n_tokens.checked_mul(n_expert) else {
+            return false;
+        };
+        let Some(x_bytes) = u64::from(n_tokens)
+            .checked_mul(u64::from(expert_in_dim))
+            .and_then(|elements| elements.checked_mul(size_of::<f32>() as u64))
+        else {
+            return false;
+        };
+        let Some(route_bytes) = u64::from(pair_count).checked_mul(size_of::<i32>() as u64) else {
+            return false;
+        };
+        let Some(weight_bytes) = u64::from(pair_count).checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(mid_elements) = u64::from(pair_count).checked_mul(u64::from(expert_mid_dim))
+        else {
+            return false;
+        };
+        let Some(mid_bytes) = mid_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(down_elements) = u64::from(pair_count).checked_mul(u64::from(out_dim)) else {
+            return false;
+        };
+        let Some(down_bytes) = down_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(out_elements) = u64::from(n_tokens).checked_mul(u64::from(out_dim)) else {
+            return false;
+        };
+        let Some(out_bytes) = out_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(gate_model_bytes) = MOE_EXPERT_COUNT.checked_mul(gate_expert_bytes) else {
+            return false;
+        };
+        let Some(down_model_bytes) = MOE_EXPERT_COUNT.checked_mul(down_expert_bytes) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_tokens == 0
+            || n_expert == 0
+            || expert_in_dim % QK_K != 0
+            || expert_mid_dim % QK_K != 0
+            || gate_type != 16
+            || down_type != 10
+            || gate_offset > model_size
+            || up_offset > model_size
+            || down_offset > model_size
+            || gate_model_bytes > model_size - gate_offset
+            || gate_model_bytes > model_size - up_offset
+            || down_model_bytes > model_size - down_offset
+            || x.bytes < x_bytes
+            || selected.bytes < route_bytes
+            || weights.bytes < weight_bytes
+            || gate.bytes < mid_bytes
+            || up.bytes < mid_bytes
+            || mid.bytes < mid_bytes
+            || down.bytes < down_bytes
+            || out.bytes < out_bytes
+        {
+            return false;
+        }
+        let xq_blocks = expert_in_dim / QK_K;
+        let midq_blocks = expert_mid_dim / QK_K;
+        let Some(xq_bytes) = u64::from(n_tokens)
+            .checked_mul(u64::from(xq_blocks))
+            .and_then(|blocks| blocks.checked_mul(Q8_K_BYTES))
+        else {
+            return false;
+        };
+        let Some(midq_bytes) = u64::from(pair_count)
+            .checked_mul(u64::from(midq_blocks))
+            .and_then(|blocks| blocks.checked_mul(Q8_K_BYTES))
+        else {
+            return false;
+        };
+        let use_quantized = down.bytes >= xq_bytes && gate.bytes >= midq_bytes;
+
+        let launched = with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                gate_offset,
+                gate_model_bytes,
+                |gate_weights_ptr| {
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        up_offset,
+                        gate_model_bytes,
+                        |up_weights_ptr| {
+                            with_cached_abi_model_range(
+                                backend,
+                                model_map,
+                                model_size,
+                                down_offset,
+                                down_model_bytes,
+                                |down_weights_ptr| {
+                                    with_abi_moe_iq2_tables(backend, |tables| {
+                                        with_abi_kernels(backend, |kernels| {
+                                            if !use_quantized {
+                                                if !unsafe {
+                                                    kernels.moe_gate_up_mid_f32_tensor(
+                                                        backend.stream(),
+                                                        n_tokens,
+                                                        gate.device_ptr(),
+                                                        up.device_ptr(),
+                                                        mid.device_ptr(),
+                                                        gate_weights_ptr,
+                                                        up_weights_ptr,
+                                                        x.device_ptr(),
+                                                        selected.device_ptr(),
+                                                        weights.device_ptr(),
+                                                        tables.grid.cu_deviceptr(),
+                                                        tables.signs.cu_deviceptr(),
+                                                        gate_model_bytes,
+                                                        expert_in_dim,
+                                                        expert_mid_dim,
+                                                        n_expert,
+                                                        gate_expert_bytes,
+                                                        gate_row_bytes,
+                                                        clamp,
+                                                    )
+                                                } {
+                                                    return Some(false);
+                                                }
+                                                if !unsafe {
+                                                    kernels.moe_down_f32_tensor(
+                                                        backend.stream(),
+                                                        n_tokens,
+                                                        down.device_ptr(),
+                                                        down_weights_ptr,
+                                                        mid.device_ptr(),
+                                                        selected.device_ptr(),
+                                                        down_model_bytes,
+                                                        expert_mid_dim,
+                                                        out_dim,
+                                                        n_expert,
+                                                        down_expert_bytes,
+                                                        down_row_bytes,
+                                                    )
+                                                } {
+                                                    return Some(false);
+                                                }
+                                                return Some(unsafe {
+                                                    kernels.moe_sum_tensor(
+                                                        backend.stream(),
+                                                        n_tokens,
+                                                        out.device_ptr(),
+                                                        down.device_ptr(),
+                                                        out_dim,
+                                                        n_expert,
+                                                    )
+                                                });
+                                            }
+                                            if !unsafe {
+                                                kernels.moe_q8_k_quantize_tensor(
+                                                    backend.stream(),
+                                                    x.device_ptr(),
+                                                    down.device_ptr(),
+                                                    xq_bytes,
+                                                    expert_in_dim,
+                                                    n_tokens,
+                                                )
+                                            } {
+                                                return Some(false);
+                                            }
+
+                                            let use_expert_tiles = std::env::var_os(
+                                                "DS4_CUDA_MOE_NO_EXPERT_TILES",
+                                            )
+                                            .is_none();
+                                            let expert_tile_m = if std::env::var_os(
+                                                "DS4_CUDA_MOE_TILE4",
+                                            )
+                                            .is_some()
+                                            {
+                                                4
+                                            } else {
+                                                8
+                                            };
+                                            let use_p2_sorted =
+                                                std::env::var_os("DS4_CUDA_MOE_NO_P2").is_none();
+                                            let use_atomic_down = use_expert_tiles
+                                                && (std::env::var_os(
+                                                    "DS4_CUDA_MOE_ATOMIC_DOWN",
+                                                )
+                                                .is_some()
+                                                    || (n_tokens >= 128
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_ATOMIC_DOWN",
+                                                        )
+                                                        .is_none()));
+                                            let use_gate_rowspan = use_expert_tiles
+                                                && expert_tile_m == 8
+                                                && (std::env::var_os(
+                                                    "DS4_CUDA_MOE_GATE_ROW2048",
+                                                )
+                                                .is_some()
+                                                    || std::env::var_os(
+                                                        "DS4_CUDA_MOE_GATE_ROW256",
+                                                    )
+                                                    .is_some()
+                                                    || std::env::var_os(
+                                                        "DS4_CUDA_MOE_GATE_ROW128",
+                                                    )
+                                                    .is_some()
+                                                    || (n_tokens >= 128
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_GATE_ROW2048",
+                                                        )
+                                                        .is_none()
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_GATE_ROW256",
+                                                        )
+                                                        .is_none()
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_GATE_ROW128",
+                                                        )
+                                                        .is_none()));
+                                            let use_down_tile16 = use_atomic_down
+                                                && expert_tile_m == 8
+                                                && n_tokens >= 128
+                                                && std::env::var_os(
+                                                    "DS4_CUDA_MOE_NO_DOWN_TILE16",
+                                                )
+                                                .is_none();
+                                            let gate_row_span = if std::env::var_os(
+                                                "DS4_CUDA_MOE_GATE_ROW512",
+                                            )
+                                            .is_some()
+                                            {
+                                                512
+                                            } else if std::env::var_os(
+                                                "DS4_CUDA_MOE_GATE_ROW2048",
+                                            )
+                                            .is_some()
+                                            {
+                                                2048
+                                            } else {
+                                                1024
+                                            };
+                                            let down_row_span = if std::env::var_os(
+                                                "DS4_CUDA_MOE_DOWN_ROW512",
+                                            )
+                                            .is_some()
+                                            {
+                                                512
+                                            } else if std::env::var_os(
+                                                "DS4_CUDA_MOE_DOWN_ROW1024",
+                                            )
+                                            .is_some()
+                                            {
+                                                1024
+                                            } else {
+                                                2048
+                                            };
+                                            let use_down_rowspan = use_atomic_down
+                                                && expert_tile_m == 8
+                                                && (std::env::var_os(
+                                                    "DS4_CUDA_MOE_DOWN_ROW2048",
+                                                )
+                                                .is_some()
+                                                    || std::env::var_os(
+                                                        "DS4_CUDA_MOE_DOWN_ROW256",
+                                                    )
+                                                    .is_some()
+                                                    || std::env::var_os(
+                                                        "DS4_CUDA_MOE_DOWN_ROW128",
+                                                    )
+                                                    .is_some()
+                                                    || std::env::var_os(
+                                                        "DS4_CUDA_MOE_DOWN_ROW64",
+                                                    )
+                                                    .is_some()
+                                                    || (use_down_tile16
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_DOWN_ROW2048",
+                                                        )
+                                                        .is_none()
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_DOWN_ROW256",
+                                                        )
+                                                        .is_none()
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_DOWN_ROW128",
+                                                        )
+                                                        .is_none()
+                                                        && std::env::var_os(
+                                                            "DS4_CUDA_MOE_NO_DOWN_ROW64",
+                                                        )
+                                                        .is_none()));
+                                            let write_gate_up = std::env::var_os(
+                                                "DS4_CUDA_MOE_WRITE_GATE_UP",
+                                            )
+                                            .is_some();
+                                            let Some(tile_capacity) = pair_count
+                                                .div_ceil(expert_tile_m)
+                                                .checked_add(256)
+                                            else {
+                                                return Some(false);
+                                            };
+                                            let tile16_capacity = if use_down_tile16 {
+                                                let Some(capacity) =
+                                                    pair_count.div_ceil(16).checked_add(256)
+                                                else {
+                                                    return Some(false);
+                                                };
+                                                capacity
+                                            } else {
+                                                1
+                                            };
+                                            let Some(pair_count_len) =
+                                                usize::try_from(pair_count).ok()
+                                            else {
+                                                return Some(false);
+                                            };
+                                            let Some(tile_capacity_len) =
+                                                usize::try_from(tile_capacity).ok()
+                                            else {
+                                                return Some(false);
+                                            };
+                                            let Some(tile16_capacity_len) =
+                                                usize::try_from(tile16_capacity).ok()
+                                            else {
+                                                return Some(false);
+                                            };
+                                            with_abi_routed_moe_batch_scratch(
+                                                backend,
+                                                pair_count_len,
+                                                tile_capacity_len,
+                                                tile16_capacity_len,
+                                                |scratch| {
+                                                    clear_abi_routed_moe_counts(
+                                                        backend,
+                                                        &scratch.counts,
+                                                    )?;
+                                                    if !unsafe {
+                                                        kernels.moe_count_sorted_pairs_tensor(
+                                                            backend.stream(),
+                                                            pair_count,
+                                                            selected.device_ptr(),
+                                                            scratch.counts.cu_deviceptr(),
+                                                        )
+                                                    } || !unsafe {
+                                                        kernels.moe_prefix_sorted_pairs_tensor(
+                                                            backend.stream(),
+                                                            scratch.counts.cu_deviceptr(),
+                                                            scratch.offsets.cu_deviceptr(),
+                                                            scratch.cursors.cu_deviceptr(),
+                                                        )
+                                                    } || !unsafe {
+                                                        kernels.moe_scatter_sorted_pairs_tensor(
+                                                            backend.stream(),
+                                                            pair_count,
+                                                            selected.device_ptr(),
+                                                            scratch.cursors.cu_deviceptr(),
+                                                            scratch.sorted_pairs.cu_deviceptr(),
+                                                        )
+                                                    } {
+                                                        return Some(false);
+                                                    }
+                                                    if use_expert_tiles
+                                                        && (!unsafe {
+                                                            kernels
+                                                                .moe_build_expert_tile_offsets_tensor(
+                                                                    backend.stream(),
+                                                                    expert_tile_m,
+                                                                    scratch.counts.cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_offsets
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_total
+                                                                        .cu_deviceptr(),
+                                                                )
+                                                        } || !unsafe {
+                                                            kernels.moe_build_expert_tiles_tensor(
+                                                                backend.stream(),
+                                                                expert_tile_m,
+                                                                tile_capacity,
+                                                                scratch.counts.cu_deviceptr(),
+                                                                scratch.tile_offsets.cu_deviceptr(),
+                                                                scratch.tile_experts.cu_deviceptr(),
+                                                                scratch.tile_starts.cu_deviceptr(),
+                                                            )
+                                                        })
+                                                    {
+                                                        return Some(false);
+                                                    }
+                                                    if use_expert_tiles
+                                                        && use_down_tile16
+                                                        && (!unsafe {
+                                                            kernels
+                                                                .moe_build_expert_tile_offsets_tensor(
+                                                                    backend.stream(),
+                                                                    16,
+                                                                    scratch.counts.cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile16_offsets
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile16_total
+                                                                        .cu_deviceptr(),
+                                                                )
+                                                        } || !unsafe {
+                                                            kernels.moe_build_expert_tiles_tensor(
+                                                                backend.stream(),
+                                                                16,
+                                                                tile16_capacity,
+                                                                scratch.counts.cu_deviceptr(),
+                                                                scratch
+                                                                    .tile16_offsets
+                                                                    .cu_deviceptr(),
+                                                                scratch
+                                                                    .tile16_experts
+                                                                    .cu_deviceptr(),
+                                                                scratch
+                                                                    .tile16_starts
+                                                                    .cu_deviceptr(),
+                                                            )
+                                                        })
+                                                    {
+                                                        return Some(false);
+                                                    }
+                                                    let gate_ok = if use_expert_tiles
+                                                        && use_gate_rowspan
+                                                    {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_gate_up_mid_expert_tile8_rowspan_tensor(
+                                                                    backend.stream(),
+                                                                    gate.device_ptr(),
+                                                                    up.device_ptr(),
+                                                                    mid.device_ptr(),
+                                                                    gate_weights_ptr,
+                                                                    up_weights_ptr,
+                                                                    down.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    scratch.offsets.cu_deviceptr(),
+                                                                    scratch.counts.cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_total
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_experts
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_starts
+                                                                        .cu_deviceptr(),
+                                                                    weights.device_ptr(),
+                                                                    tables.grid.cu_deviceptr(),
+                                                                    tables.signs.cu_deviceptr(),
+                                                                    gate_model_bytes,
+                                                                    xq_bytes,
+                                                                    xq_blocks,
+                                                                    expert_mid_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    tile_capacity,
+                                                                    gate_row_span,
+                                                                    gate_expert_bytes,
+                                                                    gate_row_bytes,
+                                                                    write_gate_up,
+                                                                    clamp,
+                                                                )
+                                                        }
+                                                    } else if use_expert_tiles
+                                                        && expert_tile_m == 8
+                                                    {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_gate_up_mid_expert_tile8_row32_tensor(
+                                                                    backend.stream(),
+                                                                    gate.device_ptr(),
+                                                                    up.device_ptr(),
+                                                                    mid.device_ptr(),
+                                                                    gate_weights_ptr,
+                                                                    up_weights_ptr,
+                                                                    down.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    scratch.offsets.cu_deviceptr(),
+                                                                    scratch.counts.cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_total
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_experts
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_starts
+                                                                        .cu_deviceptr(),
+                                                                    weights.device_ptr(),
+                                                                    tables.grid.cu_deviceptr(),
+                                                                    tables.signs.cu_deviceptr(),
+                                                                    gate_model_bytes,
+                                                                    xq_bytes,
+                                                                    xq_blocks,
+                                                                    expert_mid_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    tile_capacity,
+                                                                    gate_expert_bytes,
+                                                                    gate_row_bytes,
+                                                                    write_gate_up,
+                                                                    clamp,
+                                                                )
+                                                        }
+                                                    } else if use_expert_tiles {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_gate_up_mid_expert_tile4_row32_tensor(
+                                                                    backend.stream(),
+                                                                    gate.device_ptr(),
+                                                                    up.device_ptr(),
+                                                                    mid.device_ptr(),
+                                                                    gate_weights_ptr,
+                                                                    up_weights_ptr,
+                                                                    down.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    scratch.offsets.cu_deviceptr(),
+                                                                    scratch.counts.cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_total
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_experts
+                                                                        .cu_deviceptr(),
+                                                                    scratch
+                                                                        .tile_starts
+                                                                        .cu_deviceptr(),
+                                                                    weights.device_ptr(),
+                                                                    tables.grid.cu_deviceptr(),
+                                                                    tables.signs.cu_deviceptr(),
+                                                                    gate_model_bytes,
+                                                                    xq_bytes,
+                                                                    xq_blocks,
+                                                                    expert_mid_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    tile_capacity,
+                                                                    gate_expert_bytes,
+                                                                    gate_row_bytes,
+                                                                    write_gate_up,
+                                                                    clamp,
+                                                                )
+                                                        }
+                                                    } else if use_p2_sorted {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_gate_up_mid_sorted_p2_qwarp32_tensor(
+                                                                    backend.stream(),
+                                                                    gate.device_ptr(),
+                                                                    up.device_ptr(),
+                                                                    mid.device_ptr(),
+                                                                    gate_weights_ptr,
+                                                                    up_weights_ptr,
+                                                                    down.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    selected.device_ptr(),
+                                                                    weights.device_ptr(),
+                                                                    tables.grid.cu_deviceptr(),
+                                                                    tables.signs.cu_deviceptr(),
+                                                                    gate_model_bytes,
+                                                                    xq_bytes,
+                                                                    xq_blocks,
+                                                                    expert_mid_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    gate_expert_bytes,
+                                                                    gate_row_bytes,
+                                                                    clamp,
+                                                                )
+                                                        }
+                                                    } else {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_gate_up_mid_sorted_qwarp32_tensor(
+                                                                    backend.stream(),
+                                                                    gate.device_ptr(),
+                                                                    up.device_ptr(),
+                                                                    mid.device_ptr(),
+                                                                    gate_weights_ptr,
+                                                                    up_weights_ptr,
+                                                                    down.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    selected.device_ptr(),
+                                                                    weights.device_ptr(),
+                                                                    tables.grid.cu_deviceptr(),
+                                                                    tables.signs.cu_deviceptr(),
+                                                                    gate_model_bytes,
+                                                                    xq_bytes,
+                                                                    xq_blocks,
+                                                                    expert_mid_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    gate_expert_bytes,
+                                                                    gate_row_bytes,
+                                                                    clamp,
+                                                                )
+                                                        }
+                                                    };
+                                                    if !gate_ok
+                                                        || !unsafe {
+                                                            kernels.moe_q8_k_quantize_tensor(
+                                                                backend.stream(),
+                                                                mid.device_ptr(),
+                                                                gate.device_ptr(),
+                                                                midq_bytes,
+                                                                expert_mid_dim,
+                                                                pair_count,
+                                                            )
+                                                        }
+                                                    {
+                                                        return Some(false);
+                                                    }
+                                                    if use_atomic_down
+                                                        && !unsafe {
+                                                            kernels.moe_atomic_output_zero_tensor(
+                                                                backend.stream(),
+                                                                out.device_ptr(),
+                                                                out_elements,
+                                                            )
+                                                        }
+                                                    {
+                                                        return Some(false);
+                                                    }
+                                                    let down_ptr = if use_atomic_down {
+                                                        out.device_ptr()
+                                                    } else {
+                                                        down.device_ptr()
+                                                    };
+                                                    let down_ok = if use_expert_tiles {
+                                                        let (
+                                                            down_tile_total,
+                                                            down_tile_experts,
+                                                            down_tile_starts,
+                                                            down_tile_capacity,
+                                                        ) = if use_down_tile16 {
+                                                            (
+                                                                scratch
+                                                                    .tile16_total
+                                                                    .cu_deviceptr(),
+                                                                scratch
+                                                                    .tile16_experts
+                                                                    .cu_deviceptr(),
+                                                                scratch
+                                                                    .tile16_starts
+                                                                    .cu_deviceptr(),
+                                                                tile16_capacity,
+                                                            )
+                                                        } else {
+                                                            (
+                                                                scratch
+                                                                    .tile_total
+                                                                    .cu_deviceptr(),
+                                                                scratch
+                                                                    .tile_experts
+                                                                    .cu_deviceptr(),
+                                                                scratch
+                                                                    .tile_starts
+                                                                    .cu_deviceptr(),
+                                                                tile_capacity,
+                                                            )
+                                                        };
+                                                        if use_down_rowspan {
+                                                            unsafe {
+                                                                kernels
+                                                                    .moe_down_expert_tile16_rowspan_tensor(
+                                                                        backend.stream(),
+                                                                        down_ptr,
+                                                                        down_weights_ptr,
+                                                                        gate.device_ptr(),
+                                                                        scratch
+                                                                            .sorted_pairs
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .offsets
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .counts
+                                                                            .cu_deviceptr(),
+                                                                        down_tile_total,
+                                                                        down_tile_experts,
+                                                                        down_tile_starts,
+                                                                        down_model_bytes,
+                                                                        midq_bytes,
+                                                                        midq_blocks,
+                                                                        out_dim,
+                                                                        n_expert,
+                                                                        n_tokens,
+                                                                        pair_count,
+                                                                        down_tile_capacity,
+                                                                        down_row_span,
+                                                                        down_expert_bytes,
+                                                                        down_row_bytes,
+                                                                        use_atomic_down,
+                                                                    )
+                                                            }
+                                                        } else if use_down_tile16 {
+                                                            unsafe {
+                                                                kernels
+                                                                    .moe_down_expert_tile16_row32_tensor(
+                                                                        backend.stream(),
+                                                                        down_ptr,
+                                                                        down_weights_ptr,
+                                                                        gate.device_ptr(),
+                                                                        scratch
+                                                                            .sorted_pairs
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .offsets
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .counts
+                                                                            .cu_deviceptr(),
+                                                                        down_tile_total,
+                                                                        down_tile_experts,
+                                                                        down_tile_starts,
+                                                                        down_model_bytes,
+                                                                        midq_bytes,
+                                                                        midq_blocks,
+                                                                        out_dim,
+                                                                        n_expert,
+                                                                        n_tokens,
+                                                                        pair_count,
+                                                                        down_tile_capacity,
+                                                                        down_expert_bytes,
+                                                                        down_row_bytes,
+                                                                        use_atomic_down,
+                                                                    )
+                                                            }
+                                                        } else if expert_tile_m == 8 {
+                                                            unsafe {
+                                                                kernels
+                                                                    .moe_down_expert_tile8_row32_tensor(
+                                                                        backend.stream(),
+                                                                        down_ptr,
+                                                                        down_weights_ptr,
+                                                                        gate.device_ptr(),
+                                                                        scratch
+                                                                            .sorted_pairs
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .offsets
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .counts
+                                                                            .cu_deviceptr(),
+                                                                        down_tile_total,
+                                                                        down_tile_experts,
+                                                                        down_tile_starts,
+                                                                        down_model_bytes,
+                                                                        midq_bytes,
+                                                                        midq_blocks,
+                                                                        out_dim,
+                                                                        n_expert,
+                                                                        n_tokens,
+                                                                        pair_count,
+                                                                        down_tile_capacity,
+                                                                        down_expert_bytes,
+                                                                        down_row_bytes,
+                                                                        use_atomic_down,
+                                                                    )
+                                                            }
+                                                        } else {
+                                                            unsafe {
+                                                                kernels
+                                                                    .moe_down_expert_tile4_row32_tensor(
+                                                                        backend.stream(),
+                                                                        down_ptr,
+                                                                        down_weights_ptr,
+                                                                        gate.device_ptr(),
+                                                                        scratch
+                                                                            .sorted_pairs
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .offsets
+                                                                            .cu_deviceptr(),
+                                                                        scratch
+                                                                            .counts
+                                                                            .cu_deviceptr(),
+                                                                        down_tile_total,
+                                                                        down_tile_experts,
+                                                                        down_tile_starts,
+                                                                        down_model_bytes,
+                                                                        midq_bytes,
+                                                                        midq_blocks,
+                                                                        out_dim,
+                                                                        n_expert,
+                                                                        n_tokens,
+                                                                        pair_count,
+                                                                        down_tile_capacity,
+                                                                        down_expert_bytes,
+                                                                        down_row_bytes,
+                                                                        use_atomic_down,
+                                                                    )
+                                                            }
+                                                        }
+                                                    } else if use_p2_sorted {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_down_sorted_p2_qwarp32_tensor(
+                                                                    backend.stream(),
+                                                                    down.device_ptr(),
+                                                                    down_weights_ptr,
+                                                                    gate.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    selected.device_ptr(),
+                                                                    down_model_bytes,
+                                                                    midq_bytes,
+                                                                    midq_blocks,
+                                                                    out_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    down_expert_bytes,
+                                                                    down_row_bytes,
+                                                                )
+                                                        }
+                                                    } else {
+                                                        unsafe {
+                                                            kernels
+                                                                .moe_down_sorted_qwarp32_tensor(
+                                                                    backend.stream(),
+                                                                    down.device_ptr(),
+                                                                    down_weights_ptr,
+                                                                    gate.device_ptr(),
+                                                                    scratch
+                                                                        .sorted_pairs
+                                                                        .cu_deviceptr(),
+                                                                    selected.device_ptr(),
+                                                                    down_model_bytes,
+                                                                    midq_bytes,
+                                                                    midq_blocks,
+                                                                    out_dim,
+                                                                    n_expert,
+                                                                    pair_count,
+                                                                    down_expert_bytes,
+                                                                    down_row_bytes,
+                                                                )
+                                                        }
+                                                    };
+                                                    if !down_ok {
+                                                        return Some(false);
+                                                    }
+                                                    if use_atomic_down {
+                                                        Some(true)
+                                                    } else {
+                                                        Some(unsafe {
+                                                            kernels.moe_sum_tensor(
+                                                                backend.stream(),
+                                                                n_tokens,
+                                                                out.device_ptr(),
+                                                                down.device_ptr(),
+                                                                out_dim,
+                                                                n_expert,
+                                                            )
+                                                        })
+                                                    }
+                                                },
+                                            )
+                                        })
+                                    })
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false);
+        if launched && !mid_is_f16.is_null() {
+            unsafe { *mid_is_f16 = false };
+        }
+        launched
     })
 }
 

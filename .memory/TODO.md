@@ -11971,8 +11971,43 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because public batch orchestration is independently executable and
+  comparable before graph-wide route promotion.
+- Goal: expose and validate the Rust public batch ABI across fallback,
+  sorted, and tiled routes before defining route-promotion policy.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Batched Routed MoE ABI Dispatch
+
+- Status: done
+- Goal: export `ds4_gpu_routed_moe_batch_tensor` from the Rust CUDA ABI and
+  execute the current-C F32 fallback, sorted, tiled, and atomic-down
+  dispatch surface through a linked B300 consumer.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-batch-dispatch-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_batch_dispatch_smoke.py --negative-test`.
+- Evidence:
+  - The Rust ABI exports the public batch wrapper, delegates one-token calls
+    to the proved public wrapper, and retains mutex-guarded sorted/tile
+    device scratch with active-stream count clearing.
+  - The B300 linked batch consumer exercises F32 fallback, sorted P2,
+    sorted no-P2, tiled row32, tile4 atomic, and default 128-token tile16
+    row-span atomic routes and confirms successful F32 mid reporting.
+  - The rebuilt staticlib exposes 75 Rust ABI symbols and embeds 91 kernels;
+    the prior single-token linked regression remains passing.
+  - Local tests pass with 165 tests; B300 feature tests pass with 172 tests;
+    all 79 CUDA ABI comparators pass; and the unified report passes with 252
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Graph route promotion, remaining compute ownership, whole-archive
+    policy, and C CUDA removal remain pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: compose and validate the public batched routed-MoE wrapper across
-  fallback, sorted, and tiled routes, then define route-promotion policy and
-  connect remaining graph compute and whole-archive retention without
-  claiming C CUDA removal before those gates pass.
+- Goal: define route-promotion policy and connect remaining graph compute and
+  whole-archive retention without claiming C CUDA removal before those gates
+  pass.
