@@ -12288,6 +12288,40 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Long-Prefill Performance And C CUDA Removal Policy
 
-- Status: active
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  after B300 traces isolated serialized static prefill, indexed prefill, and
+  generic indexed decode attention kernels.
 - Goal: repair the long-prefill runtime boundary exposed by the full
   official-vector gate, then reconsider route promotion or C CUDA removal.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Long-Route Attention Parallel Repair
+
+- Status: done
+- Goal: port current-C parallel attention execution for the selected long
+  prefill and indexed decode kernels without changing the opt-in route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-long-route-attention-parallel-repair.json`
+- Comparator:
+  `ds4-parity/check_cuda_rust_long_route_attention_parallel_repair.py --negative-test`.
+- Evidence:
+  - Before repair, a bounded one-step `long_code_audit` probe timed out
+    after reaching only layer-0 `kv_path`; the selected Rust static prefill
+    attention kernel was lane-zero serialized.
+  - Porting static and indexed prefill exposes the final generic indexed
+    decode blocker. All three reached kernels now use the current-C parallel
+    structure; public prefill and indexed C-linked consumers pass on B300.
+  - The four-step `long_code_audit` probe passes all selected tokens in
+    `89` seconds. The full official-vector route passes all `13` exercised
+    selected tokens in `101` seconds, retaining the existing
+    `long_memory_archive` API/official graph mismatch skip.
+  - Local `ds4-cuda` tests pass with `169` tests and B300 feature tests pass
+    with `176` tests. Default routing and C CUDA removal remain pending. The
+    pre-implementation, follow-on, and final Claude review attempts each
+    returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Acceptance
+
+- Status: active
+- Goal: evaluate default CLI/server and long-context quality criteria before
+  promoting the opt-in Rust CUDA route or removing current-C CUDA.

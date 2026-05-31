@@ -1,0 +1,121 @@
+{
+  "schema": "ds4.cuda_rust_long_route_attention_parallel_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-full-official-vector-route",
+  "goal": "Replace serialized Rust CUDA attention kernels reached by long prefill and indexed decode, then rerun the retained official-vector route gate.",
+  "ownership": {
+    "changes_rust_cuda_kernel_parallelism": true,
+    "changes_public_abi_surface": false,
+    "default_current_c_route_preserved": true,
+    "short_official_vector_correctness_preserved": true,
+    "long_code_audit_correctness_closed": true,
+    "full_official_vector_gate_closed": true,
+    "runtime_route_promoted": false,
+    "c_cuda_removal_allowed": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "kernels_changed": [
+      "abi_attention_static_mixed_heads8_online_kernel",
+      "abi_attention_indexed_mixed_heads8_online_kernel",
+      "abi_attention_indexed_mixed_kernel"
+    ],
+    "current_c_algorithm_preserved": [
+      "warp-per-head online attention for static and indexed long prefill",
+      "ordered valid top-k compaction for generic indexed attention",
+      "parallel score, softmax reduction, and 512-wide output accumulation"
+    ],
+    "dispatch_policy_changed": false
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "shared_library": "/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+    "shared_library_sha256": "299ec502207cece357323516d7c1273d3658917878503c201a97557a4eb79fad",
+    "build_path": "cargo-oxide build --features cuda-oxide-kernels",
+    "pre_repair_long_profile": {
+      "shared_library_sha256": "c64dda39104483ee28a25babef8c140d8e59a83d1a2e889fd6e4c44eeeda9ddd",
+      "case": "long_code_audit",
+      "step_count": 1,
+      "timeout_seconds": 120,
+      "completed": false,
+      "last_completed_stage": "layer=0 pos=0 tokens=2048 kv_path=0.117 ms",
+      "stderr_sha256": "211e1728eb3ab8b0b711b19c336a65448091201c7076dbfcdbd9e7e77bbe69d1",
+      "gpu_memory_mib_after_termination": 0
+    },
+    "static_prefill_only_probe": {
+      "shared_library_sha256": "62ecd9bdf1319c41ba6531a4d94625b1407b9ef8b90a6cad3d212c9f73597a96",
+      "case": "long_code_audit",
+      "step_count": 1,
+      "terminated_after_seconds": 203,
+      "first_chunk_completed": true,
+      "sample_suffix_static_attention_ms": 23.617,
+      "last_completed_stage": "layer=2 pos=2048 tokens=1796 indexer_setup=25.331 ms",
+      "stderr_sha256": "e43653cd3043f5f310b0d2464fd5365cccd6b5acff4bef72a8298202de26a4d7",
+      "gpu_memory_mib_after_termination": 0
+    },
+    "prefill_without_generic_indexed_decode_probe": {
+      "shared_library_sha256": "6eb42263d8d20cf8f4920a9702dc4fbd618f2b565938b63e5779591586df7382",
+      "case": "long_code_audit",
+      "step_count": 4,
+      "terminated_after_seconds": 124,
+      "prefill_completed": true,
+      "sample_suffix_indexed_attention_ms": 71.819,
+      "decode_completed": false,
+      "stderr_sha256": "df01ddafb4c9407ad77be52e3f6f26764b9092db10cac408302cf9af66ff3f28",
+      "gpu_memory_mib_after_termination": 0
+    },
+    "long_code_audit_probe": {
+      "case": "long_code_audit",
+      "prompt_tokens": 3844,
+      "step_count": 4,
+      "selected_match_count": 4,
+      "all_selected_match": true,
+      "wall_elapsed_seconds": 89,
+      "report_sha256": "7938be0294898b91cb7a28353d1f10d2d300ad4d5672452792c0b5ff886289c7",
+      "stderr_sha256": "fd6a36ffc1016d36cc45e5e99992eb9eeab0f8df9ae4f7647e5f94ddb7a9f4a2",
+      "gpu_memory_mib_after_process": 0
+    },
+    "full_official_vector_probe": {
+      "completed": true,
+      "wall_elapsed_seconds": 101,
+      "case_count": 5,
+      "exercised_case_count": 4,
+      "selected_step_count": 13,
+      "selected_match_count": 13,
+      "all_selected_match": true,
+      "known_skipped_cases": [
+        {
+          "id": "long_memory_archive",
+          "reason": "API/official graph mismatch"
+        }
+      ],
+      "report_sha256": "3f735bf6bb712b619db0bdd845d408ff7885a643ded25f93b84eb7ccfc10952f",
+      "stderr_sha256": "d78641dc5de71ef068713323db5ee9a5a618e76b177e215f1f4d03b5e70eace9",
+      "gpu_memory_mib_after_process": 0
+    },
+    "affected_public_abi_smokes": {
+      "attention_prefill_passed": true,
+      "attention_indexed_batch_passed": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "b300_affected_public_abi_smokes_passed": true,
+    "unified_report_passed": 261,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "follow_on_indexed_prefill": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "follow_on_generic_indexed_decode": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Default-Route Promotion And C CUDA Removal Acceptance"
+}

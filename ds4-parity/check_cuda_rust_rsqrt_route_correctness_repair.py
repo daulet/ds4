@@ -14,7 +14,7 @@ from typing import Any, Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
-NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Long-Prefill Performance And C CUDA Removal Policy"
+NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Default-Route Promotion And C CUDA Removal Acceptance"
 FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE.lower()}/rust-cuda-rsqrt-route-correctness-repair.json"
 
 
@@ -100,7 +100,7 @@ def validate_implementation(report: Report, fixture: dict[str, Any], texts: dict
         "let scale = unsafe { __nv_rsqrtf(head_dim as f32) };",
     ]:
         report.check(marker in kernels, f"rsqrt implementation marker missing: {marker}")
-    report.check(kernels.count("__nv_rsqrtf(") == 10, "expected nine device rsqrt call sites plus declaration")
+    report.check(kernels.count("__nv_rsqrtf(") == 13, "expected twelve device rsqrt call sites plus declaration")
 
 
 def validate_execution(report: Report, fixture: dict[str, Any]) -> None:

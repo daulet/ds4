@@ -13051,15 +13051,60 @@ Stage split:
     attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
   - The full official-vector route remains compute-active at 100% B300 use
     after `935` seconds and is terminated with zero GPU allocation afterward.
-    Source inspection leaves serialized generic prefill attention as the next
-    performance boundary. Route promotion and C CUDA removal remain blocked.
+    Subsequent profiling identifies serialized selected long-route attention
+    kernels as the next performance boundary. Route promotion and C CUDA
+    removal remain blocked.
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Long-Prefill Performance And C CUDA Removal Policy
 
-- Status: active.
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because B300 profiling identified three independently serialized attention
+  kernels on the opt-in long route.
 - Goal: close the full official-vector runtime gate by repairing the measured
   long-prefill performance boundary, then reconsider route promotion or C
   CUDA removal.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Long-Route Attention Parallel Repair
+
+- Status: done.
+- Goal: port current-C parallel execution for the static prefill, indexed
+  prefill, and generic indexed decode attention kernels reached by the opt-in
+  Rust CUDA long route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-long-route-attention-parallel-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_long_route_attention_parallel_repair.py --negative-test`.
+- Evidence:
+  - Before repair, a one-step `long_code_audit` probe reached layer-0
+    `kv_path` and then failed to return from attention within a 120-second
+    bound. The Rust selected static prefill kernel performed all work on lane
+    zero.
+  - After the static prefill port, suffix attention returns in `23.617 ms`
+    but stalls after `indexer_setup`; after the indexed prefill port, both
+    prefill chunks complete but four-step execution stalls before decode. The
+    remaining selected generic indexed decode kernel was likewise lane-zero.
+  - `rust/ds4-cuda/src/abi_kernels.rs` now implements current-C-equivalent
+    warp/shared-memory online attention for the static and indexed prefill
+    paths, plus shared score/reduction/output work for generic indexed decode.
+    Public prefill and indexed-attention C-linked consumers pass on B300.
+  - On B300, the four-step `long_code_audit` probe completes in `89` seconds
+    and matches all four selected tokens. The full official-vector run
+    completes in `101` seconds with `13/13` exercised selected tokens
+    matching; `long_memory_archive` remains the existing explicit
+    `API/official graph mismatch` skip.
+  - Local `ds4-cuda` tests pass with `169` tests and B300 feature tests pass
+    with `176` tests. Route promotion and C CUDA removal remain deferred to
+    the broader acceptance policy. The pre-implementation, follow-on, and
+    final non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Acceptance
+
+- Status: active.
+- Goal: evaluate the now-completing opt-in Rust CUDA route against the
+  remaining default CLI/server, long-context quality, and removal criteria
+  before changing default routing or deleting current-C CUDA.
 
 ## Removal Criteria for C Host Code
 

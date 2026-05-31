@@ -3,7 +3,21 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Long-Prefill Performance And C CUDA Removal Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Default-Route Promotion And C CUDA Removal Acceptance
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Long-Route Attention Parallel Repair
+  is validated on B300. The selected static prefill, indexed prefill, and
+  generic indexed decode attention kernels now implement current-C parallel
+  execution instead of lane-zero serialization. A pre-repair
+  `long_code_audit` probe did not complete layer-0 attention within 120
+  seconds; after all three repairs the four-step case completes in 89 seconds
+  with all selected tokens matching. The complete official-vector route
+  completes in 101 seconds with all 13 exercised selected tokens matching;
+  `long_memory_archive` remains the explicit `API/official graph mismatch`
+  skip. Public prefill and indexed-attention ABI consumers pass, B300 feature
+  tests pass with 176 tests, and local `ds4-cuda` tests pass with 169 tests.
+  The pre-implementation, follow-on, and final non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Route promotion
+  and C CUDA removal remain pending broader acceptance.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Reciprocal-Square-Root Route Correctness Repair
   is validated on B300 for the known short-route correctness failure. Rust
   now calls device `__nv_rsqrtf` at the current-C-equivalent RMS and
@@ -20,7 +34,8 @@
   attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The full
   official-vector run remains compute-active at 100% GPU use after 935
   seconds and is terminated with zero allocation;
-  serialized generic prefill attention is the next performance boundary.
+  subsequent profiling identifies the selected long-route attention kernels
+  as the next performance boundary.
   Route promotion and C CUDA removal remain blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Generic Decode Attention Parallel Repair
   is validated on B300 as a performance-only repair. The generic mixed

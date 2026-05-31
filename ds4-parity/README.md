@@ -4197,6 +4197,21 @@ retained 900-second bound. Route promotion and C CUDA removal remain pending
 on long-prefill performance. The unified report passes with `260` passed,
 `45` skipped, and `0` failed.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA long-route attention parallel repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_long_route_attention_parallel_repair.py --negative-test
+```
+
+The selected Rust CUDA static prefill, indexed prefill, and generic indexed
+decode attention kernels now use current-C parallel execution instead of
+lane-zero serialization. On B300, `long_code_audit` completes all four steps
+in `89` seconds and the complete official-vector route finishes in `101`
+seconds with all `13` exercised selected tokens matching; the existing
+`long_memory_archive` API/official graph mismatch skip remains explicit.
+Default-route promotion and C CUDA removal remain pending broader acceptance.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
