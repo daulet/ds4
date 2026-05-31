@@ -4,6 +4,21 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Q2-Group Expansion Performance Repair
+  is validated on B300. The cached down kernel now expands its four Q2
+  group steps within each existing ordered chunk while preserving the
+  two-chunk traversal, packed-load expansion, and staged-pair semantics.
+  Emitted PTX moves from `8` to `32` DP4A sites while local stores/loads
+  increase only from `51/6` to `54/9`; the repaired DSO SHA-256 is
+  `f0e72d3aa68715171e8caf2673048ad3e16cb432fae3267da4811454bbd1f856`.
+  In adjacent parent/candidate B300 runs, down falls from `1116.221 ms` to
+  `905.109 ms` and total routed-MoE falls from `2666.890 ms` to
+  `2454.643 ms`; an earlier candidate run records `909.219 ms` down.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests; the unified report passes with `268`
+  passed, `50` skipped, and `0` failed. Pre-implementation and final Claude
+  review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  Routed-MoE remains `2.66x` current-C, so promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Load-Helper Expansion Performance Repair
   is validated on B300. The cached down kernel now expands the eight
   little-endian packed-Q2 loads at their hot sites. Emitted PTX preserves

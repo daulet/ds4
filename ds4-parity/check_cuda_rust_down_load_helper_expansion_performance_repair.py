@@ -87,14 +87,20 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
 
 
 def validate_implementation(report: Report, fixture: dict[str, Any], kernels: str) -> None:
+    q2_group = ""
+    if "macro_rules! abi_moe_down_accumulate_q2_group" in kernels:
+        q2_group = kernels.split("macro_rules! abi_moe_down_accumulate_q2_group", 1)[1].split(
+            "#[allow(clippy::too_many_arguments, static_mut_refs)]", 1
+        )[0]
     down = kernels.split("pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel(", 1)[1].split(
         "pub fn abi_moe_gate_up_mid_f32_kernel(", 1
     )[0]
+    down_shape = down + q2_group
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
     report.check("macro_rules! abi_moe_down_load_u32" in kernels, "down load macro missing")
-    report.check(down.count("abi_moe_down_load_u32!(") == 8, "down load expansion count drift")
+    report.check(down_shape.count("abi_moe_down_load_u32!(") == 8, "down load expansion count drift")
     report.check("abi_moe_load_u32(down_weights, q" not in down, "hot down load helper retained")
-    report.check(down.count("integer::dp4a_i8(") == 8, "down DP4A topology drift")
+    report.check(down_shape.count("integer::dp4a_i8(") == 8, "down DP4A topology drift")
     for key, expected in [
         ("hot_invocation_count", 8),
         ("parent_ptx_dp4a_site_count", 8),

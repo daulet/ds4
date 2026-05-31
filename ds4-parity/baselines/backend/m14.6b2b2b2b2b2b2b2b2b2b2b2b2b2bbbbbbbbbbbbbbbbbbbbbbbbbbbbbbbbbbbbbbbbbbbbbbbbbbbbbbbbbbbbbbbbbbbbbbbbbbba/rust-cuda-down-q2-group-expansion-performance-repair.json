@@ -1,0 +1,133 @@
+{
+  "schema": "ds4.cuda_rust_down_q2_group_expansion_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-down-q2-group-expanded-route-blocked",
+  "goal": "Reduce cached Rust CUDA routed-MoE down overhead by exposing the four fixed Q2 groups within each existing ordered chunk.",
+  "ownership": {
+    "changes_cached_down_q2_group_shape": true,
+    "expands_inner_q2_groups": true,
+    "preserves_outer_chunk_order": true,
+    "retains_down_load_expansion": true,
+    "retains_gate_accumulation_order": true,
+    "retains_multi_pair_down_dp4a": true,
+    "changes_default_dispatch": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false,
+    "default_current_c_route_preserved": true
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "new_macro": "abi_moe_down_accumulate_q2_group",
+    "fixed_group_invocation_count_per_dynamic_chunk": 4,
+    "dynamic_outer_chunk_count": 2,
+    "parent_ptx_dp4a_site_count": 8,
+    "parent_ptx_local_store_count": 51,
+    "parent_ptx_local_load_count": 6,
+    "parent_ptx_call_instruction_count": 1,
+    "repaired_ptx_dp4a_site_count": 32,
+    "repaired_ptx_local_store_count": 54,
+    "repaired_ptx_local_load_count": 9,
+    "repaired_ptx_call_instruction_count": 1,
+    "scope_boundary": "only the four cached-down Q2 group steps inside each existing ordered chunk are expanded; staging, gate/up, dispatch, and default routing remain unchanged"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "parent_profiled_shared_library_sha256": "53717e57162ad2e0eedff267d3f22fa4a8246c5c065f7ad899ef544bd9894e91",
+    "repaired_profiled_shared_library_sha256": "f0e72d3aa68715171e8caf2673048ad3e16cb432fae3267da4811454bbd1f856",
+    "workload": "one 2048-token prefill frontier plus one generated token through Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "ptx_shape": {
+      "parent_function_sha256": "57dad6696abbc392f73de19db9815354f494a971d876df6b1ce7a2560f969c7a",
+      "repaired_function_sha256": "b1f4318ab13b04e0cd135ae9f96d84c84de5425d301dab33e447eae786e17f0f",
+      "parent_dp4a_site_count": 8,
+      "repaired_dp4a_site_count": 32,
+      "parent_local_store_count": 51,
+      "repaired_local_store_count": 54,
+      "parent_local_load_count": 6,
+      "repaired_local_load_count": 9,
+      "parent_call_instruction_count": 1,
+      "repaired_call_instruction_count": 1
+    },
+    "parent_rebuild_profile": {
+      "csv_sha256": "95a14696b3006a57bcb311a1e877335afb33898b851d01a1834194d3966518e3",
+      "stderr_sha256": "06053ac94c0395e480cabff6d859395d12ee216762fc3142d6e35fdc384b955c",
+      "prefill_tps": 209.85,
+      "decode_tps": 16.28,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.076,
+      "sort_ms": 4.307,
+      "gateup_ms": 1534.338,
+      "midq_ms": 8.901,
+      "down_ms": 1116.221,
+      "sum_ms": 0.043,
+      "total_ms": 2666.890
+    },
+    "repaired_rebuild_profile": {
+      "csv_sha256": "d008924e924278d68eb99be9705087bae905f566fd2bd8e5ad6b765b2784c6a9",
+      "stderr_sha256": "4c5854abd384c865c2a90f8996db1dabf43249ba828aecb453db0e5b0d456cc3",
+      "prefill_tps": 217.45,
+      "decode_tps": 16.22,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.049,
+      "sort_ms": 4.289,
+      "gateup_ms": 1533.245,
+      "midq_ms": 8.905,
+      "down_ms": 905.109,
+      "sum_ms": 0.043,
+      "total_ms": 2454.643
+    },
+    "additional_repaired_profile": {
+      "csv_sha256": "013cf2b7cc895bdc2b9797a9c0dba236eec6ea38269202156182309ffaaae742",
+      "stderr_sha256": "facc4db63f08e5361ba3b91983827cd53b85ed9aa1ecdada1a7efbd40092ada8",
+      "down_ms": 909.219,
+      "total_ms": 2462.214
+    },
+    "current_c_reference": {
+      "source_fixture": "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-phase-profile-parity.json",
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "down_speedup_over_parent": 1.233,
+      "total_speedup_over_parent": 1.086,
+      "down_reduction_percent_over_parent": 18.91,
+      "total_reduction_percent_over_parent": 7.96,
+      "repaired_gateup_ratio_to_current_c": 2.96,
+      "repaired_down_ratio_to_current_c": 2.30,
+      "repaired_total_ratio_to_current_c": 2.66,
+      "remaining_primary_bottleneck": "cached-gateup-and-down-native-codegen-gap"
+    },
+    "official_vector_probe": {
+      "summary_sha256": "cc7096f2aa530fb67c0e7f9d73175c83344f294aa9788e04294b2c09b77bd503",
+      "stdout_sha256": "c5d015f9da7baf94515c74eb03ea30356682d2dbfeab7bb3e03f2145ec6a508f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Investigate the remaining roughly 2.7x routed-MoE native-codegen gap before route promotion."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 268,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

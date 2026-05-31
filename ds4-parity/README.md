@@ -4354,6 +4354,19 @@ traffic. Conservative interleaved B300 repeats lower down from `1125.795
 ms` to `1119.090 ms`; official-vector correctness is preserved and the graph
 route remains current-C.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA down Q2-group expansion performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_down_q2_group_expansion_performance_repair.py --negative-test
+```
+
+The cached Rust down kernel now exposes four fixed Q2 group steps within each
+ordered chunk, increasing emitted DP4A sites from `8` to `32` while local
+traffic grows only from `51/6` to `54/9`. Adjacent B300 runs lower down from
+`1116.221 ms` to `905.109 ms`; official-vector correctness is preserved and
+the graph route remains current-C.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

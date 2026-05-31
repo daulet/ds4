@@ -2880,6 +2880,79 @@ mod kernels {
         }};
     }
 
+    macro_rules! abi_moe_down_accumulate_q2_group {
+        ($weights:expr, $q:expr, $shift:expr, $q8_base:expr, $scale_index:ident, $np:expr, $midq_blocks:expr, $block:expr, $q8:expr, $quant_sums:ident) => {{
+            let first_scale = ($weights[$scale_index] & 0x0f) as i32;
+            $scale_index += 1;
+            let second_scale = ($weights[$scale_index] & 0x0f) as i32;
+            $scale_index += 1;
+            let first_word0 =
+                ((abi_moe_down_load_u32!($weights, $q) >> $shift) & 0x0303_0303) as i32;
+            let first_word1 =
+                ((abi_moe_down_load_u32!($weights, $q + 4) >> $shift) & 0x0303_0303) as i32;
+            let first_word2 =
+                ((abi_moe_down_load_u32!($weights, $q + 8) >> $shift) & 0x0303_0303) as i32;
+            let first_word3 =
+                ((abi_moe_down_load_u32!($weights, $q + 12) >> $shift) & 0x0303_0303) as i32;
+            let second_word0 =
+                ((abi_moe_down_load_u32!($weights, $q + 16) >> $shift) & 0x0303_0303) as i32;
+            let second_word1 =
+                ((abi_moe_down_load_u32!($weights, $q + 20) >> $shift) & 0x0303_0303) as i32;
+            let second_word2 =
+                ((abi_moe_down_load_u32!($weights, $q + 24) >> $shift) & 0x0303_0303) as i32;
+            let second_word3 =
+                ((abi_moe_down_load_u32!($weights, $q + 28) >> $shift) & 0x0303_0303) as i32;
+            let mut entry = 0_u32;
+            while entry < $np {
+                let q8_block = entry as usize * $midq_blocks as usize + $block as usize;
+                let mut first = 0_i32;
+                first = integer::dp4a_i8(
+                    first_word0,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base),
+                    first,
+                );
+                first = integer::dp4a_i8(
+                    first_word1,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 4),
+                    first,
+                );
+                first = integer::dp4a_i8(
+                    first_word2,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 8),
+                    first,
+                );
+                first = integer::dp4a_i8(
+                    first_word3,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 12),
+                    first,
+                );
+                let mut second = 0_i32;
+                second = integer::dp4a_i8(
+                    second_word0,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 16),
+                    second,
+                );
+                second = integer::dp4a_i8(
+                    second_word1,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 20),
+                    second,
+                );
+                second = integer::dp4a_i8(
+                    second_word2,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 24),
+                    second,
+                );
+                second = integer::dp4a_i8(
+                    second_word3,
+                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 28),
+                    second,
+                );
+                $quant_sums[entry as usize] += first_scale * first + second_scale * second;
+                entry += 1;
+            }
+        }};
+    }
+
     #[allow(clippy::too_many_arguments, static_mut_refs)]
     #[kernel]
     pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel(
@@ -2971,122 +3044,55 @@ mod kernels {
                     let mut chunk = 0_usize;
                     while chunk < 2 {
                         let q = packed + 16 + chunk * 32;
-                        let mut shift = 0_u32;
-                        let mut group = 0_usize;
-                        while group < 4 {
-                            let first_scale = (down_weights[packed + scale_index] & 0x0f) as i32;
-                            scale_index += 1;
-                            let second_scale = (down_weights[packed + scale_index] & 0x0f) as i32;
-                            scale_index += 1;
-                            let first_word0 = ((abi_moe_down_load_u32!(down_weights, q) >> shift)
-                                & 0x0303_0303) as i32;
-                            let first_word1 = ((abi_moe_down_load_u32!(down_weights, q + 4)
-                                >> shift)
-                                & 0x0303_0303) as i32;
-                            let first_word2 = ((abi_moe_down_load_u32!(down_weights, q + 8)
-                                >> shift)
-                                & 0x0303_0303) as i32;
-                            let first_word3 = ((abi_moe_down_load_u32!(down_weights, q + 12)
-                                >> shift)
-                                & 0x0303_0303) as i32;
-                            let second_word0 =
-                                ((abi_moe_down_load_u32!(down_weights, q + 16) >> shift)
-                                    & 0x0303_0303) as i32;
-                            let second_word1 =
-                                ((abi_moe_down_load_u32!(down_weights, q + 20) >> shift)
-                                    & 0x0303_0303) as i32;
-                            let second_word2 =
-                                ((abi_moe_down_load_u32!(down_weights, q + 24) >> shift)
-                                    & 0x0303_0303) as i32;
-                            let second_word3 =
-                                ((abi_moe_down_load_u32!(down_weights, q + 28) >> shift)
-                                    & 0x0303_0303) as i32;
-                            let q8_base = chunk * 128 + group * 32;
-                            let mut entry = 0_u32;
-                            while entry < np {
-                                let q8_block =
-                                    entry as usize * midq_blocks as usize + block as usize;
-                                let mut first = 0_i32;
-                                first = integer::dp4a_i8(
-                                    first_word0,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base,
-                                    ),
-                                    first,
-                                );
-                                first = integer::dp4a_i8(
-                                    first_word1,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base + 4,
-                                    ),
-                                    first,
-                                );
-                                first = integer::dp4a_i8(
-                                    first_word2,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base + 8,
-                                    ),
-                                    first,
-                                );
-                                first = integer::dp4a_i8(
-                                    first_word3,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base + 12,
-                                    ),
-                                    first,
-                                );
-                                let mut second = 0_i32;
-                                second = integer::dp4a_i8(
-                                    second_word0,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base + 16,
-                                    ),
-                                    second,
-                                );
-                                second = integer::dp4a_i8(
-                                    second_word1,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base + 20,
-                                    ),
-                                    second,
-                                );
-                                second = integer::dp4a_i8(
-                                    second_word2,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base + 24,
-                                    ),
-                                    second,
-                                );
-                                second = integer::dp4a_i8(
-                                    second_word3,
-                                    abi_moe_cached_q8_word(
-                                        unsafe { SMIDQ.as_ptr() },
-                                        q8_block,
-                                        q8_base + 28,
-                                    ),
-                                    second,
-                                );
-                                quant_sums[entry as usize] +=
-                                    first_scale * first + second_scale * second;
-                                entry += 1;
-                            }
-                            shift += 2;
-                            group += 1;
-                        }
+                        let q8_base = chunk * 128;
+                        abi_moe_down_accumulate_q2_group!(
+                            down_weights,
+                            q,
+                            0,
+                            q8_base,
+                            scale_index,
+                            np,
+                            midq_blocks,
+                            block,
+                            unsafe { SMIDQ.as_ptr() },
+                            quant_sums
+                        );
+                        abi_moe_down_accumulate_q2_group!(
+                            down_weights,
+                            q,
+                            2,
+                            q8_base + 32,
+                            scale_index,
+                            np,
+                            midq_blocks,
+                            block,
+                            unsafe { SMIDQ.as_ptr() },
+                            quant_sums
+                        );
+                        abi_moe_down_accumulate_q2_group!(
+                            down_weights,
+                            q,
+                            4,
+                            q8_base + 64,
+                            scale_index,
+                            np,
+                            midq_blocks,
+                            block,
+                            unsafe { SMIDQ.as_ptr() },
+                            quant_sums
+                        );
+                        abi_moe_down_accumulate_q2_group!(
+                            down_weights,
+                            q,
+                            6,
+                            q8_base + 96,
+                            scale_index,
+                            np,
+                            midq_blocks,
+                            block,
+                            unsafe { SMIDQ.as_ptr() },
+                            quant_sums
+                        );
                         chunk += 1;
                     }
                     let mut entry = 0_u32;

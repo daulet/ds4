@@ -13461,6 +13461,35 @@ Stage split:
     Total routed-MoE remains `2.89x` current-C, so default current-C routing
     and promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Q2-Group Expansion Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE down overhead by exposing the four
+  fixed Q2 group steps within each existing ordered chunk.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-q2-group-expansion-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_down_q2_group_expansion_performance_repair.py --negative-test`.
+- Evidence:
+  - The cached down row-span kernel preserves its dynamic two-chunk traversal
+    but expands the four ordered Q2 group steps within each chunk through
+    `abi_moe_down_accumulate_q2_group!`; staging, gate/up, dispatch, and
+    default routing are unchanged.
+  - Emitted PTX moves from `8` to `32` DP4A sites while local stores/loads
+    rise only from `51/6` to `54/9`; call-instruction count remains `1`.
+  - Adjacent B300 parent/candidate runs repeat down at `1116.221 ms` versus
+    `905.109 ms` (`1.233x`) and total routed-MoE at `2666.890 ms` versus
+    `2454.643 ms` (`1.086x`). An earlier candidate measurement records
+    `909.219 ms` down.
+  - The repaired DSO SHA-256 is
+    `f0e72d3aa68715171e8caf2673048ad3e16cb432fae3267da4811454bbd1f856`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `268`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `2.66x` current-C, so default current-C routing
+    and promotion blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and
