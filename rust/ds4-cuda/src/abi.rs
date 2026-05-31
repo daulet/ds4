@@ -22,9 +22,10 @@ use crate::substrate::CudaOxideSubstrate;
 use crate::{
     q8_dp4a_enabled, select_attention_output_a_path, select_attention_prefill_path,
     select_f16_pair_projection_path, select_f16_projection_path, select_f32_projection_path,
-    select_q8_matmul_path, AttentionOutputADispatchOptions, AttentionOutputAPath,
-    AttentionPrefillDispatchOptions, AttentionPrefillPath, F16PairProjectionDispatch,
-    F16PairProjectionPath, F16ProjectionDispatch, Q8MatmulDispatchOptions, Q8MatmulPath,
+    select_q8_matmul_path, select_router_select_path, AttentionOutputADispatchOptions,
+    AttentionOutputAPath, AttentionPrefillDispatchOptions, AttentionPrefillPath,
+    F16PairProjectionDispatch, F16PairProjectionPath, F16ProjectionDispatch,
+    Q8MatmulDispatchOptions, Q8MatmulPath, RouterSelectDispatchOptions, RouterSelectPath,
     DS4_CUDA_ATTENTION_RAW_SCORE_CAP, DS4_CUDA_ATTENTION_SCORE_CAP,
 };
 
@@ -6500,6 +6501,331 @@ pub unsafe extern "C" fn ds4_gpu_directional_steering_project_tensor(
             })
         })
         .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_router_select_tensor(
+    selected: *mut Ds4GpuTensor,
+    weights: *mut Ds4GpuTensor,
+    probs: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    bias_offset: u64,
+    hash_offset: u64,
+    hash_rows: u32,
+    token: u32,
+    n_expert_groups: u32,
+    n_group_used: u32,
+    has_bias: bool,
+    hash_mode: bool,
+    logits: *const Ds4GpuTensor,
+) -> c_int {
+    status(|| {
+        let Some(selected) = (unsafe { tensor_ref(selected.cast_const()) }) else {
+            return false;
+        };
+        let Some(weights) = (unsafe { tensor_ref(weights.cast_const()) }) else {
+            return false;
+        };
+        let Some(probs) = (unsafe { tensor_ref(probs.cast_const()) }) else {
+            return false;
+        };
+        let Some(logits) = (unsafe { tensor_ref(logits) }) else {
+            return false;
+        };
+        unsafe {
+            router_select_impl(
+                selected,
+                weights,
+                probs,
+                model_map,
+                model_size,
+                bias_offset,
+                hash_offset,
+                hash_rows,
+                token as i32,
+                n_expert_groups,
+                n_group_used,
+                has_bias,
+                hash_mode,
+                logits,
+                None,
+                1,
+            )
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_router_select_batch_tensor(
+    selected: *mut Ds4GpuTensor,
+    weights: *mut Ds4GpuTensor,
+    probs: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    bias_offset: u64,
+    hash_offset: u64,
+    hash_rows: u32,
+    n_expert_groups: u32,
+    n_group_used: u32,
+    has_bias: bool,
+    hash_mode: bool,
+    logits: *const Ds4GpuTensor,
+    tokens: *const Ds4GpuTensor,
+    n_tokens: u32,
+) -> c_int {
+    status(|| {
+        let Some(selected) = (unsafe { tensor_ref(selected.cast_const()) }) else {
+            return false;
+        };
+        let Some(weights) = (unsafe { tensor_ref(weights.cast_const()) }) else {
+            return false;
+        };
+        let Some(probs) = (unsafe { tensor_ref(probs.cast_const()) }) else {
+            return false;
+        };
+        let Some(logits) = (unsafe { tensor_ref(logits) }) else {
+            return false;
+        };
+        let Some(tokens) = (unsafe { tensor_ref(tokens) }) else {
+            return false;
+        };
+        unsafe {
+            router_select_impl(
+                selected,
+                weights,
+                probs,
+                model_map,
+                model_size,
+                bias_offset,
+                hash_offset,
+                hash_rows,
+                0,
+                n_expert_groups,
+                n_group_used,
+                has_bias,
+                hash_mode,
+                logits,
+                Some(tokens),
+                n_tokens,
+            )
+        }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn router_select_impl(
+    selected: &Ds4GpuTensor,
+    weights: &Ds4GpuTensor,
+    probs: &Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    bias_offset: u64,
+    hash_offset: u64,
+    hash_rows: u32,
+    token_scalar: i32,
+    n_expert_groups: u32,
+    n_group_used: u32,
+    has_bias: bool,
+    hash_mode: bool,
+    logits: &Ds4GpuTensor,
+    tokens: Option<&Ds4GpuTensor>,
+    n_tokens: u32,
+) -> bool {
+    const N_EXPERT: u64 = 256;
+    const TOP_K: u64 = 6;
+    let Some(prob_elements) = u64::from(n_tokens).checked_mul(N_EXPERT) else {
+        return false;
+    };
+    let Some(selected_elements) = u64::from(n_tokens).checked_mul(TOP_K) else {
+        return false;
+    };
+    let Some(prob_bytes) = prob_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let Some(selected_bytes) = selected_elements.checked_mul(size_of::<i32>() as u64) else {
+        return false;
+    };
+    let Some(weight_bytes) = selected_elements.checked_mul(size_of::<f32>() as u64) else {
+        return false;
+    };
+    let token_bytes = u64::from(n_tokens) * size_of::<i32>() as u64;
+    let hash_bytes = u64::from(hash_rows) * TOP_K * size_of::<i32>() as u64;
+    if model_map.is_null()
+        || n_tokens == 0
+        || n_expert_groups > 1
+        || n_group_used > 0
+        || (hash_mode && hash_rows == 0)
+        || logits.bytes < prob_bytes
+        || probs.bytes < prob_bytes
+        || selected.bytes < selected_bytes
+        || weights.bytes < weight_bytes
+        || tokens.is_some_and(|tokens| tokens.bytes < token_bytes)
+    {
+        return false;
+    }
+
+    with_backend(|backend| {
+        let fallback_ptr = logits.device_ptr();
+        if has_bias && !hash_mode {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                bias_offset,
+                N_EXPERT * size_of::<f32>() as u64,
+                |bias_ptr| unsafe {
+                    launch_router_select(
+                        backend,
+                        selected,
+                        weights,
+                        probs,
+                        bias_ptr,
+                        fallback_ptr,
+                        hash_rows,
+                        token_scalar,
+                        has_bias,
+                        hash_mode,
+                        logits,
+                        tokens,
+                        n_tokens,
+                    )
+                },
+            )
+        } else if hash_mode {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                hash_offset,
+                hash_bytes,
+                |hash_ptr| unsafe {
+                    launch_router_select(
+                        backend,
+                        selected,
+                        weights,
+                        probs,
+                        fallback_ptr,
+                        hash_ptr,
+                        hash_rows,
+                        token_scalar,
+                        has_bias,
+                        hash_mode,
+                        logits,
+                        tokens,
+                        n_tokens,
+                    )
+                },
+            )
+        } else {
+            unsafe {
+                launch_router_select(
+                    backend,
+                    selected,
+                    weights,
+                    probs,
+                    fallback_ptr,
+                    fallback_ptr,
+                    hash_rows,
+                    token_scalar,
+                    has_bias,
+                    hash_mode,
+                    logits,
+                    tokens,
+                    n_tokens,
+                )
+            }
+        }
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn launch_router_select(
+    backend: &CudaOxideSubstrate,
+    selected: &Ds4GpuTensor,
+    weights: &Ds4GpuTensor,
+    probs: &Ds4GpuTensor,
+    bias_ptr: u64,
+    hash_ptr: u64,
+    hash_rows: u32,
+    token_scalar: i32,
+    has_bias: bool,
+    hash_mode: bool,
+    logits: &Ds4GpuTensor,
+    tokens: Option<&Ds4GpuTensor>,
+    n_tokens: u32,
+) -> Option<bool> {
+    let tokens_ptr = tokens.map_or_else(|| logits.device_ptr(), Ds4GpuTensor::device_ptr);
+    let path = select_router_select_path(RouterSelectDispatchOptions {
+        no_warp_router_select: std::env::var_os("DS4_CUDA_NO_WARP_ROUTER_SELECT").is_some(),
+        no_parallel_router_select: std::env::var_os("DS4_CUDA_NO_PARALLEL_ROUTER_SELECT").is_some(),
+    });
+    with_abi_kernels(backend, |kernels| {
+        let launched = match path {
+            RouterSelectPath::WarpTopK => unsafe {
+                kernels.router_select_warp_topk_tensor(
+                    backend.stream(),
+                    selected.device_ptr(),
+                    weights.device_ptr(),
+                    probs.device_ptr(),
+                    bias_ptr,
+                    hash_ptr,
+                    logits.device_ptr(),
+                    tokens_ptr,
+                    n_tokens,
+                    token_scalar,
+                    hash_rows,
+                    has_bias && !hash_mode,
+                    hash_mode,
+                    tokens.is_some(),
+                )
+            },
+            RouterSelectPath::Parallel => unsafe {
+                kernels.router_select_parallel_tensor(
+                    backend.stream(),
+                    selected.device_ptr(),
+                    weights.device_ptr(),
+                    probs.device_ptr(),
+                    bias_ptr,
+                    hash_ptr,
+                    logits.device_ptr(),
+                    tokens_ptr,
+                    n_tokens,
+                    token_scalar,
+                    hash_rows,
+                    has_bias && !hash_mode,
+                    hash_mode,
+                    tokens.is_some(),
+                )
+            },
+            RouterSelectPath::Scalar => unsafe {
+                kernels.router_select_scalar_tensor(
+                    backend.stream(),
+                    selected.device_ptr(),
+                    weights.device_ptr(),
+                    probs.device_ptr(),
+                    bias_ptr,
+                    hash_ptr,
+                    logits.device_ptr(),
+                    tokens_ptr,
+                    n_tokens,
+                    token_scalar,
+                    hash_rows,
+                    has_bias && !hash_mode,
+                    hash_mode,
+                    tokens.is_some(),
+                )
+            },
+        };
+        Some(launched)
     })
 }
 

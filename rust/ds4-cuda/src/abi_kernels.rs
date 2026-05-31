@@ -12,6 +12,9 @@ use cuda_host::ltoir::{self, LtoirError};
 
 const THREADS_PER_BLOCK: u32 = 256;
 const ABI_KERNEL_ARTIFACT: &str = "ds4-cuda";
+const ABI_ROUTER_N_EXPERT: usize = 256;
+const ABI_ROUTER_TOP_K: usize = 6;
+const ABI_ROUTER_ROWS_PER_WARP_BLOCK: u32 = 4;
 
 #[cuda_module]
 mod kernels {
@@ -1169,6 +1172,413 @@ mod kernels {
             *state_kv.get_unchecked_mut(source) = kv;
             *state_score.get_unchecked_mut(source) = score;
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_router_select_kernel(
+        n_tokens: u32,
+        token_scalar: i32,
+        hash_rows: u32,
+        has_bias: u32,
+        hash_mode: u32,
+        use_token_buffer: u32,
+        logits: &[f32],
+        bias: &[f32],
+        hash: &[i32],
+        tokens: &[i32],
+        mut selected: DisjointSlice<i32>,
+        mut weights: DisjointSlice<f32>,
+        mut probs: DisjointSlice<f32>,
+    ) {
+        let token_index = thread::blockIdx_x() as usize;
+        if token_index >= n_tokens as usize || thread::threadIdx_x() != 0 {
+            return;
+        }
+        let prob_base = token_index * ABI_ROUTER_N_EXPERT;
+        let selected_base = token_index * ABI_ROUTER_TOP_K;
+        let mut expert = 0_usize;
+        while expert < ABI_ROUTER_N_EXPERT {
+            unsafe {
+                *probs.get_unchecked_mut(prob_base + expert) =
+                    abi_router_prob(logits[prob_base + expert]);
+            }
+            expert += 1;
+        }
+
+        let mut chosen = [-1_i32; ABI_ROUTER_TOP_K];
+        if hash_mode != 0 {
+            let mut token = if use_token_buffer != 0 {
+                tokens[token_index]
+            } else {
+                token_scalar
+            };
+            if token < 0 || token as u32 >= hash_rows {
+                token = 0;
+            }
+            let hash_base = token as usize * ABI_ROUTER_TOP_K;
+            let mut output = 0_usize;
+            while output < ABI_ROUTER_TOP_K {
+                chosen[output] = hash[hash_base + output];
+                output += 1;
+            }
+        } else {
+            expert = 0;
+            while expert < ABI_ROUTER_N_EXPERT {
+                let score = abi_router_prob(logits[prob_base + expert])
+                    + if has_bias != 0 { bias[expert] } else { 0.0 };
+                let mut output = 0_usize;
+                while output < ABI_ROUTER_TOP_K {
+                    let incumbent = chosen[output];
+                    let better = if incumbent < 0 {
+                        true
+                    } else {
+                        score
+                            > abi_router_prob(logits[prob_base + incumbent as usize])
+                                + if has_bias != 0 {
+                                    bias[incumbent as usize]
+                                } else {
+                                    0.0
+                                }
+                    };
+                    if better {
+                        let mut shift = ABI_ROUTER_TOP_K - 1;
+                        while shift > output {
+                            chosen[shift] = chosen[shift - 1];
+                            shift -= 1;
+                        }
+                        chosen[output] = expert as i32;
+                        break;
+                    }
+                    output += 1;
+                }
+                expert += 1;
+            }
+        }
+
+        let mut sum = 0.0_f32;
+        let mut output = 0_usize;
+        while output < ABI_ROUTER_TOP_K {
+            let selected_expert = chosen[output];
+            let probability =
+                if selected_expert >= 0 && selected_expert < ABI_ROUTER_N_EXPERT as i32 {
+                    abi_router_prob(logits[prob_base + selected_expert as usize])
+                } else {
+                    0.0
+                };
+            unsafe {
+                *selected.get_unchecked_mut(selected_base + output) = selected_expert;
+                *weights.get_unchecked_mut(selected_base + output) = probability;
+            }
+            sum += probability;
+            output += 1;
+        }
+        if sum < 6.103515625e-5_f32 {
+            sum = 6.103515625e-5_f32;
+        }
+        output = 0;
+        while output < ABI_ROUTER_TOP_K {
+            let probability = unsafe { *weights.as_mut_ptr().add(selected_base + output) };
+            unsafe {
+                *weights.get_unchecked_mut(selected_base + output) = probability / sum * 1.5;
+            }
+            output += 1;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_router_select_parallel_kernel(
+        n_tokens: u32,
+        token_scalar: i32,
+        hash_rows: u32,
+        has_bias: u32,
+        hash_mode: u32,
+        use_token_buffer: u32,
+        logits: &[f32],
+        bias: &[f32],
+        hash: &[i32],
+        tokens: &[i32],
+        mut selected: DisjointSlice<i32>,
+        mut weights: DisjointSlice<f32>,
+        mut probs: DisjointSlice<f32>,
+    ) {
+        static mut SPROB: SharedArray<f32, ABI_ROUTER_N_EXPERT> = SharedArray::UNINIT;
+
+        let token_index = thread::blockIdx_x() as usize;
+        let expert = thread::threadIdx_x() as usize;
+        if token_index >= n_tokens as usize || expert >= ABI_ROUTER_N_EXPERT {
+            return;
+        }
+        let prob_base = token_index * ABI_ROUTER_N_EXPERT;
+        let selected_base = token_index * ABI_ROUTER_TOP_K;
+        let probability = abi_router_prob(logits[prob_base + expert]);
+        unsafe {
+            SPROB[expert] = probability;
+            *probs.get_unchecked_mut(prob_base + expert) = probability;
+        }
+        thread::sync_threads();
+        if expert != 0 {
+            return;
+        }
+
+        let mut chosen = [-1_i32; ABI_ROUTER_TOP_K];
+        if hash_mode != 0 {
+            let mut token = if use_token_buffer != 0 {
+                tokens[token_index]
+            } else {
+                token_scalar
+            };
+            if token < 0 || token as u32 >= hash_rows {
+                token = 0;
+            }
+            let hash_base = token as usize * ABI_ROUTER_TOP_K;
+            let mut output = 0_usize;
+            while output < ABI_ROUTER_TOP_K {
+                chosen[output] = hash[hash_base + output];
+                output += 1;
+            }
+        } else {
+            let mut candidate = 0_usize;
+            while candidate < ABI_ROUTER_N_EXPERT {
+                let score =
+                    unsafe { SPROB[candidate] } + if has_bias != 0 { bias[candidate] } else { 0.0 };
+                let mut output = 0_usize;
+                while output < ABI_ROUTER_TOP_K {
+                    let incumbent = chosen[output];
+                    let better = if incumbent < 0 {
+                        true
+                    } else {
+                        score
+                            > unsafe { SPROB[incumbent as usize] }
+                                + if has_bias != 0 {
+                                    bias[incumbent as usize]
+                                } else {
+                                    0.0
+                                }
+                    };
+                    if better {
+                        let mut shift = ABI_ROUTER_TOP_K - 1;
+                        while shift > output {
+                            chosen[shift] = chosen[shift - 1];
+                            shift -= 1;
+                        }
+                        chosen[output] = candidate as i32;
+                        break;
+                    }
+                    output += 1;
+                }
+                candidate += 1;
+            }
+        }
+
+        let mut sum = 0.0_f32;
+        let mut output = 0_usize;
+        while output < ABI_ROUTER_TOP_K {
+            let selected_expert = chosen[output];
+            let probability =
+                if selected_expert >= 0 && selected_expert < ABI_ROUTER_N_EXPERT as i32 {
+                    unsafe { SPROB[selected_expert as usize] }
+                } else {
+                    0.0
+                };
+            unsafe {
+                *selected.get_unchecked_mut(selected_base + output) = selected_expert;
+                *weights.get_unchecked_mut(selected_base + output) = probability;
+            }
+            sum += probability;
+            output += 1;
+        }
+        if sum < 6.103515625e-5_f32 {
+            sum = 6.103515625e-5_f32;
+        }
+        output = 0;
+        while output < ABI_ROUTER_TOP_K {
+            let probability = unsafe { *weights.as_mut_ptr().add(selected_base + output) };
+            unsafe {
+                *weights.get_unchecked_mut(selected_base + output) = probability / sum * 1.5;
+            }
+            output += 1;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_router_select_warp_topk_kernel(
+        n_tokens: u32,
+        token_scalar: i32,
+        hash_rows: u32,
+        has_bias: u32,
+        hash_mode: u32,
+        use_token_buffer: u32,
+        logits: &[f32],
+        bias: &[f32],
+        hash: &[i32],
+        tokens: &[i32],
+        mut selected: DisjointSlice<i32>,
+        mut weights: DisjointSlice<f32>,
+        mut probs: DisjointSlice<f32>,
+    ) {
+        static mut SPROB: SharedArray<f32, { 4 * ABI_ROUTER_N_EXPERT }> = SharedArray::UNINIT;
+
+        let lane = thread::threadIdx_x();
+        let row_in_block = thread::threadIdx_y();
+        let token_index = thread::blockIdx_x() * ABI_ROUTER_ROWS_PER_WARP_BLOCK + row_in_block;
+        if token_index >= n_tokens || lane >= 32 {
+            return;
+        }
+        let prob_base = token_index as usize * ABI_ROUTER_N_EXPERT;
+        let shared_base = row_in_block as usize * ABI_ROUTER_N_EXPERT;
+        let selected_base = token_index as usize * ABI_ROUTER_TOP_K;
+        let mut local_prob = [0.0_f32; 8];
+        let mut local_score = [0.0_f32; 8];
+        let mut slot = 0_usize;
+        while slot < 8 {
+            let expert = lane as usize + slot * 32;
+            let probability = abi_router_prob(logits[prob_base + expert]);
+            local_prob[slot] = probability;
+            local_score[slot] = probability + if has_bias != 0 { bias[expert] } else { 0.0 };
+            unsafe {
+                SPROB[shared_base + expert] = probability;
+                *probs.get_unchecked_mut(prob_base + expert) = probability;
+            }
+            slot += 1;
+        }
+        warp::sync_mask(u32::MAX);
+
+        if hash_mode != 0 {
+            if lane == 0 {
+                let mut token = if use_token_buffer != 0 {
+                    tokens[token_index as usize]
+                } else {
+                    token_scalar
+                };
+                if token < 0 || token as u32 >= hash_rows {
+                    token = 0;
+                }
+                let hash_base = token as usize * ABI_ROUTER_TOP_K;
+                let mut sum = 0.0_f32;
+                let mut output = 0_usize;
+                while output < ABI_ROUTER_TOP_K {
+                    let selected_expert = hash[hash_base + output];
+                    let probability =
+                        if selected_expert >= 0 && selected_expert < ABI_ROUTER_N_EXPERT as i32 {
+                            unsafe { SPROB[shared_base + selected_expert as usize] }
+                        } else {
+                            0.0
+                        };
+                    unsafe {
+                        *selected.get_unchecked_mut(selected_base + output) = selected_expert;
+                        *weights.get_unchecked_mut(selected_base + output) = probability;
+                    }
+                    sum += probability;
+                    output += 1;
+                }
+                if sum < 6.103515625e-5_f32 {
+                    sum = 6.103515625e-5_f32;
+                }
+                output = 0;
+                while output < ABI_ROUTER_TOP_K {
+                    let probability = unsafe { *weights.as_mut_ptr().add(selected_base + output) };
+                    unsafe {
+                        *weights.get_unchecked_mut(selected_base + output) =
+                            probability / sum * 1.5;
+                    }
+                    output += 1;
+                }
+            }
+            return;
+        }
+
+        let mut output_prob = [0.0_f32; ABI_ROUTER_TOP_K];
+        let mut output_index = [0_u32; ABI_ROUTER_TOP_K];
+        let mut output = 0_usize;
+        while output < ABI_ROUTER_TOP_K {
+            let mut best_score = f32::NEG_INFINITY;
+            let mut best_prob = 0.0_f32;
+            let mut best_index = u32::MAX;
+            slot = 0;
+            while slot < 8 {
+                let candidate = lane + slot as u32 * 32;
+                let score = local_score[slot];
+                if abi_router_score_better(score, candidate, best_score, best_index) {
+                    best_score = score;
+                    best_prob = local_prob[slot];
+                    best_index = candidate;
+                }
+                slot += 1;
+            }
+            let mut mask = 16_u32;
+            while mask > 0 {
+                let other_score = warp::shuffle_xor_f32(best_score, mask);
+                let other_prob = warp::shuffle_xor_f32(best_prob, mask);
+                let other_index = warp::shuffle_xor(best_index, mask);
+                if abi_router_score_better(other_score, other_index, best_score, best_index) {
+                    best_score = other_score;
+                    best_prob = other_prob;
+                    best_index = other_index;
+                }
+                mask >>= 1;
+            }
+            slot = 0;
+            while slot < 8 {
+                if lane + slot as u32 * 32 == best_index {
+                    local_score[slot] = f32::NEG_INFINITY;
+                }
+                slot += 1;
+            }
+            if lane == 0 {
+                output_index[output] = best_index;
+                output_prob[output] = best_prob;
+            }
+            output += 1;
+        }
+
+        if lane == 0 {
+            let mut sum = 0.0_f32;
+            output = 0;
+            while output < ABI_ROUTER_TOP_K {
+                unsafe {
+                    *selected.get_unchecked_mut(selected_base + output) =
+                        output_index[output] as i32;
+                    *weights.get_unchecked_mut(selected_base + output) = output_prob[output];
+                }
+                sum += output_prob[output];
+                output += 1;
+            }
+            if sum < 6.103515625e-5_f32 {
+                sum = 6.103515625e-5_f32;
+            }
+            output = 0;
+            while output < ABI_ROUTER_TOP_K {
+                unsafe {
+                    *weights.get_unchecked_mut(selected_base + output) =
+                        *weights.get_unchecked_mut(selected_base + output) / sum * 1.5;
+                }
+                output += 1;
+            }
+        }
+    }
+
+    fn abi_router_score_better(
+        candidate_score: f32,
+        candidate_index: u32,
+        best_score: f32,
+        best_index: u32,
+    ) -> bool {
+        candidate_score > best_score
+            || (candidate_score == best_score && candidate_index < best_index)
+    }
+
+    fn abi_router_prob(logit: f32) -> f32 {
+        let softplus = if logit > 20.0 {
+            logit
+        } else if logit < -20.0 {
+            logit.exp()
+        } else {
+            (1.0 + logit.exp()).ln()
+        };
+        softplus.sqrt()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3402,6 +3812,9 @@ pub(crate) struct AbiKernelModule {
     compressor_prefill_pool_kernel: CudaFunction,
     compressor_update_pool_kernel: CudaFunction,
     compressor_shift_ratio4_kernel: CudaFunction,
+    router_select_kernel: CudaFunction,
+    router_select_parallel_kernel: CudaFunction,
+    router_select_warp_topk_kernel: CudaFunction,
     attention_decode_mixed_kernel: CudaFunction,
     attention_decode_mixed_heads8_online_kernel: CudaFunction,
     attention_prefill_raw_kernel: CudaFunction,
@@ -3510,6 +3923,15 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             compressor_shift_ratio4_kernel: module
                 .load_function("abi_compressor_shift_ratio4_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            router_select_kernel: module
+                .load_function("abi_router_select_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            router_select_parallel_kernel: module
+                .load_function("abi_router_select_parallel_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            router_select_warp_topk_kernel: module
+                .load_function("abi_router_select_warp_topk_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             attention_decode_mixed_kernel: module
                 .load_function("abi_attention_decode_mixed_kernel")
@@ -4966,6 +5388,230 @@ impl AbiKernelModule {
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn router_select_scalar_tensor(
+        &self,
+        stream: &CudaStream,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        probs_ptr: u64,
+        bias_ptr: u64,
+        hash_ptr: u64,
+        logits_ptr: u64,
+        tokens_ptr: u64,
+        n_tokens: u32,
+        token_scalar: i32,
+        hash_rows: u32,
+        has_bias: bool,
+        hash_mode: bool,
+        use_token_buffer: bool,
+    ) -> bool {
+        unsafe {
+            self.router_select_tensor(
+                &self.router_select_kernel,
+                stream,
+                selected_ptr,
+                weights_ptr,
+                probs_ptr,
+                bias_ptr,
+                hash_ptr,
+                logits_ptr,
+                tokens_ptr,
+                n_tokens,
+                token_scalar,
+                hash_rows,
+                has_bias,
+                hash_mode,
+                use_token_buffer,
+                (n_tokens, 1, 1),
+                (1, 1, 1),
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn router_select_parallel_tensor(
+        &self,
+        stream: &CudaStream,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        probs_ptr: u64,
+        bias_ptr: u64,
+        hash_ptr: u64,
+        logits_ptr: u64,
+        tokens_ptr: u64,
+        n_tokens: u32,
+        token_scalar: i32,
+        hash_rows: u32,
+        has_bias: bool,
+        hash_mode: bool,
+        use_token_buffer: bool,
+    ) -> bool {
+        unsafe {
+            self.router_select_tensor(
+                &self.router_select_parallel_kernel,
+                stream,
+                selected_ptr,
+                weights_ptr,
+                probs_ptr,
+                bias_ptr,
+                hash_ptr,
+                logits_ptr,
+                tokens_ptr,
+                n_tokens,
+                token_scalar,
+                hash_rows,
+                has_bias,
+                hash_mode,
+                use_token_buffer,
+                (n_tokens, 1, 1),
+                (THREADS_PER_BLOCK, 1, 1),
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn router_select_warp_topk_tensor(
+        &self,
+        stream: &CudaStream,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        probs_ptr: u64,
+        bias_ptr: u64,
+        hash_ptr: u64,
+        logits_ptr: u64,
+        tokens_ptr: u64,
+        n_tokens: u32,
+        token_scalar: i32,
+        hash_rows: u32,
+        has_bias: bool,
+        hash_mode: bool,
+        use_token_buffer: bool,
+    ) -> bool {
+        unsafe {
+            self.router_select_tensor(
+                &self.router_select_warp_topk_kernel,
+                stream,
+                selected_ptr,
+                weights_ptr,
+                probs_ptr,
+                bias_ptr,
+                hash_ptr,
+                logits_ptr,
+                tokens_ptr,
+                n_tokens,
+                token_scalar,
+                hash_rows,
+                has_bias,
+                hash_mode,
+                use_token_buffer,
+                (n_tokens.div_ceil(ABI_ROUTER_ROWS_PER_WARP_BLOCK), 1, 1),
+                (32, ABI_ROUTER_ROWS_PER_WARP_BLOCK, 1),
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn router_select_tensor(
+        &self,
+        function: &CudaFunction,
+        stream: &CudaStream,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        probs_ptr: u64,
+        bias_ptr: u64,
+        hash_ptr: u64,
+        logits_ptr: u64,
+        tokens_ptr: u64,
+        n_tokens: u32,
+        token_scalar: i32,
+        hash_rows: u32,
+        has_bias: bool,
+        hash_mode: bool,
+        use_token_buffer: bool,
+        grid_dim: (u32, u32, u32),
+        block_dim: (u32, u32, u32),
+    ) -> bool {
+        if n_tokens == 0 {
+            return false;
+        }
+        let Some(prob_elements) = u64::from(n_tokens).checked_mul(ABI_ROUTER_N_EXPERT as u64)
+        else {
+            return false;
+        };
+        let Some(selected_elements) = u64::from(n_tokens).checked_mul(ABI_ROUTER_TOP_K as u64)
+        else {
+            return false;
+        };
+        let mut n_tokens = n_tokens;
+        let mut token_scalar = token_scalar;
+        let mut hash_rows = hash_rows;
+        let mut has_bias = u32::from(has_bias);
+        let mut hash_mode = u32::from(hash_mode);
+        let mut use_token_buffer = u32::from(use_token_buffer);
+        let mut logits_ptr = logits_ptr;
+        let mut logits_len = prob_elements;
+        let mut bias_ptr = bias_ptr;
+        let mut bias_len = if has_bias != 0 {
+            ABI_ROUTER_N_EXPERT as u64
+        } else {
+            0
+        };
+        let mut hash_ptr = hash_ptr;
+        let mut hash_len = if hash_mode != 0 {
+            u64::from(hash_rows) * ABI_ROUTER_TOP_K as u64
+        } else {
+            0
+        };
+        let mut tokens_ptr = tokens_ptr;
+        let mut tokens_len = if use_token_buffer != 0 {
+            u64::from(n_tokens)
+        } else {
+            0
+        };
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = selected_elements;
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = selected_elements;
+        let mut probs_ptr = probs_ptr;
+        let mut probs_len = prob_elements;
+        let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut token_scalar as *mut i32).cast::<c_void>(),
+            (&mut hash_rows as *mut u32).cast::<c_void>(),
+            (&mut has_bias as *mut u32).cast::<c_void>(),
+            (&mut hash_mode as *mut u32).cast::<c_void>(),
+            (&mut use_token_buffer as *mut u32).cast::<c_void>(),
+            (&mut logits_ptr as *mut u64).cast::<c_void>(),
+            (&mut logits_len as *mut u64).cast::<c_void>(),
+            (&mut bias_ptr as *mut u64).cast::<c_void>(),
+            (&mut bias_len as *mut u64).cast::<c_void>(),
+            (&mut hash_ptr as *mut u64).cast::<c_void>(),
+            (&mut hash_len as *mut u64).cast::<c_void>(),
+            (&mut tokens_ptr as *mut u64).cast::<c_void>(),
+            (&mut tokens_len as *mut u64).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut probs_ptr as *mut u64).cast::<c_void>(),
+            (&mut probs_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the public wrappers validate output/input spans and cached
+        // optional model ranges before selecting one current-C router launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
+                grid_dim,
+                block_dim,
+                0,
                 stream,
                 &mut params,
             )

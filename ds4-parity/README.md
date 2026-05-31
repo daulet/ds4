@@ -3904,6 +3904,22 @@ rejection controls. Public attention ABI ownership is complete; routed MoE,
 remaining graph compute, whole-archive retention policy, route promotion, C
 CUDA removal, and the embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public router-selection ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_router_selection_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes both public router-selection wrappers
+through default warp, forced parallel, and forced scalar paths. It proves
+biased top-k selection, single and batched hash fallback, normalized
+unbiased weights, partial warp-block batching, stable tie ordering, and
+reject-before-write controls. Router selection ownership is complete; routed
+MoE, remaining graph compute, whole-archive retention policy, route
+promotion, C CUDA removal, and the embedded-object executable-stack warning
+remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

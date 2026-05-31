@@ -11498,6 +11498,49 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because public single and batched router selection share one comparable
+  bias/hash and scalar/parallel/warp dispatch family.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Router Selection ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_router_select_tensor` and
+  `ds4_gpu_router_select_batch_tensor` through scalar, parallel, and warp
+  current-C dispatch while preserving bias, hash fallback, stable top-k, and
+  normalized weight behavior without claiming routed MoE or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-router-selection-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_router_selection_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports both checked router wrappers and
+    applies current-C environment dispatch with optional cached bias/hash
+    ranges plus checked public spans.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds scalar, parallel, and warp
+    router kernels promoted from the measured internal proofs.
+  - A C-linked B300 consumer proves bias, hash fallback, forced
+    parallel/scalar dispatch, partial warp blocks, stable ties, and
+    reject-before-write validation controls.
+  - Local library tests pass with 153 tests; B300 release-feature tests pass
+    with 160 tests; the static library exposes 73 Rust ABI symbols and embeds
+    62 kernels.
+  - All 63 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 67 CUDA ABI comparators
+    pass.
+  - The unified report passes with 239 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Router selection is complete; routed MoE, remaining graph compute,
+    whole-archive/route promotion, C CUDA removal, and the warning remain
+    open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before
