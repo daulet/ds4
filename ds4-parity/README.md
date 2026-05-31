@@ -4058,6 +4058,17 @@ The retained F32 gate, down, and sum entries now accept the previously proved
 batched layout while the public single-token caller continues to pass one
 token. The public batched wrapper and route promotion remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA sorted routed-MoE host launch methods:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_sorted_host_launch_smoke.py --negative-test
+```
+
+The ABI module now contains internal sorted metadata and P2 or fallback
+projection launch adapters. They compile into the B300-validated static
+library without exporting or invoking a public Rust batch route.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

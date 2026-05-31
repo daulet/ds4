@@ -11898,9 +11898,46 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because sorted metadata plus P2/fallback submission are an isolated
+  host-launch prerequisite before expert-tile and cached orchestration.
+- Goal: add internal sorted launch adapters, then implement expert-tile,
+  row-span, cached, and atomic-down host orchestration before claiming the
+  public batch surface or C CUDA removal.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Sorted Routed MoE Host Launch Methods
+
+- Status: done
+- Goal: add internal host launch methods for already embedded sorted metadata
+  and P2 or fallback routed-MoE projection kernels without claiming public
+  batched routed-MoE ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-sorted-host-launch-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_sorted_host_launch_smoke.py --negative-test`.
+- Evidence:
+  - Internal adapters cover sorted count/prefix/scatter plus sorted P2 and
+    no-P2 gate/down projection submissions over caller-validated scratch and
+    pair-count-sized tensor spans.
+  - No public Rust batch route invokes these methods yet; expert-tile,
+    cached, and atomic-down host orchestration remains unclaimed.
+  - The B300 rebuilt-staticlib regression consumer loads 91 embedded kernels
+    while the archive continues to expose 74 Rust ABI symbols.
+  - Local tests pass with 163 tests; B300 feature tests pass with 170 tests;
+    all 77 CUDA ABI comparators pass; and the unified report passes with 250
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Expert-tile, row-span, cached, and atomic-down host orchestration, public
+    batched routed-MoE ownership, route promotion, and C CUDA removal remain
+    pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: implement host-side sorted, tiled, cached, and fallback batched
-  routed-MoE orchestration before defining the public batch wrapper and
-  route-promotion policy, then connect remaining graph compute and
-  whole-archive retention policy without claiming C CUDA removal before
+- Goal: implement internal expert-tile, row-span, cached, and atomic-down
+  batched routed-MoE host orchestration before composing the public batch
+  wrapper and route-promotion policy, then connect remaining graph compute
+  and whole-archive retention policy without claiming C CUDA removal before
   those gates pass.

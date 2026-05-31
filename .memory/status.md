@@ -3,7 +3,21 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Sorted Routed MoE Host Launch Methods
+  is validated on B300. The Rust ABI module now contains internal launch
+  adapters for sorted count/prefix/scatter metadata and sorted P2 or no-P2
+  gate/down projection entries over caller-validated scratch spans. No
+  public Rust batch route invokes these methods yet; expert-tile, cached,
+  and atomic-down orchestration remains unclaimed. The rebuilt static
+  library still exposes 74 Rust ABI symbols and embeds 91 kernels, and
+  links/runs the existing C-linked public single-token consumer. Local tests
+  pass with 163 tests; B300 feature tests pass with 170 tests; all 77 CUDA
+  ABI comparators pass; and the unified report passes with 250 passed, 45
+  skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Public batch ownership, route
+  promotion, and C CUDA removal remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Batched F32 Routed MoE ABI Prerequisite
   is validated on B300. The retained Rust CUDA ABI F32 gate, down, and sum
   entries and their launch methods now accept `n_tokens` over the previously

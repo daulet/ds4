@@ -8208,6 +8208,123 @@ impl AbiKernelModule {
         .is_ok()
     }
 
+    #[allow(dead_code)]
+    pub(crate) unsafe fn moe_count_sorted_pairs_tensor(
+        &self,
+        stream: &CudaStream,
+        pair_count: u32,
+        selected_ptr: u64,
+        counts_ptr: u64,
+    ) -> bool {
+        let Some(config) = launch_config(u64::from(pair_count)) else {
+            return false;
+        };
+        let mut pair_count = pair_count;
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(pair_count);
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut params = [
+            (&mut pair_count as *mut u32).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_count_sorted_pairs_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) unsafe fn moe_prefix_sorted_pairs_tensor(
+        &self,
+        stream: &CudaStream,
+        counts_ptr: u64,
+        offsets_ptr: u64,
+        cursors_ptr: u64,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (1, 1, 1),
+            block_dim: (1, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut counts_ptr = counts_ptr;
+        let mut counts_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut offsets_ptr = offsets_ptr;
+        let mut offsets_len = ABI_MOE_SORTED_EXPERTS as u64 + 1;
+        let mut cursors_ptr = cursors_ptr;
+        let mut cursors_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut params = [
+            (&mut counts_ptr as *mut u64).cast::<c_void>(),
+            (&mut counts_len as *mut u64).cast::<c_void>(),
+            (&mut offsets_ptr as *mut u64).cast::<c_void>(),
+            (&mut offsets_len as *mut u64).cast::<c_void>(),
+            (&mut cursors_ptr as *mut u64).cast::<c_void>(),
+            (&mut cursors_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_prefix_sorted_pairs_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) unsafe fn moe_scatter_sorted_pairs_tensor(
+        &self,
+        stream: &CudaStream,
+        pair_count: u32,
+        selected_ptr: u64,
+        cursors_ptr: u64,
+        sorted_pairs_ptr: u64,
+    ) -> bool {
+        let Some(config) = launch_config(u64::from(pair_count)) else {
+            return false;
+        };
+        let mut pair_count = pair_count;
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(pair_count);
+        let mut cursors_ptr = cursors_ptr;
+        let mut cursors_len = ABI_MOE_SORTED_EXPERTS as u64;
+        let mut sorted_pairs_ptr = sorted_pairs_ptr;
+        let mut sorted_pairs_len = u64::from(pair_count);
+        let mut params = [
+            (&mut pair_count as *mut u32).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+            (&mut cursors_ptr as *mut u64).cast::<c_void>(),
+            (&mut cursors_len as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+            (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_scatter_sorted_pairs_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) unsafe fn moe_gate_up_mid_f32_tensor(
         &self,
@@ -8418,6 +8535,276 @@ impl AbiKernelModule {
                 false,
                 clamp,
             )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_sorted_qwarp32_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        clamp: f32,
+    ) -> bool {
+        unsafe {
+            self.moe_gate_up_mid_sorted_tensor(
+                &self.moe_gate_up_mid_sorted_qwarp32_kernel,
+                false,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                sorted_pairs_ptr,
+                selected_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                pair_count,
+                gate_expert_bytes,
+                gate_row_bytes,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_sorted_p2_qwarp32_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        clamp: f32,
+    ) -> bool {
+        unsafe {
+            self.moe_gate_up_mid_sorted_tensor(
+                &self.moe_gate_up_mid_sorted_p2_qwarp32_kernel,
+                true,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                sorted_pairs_ptr,
+                selected_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                pair_count,
+                gate_expert_bytes,
+                gate_row_bytes,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    unsafe fn moe_gate_up_mid_sorted_tensor(
+        &self,
+        function: &CudaFunction,
+        p2: bool,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        clamp: f32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (
+                if p2 {
+                    expert_mid_dim.div_ceil(16)
+                } else {
+                    expert_mid_dim.div_ceil(32)
+                },
+                if p2 {
+                    pair_count.div_ceil(2)
+                } else {
+                    pair_count
+                },
+                1,
+            ),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let output_len = u64::from(pair_count) * u64::from(expert_mid_dim);
+        let mut xq_blocks = xq_blocks;
+        let mut expert_mid_dim = expert_mid_dim;
+        let mut n_expert = n_expert;
+        let mut pair_count = pair_count;
+        let mut clamp = clamp;
+        let mut gate_expert_bytes = gate_expert_bytes;
+        let mut gate_row_bytes = gate_row_bytes;
+        let mut gate_weights_ptr = gate_weights_ptr;
+        let mut gate_weights_len = gate_weight_bytes;
+        let mut up_weights_ptr = up_weights_ptr;
+        let mut up_weights_len = gate_weight_bytes;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = xq_bytes;
+        let mut sorted_pairs_ptr = sorted_pairs_ptr;
+        let mut sorted_pairs_len = u64::from(pair_count);
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(pair_count);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = u64::from(pair_count);
+        let mut iq2_grid_ptr = iq2_grid_ptr;
+        let mut iq2_grid_len = 256_u64;
+        let mut iq2_signs_ptr = iq2_signs_ptr;
+        let mut iq2_signs_len = 128_u64;
+        let mut gate_ptr = gate_ptr;
+        let mut gate_len = output_len;
+        let mut up_ptr = up_ptr;
+        let mut up_len = output_len;
+        let mut mid_ptr = mid_ptr;
+        let mut mid_len = output_len;
+        if p2 {
+            let mut params = [
+                (&mut xq_blocks as *mut u32).cast::<c_void>(),
+                (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+                (&mut n_expert as *mut u32).cast::<c_void>(),
+                (&mut pair_count as *mut u32).cast::<c_void>(),
+                (&mut clamp as *mut f32).cast::<c_void>(),
+                (&mut gate_expert_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_row_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_len as *mut u64).cast::<c_void>(),
+                (&mut up_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_weights_len as *mut u64).cast::<c_void>(),
+                (&mut xq_ptr as *mut u64).cast::<c_void>(),
+                (&mut xq_len as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+                (&mut selected_ptr as *mut u64).cast::<c_void>(),
+                (&mut selected_len as *mut u64).cast::<c_void>(),
+                (&mut weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut weights_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_len as *mut u64).cast::<c_void>(),
+                (&mut gate_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_len as *mut u64).cast::<c_void>(),
+                (&mut up_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_len as *mut u64).cast::<c_void>(),
+                (&mut mid_ptr as *mut u64).cast::<c_void>(),
+                (&mut mid_len as *mut u64).cast::<c_void>(),
+            ];
+            unsafe {
+                cuda_core::launch_kernel_on_stream(
+                    function,
+                    config.grid_dim,
+                    config.block_dim,
+                    0,
+                    stream,
+                    &mut params,
+                )
+            }
+            .is_ok()
+        } else {
+            let mut params = [
+                (&mut xq_blocks as *mut u32).cast::<c_void>(),
+                (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+                (&mut n_expert as *mut u32).cast::<c_void>(),
+                (&mut clamp as *mut f32).cast::<c_void>(),
+                (&mut gate_expert_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_row_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_len as *mut u64).cast::<c_void>(),
+                (&mut up_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_weights_len as *mut u64).cast::<c_void>(),
+                (&mut xq_ptr as *mut u64).cast::<c_void>(),
+                (&mut xq_len as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+                (&mut selected_ptr as *mut u64).cast::<c_void>(),
+                (&mut selected_len as *mut u64).cast::<c_void>(),
+                (&mut weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut weights_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_len as *mut u64).cast::<c_void>(),
+                (&mut gate_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_len as *mut u64).cast::<c_void>(),
+                (&mut up_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_len as *mut u64).cast::<c_void>(),
+                (&mut mid_ptr as *mut u64).cast::<c_void>(),
+                (&mut mid_len as *mut u64).cast::<c_void>(),
+            ];
+            unsafe {
+                cuda_core::launch_kernel_on_stream(
+                    function,
+                    config.grid_dim,
+                    config.block_dim,
+                    0,
+                    stream,
+                    &mut params,
+                )
+            }
+            .is_ok()
         }
     }
 
@@ -8682,6 +9069,201 @@ impl AbiKernelModule {
             )
         }
         .is_ok()
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_sorted_qwarp32_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        selected_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+    ) -> bool {
+        unsafe {
+            self.moe_down_sorted_tensor(
+                &self.moe_down_sorted_qwarp32_kernel,
+                false,
+                stream,
+                down_ptr,
+                down_weights_ptr,
+                midq_ptr,
+                sorted_pairs_ptr,
+                selected_ptr,
+                down_weight_bytes,
+                midq_bytes,
+                midq_blocks,
+                out_dim,
+                n_expert,
+                pair_count,
+                down_expert_bytes,
+                down_row_bytes,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_sorted_p2_qwarp32_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        selected_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+    ) -> bool {
+        unsafe {
+            self.moe_down_sorted_tensor(
+                &self.moe_down_sorted_p2_qwarp32_kernel,
+                true,
+                stream,
+                down_ptr,
+                down_weights_ptr,
+                midq_ptr,
+                sorted_pairs_ptr,
+                selected_ptr,
+                down_weight_bytes,
+                midq_bytes,
+                midq_blocks,
+                out_dim,
+                n_expert,
+                pair_count,
+                down_expert_bytes,
+                down_row_bytes,
+            )
+        }
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)]
+    unsafe fn moe_down_sorted_tensor(
+        &self,
+        function: &CudaFunction,
+        p2: bool,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        sorted_pairs_ptr: u64,
+        selected_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        pair_count: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (
+                if p2 {
+                    out_dim.div_ceil(16)
+                } else {
+                    out_dim.div_ceil(32)
+                },
+                if p2 {
+                    pair_count.div_ceil(2)
+                } else {
+                    pair_count
+                },
+                1,
+            ),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut midq_blocks = midq_blocks;
+        let mut out_dim = out_dim;
+        let mut n_expert = n_expert;
+        let mut pair_count = pair_count;
+        let mut down_expert_bytes = down_expert_bytes;
+        let mut down_row_bytes = down_row_bytes;
+        let mut down_weights_ptr = down_weights_ptr;
+        let mut down_weights_len = down_weight_bytes;
+        let mut midq_ptr = midq_ptr;
+        let mut midq_len = midq_bytes;
+        let mut sorted_pairs_ptr = sorted_pairs_ptr;
+        let mut sorted_pairs_len = u64::from(pair_count);
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(pair_count);
+        let mut down_ptr = down_ptr;
+        let mut down_len = u64::from(pair_count) * u64::from(out_dim);
+        if p2 {
+            let mut params = [
+                (&mut midq_blocks as *mut u32).cast::<c_void>(),
+                (&mut out_dim as *mut u32).cast::<c_void>(),
+                (&mut n_expert as *mut u32).cast::<c_void>(),
+                (&mut pair_count as *mut u32).cast::<c_void>(),
+                (&mut down_expert_bytes as *mut u64).cast::<c_void>(),
+                (&mut down_row_bytes as *mut u64).cast::<c_void>(),
+                (&mut down_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut down_weights_len as *mut u64).cast::<c_void>(),
+                (&mut midq_ptr as *mut u64).cast::<c_void>(),
+                (&mut midq_len as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+                (&mut selected_ptr as *mut u64).cast::<c_void>(),
+                (&mut selected_len as *mut u64).cast::<c_void>(),
+                (&mut down_ptr as *mut u64).cast::<c_void>(),
+                (&mut down_len as *mut u64).cast::<c_void>(),
+            ];
+            unsafe {
+                cuda_core::launch_kernel_on_stream(
+                    function,
+                    config.grid_dim,
+                    config.block_dim,
+                    0,
+                    stream,
+                    &mut params,
+                )
+            }
+            .is_ok()
+        } else {
+            let mut params = [
+                (&mut midq_blocks as *mut u32).cast::<c_void>(),
+                (&mut out_dim as *mut u32).cast::<c_void>(),
+                (&mut n_expert as *mut u32).cast::<c_void>(),
+                (&mut down_expert_bytes as *mut u64).cast::<c_void>(),
+                (&mut down_row_bytes as *mut u64).cast::<c_void>(),
+                (&mut down_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut down_weights_len as *mut u64).cast::<c_void>(),
+                (&mut midq_ptr as *mut u64).cast::<c_void>(),
+                (&mut midq_len as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_ptr as *mut u64).cast::<c_void>(),
+                (&mut sorted_pairs_len as *mut u64).cast::<c_void>(),
+                (&mut selected_ptr as *mut u64).cast::<c_void>(),
+                (&mut selected_len as *mut u64).cast::<c_void>(),
+                (&mut down_ptr as *mut u64).cast::<c_void>(),
+                (&mut down_len as *mut u64).cast::<c_void>(),
+            ];
+            unsafe {
+                cuda_core::launch_kernel_on_stream(
+                    function,
+                    config.grid_dim,
+                    config.block_dim,
+                    0,
+                    stream,
+                    &mut params,
+                )
+            }
+            .is_ok()
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

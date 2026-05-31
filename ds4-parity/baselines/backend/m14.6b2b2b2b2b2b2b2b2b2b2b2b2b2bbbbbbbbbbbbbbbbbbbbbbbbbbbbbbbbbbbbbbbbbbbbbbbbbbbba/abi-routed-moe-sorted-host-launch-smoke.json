@@ -1,0 +1,97 @@
+{
+  "schema": "ds4.cuda_abi_routed_moe_sorted_host_launch_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-sorted-host-launch-methods",
+  "goal": "Add internal Rust ABI-module host launch methods for the already embedded sorted-pair metadata and sorted P2 or fallback quantized routed-MoE kernels without exporting the incomplete public batch wrapper.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "routed_moe_launch",
+      "ds4_gpu_routed_moe_batch_tensor"
+    ],
+    "prior_proof_sources": [
+      "rust/ds4-cuda/src/bin/routed_moe_sorted_p2_smoke.rs",
+      "ds4-parity/baselines/backend/m14.5c2b2/routed-moe-sorted-p2-smoke.json",
+      "ds4-parity/baselines/backend/m14.5c2f/routed-moe-qwarp-fallback-smoke.json"
+    ],
+    "semantics": [
+      "the current CUDA batch dispatcher builds sorted-pair count, prefix, and scatter metadata for n_tokens greater than one",
+      "when expert-tile dispatch is disabled, current CUDA selects sorted P2 by default and retains a no-P2 sorted fallback route",
+      "this internal launch-method leaf exposes those retained submission building blocks but does not yet compose public batch orchestration"
+    ]
+  },
+  "implementation": {
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "regression_harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_routed_moe_one_link_smoke.c",
+    "host_launch_methods": [
+      "moe_count_sorted_pairs_tensor",
+      "moe_prefix_sorted_pairs_tensor",
+      "moe_scatter_sorted_pairs_tensor",
+      "moe_gate_up_mid_sorted_qwarp32_tensor",
+      "moe_gate_up_mid_sorted_p2_qwarp32_tensor",
+      "moe_down_sorted_qwarp32_tensor",
+      "moe_down_sorted_p2_qwarp32_tensor"
+    ],
+    "scratch_boundary": "sorted metadata launch methods accept caller-provided validated buffers, including zeroed counts before counting and pair_count-sized sorted storage",
+    "remaining_compute_boundary": "Rust still does not export ds4_gpu_routed_moe_batch_tensor; expert-tile, row-span, cached, atomic-down, and composed public batch orchestration remain pending",
+    "linkage_requirement": "the existing C-linked public single-token consumer retains and loads the Rust static-library kernel module with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 74,
+    "exported_compute_symbol_count": 72,
+    "embedded_kernel_count": 91,
+    "consumes_batched_f32_module": true,
+    "adds_sorted_metadata_launch_methods": true,
+    "adds_sorted_p2_launch_methods": true,
+    "adds_sorted_fallback_launch_methods": true,
+    "owns_expert_tile_launch_methods": false,
+    "owns_cached_launch_methods": false,
+    "owns_batched_quantized_orchestration": false,
+    "owns_routed_moe_batch_tensor": false,
+    "owns_complete_routed_moe_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "target": "sm_80",
+    "local_library_test_count": 163,
+    "feature_release_test_count": 170,
+    "staticlib_export_count": 74,
+    "embedded_kernel_count": 91,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "embedded_routed_moe_kernels_loaded": true,
+      "single_token_public_regression_remains_passing": true,
+      "sorted_metadata_launch_methods_compile": true,
+      "sorted_p2_launch_methods_compile": true,
+      "sorted_fallback_launch_methods_compile": true,
+      "public_batch_route_not_yet_invoked": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 163,
+    "b300_feature_release_test_count": 170,
+    "cuda_abi_comparators_passed": 77,
+    "unified_report_passed": 250,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "integration_risks": [
+    "the internal launch adapters are compiled into the static library but are not yet exercised by a public Rust batch export",
+    "caller-provided sorted scratch initialization and expert-tile, cached, and atomic-down orchestration remain to be implemented before public batch ownership",
+    "whole-archive retention policy, production route promotion, and C CUDA removal remain pending"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
