@@ -4315,6 +4315,19 @@ packed transform. Controlled B300 repeats lower gate/up from `2796.005 ms`
 to `2691.558 ms` while official-vector correctness is preserved; the graph
 route remains current-C.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA IQ2 hot-helper expansion performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_iq2_hot_helper_expansion_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up kernel now expands the proven branchless IQ2 transform
+at its four hot sites because a direct inline annotation retained device
+calls in emitted PTX. Controlled B300 repeats lower gate/up from `2691.585
+ms` to `2205.067 ms`; official-vector correctness is preserved and the graph
+route remains current-C.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -4,6 +4,18 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 Hot-Helper Expansion Performance Repair
+  is validated on B300. The proven branchless IQ2 transform is now expanded
+  at its four cached gate/up hot sites because `#[inline(always)]` retained
+  all four device-function calls in emitted PTX; the repaired PTX retains no
+  IQ2 helper references in that kernel. The rebuilt DSO SHA-256 is
+  `506b1a9daaa326a650b95e1450683bf2fd677ac8439a3f6d99068a35adfcc13b`.
+  In controlled parent/candidate repeats, gate/up falls from `2691.585 ms`
+  to `2205.067 ms`, total routed-MoE falls from `3835.101 ms` to
+  `3349.623 ms`, and prefill rises from `187.65` to `194.80 tok/s`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. Routed-MoE remains `3.62x` current-C, so
+  promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Branchless IQ2 Signed-Word Performance Repair
   is validated on B300. `abi_moe_iq2_signed_word` now forms four signed IQ2
   bytes with a branchless packed transform whose equivalence is checked over

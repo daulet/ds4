@@ -13378,6 +13378,32 @@ Stage split:
     current-C, so default current-C routing and promotion blockers remain in
     force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 Hot-Helper Expansion Performance Repair
+
+- Status: done.
+- Goal: remove repeated device-function call overhead from the proven
+  branchless IQ2 signed-word computation in cached Rust CUDA gate/up.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-iq2-hot-helper-expansion-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_iq2_hot_helper_expansion_performance_repair.py --negative-test`.
+- Evidence:
+  - The proven branchless packed transform is now a local macro expanded at
+    its four cached gate/up uses. An attempted `#[inline(always)]` annotation
+    retained all four hot calls in emitted PTX; macro expansion removes all
+    IQ2 helper references while preserving the DP4A and dispatch topology.
+  - A controlled B300 parent/candidate rebuild repeats gate/up at
+    `2691.585 ms` versus `2205.067 ms` (`1.22x`) and total routed-MoE at
+    `3835.101 ms` versus `3349.623 ms` (`1.14x`). Prefill rises from
+    `187.65` to `194.80 tok/s`.
+  - The repaired DSO SHA-256 is
+    `506b1a9daaa326a650b95e1450683bf2fd677ac8439a3f6d99068a35adfcc13b`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests.
+  - Total routed-MoE remains `3.62x` current-C, so default current-C routing
+    and promotion blockers remain in force while remaining gate/up packed
+    arithmetic and reduction work is investigated.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

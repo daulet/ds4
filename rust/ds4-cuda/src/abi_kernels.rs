@@ -2294,6 +2294,19 @@ mod kernels {
         }
     }
 
+    macro_rules! abi_moe_iq2_signed_word {
+        ($grid:expr, $signs:expr, $lane:expr) => {{
+            let lane = $lane as u32;
+            let bits = ($signs >> lane) as u32;
+            let mask = (0_u32.wrapping_sub(bits & 1) & 0x0000_00ff)
+                | (0_u32.wrapping_sub((bits >> 1) & 1) & 0x0000_ff00)
+                | (0_u32.wrapping_sub((bits >> 2) & 1) & 0x00ff_0000)
+                | (0_u32.wrapping_sub((bits >> 3) & 1) & 0xff00_0000);
+            let values = ($grid >> (8 * lane)) as u32;
+            ((values ^ mask).wrapping_add(mask & 0x0101_0101)) as i32
+        }};
+    }
+
     #[allow(clippy::too_many_arguments, static_mut_refs)]
     #[kernel]
     pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(
@@ -2399,8 +2412,8 @@ mod kernels {
                                     unsafe { S_IQ2_GRID[((aux_g >> (8 * group)) & 0xff) as usize] };
                                 let signs =
                                     unsafe { S_IQ2_SIGNS[((aux_s >> (7 * group)) & 127) as usize] };
-                                let weight_word0 = abi_moe_iq2_signed_word(grid, signs, 0);
-                                let weight_word1 = abi_moe_iq2_signed_word(grid, signs, 4);
+                                let weight_word0 = abi_moe_iq2_signed_word!(grid, signs, 0);
+                                let weight_word1 = abi_moe_iq2_signed_word!(grid, signs, 4);
                                 let q8_index = ib32 * 32 + group as usize * 8;
                                 let mut entry = 0_u32;
                                 while entry < np {
@@ -2465,8 +2478,8 @@ mod kernels {
                                     unsafe { S_IQ2_GRID[((aux_g >> (8 * group)) & 0xff) as usize] };
                                 let signs =
                                     unsafe { S_IQ2_SIGNS[((aux_s >> (7 * group)) & 127) as usize] };
-                                let weight_word0 = abi_moe_iq2_signed_word(grid, signs, 0);
-                                let weight_word1 = abi_moe_iq2_signed_word(grid, signs, 4);
+                                let weight_word0 = abi_moe_iq2_signed_word!(grid, signs, 0);
+                                let weight_word1 = abi_moe_iq2_signed_word!(grid, signs, 4);
                                 let q8_index = ib32 * 32 + group as usize * 8;
                                 let mut entry = 0_u32;
                                 while entry < np {
@@ -4129,16 +4142,6 @@ mod kernels {
 
     fn abi_moe_cached_q8_word(q8: *const u8, block: usize, index: usize) -> i32 {
         abi_moe_cached_load_u32(q8, block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index) as i32
-    }
-
-    fn abi_moe_iq2_signed_word(grid: u64, signs: u8, lane: u32) -> i32 {
-        let bits = (signs >> lane) as u32;
-        let mask = (0_u32.wrapping_sub(bits & 1) & 0x0000_00ff)
-            | (0_u32.wrapping_sub((bits >> 1) & 1) & 0x0000_ff00)
-            | (0_u32.wrapping_sub((bits >> 2) & 1) & 0x00ff_0000)
-            | (0_u32.wrapping_sub((bits >> 3) & 1) & 0xff00_0000);
-        let values = (grid >> (8 * lane)) as u32;
-        ((values ^ mask).wrapping_add(mask & 0x0101_0101)) as i32
     }
 
     fn abi_moe_cached_q8_bsum(q8: *const u8, block: usize, index: usize) -> i32 {

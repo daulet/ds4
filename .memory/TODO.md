@@ -12543,3 +12543,28 @@
     negative checks and B300 feature tests pass `176` tests.
   - Total routed-MoE remains `4.15x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA IQ2 Hot-Helper Expansion Performance Repair
+
+- Status: done
+- Goal: remove repeated device-function call overhead from the proven
+  branchless IQ2 signed-word construction in cached Rust CUDA gate/up.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-iq2-hot-helper-expansion-performance-repair.json`
+- Evidence:
+  - `#[inline(always)]` did not affect cuda-oxide PTX for the hot helper, so
+    the retained branchless transform is expanded through a local macro at
+    its four gate/up use sites. Emitted PTX drops IQ2 helper references from
+    `4` to `0`; the remaining three calls are quarter-warp reduction tail
+    work.
+  - A controlled B300 parent/candidate rebuild repeats gate/up at
+    `2691.585 ms` versus `2205.067 ms` (`1.22x`) and total routed-MoE at
+    `3835.101 ms` versus `3349.623 ms` (`1.14x`). Prefill rises from
+    `187.65` to `194.80 tok/s`.
+  - The repaired DSO SHA-256 is
+    `506b1a9daaa326a650b95e1450683bf2fd677ac8439a3f6d99068a35adfcc13b`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests.
+  - Total routed-MoE remains `3.62x` current-C. Default routing and
+    promotion blockers remain in force while the remaining cached gate/up
+    packed-byte arithmetic and reduction gap is investigated.

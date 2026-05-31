@@ -1,0 +1,111 @@
+{
+  "schema": "ds4.cuda_rust_iq2_hot_helper_expansion_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-iq2-hot-helper-expanded-route-blocked",
+  "goal": "Remove repeated Rust CUDA device-function calls from cached gate/up IQ2 signed-word construction while preserving the proven packed transform and current-C routing.",
+  "ownership": {
+    "expands_iq2_signed_word_at_hot_sites": true,
+    "retains_branchless_iq2_transform": true,
+    "retains_multi_pair_gate_dp4a": true,
+    "retains_multi_pair_down_dp4a": true,
+    "changes_default_dispatch": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false,
+    "default_current_c_route_preserved": true
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "expanded_form": "macro_rules! abi_moe_iq2_signed_word",
+    "hot_invocation_count": 4,
+    "retained_transform": "(values ^ mask).wrapping_add(mask & 0x0101_0101)",
+    "rejected_attempt": "#[inline(always)] on the Rust helper left all four hot call references in emitted PTX",
+    "scope_boundary": "only the IQ2 signed-word call boundary changes; arithmetic, DP4A dot topology, down repair, dispatch, and routing remain unchanged"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "parent_profiled_shared_library_sha256": "383fe12843109a33719bcbac5e38ec1b22ea95f9e45647b2ecc47c3f88a79f01",
+    "repaired_profiled_shared_library_sha256": "506b1a9daaa326a650b95e1450683bf2fd677ac8439a3f6d99068a35adfcc13b",
+    "workload": "one 2048-token prefill frontier plus one generated token through Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "ptx_call_boundary": {
+      "parent_hot_helper_reference_count": 4,
+      "repaired_hot_helper_reference_count": 0,
+      "repaired_remaining_call_uni_count": 3,
+      "repaired_remaining_calls": "quarter-warp reduction tail only"
+    },
+    "parent_rebuild_profile": {
+      "csv_sha256": "6d34fc15efa7d6392f9caf083bd1b3c27b504655bb67a37579fdaf86eb473ae4",
+      "stderr_sha256": "369121f89ac0c0f7df52bca4c53b362c6f558d66471ece5c78afe1bd9ea5cbbd",
+      "prefill_tps": 187.65,
+      "decode_tps": 16.22,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.082,
+      "sort_ms": 4.332,
+      "gateup_ms": 2691.585,
+      "midq_ms": 8.907,
+      "down_ms": 1127.143,
+      "sum_ms": 0.043,
+      "total_ms": 3835.101
+    },
+    "repaired_rebuild_profile": {
+      "csv_sha256": "08c0df98ccfd847f96229bc2d501eb8333f13d2344b24fd3bc46919c2862a985",
+      "stderr_sha256": "3f2440ef3ece7bd358b052f64642077f18d8a22e0a0ab2500e4dd6590120e13b",
+      "prefill_tps": 194.80,
+      "decode_tps": 16.34,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.052,
+      "sort_ms": 4.360,
+      "gateup_ms": 2205.067,
+      "midq_ms": 8.902,
+      "down_ms": 1128.197,
+      "sum_ms": 0.043,
+      "total_ms": 3349.623
+    },
+    "current_c_reference": {
+      "source_fixture": "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-phase-profile-parity.json",
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "gateup_speedup_over_parent": 1.22,
+      "total_speedup_over_parent": 1.14,
+      "prefill_gain_percent_over_parent": 3.81,
+      "repaired_gateup_ratio_to_current_c": 4.26,
+      "repaired_down_ratio_to_current_c": 2.87,
+      "repaired_total_ratio_to_current_c": 3.62,
+      "remaining_primary_bottleneck": "cached-gateup-iq2-arithmetic-and-intrinsic-gap"
+    },
+    "official_vector_probe": {
+      "summary_sha256": "3a55e7fd5e725f80c5e3abb806dd6d88a4f3fc4de479068acca5f4a349ce35f6",
+      "stdout_sha256": "c5d015f9da7baf94515c74eb03ea30356682d2dbfeab7bb3e03f2145ec6a508f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Inspect the remaining cached gate/up packed-byte arithmetic and reduction gap, including cuda-oxide intrinsic support, before route promotion."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 270,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}
