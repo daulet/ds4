@@ -12219,6 +12219,42 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Correctness Performance And C CUDA Removal Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the serialized generic decode-attention kernel is independently
+  repairable while prefill Q-path correctness remains blocked.
+- Goal: remove the first measured Rust CUDA engine-route throughput blocker
+  while preserving the correctness gate.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Generic Decode Attention Parallel Repair
+
+- Status: done
+- Goal: replace the serialized Rust CUDA generic mixed decode-attention
+  computation with block-parallel score, softmax, and output work while
+  retaining the opt-in runtime route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-generic-decode-attention-parallel-repair.json`
+- Comparator:
+  `ds4-parity/check_cuda_rust_generic_decode_attention_parallel_repair.py --negative-test`.
+- Evidence:
+  - Before repair, `short_code_completion` decode position `27` spends
+    `471.787 ms` in layer-0 attention and `589.625 ms` in layer-2
+    attention while routed MoE remains below `0.45 ms`.
+  - The repaired kernel performs shared block reductions and parallel output
+    accumulation. The uncontended B300 replay measures all 43 decode
+    attention stages at `0.080-0.134 ms`, `4.578 ms` total, and completes
+    the two-step route in `48` seconds.
+  - The Rust shared-library public attention consumer remains passing, but
+    route correctness is still blocked: step `1` selects hex `43` instead of
+    expected hex `63`.
+  - Paired prefill tensors isolate the next boundary: `q_lora` and `KVraw`
+    remain identical, while layer-0 `Qraw` first differs by `4.7683716e-6`,
+    `Qcur` differs by `1.5093386e-4`, and `attn_out` differs by
+    `1.1451244e-3`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Prefill Q-Path Correctness And C CUDA Removal Policy
+
 - Status: active
-- Goal: repair Rust CUDA engine-route correctness and throughput before
-  rerunning complete promotion gates or considering C CUDA removal.
+- Goal: repair the layer-0 prefill Q projection/head-normalization
+  divergence, rerun end-to-end correctness gates, and only then consider
+  route promotion or C CUDA removal.

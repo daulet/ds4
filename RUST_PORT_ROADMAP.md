@@ -12982,9 +12982,46 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Runtime Correctness Performance And C CUDA Removal Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the serialized generic decode-attention kernel is independently
+  repairable while prefill Q-path correctness remains blocked.
+- Goal: remove the first measured Rust CUDA engine-route throughput blocker
+  while preserving the correctness gate.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Generic Decode Attention Parallel Repair
+
+- Status: done.
+- Goal: replace the serialized Rust CUDA generic mixed decode-attention
+  computation with block-parallel score, softmax, and output work while
+  retaining the opt-in runtime route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-generic-decode-attention-parallel-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_generic_decode_attention_parallel_repair.py --negative-test`.
+- Evidence:
+  - Before repair, the Rust route's `short_code_completion` decode at
+    position `27` spends `471.787 ms` at layer `0` and `589.625 ms` at
+    layer `2` in attention while routed MoE remains below `0.45 ms`.
+  - The Rust ABI kernel now parallels raw/compressed score staging, max and
+    denominator reductions, and output accumulation. An uncontended B300
+    replay measures all 43 attention layers at `0.080-0.134 ms`, `4.578 ms`
+    total, and completes the two-step route in `48` seconds.
+  - The public attention ABI consumer remains passing against the Rust shared
+    library. Correctness is not promoted: the two-step replay still selects
+    hex `43` instead of expected hex `63` at step `1`.
+  - Paired prefill dumps place the first remaining material drift in layer-0
+    Q projection/head normalization: `q_lora` and `KVraw` are identical,
+    `Qraw` differs by `4.7683716e-6`, `Qcur` by `1.5093386e-4`, and
+    `attn_out` by `1.1451244e-3`. Default route promotion and C CUDA removal
+    remain blocked.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Prefill Q-Path Correctness And C CUDA Removal Policy
+
 - Status: active.
-- Goal: repair the Rust CUDA engine-route correctness and throughput blockers,
-  then rerun complete end-to-end gates before considering C CUDA removal.
+- Goal: repair the layer-0 prefill Q projection/head-normalization divergence,
+  rerun end-to-end correctness gates, and only then consider route promotion
+  or C CUDA removal.
 
 ## Removal Criteria for C Host Code
 

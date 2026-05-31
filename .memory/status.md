@@ -3,7 +3,19 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Runtime Correctness Performance And C CUDA Removal Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Prefill Q-Path Correctness And C CUDA Removal Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Generic Decode Attention Parallel Repair
+  is validated on B300 as a performance-only repair. The generic mixed
+  attention kernel now uses block-parallel score staging, reductions, and
+  output accumulation instead of executing the full work on lane zero. For
+  `short_code_completion` decode position `27`, attention drops from
+  `471.787-589.625 ms` in representative pre-repair layers to
+  `0.080-0.134 ms` across all 43 layers, `4.578 ms` total, in an
+  uncontended replay. The public attention ABI smoke remains passing against
+  `libds4_cuda.so`. The route is not correct yet: step `1` still selects hex
+  `43` rather than expected hex `63`. Paired prefill dumps place the next
+  material divergence at layer-0 `Qraw`/`Qnorm`/`Qcur`, after identical
+  `q_lora` and `KVraw`; route promotion and C CUDA removal remain blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Opt-In Rust CUDA Engine Route Blocker Probe
   is validated as a blocker on B300. The opt-in `ds4-engine`
   `cuda-rust-backend` link compiles `ds4.c` and `ds4_kvstore.c`, links

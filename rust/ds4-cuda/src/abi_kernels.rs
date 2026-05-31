@@ -4049,9 +4049,16 @@ mod kernels {
         comp_mask: &[f32],
         mut heads: DisjointSlice<f32>,
     ) {
+        static mut SCORES: SharedArray<f32, 8192> = SharedArray::UNINIT;
+        static mut RAW_ROWS: SharedArray<u32, 256> = SharedArray::UNINIT;
+        static mut PARTIAL: SharedArray<f32, 256> = SharedArray::UNINIT;
+        static mut SOFTMAX: SharedArray<f32, 2> = SharedArray::UNINIT;
+
         let token = thread::blockIdx_x();
         let head = thread::blockIdx_y();
-        if token >= n_tokens || head >= n_head || thread::threadIdx_x() != 0 {
+        let tid = thread::threadIdx_x() as usize;
+        let block_dim = thread::blockDim_x();
+        if token >= n_tokens || head >= n_head {
             return;
         }
         let single_all = n_tokens == 1 && ratio == 0;
@@ -4098,88 +4105,211 @@ mod kernels {
         let query_base =
             ((token as usize * n_head as usize + head as usize) * head_dim as usize) as usize;
         let scale = 1.0_f32 / (head_dim as f32).sqrt();
-        let mut max_score = sinks[head as usize];
-        let mut raw_row = 0_u32;
+        let mut raw_row = thread::threadIdx_x();
         while raw_row < raw_count {
-            let row = raw_start.wrapping_add(raw_first).wrapping_add(raw_row) % raw_cap;
-            max_score = abi_attention_maximum(
-                max_score,
-                abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale,
-            );
-            raw_row += 1;
-        }
-        let mut compressed = 0_u32;
-        while compressed < visible_comp {
-            let add = if use_comp_mask != 0 {
-                comp_mask[token as usize * n_comp as usize + compressed as usize]
-            } else {
-                0.0
-            };
-            if add > -1.0e20 {
-                max_score = abi_attention_maximum(
-                    max_score,
-                    abi_attention_dot(q, query_base, comp_kv, compressed, head_dim) * scale + add,
-                );
+            unsafe {
+                RAW_ROWS[raw_row as usize] =
+                    raw_start.wrapping_add(raw_first).wrapping_add(raw_row) % raw_cap;
             }
-            compressed += 1;
+            raw_row += block_dim;
         }
-        let mut denominator = (sinks[head as usize] - max_score).exp();
-        raw_row = 0;
-        while raw_row < raw_count {
-            let row = raw_start.wrapping_add(raw_first).wrapping_add(raw_row) % raw_cap;
-            denominator +=
-                (abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale - max_score).exp();
-            raw_row += 1;
-        }
-        compressed = 0;
-        while compressed < visible_comp {
-            let add = if use_comp_mask != 0 {
-                comp_mask[token as usize * n_comp as usize + compressed as usize]
-            } else {
-                0.0
-            };
-            if add > -1.0e20 {
-                denominator +=
-                    (abi_attention_dot(q, query_base, comp_kv, compressed, head_dim) * scale + add
-                        - max_score)
-                        .exp();
-            }
-            compressed += 1;
-        }
-        let mut dimension = 0_u32;
-        while dimension < head_dim {
-            let mut accumulator = 0.0_f32;
-            raw_row = 0;
+        thread::sync_threads();
+
+        let n_score = raw_count + visible_comp;
+        let mut local_max = sinks[head as usize];
+        if visible_comp == 0 || n_tokens == 1 {
+            raw_row = thread::threadIdx_x();
             while raw_row < raw_count {
-                let row = raw_start.wrapping_add(raw_first).wrapping_add(raw_row) % raw_cap;
-                let weight = (abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale
-                    - max_score)
-                    .exp();
-                accumulator += raw_kv[(row * head_dim + dimension) as usize] * weight;
-                raw_row += 1;
+                let row = unsafe { RAW_ROWS[raw_row as usize] };
+                let score = abi_attention_dot(q, query_base, raw_kv, row, head_dim) * scale;
+                unsafe {
+                    SCORES[raw_row as usize] = score;
+                }
+                local_max = abi_attention_maximum(local_max, score);
+                raw_row += block_dim;
             }
-            compressed = 0;
+            let mut compressed = thread::threadIdx_x();
             while compressed < visible_comp {
                 let add = if use_comp_mask != 0 {
                     comp_mask[token as usize * n_comp as usize + compressed as usize]
                 } else {
                     0.0
                 };
+                let mut score = f32::NEG_INFINITY;
                 if add > -1.0e20 {
-                    let weight = (abi_attention_dot(q, query_base, comp_kv, compressed, head_dim)
-                        * scale
-                        + add
-                        - max_score)
-                        .exp();
-                    accumulator += comp_kv[(compressed * head_dim + dimension) as usize] * weight;
+                    score = abi_attention_dot(q, query_base, comp_kv, compressed, head_dim) * scale
+                        + add;
                 }
+                unsafe {
+                    SCORES[(raw_count + compressed) as usize] = score;
+                }
+                local_max = abi_attention_maximum(local_max, score);
+                compressed += block_dim;
+            }
+        } else {
+            let qlane = thread::threadIdx_x() & 7;
+            let qgroup = thread::threadIdx_x() >> 3;
+            let mut row0 = 0_u32;
+            while row0 < n_score {
+                let row = row0 + qgroup;
+                if row < n_score {
+                    let mut add = 0.0_f32;
+                    let mut valid_row = true;
+                    let kv_row;
+                    let kv;
+                    if row < raw_count {
+                        kv_row = unsafe { RAW_ROWS[row as usize] };
+                        kv = raw_kv;
+                    } else {
+                        let compressed = row - raw_count;
+                        add = if use_comp_mask != 0 {
+                            comp_mask[token as usize * n_comp as usize + compressed as usize]
+                        } else {
+                            0.0
+                        };
+                        valid_row = add > -1.0e20;
+                        kv_row = compressed;
+                        kv = comp_kv;
+                    }
+                    let mut score = f32::NEG_INFINITY;
+                    if valid_row {
+                        let mut dot = 0.0_f32;
+                        let mut dimension = qlane;
+                        while dimension < head_dim {
+                            dot += q[query_base + dimension as usize]
+                                * kv[(kv_row * head_dim + dimension) as usize];
+                            dimension += 8;
+                        }
+                        let mask = 0xff_u32 << (thread::threadIdx_x() & 24);
+                        let mut offset = 4_u32;
+                        while offset > 0 {
+                            dot += warp::shuffle_xor_f32_sync(mask, dot, offset);
+                            offset >>= 1;
+                        }
+                        score = dot * scale + add;
+                    }
+                    if qlane == 0 {
+                        unsafe {
+                            SCORES[row as usize] = score;
+                        }
+                    }
+                }
+                row0 += 32;
+            }
+            thread::sync_threads();
+            let mut score = thread::threadIdx_x();
+            while score < n_score {
+                local_max = abi_attention_maximum(local_max, unsafe { SCORES[score as usize] });
+                score += block_dim;
+            }
+        }
+
+        unsafe {
+            PARTIAL[tid] = local_max;
+        }
+        thread::sync_threads();
+        let mut stride = block_dim >> 1;
+        while stride > 0 {
+            if thread::threadIdx_x() < stride {
+                unsafe {
+                    PARTIAL[tid] =
+                        abi_attention_maximum(PARTIAL[tid], PARTIAL[tid + stride as usize]);
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        if tid == 0 {
+            unsafe {
+                SOFTMAX[0] = PARTIAL[0];
+            }
+        }
+        thread::sync_threads();
+        let max_score = unsafe { SOFTMAX[0] };
+        let mut denominator = 0.0_f32;
+        let mut score = thread::threadIdx_x();
+        while score < n_score {
+            let probability = (unsafe { SCORES[score as usize] } - max_score).exp();
+            unsafe {
+                SCORES[score as usize] = probability;
+            }
+            denominator += probability;
+            score += block_dim;
+        }
+        unsafe {
+            PARTIAL[tid] = denominator;
+        }
+        thread::sync_threads();
+        stride = block_dim >> 1;
+        while stride > 0 {
+            if thread::threadIdx_x() < stride {
+                unsafe {
+                    PARTIAL[tid] += PARTIAL[tid + stride as usize];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        if tid == 0 {
+            unsafe {
+                SOFTMAX[1] = PARTIAL[0] + (sinks[head as usize] - max_score).exp();
+            }
+        }
+        thread::sync_threads();
+        denominator = unsafe { SOFTMAX[1] };
+
+        if head_dim == 512 && block_dim == 256 {
+            let dimension0 = thread::threadIdx_x();
+            let dimension1 = dimension0 + 256;
+            let mut accumulator0 = 0.0_f32;
+            let mut accumulator1 = 0.0_f32;
+            raw_row = 0;
+            while raw_row < raw_count {
+                let probability = unsafe { SCORES[raw_row as usize] };
+                let row = unsafe { RAW_ROWS[raw_row as usize] };
+                accumulator0 += raw_kv[(row * head_dim + dimension0) as usize] * probability;
+                accumulator1 += raw_kv[(row * head_dim + dimension1) as usize] * probability;
+                raw_row += 1;
+            }
+            let mut compressed = 0_u32;
+            while compressed < visible_comp {
+                let probability = unsafe { SCORES[(raw_count + compressed) as usize] };
+                accumulator0 +=
+                    comp_kv[(compressed * head_dim + dimension0) as usize] * probability;
+                accumulator1 +=
+                    comp_kv[(compressed * head_dim + dimension1) as usize] * probability;
                 compressed += 1;
             }
             unsafe {
-                *heads.get_unchecked_mut(query_base + dimension as usize) =
-                    accumulator / denominator;
+                *heads.get_unchecked_mut(query_base + dimension0 as usize) =
+                    accumulator0 / denominator;
+                *heads.get_unchecked_mut(query_base + dimension1 as usize) =
+                    accumulator1 / denominator;
             }
-            dimension += 1;
+        } else {
+            let mut dimension = thread::threadIdx_x();
+            while dimension < head_dim {
+                let mut accumulator = 0.0_f32;
+                raw_row = 0;
+                while raw_row < raw_count {
+                    let probability = unsafe { SCORES[raw_row as usize] };
+                    let row = unsafe { RAW_ROWS[raw_row as usize] };
+                    accumulator += raw_kv[(row * head_dim + dimension) as usize] * probability;
+                    raw_row += 1;
+                }
+                let mut compressed = 0_u32;
+                while compressed < visible_comp {
+                    let probability = unsafe { SCORES[(raw_count + compressed) as usize] };
+                    accumulator +=
+                        comp_kv[(compressed * head_dim + dimension) as usize] * probability;
+                    compressed += 1;
+                }
+                unsafe {
+                    *heads.get_unchecked_mut(query_base + dimension as usize) =
+                        accumulator / denominator;
+                }
+                dimension += block_dim;
+            }
         }
     }
 

@@ -4168,6 +4168,20 @@ diverges at `short_code_completion` step `1` and the full gate does not
 complete in 15 minutes. Default route promotion and C CUDA removal remain
 blocked.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA generic decode-attention parallel repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_generic_decode_attention_parallel_repair.py --negative-test
+```
+
+The opt-in Rust engine route now executes generic mixed decode attention with
+block-parallel score, softmax, and output work. On B300 its two-step
+`short_code_completion` attention profile drops from hundreds of milliseconds
+per layer to `4.578 ms` total across 43 layers; output parity remains blocked
+in the prefill Q path, so default route promotion and C CUDA removal remain
+pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
