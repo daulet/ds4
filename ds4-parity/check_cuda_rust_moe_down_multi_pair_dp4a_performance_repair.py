@@ -99,9 +99,24 @@ def validate_implementation(report: Report, kernels: str) -> None:
         "pub fn abi_moe_gate_up_mid_f32_kernel(", 1
     )[0]
     report.check(gate.count("integer::dp4a_i8(") in (4, 16), "retained gate/up DP4A layout drift")
-    report.check("let mut accumulators = [0.0_f32; 16];" in down, "down multi-pair accumulators missing")
-    report.check("let mut min_sums = [0_i32; 16];" in down, "down minimum correction missing")
-    report.check("let mut quant_sums = [0_i32; 16];" in down, "down quant accumulators missing")
+    scalar_half_layout = (
+        "let mut entry_base = 0_u32;" in down
+        and down.count("let mut accumulator") == 8
+        and down.count("let mut min_sum") == 8
+        and down.count("let mut quant_sum") == 8
+    )
+    report.check(
+        "let mut accumulators = [0.0_f32; 16];" in down or scalar_half_layout,
+        "down multi-pair accumulators missing",
+    )
+    report.check(
+        "let mut min_sums = [0_i32; 16];" in down or scalar_half_layout,
+        "down minimum correction missing",
+    )
+    report.check(
+        "let mut quant_sums = [0_i32; 16];" in down or scalar_half_layout,
+        "down quant accumulators missing",
+    )
     report.check(
         down.count("integer::dp4a_i8(") + q2_group.count("integer::dp4a_i8(") == 8,
         "down DP4A call layout drift",

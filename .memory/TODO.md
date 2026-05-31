@@ -12850,3 +12850,34 @@
     Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
     Total routed-MoE remains `1.52x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Sequential Half-Tile Scalar Expansion Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE down overhead by replacing dynamic
+  staged-entry arrays with sequential eight-entry scalar halves.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-sequential-half-tile-scalar-expansion-performance-repair.json`
+- Evidence:
+  - Only cached down per-entry accumulation scheduling changes; the aligned
+    cached-Q8 loads, corrected Q2 arithmetic, gate/up codegen, row-span
+    policy, benchmark executable, and default current-C routing remain
+    unchanged.
+  - Eight-entry scalar halves increase down PTX DP4A sites from `32` to
+    `256` and remove local stores/loads from `54/9` to `0/0`. A rejected
+    sixteen-entry expansion increases DP4A sites to `512` but regresses down
+    to `912.140 ms` under its larger register and code footprint.
+  - An interleaved B300 parent/candidate comparison leaves gate/up at
+    `752.737 ms` versus `752.848 ms`, lowers down from `632.769 ms` to
+    `518.360 ms`, and lowers total routed-MoE from `1401.795 ms` to
+    `1287.615 ms`; prefill rises from `241.19` to `244.16 tok/s`.
+  - The repaired DSO SHA-256 is
+    `959f7d4c262a9efbf528a4b53261834a598b01941c68d8c3027e6e452fdfa275`
+    and PTX SHA-256 is
+    `df8e1b5eceb9ebb7d626404deecdbc4785f48e7b773e0246f26297a3aba838af`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `276`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `1.39x` current-C, so default routing and
+    promotion blockers remain in force.

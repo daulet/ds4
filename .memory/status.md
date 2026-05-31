@@ -4,6 +4,26 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Sequential Half-Tile Scalar Expansion Performance Repair
+  is validated on B300 from the retained aligned cached-Q8 parent. The
+  cached down kernel processes its staged entries as sequential eight-entry
+  scalar halves, exposing `256` DP4A sites while eliminating local
+  stores/loads (`54/9` to `0/0`). Gate/up codegen is unchanged. The repaired
+  DSO SHA-256 is
+  `959f7d4c262a9efbf528a4b53261834a598b01941c68d8c3027e6e452fdfa275`
+  and its PTX SHA-256 is
+  `df8e1b5eceb9ebb7d626404deecdbc4785f48e7b773e0246f26297a3aba838af`.
+  An interleaved B300 parent/candidate comparison leaves gate/up effectively
+  unchanged (`752.737 ms` to `752.848 ms`), lowers down from `632.769 ms`
+  to `518.360 ms`, and lowers total routed-MoE from `1401.795 ms` to
+  `1287.615 ms`; prefill rises from `241.19` to `244.16 tok/s`. Expanding
+  all sixteen entries was rejected after down regressed to `912.140 ms`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. The unified report passes with `276`
+  passed, `50` skipped, and `0` failed. Pre-implementation and final Claude
+  review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total
+  routed-MoE remains `1.39x` current-C, so default routing and promotion
+  blockers remain in force.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Word Load Performance Repair
   is validated on B300 from the retained scalar staged-pair parent. Cached
   `SXQ` and `SMIDQ` buffers now carry four-byte alignment, and only naturally

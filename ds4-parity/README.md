@@ -4459,6 +4459,21 @@ reduces them from `134` to `2`; an adjacent parent versus candidate run lowers
 total routed-MoE from `2132.947 ms` to `1402.260 ms`. Official-vector
 correctness is preserved, and the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA down sequential half-tile scalar expansion performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_down_sequential_half_tile_scalar_expansion_performance_repair.py --negative-test
+```
+
+The cached Rust down kernel now processes sequential eight-entry scalar halves,
+increasing emitted DP4A sites from `32` to `256` while eliminating local
+stores/loads from `54/9` to `0/0`. On B300, an interleaved parent versus
+candidate comparison lowers down from `632.769 ms` to `518.360 ms` and total
+routed-MoE from `1401.795 ms` to `1287.615 ms`; a full sixteen-entry probe is
+rejected after regressing down to `912.140 ms`. Official-vector correctness is
+preserved, and the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

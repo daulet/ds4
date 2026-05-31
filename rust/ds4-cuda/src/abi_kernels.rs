@@ -2985,7 +2985,7 @@ mod kernels {
     }
 
     macro_rules! abi_moe_down_accumulate_q2_group {
-        ($weights:expr, $q:expr, $shift:expr, $q8_base:expr, $scale_index:ident, $np:expr, $midq_blocks:expr, $block:expr, $q8:expr, $quant_sums:ident) => {{
+        ($weights:expr, $q:expr, $shift:expr, $q8_base:expr, $scale_index:ident, $np:expr, $midq_blocks:expr, $block:expr, $q8:expr, $entry_base:expr, $sum0:ident, $sum1:ident, $sum2:ident, $sum3:ident, $sum4:ident, $sum5:ident, $sum6:ident, $sum7:ident) => {{
             let first_scale = ($weights[$scale_index] & 0x0f) as i32;
             $scale_index += 1;
             let second_scale = ($weights[$scale_index] & 0x0f) as i32;
@@ -3006,54 +3006,65 @@ mod kernels {
                 ((abi_moe_down_load_u32!($weights, $q + 24) >> $shift) & 0x0303_0303) as i32;
             let second_word3 =
                 ((abi_moe_down_load_u32!($weights, $q + 28) >> $shift) & 0x0303_0303) as i32;
-            let mut entry = 0_u32;
-            while entry < $np {
-                let q8_block = entry as usize * $midq_blocks as usize + $block as usize;
-                let mut first = 0_i32;
-                first = integer::dp4a_i8(
-                    first_word0,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base),
-                    first,
-                );
-                first = integer::dp4a_i8(
-                    first_word1,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 4),
-                    first,
-                );
-                first = integer::dp4a_i8(
-                    first_word2,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 8),
-                    first,
-                );
-                first = integer::dp4a_i8(
-                    first_word3,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 12),
-                    first,
-                );
-                let mut second = 0_i32;
-                second = integer::dp4a_i8(
-                    second_word0,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 16),
-                    second,
-                );
-                second = integer::dp4a_i8(
-                    second_word1,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 20),
-                    second,
-                );
-                second = integer::dp4a_i8(
-                    second_word2,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 24),
-                    second,
-                );
-                second = integer::dp4a_i8(
-                    second_word3,
-                    abi_moe_cached_q8_word($q8, q8_block, $q8_base + 28),
-                    second,
-                );
-                $quant_sums[entry as usize] += first_scale * first + second_scale * second;
-                entry += 1;
+            macro_rules! accumulate_entry {
+                ($entry:literal, $sum:ident) => {{
+                    if $np > $entry_base + $entry {
+                        let q8_block = ($entry_base + $entry) as usize * $midq_blocks as usize
+                            + $block as usize;
+                        let mut first = 0_i32;
+                        first = integer::dp4a_i8(
+                            first_word0,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base),
+                            first,
+                        );
+                        first = integer::dp4a_i8(
+                            first_word1,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 4),
+                            first,
+                        );
+                        first = integer::dp4a_i8(
+                            first_word2,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 8),
+                            first,
+                        );
+                        first = integer::dp4a_i8(
+                            first_word3,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 12),
+                            first,
+                        );
+                        let mut second = 0_i32;
+                        second = integer::dp4a_i8(
+                            second_word0,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 16),
+                            second,
+                        );
+                        second = integer::dp4a_i8(
+                            second_word1,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 20),
+                            second,
+                        );
+                        second = integer::dp4a_i8(
+                            second_word2,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 24),
+                            second,
+                        );
+                        second = integer::dp4a_i8(
+                            second_word3,
+                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 28),
+                            second,
+                        );
+                        $sum += first_scale * first + second_scale * second;
+                    }
+                }};
             }
+            accumulate_entry!(0, $sum0);
+            accumulate_entry!(1, $sum1);
+            accumulate_entry!(2, $sum2);
+            accumulate_entry!(3, $sum3);
+            accumulate_entry!(4, $sum4);
+            accumulate_entry!(5, $sum5);
+            accumulate_entry!(6, $sum6);
+            accumulate_entry!(7, $sum7);
         }};
     }
 
@@ -3122,116 +3133,163 @@ mod kernels {
             if row < out_dim {
                 let row_base =
                     u64::from(expert) * down_expert_bytes + u64::from(row) * down_row_bytes;
-                let mut accumulators = [0.0_f32; 16];
-                let mut block = lane;
-                while block < midq_blocks {
-                    let packed = (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize;
-                    let weight_scale =
-                        f16::from_bits(abi_moe_load_u16(down_weights, packed + 80)) as f32;
-                    let weight_min =
-                        f16::from_bits(abi_moe_load_u16(down_weights, packed + 82)) as f32;
-                    let mut min_sums = [0_i32; 16];
-                    let mut scale = 0_usize;
-                    while scale < 16 {
-                        let minimum = (down_weights[packed + scale] >> 4) as i32;
-                        let mut entry = 0_u32;
-                        while entry < np {
-                            let q8_block = entry as usize * midq_blocks as usize + block as usize;
-                            min_sums[entry as usize] +=
-                                abi_moe_cached_q8_bsum(unsafe { SMIDQ.as_ptr() }, q8_block, scale)
-                                    * minimum;
-                            entry += 1;
+                let mut entry_base = 0_u32;
+                while entry_base < np {
+                    let mut accumulator0 = 0.0_f32;
+                    let mut accumulator1 = 0.0_f32;
+                    let mut accumulator2 = 0.0_f32;
+                    let mut accumulator3 = 0.0_f32;
+                    let mut accumulator4 = 0.0_f32;
+                    let mut accumulator5 = 0.0_f32;
+                    let mut accumulator6 = 0.0_f32;
+                    let mut accumulator7 = 0.0_f32;
+                    let mut block = lane;
+                    while block < midq_blocks {
+                        let packed =
+                            (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize;
+                        let weight_scale =
+                            f16::from_bits(abi_moe_load_u16(down_weights, packed + 80)) as f32;
+                        let weight_min =
+                            f16::from_bits(abi_moe_load_u16(down_weights, packed + 82)) as f32;
+                        let mut min_sum0 = 0_i32;
+                        let mut min_sum1 = 0_i32;
+                        let mut min_sum2 = 0_i32;
+                        let mut min_sum3 = 0_i32;
+                        let mut min_sum4 = 0_i32;
+                        let mut min_sum5 = 0_i32;
+                        let mut min_sum6 = 0_i32;
+                        let mut min_sum7 = 0_i32;
+                        let mut scale = 0_usize;
+                        macro_rules! accumulate_min_entry {
+                            ($entry:literal, $sum:ident, $minimum:expr) => {{
+                                if np > entry_base + $entry {
+                                    let q8_block = (entry_base + $entry) as usize
+                                        * midq_blocks as usize
+                                        + block as usize;
+                                    $sum += abi_moe_cached_q8_bsum(
+                                        unsafe { SMIDQ.as_ptr() },
+                                        q8_block,
+                                        scale,
+                                    ) * $minimum;
+                                }
+                            }};
                         }
-                        scale += 1;
+                        while scale < 16 {
+                            let minimum = (down_weights[packed + scale] >> 4) as i32;
+                            accumulate_min_entry!(0, min_sum0, minimum);
+                            accumulate_min_entry!(1, min_sum1, minimum);
+                            accumulate_min_entry!(2, min_sum2, minimum);
+                            accumulate_min_entry!(3, min_sum3, minimum);
+                            accumulate_min_entry!(4, min_sum4, minimum);
+                            accumulate_min_entry!(5, min_sum5, minimum);
+                            accumulate_min_entry!(6, min_sum6, minimum);
+                            accumulate_min_entry!(7, min_sum7, minimum);
+                            scale += 1;
+                        }
+                        let mut quant_sum0 = 0_i32;
+                        let mut quant_sum1 = 0_i32;
+                        let mut quant_sum2 = 0_i32;
+                        let mut quant_sum3 = 0_i32;
+                        let mut quant_sum4 = 0_i32;
+                        let mut quant_sum5 = 0_i32;
+                        let mut quant_sum6 = 0_i32;
+                        let mut quant_sum7 = 0_i32;
+                        let mut scale_index = packed;
+                        let mut chunk = 0_usize;
+                        macro_rules! accumulate_q2_group {
+                            ($q:expr, $shift:expr, $q8_base:expr) => {{
+                                abi_moe_down_accumulate_q2_group!(
+                                    down_weights,
+                                    $q,
+                                    $shift,
+                                    $q8_base,
+                                    scale_index,
+                                    np,
+                                    midq_blocks,
+                                    block,
+                                    unsafe { SMIDQ.as_ptr() },
+                                    entry_base,
+                                    quant_sum0,
+                                    quant_sum1,
+                                    quant_sum2,
+                                    quant_sum3,
+                                    quant_sum4,
+                                    quant_sum5,
+                                    quant_sum6,
+                                    quant_sum7
+                                );
+                            }};
+                        }
+                        while chunk < 2 {
+                            let q = packed + 16 + chunk * 32;
+                            let q8_base = chunk * 128;
+                            accumulate_q2_group!(q, 0, q8_base);
+                            accumulate_q2_group!(q, 2, q8_base + 32);
+                            accumulate_q2_group!(q, 4, q8_base + 64);
+                            accumulate_q2_group!(q, 6, q8_base + 96);
+                            chunk += 1;
+                        }
+                        macro_rules! accumulate_scaled_entry {
+                            ($entry:literal, $quant_sum:ident, $min_sum:ident, $accumulator:ident) => {{
+                                if np > entry_base + $entry {
+                                    let q8_block = (entry_base + $entry) as usize
+                                        * midq_blocks as usize
+                                        + block as usize;
+                                    $accumulator += abi_moe_cached_q8_scale(
+                                        unsafe { SMIDQ.as_ptr() },
+                                        q8_block,
+                                    ) * (weight_scale * $quant_sum as f32
+                                        - weight_min * $min_sum as f32);
+                                }
+                            }};
+                        }
+                        accumulate_scaled_entry!(0, quant_sum0, min_sum0, accumulator0);
+                        accumulate_scaled_entry!(1, quant_sum1, min_sum1, accumulator1);
+                        accumulate_scaled_entry!(2, quant_sum2, min_sum2, accumulator2);
+                        accumulate_scaled_entry!(3, quant_sum3, min_sum3, accumulator3);
+                        accumulate_scaled_entry!(4, quant_sum4, min_sum4, accumulator4);
+                        accumulate_scaled_entry!(5, quant_sum5, min_sum5, accumulator5);
+                        accumulate_scaled_entry!(6, quant_sum6, min_sum6, accumulator6);
+                        accumulate_scaled_entry!(7, quant_sum7, min_sum7, accumulator7);
+                        block += 8;
                     }
-                    let mut quant_sums = [0_i32; 16];
-                    let mut scale_index = packed;
-                    let mut chunk = 0_usize;
-                    while chunk < 2 {
-                        let q = packed + 16 + chunk * 32;
-                        let q8_base = chunk * 128;
-                        abi_moe_down_accumulate_q2_group!(
-                            down_weights,
-                            q,
-                            0,
-                            q8_base,
-                            scale_index,
-                            np,
-                            midq_blocks,
-                            block,
-                            unsafe { SMIDQ.as_ptr() },
-                            quant_sums
-                        );
-                        abi_moe_down_accumulate_q2_group!(
-                            down_weights,
-                            q,
-                            2,
-                            q8_base + 32,
-                            scale_index,
-                            np,
-                            midq_blocks,
-                            block,
-                            unsafe { SMIDQ.as_ptr() },
-                            quant_sums
-                        );
-                        abi_moe_down_accumulate_q2_group!(
-                            down_weights,
-                            q,
-                            4,
-                            q8_base + 64,
-                            scale_index,
-                            np,
-                            midq_blocks,
-                            block,
-                            unsafe { SMIDQ.as_ptr() },
-                            quant_sums
-                        );
-                        abi_moe_down_accumulate_q2_group!(
-                            down_weights,
-                            q,
-                            6,
-                            q8_base + 96,
-                            scale_index,
-                            np,
-                            midq_blocks,
-                            block,
-                            unsafe { SMIDQ.as_ptr() },
-                            quant_sums
-                        );
-                        chunk += 1;
-                    }
-                    let mut entry = 0_u32;
-                    while entry < np {
-                        let q8_block = entry as usize * midq_blocks as usize + block as usize;
-                        accumulators[entry as usize] +=
-                            abi_moe_cached_q8_scale(unsafe { SMIDQ.as_ptr() }, q8_block)
-                                * (weight_scale * quant_sums[entry as usize] as f32
-                                    - weight_min * min_sums[entry as usize] as f32);
-                        entry += 1;
-                    }
-                    block += 8;
-                }
-                let mut entry = 0_u32;
-                while entry < np {
-                    let pair =
-                        sorted_pairs[(offsets[expert as usize] + local_start + entry) as usize];
-                    let accumulator = abi_moe_quarter_warp_sum(accumulators[entry as usize]);
-                    if lane == 0 {
-                        if atomic_out != 0 {
-                            let token = pair / n_expert;
-                            let output = (token * out_dim + row) as usize;
-                            let cell = unsafe {
-                                &*(down_out.as_mut_ptr().add(output) as *const DeviceAtomicF32)
-                            };
-                            cell.fetch_add(accumulator, AtomicOrdering::Relaxed);
-                        } else {
-                            unsafe {
-                                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) =
-                                    accumulator;
+                    macro_rules! emit_entry {
+                        ($entry:literal, $accumulator:ident) => {{
+                            if np > entry_base + $entry {
+                                let pair = sorted_pairs[(offsets[expert as usize]
+                                    + local_start
+                                    + entry_base
+                                    + $entry) as usize];
+                                let accumulator = abi_moe_quarter_warp_sum($accumulator);
+                                if lane == 0 {
+                                    if atomic_out != 0 {
+                                        let token = pair / n_expert;
+                                        let output = (token * out_dim + row) as usize;
+                                        let cell = unsafe {
+                                            &*(down_out.as_mut_ptr().add(output)
+                                                as *const DeviceAtomicF32)
+                                        };
+                                        cell.fetch_add(accumulator, AtomicOrdering::Relaxed);
+                                    } else {
+                                        unsafe {
+                                            *down_out.get_unchecked_mut(
+                                                (pair * out_dim + row) as usize,
+                                            ) = accumulator;
+                                        }
+                                    }
+                                }
                             }
-                        }
+                        }};
                     }
-                    entry += 1;
+                    emit_entry!(0, accumulator0);
+                    emit_entry!(1, accumulator1);
+                    emit_entry!(2, accumulator2);
+                    emit_entry!(3, accumulator3);
+                    emit_entry!(4, accumulator4);
+                    emit_entry!(5, accumulator5);
+                    emit_entry!(6, accumulator6);
+                    emit_entry!(7, accumulator7);
+                    entry_base += 8;
                 }
             }
             row_offset += 32;

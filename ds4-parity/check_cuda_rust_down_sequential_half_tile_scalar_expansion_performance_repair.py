@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Rust CUDA cached-down Q2-group expansion performance repair."""
+"""Validate the Rust CUDA down sequential half-tile scalar expansion repair."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE.lower()}/rust-cuda-down-q2-group-expansion-performance-repair.json"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE.lower()}/rust-cuda-down-sequential-half-tile-scalar-expansion-performance-repair.json"
 
 
 @dataclass
@@ -56,7 +56,7 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA down Q2-group expansion repair: {state} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA down sequential half-tile scalar expansion repair: {state} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
@@ -64,23 +64,28 @@ def main(argv: Iterable[str]) -> int:
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     report.check(
-        fixture.get("schema") == "ds4.cuda_rust_down_q2_group_expansion_performance_repair.v1",
+        fixture.get("schema")
+        == "ds4.cuda_rust_down_sequential_half_tile_scalar_expansion_performance_repair.v1",
         "schema drift",
     )
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
-    report.check(fixture.get("status") == "b300-pass-down-q2-group-expanded-route-blocked", "status drift")
+    report.check(
+        fixture.get("status")
+        == "b300-pass-rust-down-sequential-half-tile-scalar-expansion-route-blocked",
+        "status drift",
+    )
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
-        ("changes_cached_down_q2_group_shape", True),
-        ("expands_inner_q2_groups", True),
-        ("preserves_outer_chunk_order", True),
-        ("retains_down_load_expansion", True),
-        ("retains_gate_accumulation_order", True),
-        ("retains_multi_pair_down_dp4a", True),
-        ("changes_default_dispatch", False),
+        ("changes_cached_down_accumulation_schedule", True),
+        ("processes_sequential_half_tiles", True),
+        ("uses_named_scalar_down_accumulators", True),
+        ("retains_aligned_cached_q8_loads", True),
+        ("retains_q2_arithmetic", True),
+        ("retains_gate_kernel_codegen", True),
+        ("retains_rowspan_policy", True),
+        ("changes_default_current_c_route", False),
         ("official_vector_gate_preserved", True),
         ("runtime_route_promoted", False),
-        ("default_current_c_route_preserved", True),
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     validate_implementation(report, fixture, texts["kernels"])
@@ -89,35 +94,38 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
 
 
 def validate_implementation(report: Report, fixture: dict[str, Any], kernels: str) -> None:
-    group_macro = kernels.split("macro_rules! abi_moe_down_accumulate_q2_group", 1)[1].split(
-        "#[allow(clippy::too_many_arguments, static_mut_refs)]", 1
-    )[0]
-    down = kernels.split("pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel(", 1)[1].split(
-        "pub fn abi_moe_gate_up_mid_f32_kernel(", 1
-    )[0]
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
-    report.check("macro_rules! abi_moe_down_load_u32" in kernels, "retained down load macro missing")
-    report.check("macro_rules! abi_moe_down_accumulate_q2_group" in kernels, "Q2-group macro missing")
-    report.check(group_macro.count("abi_moe_down_load_u32!(") == 8, "Q2-group load shape drift")
-    report.check(group_macro.count("integer::dp4a_i8(") == 8, "Q2-group DP4A shape drift")
-    direct_groups = down.count("abi_moe_down_accumulate_q2_group!(")
-    scalar_half_groups = direct_groups == 1 and down.count("\n                            accumulate_q2_group!(") == 4
-    report.check(direct_groups == 4 or scalar_half_groups, "fixed Q2-group calls drift")
-    report.check("while chunk < 2" in down, "ordered outer chunk loop missing")
-    report.check("while group < 4" not in down, "dynamic Q2-group loop retained")
+    down = kernels.split("pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel", 1)[1]
+    down = down.split("pub fn abi_moe_gate_up_mid_f32_kernel", 1)[0]
     for key, expected in [
-        ("fixed_group_invocation_count_per_dynamic_chunk", 4),
-        ("dynamic_outer_chunk_count", 2),
-        ("parent_ptx_dp4a_site_count", 8),
-        ("parent_ptx_local_store_count", 51),
-        ("parent_ptx_local_load_count", 6),
-        ("parent_ptx_call_instruction_count", 1),
-        ("repaired_ptx_dp4a_site_count", 32),
-        ("repaired_ptx_local_store_count", 54),
-        ("repaired_ptx_local_load_count", 9),
-        ("repaired_ptx_call_instruction_count", 1),
+        ("source", "rust/ds4-cuda/src/abi_kernels.rs"),
+        ("scalar_half_tile_entries", 8),
+        ("rejected_full_tile_entries", 16),
+        ("parent_gate_kernel_ptx_sha256", "3cb04ca64e08e76854813332ce1ee421483134ea4adbff071d9bad01de8122a1"),
+        ("repaired_gate_kernel_ptx_sha256", "3cb04ca64e08e76854813332ce1ee421483134ea4adbff071d9bad01de8122a1"),
+        ("parent_down_dp4a_sites", 32),
+        ("repaired_down_dp4a_sites", 256),
+        ("parent_down_ld_local_sites", 9),
+        ("repaired_down_ld_local_sites", 0),
+        ("parent_down_st_local_sites", 54),
+        ("repaired_down_st_local_sites", 0),
+        ("parent_down_b32_register_bound", 370),
+        ("repaired_down_b32_register_bound", 1530),
+        ("rejected_full_tile_down_dp4a_sites", 512),
+        ("rejected_full_tile_down_b32_register_bound", 2797),
     ]:
         report.check(implementation.get(key) == expected, f"implementation evidence drift: {key}")
+    report.check("let mut entry_base = 0_u32;" in down, "half-tile entry base missing")
+    report.check("while entry_base < np {" in down, "half-tile traversal missing")
+    report.check("entry_base += 8;" in down, "half-tile stride missing")
+    report.check(down.count("let mut accumulator") == 8, "down scalar accumulator count drift")
+    report.check(down.count("let mut min_sum") == 8, "down minimum scalar count drift")
+    report.check(down.count("let mut quant_sum") == 8, "down quant scalar count drift")
+    report.check("let mut accumulators = [0.0_f32; 16];" not in down, "array accumulator path retained")
+    report.check("let mut min_sums = [0_i32; 16];" not in down, "array minimum path retained")
+    report.check("let mut quant_sums = [0_i32; 16];" not in down, "array quant path retained")
+    report.check("abi_moe_cached_load_aligned_u32" in kernels, "aligned Q8 parent repair missing")
+    report.check("accumulate_entry!(7, $sum7);" in kernels, "fixed eight-entry Q2 group expansion missing")
 
 
 def validate_execution(report: Report, fixture: dict[str, Any]) -> None:
@@ -127,50 +135,42 @@ def validate_execution(report: Report, fixture: dict[str, Any]) -> None:
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("parent_profiled_shared_library_sha256", "53717e57162ad2e0eedff267d3f22fa4a8246c5c065f7ad899ef544bd9894e91"),
-        ("repaired_profiled_shared_library_sha256", "f0e72d3aa68715171e8caf2673048ad3e16cb432fae3267da4811454bbd1f856"),
+        ("parent_shared_library_sha256", "ccc6dc7fe28acb3edd9d11c22198f1bd2eed7a451e1a7bbc67b1d3c4a3d3dfbc"),
+        ("parent_ptx_sha256", "e97c1c1f18d3329625fe8ea737aea11873db6335609d1a569d1693b832addb6b"),
+        ("repaired_shared_library_sha256", "959f7d4c262a9efbf528a4b53261834a598b01941c68d8c3027e6e452fdfa275"),
+        ("repaired_ptx_sha256", "df8e1b5eceb9ebb7d626404deecdbc4785f48e7b773e0246f26297a3aba838af"),
         ("gpu_utilization_percent_after_each_completed_probe", 0),
         ("gpu_memory_mib_after_each_completed_probe", 0),
     ]:
         report.check(execution.get(key) == expected, f"B300 evidence drift: {key}")
-    ptx = require_dict(report, execution.get("ptx_shape"), "PTX shape")
-    for key, expected in [
-        ("parent_function_sha256", "57dad6696abbc392f73de19db9815354f494a971d876df6b1ce7a2560f969c7a"),
-        ("repaired_function_sha256", "b1f4318ab13b04e0cd135ae9f96d84c84de5425d301dab33e447eae786e17f0f"),
-        ("parent_dp4a_site_count", 8),
-        ("repaired_dp4a_site_count", 32),
-        ("parent_local_store_count", 51),
-        ("repaired_local_store_count", 54),
-        ("parent_local_load_count", 6),
-        ("repaired_local_load_count", 9),
+    parent = require_dict(report, execution.get("parent_control_profile"), "parent profile")
+    repaired = require_dict(report, execution.get("repaired_confirmation_profile"), "repaired profile")
+    for profile, label, prefill, gateup, down, total in [
+        (parent, "parent", 241.19, 752.737, 632.769, 1401.795),
+        (repaired, "repaired", 244.16, 752.848, 518.360, 1287.615),
     ]:
-        report.check(ptx.get(key) == expected, f"PTX attribution drift: {key}")
-    parent = require_dict(report, execution.get("parent_rebuild_profile"), "parent profile")
-    repaired = require_dict(report, execution.get("repaired_rebuild_profile"), "repaired profile")
-    current_c = require_dict(report, execution.get("current_c_reference"), "current-C reference")
-    for profile, label, gateup, down, total in [
-        (parent, "parent", 1534.338, 1116.221, 2666.890),
-        (repaired, "repaired", 1533.245, 905.109, 2454.643),
-        (current_c, "current-C", 517.818, 393.200, 924.283),
-    ]:
+        report.check(profile.get("prefill_tps") == prefill, f"{label} prefill drift")
         report.check(profile.get("gateup_ms") == gateup, f"{label} gate/up drift")
         report.check(profile.get("down_ms") == down, f"{label} down drift")
         report.check(profile.get("total_ms") == total, f"{label} total drift")
-    attribution = require_dict(report, execution.get("attribution"), "attribution")
+    attribution = require_dict(report, execution.get("interleaved_attribution"), "attribution")
     for key, expected in [
-        ("down_speedup_over_parent", 1.233),
-        ("total_speedup_over_parent", 1.086),
-        ("down_reduction_percent_over_parent", 18.91),
-        ("total_reduction_percent_over_parent", 7.96),
-        ("repaired_gateup_ratio_to_current_c", 2.96),
-        ("repaired_down_ratio_to_current_c", 2.30),
-        ("repaired_total_ratio_to_current_c", 2.66),
-        ("remaining_primary_bottleneck", "cached-gateup-and-down-native-codegen-gap"),
+        ("down_speedup_over_parent", 1.221),
+        ("total_speedup_over_parent", 1.089),
+        ("down_reduction_percent_over_parent", 18.08),
+        ("total_reduction_percent_over_parent", 8.15),
+        ("prefill_increase_percent_over_parent", 1.23),
+        ("repaired_gateup_ratio_to_current_c", 1.45),
+        ("repaired_down_ratio_to_current_c", 1.32),
+        ("repaired_total_ratio_to_current_c", 1.39),
     ]:
         report.check(attribution.get(key) == expected, f"attribution drift: {key}")
+    rejected = require_dict(report, execution.get("rejected_full_tile_scalar_probe"), "rejected full-tile probe")
+    report.check(rejected.get("down_ms") == 912.140, "rejected full-tile down drift")
+    report.check(rejected.get("total_ms") == 1681.666, "rejected full-tile total drift")
     official = require_dict(report, execution.get("official_vector_probe"), "official vectors")
     report.check(
-        official.get("summary_sha256") == "cc7096f2aa530fb67c0e7f9d73175c83344f294aa9788e04294b2c09b77bd503",
+        official.get("summary_sha256") == "a6467387e86968bbdcf198cf6b28fc2476f4f3d4591be136edbf7864504f924c",
         "official summary hash drift",
     )
     report.check(official.get("comparator_check_count") == 1958, "official check-count drift")
@@ -179,8 +179,8 @@ def validate_execution(report: Report, fixture: dict[str, Any]) -> None:
 
 
 def validate_wiring(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    item = f"{MILESTONE}: Rust CUDA Down Q2-Group Expansion Performance Repair"
-    checker = "check_cuda_rust_down_q2_group_expansion_performance_repair.py"
+    item = f"{MILESTONE}: Rust CUDA Down Sequential Half-Tile Scalar Expansion Performance Repair"
+    checker = "check_cuda_rust_down_sequential_half_tile_scalar_expansion_performance_repair.py"
     for target, label in [("roadmap", "roadmap"), ("todo", "TODO"), ("status", "status")]:
         report.check(item in texts[target], f"{label} item missing")
     report.check(checker in texts["readme"], "README wiring missing")
@@ -193,19 +193,19 @@ def validate_wiring(report: Report, fixture: dict[str, Any], texts: dict[str, st
     validation = require_dict(report, fixture.get("validation"), "validation")
     report.check(validation.get("local_ds4_cuda_library_test_count") == 169, "local test-count drift")
     report.check(validation.get("b300_feature_release_test_count") == 176, "B300 test-count drift")
-    report.check(validation.get("unified_report_passed") == 268, "unified pass-count drift")
+    report.check(validation.get("unified_report_passed") == 276, "unified pass-count drift")
     report.check(validation.get("unified_report_skipped") == 50, "unified skip-count drift")
     report.check(validation.get("unified_report_failed") == 0, "unified failure-count drift")
     review = require_dict(report, fixture.get("review"), "review")
-    report.check(review.get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "pre-review missing")
+    report.check(review.get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "pre-implementation review missing")
     report.check(review.get("final") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "final review missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("lost static groups", lambda value: value["implementation"].update({"repaired_ptx_dp4a_site_count": 8})),
-        ("lost speedup", lambda value: value["b300_execution"]["repaired_rebuild_profile"].update({"down_ms": 1116.221})),
-        ("dispatch overclaim", lambda value: value["ownership"].update({"changes_default_dispatch": True})),
+        ("lost scalar half", lambda value: value["implementation"].update({"scalar_half_tile_entries": 16})),
+        ("lost spill removal", lambda value: value["implementation"].update({"repaired_down_ld_local_sites": 9})),
+        ("lost speedup", lambda value: value["b300_execution"]["repaired_confirmation_profile"].update({"down_ms": 632.769})),
         ("promotion overclaim", lambda value: value["decision"].update({"rust_cuda_dso_promotion": "passed"})),
         ("official mismatch", lambda value: value["b300_execution"]["official_vector_probe"].update({"passed": False})),
     ]:
