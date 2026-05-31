@@ -12220,10 +12220,56 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
-- Status: active.
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public single-token routed-MoE wrapper has a bounded current-C
+  contract, while the public batched signature exposes an unresolved
+  `mid_is_f16` result absent from its CUDA definition.
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before
   those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Single-Token Routed MoE ABI
+
+- Status: done.
+- Goal: Rust-own `ds4_gpu_routed_moe_one_tensor` through the reachable F32
+  fallback, IQ2/Q2 quantized, Q4_K, and environment-selected single-token
+  routes without claiming batched routed MoE or production route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-one-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_one_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the checked single-token wrapper,
+    retains uploaded IQ2 lookup tables, resolves three cached model ranges,
+    and preserves packed Q8_K aliases in the public gate/down scratch tensors.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds F32 fallback, quantization,
+    IQ2/Q2, Q4_K, generic-down, direct-six, and summation kernels promoted
+    from the measured routed-MoE proofs.
+  - A C-linked B300 consumer proves nonzero F32, default IQ2/Q2, and Q4_K
+    execution; environment-forced generic gate/down output; packed Q8 scratch
+    visibility; optional auxiliary writes; negative-expert fallback; and
+    reject-before-write validation.
+  - Local library tests pass with 154 tests; B300 release-feature tests pass
+    with 161 tests; the static library exposes 74 Rust ABI symbols and embeds
+    72 kernels.
+  - All 64 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning.
+  - All 68 CUDA ABI comparators pass, and the unified report passes with 240
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Batched routed-MoE ownership remains blocked by the `mid_is_f16` public
+    result gap; remaining graph compute, route promotion, whole-archive
+    retention policy, and C CUDA removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
+- Status: active.
+- Goal: resolve or scope the batched routed-MoE ABI contract, then connect
+  remaining graph compute, whole-archive retention policy, and production
+  route-promotion work without claiming C CUDA removal before those gates
+  pass.
 
 ## Removal Criteria for C Host Code
 

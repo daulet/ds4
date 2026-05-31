@@ -12,7 +12,7 @@ use cuda_core::{
 };
 
 #[cfg(feature = "cuda-oxide-kernels")]
-use crate::abi_kernels::AbiKernelModule;
+use crate::abi_kernels::{AbiKernelModule, ABI_MOE_IQ2_GRID, ABI_MOE_IQ2_SIGNS};
 use crate::allocation_policy::managed_kv_decision;
 use crate::q8_policy::{
     q8_f32_cache_allowed, q8_preload_format, Q8CacheOptions, Q8CacheState, Q8PreloadFormat,
@@ -36,6 +36,8 @@ static ABI_KERNELS: Mutex<Option<AbiKernelModule>> = Mutex::new(None);
 static ABI_F16_ACTIVATIONS: Mutex<Option<DeviceBuffer<f16>>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_Q8_ACTIVATIONS: Mutex<Option<AbiQ8Activations>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_MOE_IQ2_TABLES: Mutex<Option<AbiMoeIq2Tables>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_INDEXED_TOPK_SORT_SCRATCH: Mutex<Option<DeviceBuffer<i32>>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -129,6 +131,12 @@ struct AbiQ8Cache {
 struct AbiQ8Activations {
     quantized: DeviceBuffer<i8>,
     scales: DeviceBuffer<f32>,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiMoeIq2Tables {
+    grid: DeviceBuffer<u64>,
+    signs: DeviceBuffer<u8>,
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -437,6 +445,21 @@ fn with_abi_q8_activations<T>(
         });
     }
     operation(activations.as_mut()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_moe_iq2_tables<T>(
+    backend: &CudaOxideSubstrate,
+    operation: impl FnOnce(&AbiMoeIq2Tables) -> Option<T>,
+) -> Option<T> {
+    let mut tables = ABI_MOE_IQ2_TABLES.lock().ok()?;
+    if tables.is_none() {
+        *tables = Some(AbiMoeIq2Tables {
+            grid: backend.upload(&ABI_MOE_IQ2_GRID).ok()?,
+            signs: backend.upload(&ABI_MOE_IQ2_SIGNS).ok()?,
+        });
+    }
+    operation(tables.as_ref()?)
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -2004,6 +2027,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut activations) = ABI_Q8_ACTIVATIONS.lock() {
                 *activations = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut tables) = ABI_MOE_IQ2_TABLES.lock() {
+                *tables = None;
             }
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut scratch) = ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH.lock() {
@@ -6826,6 +6853,355 @@ unsafe fn launch_router_select(
             },
         };
         Some(launched)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_routed_moe_one_tensor(
+    out: *mut Ds4GpuTensor,
+    gate: *mut Ds4GpuTensor,
+    up: *mut Ds4GpuTensor,
+    mid: *mut Ds4GpuTensor,
+    down: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    gate_offset: u64,
+    up_offset: u64,
+    down_offset: u64,
+    gate_type: u32,
+    down_type: u32,
+    gate_expert_bytes: u64,
+    gate_row_bytes: u64,
+    down_expert_bytes: u64,
+    down_row_bytes: u64,
+    expert_in_dim: u32,
+    expert_mid_dim: u32,
+    out_dim: u32,
+    selected: *const Ds4GpuTensor,
+    weights: *const Ds4GpuTensor,
+    n_expert: u32,
+    clamp: f32,
+    x: *const Ds4GpuTensor,
+) -> c_int {
+    status(|| {
+        const MOE_EXPERT_COUNT: u64 = 256;
+        const QK_K: u32 = 256;
+        const Q8_K_BYTES: u64 = 292;
+
+        let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(gate) = (unsafe { tensor_ref(gate.cast_const()) }) else {
+            return false;
+        };
+        let Some(up) = (unsafe { tensor_ref(up.cast_const()) }) else {
+            return false;
+        };
+        let Some(mid) = (unsafe { tensor_ref(mid.cast_const()) }) else {
+            return false;
+        };
+        let Some(down) = (unsafe { tensor_ref(down.cast_const()) }) else {
+            return false;
+        };
+        let Some(selected) = (unsafe { tensor_ref(selected) }) else {
+            return false;
+        };
+        let Some(weights) = (unsafe { tensor_ref(weights) }) else {
+            return false;
+        };
+        let Some(x) = (unsafe { tensor_ref(x) }) else {
+            return false;
+        };
+        let q4_k = gate_type == 12 && down_type == 12;
+        let Some(x_bytes) = u64::from(expert_in_dim).checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(route_bytes) = u64::from(n_expert).checked_mul(size_of::<i32>() as u64) else {
+            return false;
+        };
+        let Some(weight_bytes) = u64::from(n_expert).checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(mid_elements) = u64::from(n_expert).checked_mul(u64::from(expert_mid_dim)) else {
+            return false;
+        };
+        let Some(mid_bytes) = mid_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(down_elements) = u64::from(n_expert).checked_mul(u64::from(out_dim)) else {
+            return false;
+        };
+        let Some(down_bytes) = down_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(out_bytes) = u64::from(out_dim).checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(gate_model_bytes) = MOE_EXPERT_COUNT.checked_mul(gate_expert_bytes) else {
+            return false;
+        };
+        let Some(down_model_bytes) = MOE_EXPERT_COUNT.checked_mul(down_expert_bytes) else {
+            return false;
+        };
+        if model_map.is_null()
+            || n_expert == 0
+            || expert_in_dim % QK_K != 0
+            || expert_mid_dim % QK_K != 0
+            || (!q4_k && (gate_type != 16 || down_type != 10))
+            || (q4_k && n_expert != 6)
+            || gate_offset > model_size
+            || up_offset > model_size
+            || down_offset > model_size
+            || gate_model_bytes > model_size - gate_offset
+            || gate_model_bytes > model_size - up_offset
+            || down_model_bytes > model_size - down_offset
+            || x.bytes < x_bytes
+            || selected.bytes < route_bytes
+            || weights.bytes < weight_bytes
+            || gate.bytes < mid_bytes
+            || up.bytes < mid_bytes
+            || mid.bytes < mid_bytes
+            || down.bytes < down_bytes
+            || out.bytes < out_bytes
+        {
+            return false;
+        }
+        let xq_blocks = expert_in_dim / QK_K;
+        let midq_blocks = expert_mid_dim / QK_K;
+        let Some(xq_bytes) = u64::from(xq_blocks).checked_mul(Q8_K_BYTES) else {
+            return false;
+        };
+        let Some(midq_bytes) = u64::from(n_expert)
+            .checked_mul(u64::from(midq_blocks))
+            .and_then(|blocks| blocks.checked_mul(Q8_K_BYTES))
+        else {
+            return false;
+        };
+        let use_quantized = down.bytes >= xq_bytes && gate.bytes >= midq_bytes;
+
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                gate_offset,
+                gate_model_bytes,
+                |gate_weights_ptr| {
+                    with_cached_abi_model_range(
+                        backend,
+                        model_map,
+                        model_size,
+                        up_offset,
+                        gate_model_bytes,
+                        |up_weights_ptr| {
+                            with_cached_abi_model_range(
+                                backend,
+                                model_map,
+                                model_size,
+                                down_offset,
+                                down_model_bytes,
+                                |down_weights_ptr| {
+                                    with_abi_moe_iq2_tables(backend, |tables| {
+                                        with_abi_kernels(backend, |kernels| {
+                                            if !use_quantized {
+                                                if !unsafe {
+                                                    kernels.moe_gate_up_mid_f32_tensor(
+                                                        backend.stream(),
+                                                        gate.device_ptr(),
+                                                        up.device_ptr(),
+                                                        mid.device_ptr(),
+                                                        gate_weights_ptr,
+                                                        up_weights_ptr,
+                                                        x.device_ptr(),
+                                                        selected.device_ptr(),
+                                                        weights.device_ptr(),
+                                                        tables.grid.cu_deviceptr(),
+                                                        tables.signs.cu_deviceptr(),
+                                                        gate_model_bytes,
+                                                        expert_in_dim,
+                                                        expert_mid_dim,
+                                                        n_expert,
+                                                        gate_expert_bytes,
+                                                        gate_row_bytes,
+                                                        clamp,
+                                                    )
+                                                } {
+                                                    return Some(false);
+                                                }
+                                                if !unsafe {
+                                                    kernels.moe_down_f32_tensor(
+                                                        backend.stream(),
+                                                        down.device_ptr(),
+                                                        down_weights_ptr,
+                                                        mid.device_ptr(),
+                                                        selected.device_ptr(),
+                                                        down_model_bytes,
+                                                        expert_mid_dim,
+                                                        out_dim,
+                                                        n_expert,
+                                                        down_expert_bytes,
+                                                        down_row_bytes,
+                                                    )
+                                                } {
+                                                    return Some(false);
+                                                }
+                                                return Some(unsafe {
+                                                    kernels.moe_sum_tensor(
+                                                        backend.stream(),
+                                                        out.device_ptr(),
+                                                        down.device_ptr(),
+                                                        out_dim,
+                                                        n_expert,
+                                                    )
+                                                });
+                                            }
+                                            if !unsafe {
+                                                kernels.moe_q8_k_quantize_tensor(
+                                                    backend.stream(),
+                                                    x.device_ptr(),
+                                                    down.device_ptr(),
+                                                    xq_bytes,
+                                                    expert_in_dim,
+                                                    1,
+                                                )
+                                            } {
+                                                return Some(false);
+                                            }
+                                            let use_decode_lut = xq_blocks <= 16
+                                                && std::env::var_os(
+                                                    "DS4_CUDA_MOE_NO_DECODE_LUT_GATE",
+                                                )
+                                                .is_none();
+                                            let gate_ok = if use_decode_lut {
+                                                unsafe {
+                                                    kernels.moe_gate_up_mid_decode_tensor(
+                                                        backend.stream(),
+                                                        q4_k,
+                                                        std::env::var_os(
+                                                            "DS4_CUDA_MOE_WRITE_GATE_UP",
+                                                        )
+                                                        .is_some(),
+                                                        gate.device_ptr(),
+                                                        up.device_ptr(),
+                                                        mid.device_ptr(),
+                                                        gate_weights_ptr,
+                                                        up_weights_ptr,
+                                                        down.device_ptr(),
+                                                        selected.device_ptr(),
+                                                        weights.device_ptr(),
+                                                        tables.grid.cu_deviceptr(),
+                                                        tables.signs.cu_deviceptr(),
+                                                        gate_model_bytes,
+                                                        xq_bytes,
+                                                        xq_blocks,
+                                                        expert_mid_dim,
+                                                        n_expert,
+                                                        gate_expert_bytes,
+                                                        gate_row_bytes,
+                                                        clamp,
+                                                    )
+                                                }
+                                            } else {
+                                                unsafe {
+                                                    kernels.moe_gate_up_mid_qwarp32_tensor(
+                                                        backend.stream(),
+                                                        gate.device_ptr(),
+                                                        up.device_ptr(),
+                                                        mid.device_ptr(),
+                                                        gate_weights_ptr,
+                                                        up_weights_ptr,
+                                                        down.device_ptr(),
+                                                        selected.device_ptr(),
+                                                        weights.device_ptr(),
+                                                        tables.grid.cu_deviceptr(),
+                                                        tables.signs.cu_deviceptr(),
+                                                        gate_model_bytes,
+                                                        xq_bytes,
+                                                        xq_blocks,
+                                                        expert_mid_dim,
+                                                        n_expert,
+                                                        gate_expert_bytes,
+                                                        gate_row_bytes,
+                                                        clamp,
+                                                    )
+                                                }
+                                            };
+                                            if !gate_ok
+                                                || !unsafe {
+                                                    kernels.moe_q8_k_quantize_tensor(
+                                                        backend.stream(),
+                                                        mid.device_ptr(),
+                                                        gate.device_ptr(),
+                                                        midq_bytes,
+                                                        expert_mid_dim,
+                                                        n_expert,
+                                                    )
+                                                }
+                                            {
+                                                return Some(false);
+                                            }
+                                            let direct_sum6 = n_expert == 6
+                                                && std::env::var_os(
+                                                    "DS4_CUDA_MOE_NO_DIRECT_DOWN_SUM6",
+                                                )
+                                                .is_none();
+                                            if direct_sum6 {
+                                                return Some(unsafe {
+                                                    kernels.moe_down_sum6_tensor(
+                                                        backend.stream(),
+                                                        q4_k,
+                                                        out.device_ptr(),
+                                                        down_weights_ptr,
+                                                        gate.device_ptr(),
+                                                        selected.device_ptr(),
+                                                        down_model_bytes,
+                                                        midq_bytes,
+                                                        midq_blocks,
+                                                        out_dim,
+                                                        down_expert_bytes,
+                                                        down_row_bytes,
+                                                    )
+                                                });
+                                            }
+                                            if !unsafe {
+                                                kernels.moe_down_qwarp32_tensor(
+                                                    backend.stream(),
+                                                    down.device_ptr(),
+                                                    down_weights_ptr,
+                                                    gate.device_ptr(),
+                                                    selected.device_ptr(),
+                                                    down_model_bytes,
+                                                    midq_bytes,
+                                                    midq_blocks,
+                                                    out_dim,
+                                                    n_expert,
+                                                    down_expert_bytes,
+                                                    down_row_bytes,
+                                                )
+                                            } {
+                                                return Some(false);
+                                            }
+                                            Some(unsafe {
+                                                kernels.moe_sum_tensor(
+                                                    backend.stream(),
+                                                    out.device_ptr(),
+                                                    down.device_ptr(),
+                                                    out_dim,
+                                                    n_expert,
+                                                )
+                                            })
+                                        })
+                                    })
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false)
     })
 }
 

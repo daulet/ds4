@@ -3920,6 +3920,22 @@ MoE, remaining graph compute, whole-archive retention policy, route
 promotion, C CUDA removal, and the embedded-object executable-stack warning
 remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA public single-token routed-MoE ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_one_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the single-token public routed-MoE wrapper
+through F32 fallback, default IQ2/Q2 quantized, forced generic gate/down, and
+Q4_K direct-six paths. It proves packed public Q8 scratch visibility,
+optional gate/up writes, negative-expert fallback, and reject-before-write
+controls. Batched routed-MoE remains unclaimed because its public
+`mid_is_f16` result contract is missing from the current CUDA definition;
+route promotion, C CUDA removal, and the embedded-object executable-stack
+warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

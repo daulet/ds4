@@ -15,6 +15,278 @@ const ABI_KERNEL_ARTIFACT: &str = "ds4-cuda";
 const ABI_ROUTER_N_EXPERT: usize = 256;
 const ABI_ROUTER_TOP_K: usize = 6;
 const ABI_ROUTER_ROWS_PER_WARP_BLOCK: u32 = 4;
+const ABI_MOE_QK_K: usize = 256;
+const ABI_MOE_IQ2_BLOCK_BYTES: u64 = 66;
+const ABI_MOE_Q2_BLOCK_BYTES: u64 = 84;
+const ABI_MOE_Q4_BLOCK_BYTES: u64 = 144;
+const ABI_MOE_Q8_K_BLOCK_BYTES: u64 = 292;
+pub(crate) const ABI_MOE_IQ2_SIGNS: [u8; 128] = [
+    0, 129, 130, 3, 132, 5, 6, 135, 136, 9, 10, 139, 12, 141, 142, 15, 144, 17, 18, 147, 20, 149,
+    150, 23, 24, 153, 154, 27, 156, 29, 30, 159, 160, 33, 34, 163, 36, 165, 166, 39, 40, 169, 170,
+    43, 172, 45, 46, 175, 48, 177, 178, 51, 180, 53, 54, 183, 184, 57, 58, 187, 60, 189, 190, 63,
+    192, 65, 66, 195, 68, 197, 198, 71, 72, 201, 202, 75, 204, 77, 78, 207, 80, 209, 210, 83, 212,
+    85, 86, 215, 216, 89, 90, 219, 92, 221, 222, 95, 96, 225, 226, 99, 228, 101, 102, 231, 232,
+    105, 106, 235, 108, 237, 238, 111, 240, 113, 114, 243, 116, 245, 246, 119, 120, 249, 250, 123,
+    252, 125, 126, 255,
+];
+pub(crate) const ABI_MOE_IQ2_GRID: [u64; 256] = [
+    0x0808080808080808,
+    0x080808080808082b,
+    0x0808080808081919,
+    0x0808080808082b08,
+    0x0808080808082b2b,
+    0x0808080808190819,
+    0x0808080808191908,
+    0x08080808082b0808,
+    0x08080808082b082b,
+    0x08080808082b2b08,
+    0x08080808082b2b2b,
+    0x0808080819080819,
+    0x0808080819081908,
+    0x0808080819190808,
+    0x0808080819192b08,
+    0x08080808192b0819,
+    0x08080808192b1908,
+    0x080808082b080808,
+    0x080808082b08082b,
+    0x080808082b082b2b,
+    0x080808082b2b082b,
+    0x0808081908080819,
+    0x0808081908081908,
+    0x0808081908190808,
+    0x0808081908191919,
+    0x0808081919080808,
+    0x080808192b081908,
+    0x080808192b192b08,
+    0x0808082b08080808,
+    0x0808082b0808082b,
+    0x0808082b082b082b,
+    0x0808082b2b08082b,
+    0x0808190808080819,
+    0x0808190808081908,
+    0x0808190808190808,
+    0x08081908082b0819,
+    0x08081908082b1908,
+    0x0808190819080808,
+    0x080819081908082b,
+    0x0808190819082b08,
+    0x08081908192b0808,
+    0x080819082b080819,
+    0x080819082b081908,
+    0x080819082b190808,
+    0x080819082b2b1908,
+    0x0808191908080808,
+    0x080819190808082b,
+    0x0808191908082b08,
+    0x08081919082b0808,
+    0x080819191908192b,
+    0x08081919192b2b19,
+    0x080819192b080808,
+    0x080819192b190819,
+    0x0808192b08082b19,
+    0x0808192b08190808,
+    0x0808192b19080808,
+    0x0808192b2b081908,
+    0x0808192b2b2b1908,
+    0x08082b0808080808,
+    0x08082b0808081919,
+    0x08082b0808082b08,
+    0x08082b0808191908,
+    0x08082b08082b2b08,
+    0x08082b0819080819,
+    0x08082b0819081908,
+    0x08082b0819190808,
+    0x08082b081919082b,
+    0x08082b082b082b08,
+    0x08082b1908081908,
+    0x08082b1919080808,
+    0x08082b2b0808082b,
+    0x08082b2b08191908,
+    0x0819080808080819,
+    0x0819080808081908,
+    0x0819080808190808,
+    0x08190808082b0819,
+    0x0819080819080808,
+    0x08190808192b0808,
+    0x081908082b081908,
+    0x081908082b190808,
+    0x081908082b191919,
+    0x0819081908080808,
+    0x0819081908082b08,
+    0x08190819082b0808,
+    0x0819081919190808,
+    0x0819081919192b2b,
+    0x081908192b080808,
+    0x0819082b082b1908,
+    0x0819082b19081919,
+    0x0819190808080808,
+    0x0819190808082b08,
+    0x08191908082b0808,
+    0x08191908082b1919,
+    0x0819190819082b19,
+    0x081919082b080808,
+    0x0819191908192b08,
+    0x08191919192b082b,
+    0x0819192b08080808,
+    0x0819192b0819192b,
+    0x08192b0808080819,
+    0x08192b0808081908,
+    0x08192b0808190808,
+    0x08192b0819080808,
+    0x08192b082b080819,
+    0x08192b1908080808,
+    0x08192b1908081919,
+    0x08192b192b2b0808,
+    0x08192b2b19190819,
+    0x082b080808080808,
+    0x082b08080808082b,
+    0x082b080808082b2b,
+    0x082b080819081908,
+    0x082b0808192b0819,
+    0x082b08082b080808,
+    0x082b08082b08082b,
+    0x082b0819082b2b19,
+    0x082b081919082b08,
+    0x082b082b08080808,
+    0x082b082b0808082b,
+    0x082b190808080819,
+    0x082b190808081908,
+    0x082b190808190808,
+    0x082b190819080808,
+    0x082b19081919192b,
+    0x082b191908080808,
+    0x082b191919080819,
+    0x082b1919192b1908,
+    0x082b192b2b190808,
+    0x082b2b0808082b08,
+    0x082b2b08082b0808,
+    0x082b2b082b191908,
+    0x082b2b2b19081908,
+    0x1908080808080819,
+    0x1908080808081908,
+    0x1908080808190808,
+    0x1908080808192b08,
+    0x19080808082b0819,
+    0x19080808082b1908,
+    0x1908080819080808,
+    0x1908080819082b08,
+    0x190808081919192b,
+    0x19080808192b0808,
+    0x190808082b080819,
+    0x190808082b081908,
+    0x190808082b190808,
+    0x1908081908080808,
+    0x19080819082b0808,
+    0x19080819192b0819,
+    0x190808192b080808,
+    0x190808192b081919,
+    0x1908082b08080819,
+    0x1908082b08190808,
+    0x1908082b19082b08,
+    0x1908082b1919192b,
+    0x1908082b192b2b08,
+    0x1908190808080808,
+    0x1908190808082b08,
+    0x19081908082b0808,
+    0x190819082b080808,
+    0x190819082b192b19,
+    0x190819190819082b,
+    0x19081919082b1908,
+    0x1908192b08080808,
+    0x19082b0808080819,
+    0x19082b0808081908,
+    0x19082b0808190808,
+    0x19082b0819080808,
+    0x19082b0819081919,
+    0x19082b1908080808,
+    0x19082b1919192b08,
+    0x19082b19192b0819,
+    0x19082b192b08082b,
+    0x19082b2b19081919,
+    0x19082b2b2b190808,
+    0x1919080808080808,
+    0x1919080808082b08,
+    0x1919080808190819,
+    0x1919080808192b19,
+    0x19190808082b0808,
+    0x191908082b080808,
+    0x191908082b082b08,
+    0x1919081908081908,
+    0x191908191908082b,
+    0x191908192b2b1908,
+    0x1919082b2b190819,
+    0x191919082b190808,
+    0x191919082b19082b,
+    0x1919191908082b2b,
+    0x1919192b08080819,
+    0x1919192b19191908,
+    0x19192b0808080808,
+    0x19192b0808190819,
+    0x19192b0808192b19,
+    0x19192b08192b1908,
+    0x19192b1919080808,
+    0x19192b2b08082b08,
+    0x192b080808081908,
+    0x192b080808190808,
+    0x192b080819080808,
+    0x192b0808192b2b08,
+    0x192b081908080808,
+    0x192b081919191919,
+    0x192b082b08192b08,
+    0x192b082b192b0808,
+    0x192b190808080808,
+    0x192b190808081919,
+    0x192b191908190808,
+    0x192b19190819082b,
+    0x192b19192b081908,
+    0x192b2b081908082b,
+    0x2b08080808080808,
+    0x2b0808080808082b,
+    0x2b08080808082b2b,
+    0x2b08080819080819,
+    0x2b0808082b08082b,
+    0x2b08081908081908,
+    0x2b08081908192b08,
+    0x2b08081919080808,
+    0x2b08082b08190819,
+    0x2b08190808080819,
+    0x2b08190808081908,
+    0x2b08190808190808,
+    0x2b08190808191919,
+    0x2b08190819080808,
+    0x2b081908192b0808,
+    0x2b08191908080808,
+    0x2b0819191908192b,
+    0x2b0819192b191908,
+    0x2b08192b08082b19,
+    0x2b08192b19080808,
+    0x2b08192b192b0808,
+    0x2b082b080808082b,
+    0x2b082b1908081908,
+    0x2b082b2b08190819,
+    0x2b19080808081908,
+    0x2b19080808190808,
+    0x2b190808082b1908,
+    0x2b19080819080808,
+    0x2b1908082b2b0819,
+    0x2b1908190819192b,
+    0x2b1908192b080808,
+    0x2b19082b19081919,
+    0x2b19190808080808,
+    0x2b191908082b082b,
+    0x2b19190819081908,
+    0x2b19191919190819,
+    0x2b192b082b080819,
+    0x2b192b19082b0808,
+    0x2b2b08080808082b,
+    0x2b2b080819190808,
+    0x2b2b08082b081919,
+    0x2b2b081908082b19,
+    0x2b2b082b08080808,
+    0x2b2b190808192b08,
+    0x2b2b2b0819190808,
+    0x2b2b2b1908081908,
+];
 
 #[cuda_module]
 mod kernels {
@@ -1579,6 +1851,895 @@ mod kernels {
             (1.0 + logit.exp()).ln()
         };
         softplus.sqrt()
+    }
+
+    #[kernel]
+    pub fn abi_moe_q8_k_quantize_kernel(
+        in_dim: u32,
+        n_rows: u32,
+        x: &[f32],
+        mut out: DisjointSlice<u8>,
+    ) {
+        static mut ABS_PART: SharedArray<f32, ABI_MOE_QK_K> = SharedArray::UNINIT;
+        static mut VAL_PART: SharedArray<f32, ABI_MOE_QK_K> = SharedArray::UNINIT;
+        static mut Q_PART: SharedArray<i32, ABI_MOE_QK_K> = SharedArray::UNINIT;
+        static mut SCALE: SharedArray<f32, 1> = SharedArray::UNINIT;
+        static mut ISCALE: SharedArray<f32, 1> = SharedArray::UNINIT;
+
+        let block = thread::blockIdx_x();
+        let row = thread::blockIdx_y();
+        let lane = thread::threadIdx_x();
+        let blocks = in_dim / ABI_MOE_QK_K as u32;
+        if row >= n_rows || block >= blocks || lane >= THREADS_PER_BLOCK {
+            return;
+        }
+        let input = (row * in_dim + block * ABI_MOE_QK_K as u32 + lane) as usize;
+        let value = x[input];
+        let magnitude = if value < 0.0 { -value } else { value };
+        unsafe {
+            ABS_PART[lane as usize] = magnitude;
+            VAL_PART[lane as usize] = value;
+        }
+        thread::sync_threads();
+        let mut stride = THREADS_PER_BLOCK >> 1;
+        while stride > 0 {
+            if lane < stride {
+                unsafe {
+                    if ABS_PART[(lane + stride) as usize] > ABS_PART[lane as usize] {
+                        ABS_PART[lane as usize] = ABS_PART[(lane + stride) as usize];
+                        VAL_PART[lane as usize] = VAL_PART[(lane + stride) as usize];
+                    }
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        let output = ((row * blocks + block) as u64 * ABI_MOE_Q8_K_BLOCK_BYTES) as usize;
+        if unsafe { ABS_PART[0] } == 0.0 {
+            if lane == 0 {
+                abi_moe_store_u32(&mut out, output, 0);
+            }
+            unsafe {
+                *out.get_unchecked_mut(output + 4 + lane as usize) = 0;
+            }
+            if lane < 16 {
+                abi_moe_store_i16(&mut out, output + 260 + lane as usize * 2, 0);
+            }
+            return;
+        }
+        if lane == 0 {
+            unsafe {
+                ISCALE[0] = -127.0 / VAL_PART[0];
+                SCALE[0] = 1.0 / ISCALE[0];
+            }
+            abi_moe_store_u32(&mut out, output, unsafe { SCALE[0] }.to_bits());
+        }
+        thread::sync_threads();
+        let quantized = abi_moe_clamp_i8(abi_moe_round_ties_even(unsafe { ISCALE[0] } * value));
+        unsafe {
+            Q_PART[lane as usize] = quantized as i32;
+            *out.get_unchecked_mut(output + 4 + lane as usize) = quantized as u8;
+        }
+        thread::sync_threads();
+        if lane < 16 {
+            let mut sum = 0_i32;
+            let mut index = lane as usize * 16;
+            let end = index + 16;
+            while index < end {
+                sum += unsafe { Q_PART[index] };
+                index += 1;
+            }
+            abi_moe_store_i16(&mut out, output + 260 + lane as usize * 2, sum as i16);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_gate_up_mid_f32_kernel(
+        expert_in_dim: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        x: &[f32],
+        selected: &[i32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL_GATE: SharedArray<f32, ABI_MOE_QK_K> = SharedArray::UNINIT;
+        static mut PARTIAL_UP: SharedArray<f32, ABI_MOE_QK_K> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x();
+        let pair = thread::blockIdx_y();
+        let lane = thread::threadIdx_x();
+        if row >= expert_mid_dim || pair >= n_expert || lane >= THREADS_PER_BLOCK {
+            return;
+        }
+        let mut expert = selected[pair as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let blocks = expert_in_dim / ABI_MOE_QK_K as u32;
+        let row_base = expert as u64 * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+        let mut gate = 0.0_f32;
+        let mut up = 0.0_f32;
+        let mut block = lane;
+        while block < blocks {
+            let packed = row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES;
+            gate += abi_moe_iq2_f32_dot(
+                gate_weights,
+                packed as usize,
+                x,
+                block as usize * ABI_MOE_QK_K,
+                iq2_grid,
+                iq2_signs,
+            );
+            up += abi_moe_iq2_f32_dot(
+                up_weights,
+                packed as usize,
+                x,
+                block as usize * ABI_MOE_QK_K,
+                iq2_grid,
+                iq2_signs,
+            );
+            block += THREADS_PER_BLOCK;
+        }
+        unsafe {
+            PARTIAL_GATE[lane as usize] = gate;
+            PARTIAL_UP[lane as usize] = up;
+        }
+        thread::sync_threads();
+        let mut stride = THREADS_PER_BLOCK >> 1;
+        while stride > 0 {
+            if lane < stride {
+                unsafe {
+                    PARTIAL_GATE[lane as usize] += PARTIAL_GATE[(lane + stride) as usize];
+                    PARTIAL_UP[lane as usize] += PARTIAL_UP[(lane + stride) as usize];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        if lane == 0 {
+            gate = unsafe { PARTIAL_GATE[0] };
+            up = unsafe { PARTIAL_UP[0] };
+            abi_moe_apply_clamp(&mut gate, &mut up, clamp);
+            let offset = (pair * expert_mid_dim + row) as usize;
+            unsafe {
+                *gate_out.get_unchecked_mut(offset) = gate;
+                *up_out.get_unchecked_mut(offset) = up;
+                *mid_out.get_unchecked_mut(offset) =
+                    (gate / (1.0 + (-gate).exp())) * up * weights[pair as usize];
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_down_f32_kernel(
+        expert_mid_dim: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        mid: &[f32],
+        selected: &[i32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        static mut PARTIAL: SharedArray<f32, ABI_MOE_QK_K> = SharedArray::UNINIT;
+
+        let row = thread::blockIdx_x();
+        let pair = thread::blockIdx_y();
+        let lane = thread::threadIdx_x();
+        if row >= out_dim || pair >= n_expert || lane >= THREADS_PER_BLOCK {
+            return;
+        }
+        let mut expert = selected[pair as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let blocks = expert_mid_dim / ABI_MOE_QK_K as u32;
+        let row_base = expert as u64 * down_expert_bytes + u64::from(row) * down_row_bytes;
+        let mid_base = pair as usize * expert_mid_dim as usize;
+        let mut accumulator = 0.0_f32;
+        let mut block = lane;
+        while block < blocks {
+            let packed = row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES;
+            accumulator += abi_moe_q2_f32_dot(
+                down_weights,
+                packed as usize,
+                mid,
+                mid_base + block as usize * ABI_MOE_QK_K,
+            );
+            block += THREADS_PER_BLOCK;
+        }
+        unsafe {
+            PARTIAL[lane as usize] = accumulator;
+        }
+        thread::sync_threads();
+        let mut stride = THREADS_PER_BLOCK >> 1;
+        while stride > 0 {
+            if lane < stride {
+                unsafe {
+                    PARTIAL[lane as usize] += PARTIAL[(lane + stride) as usize];
+                }
+            }
+            thread::sync_threads();
+            stride >>= 1;
+        }
+        if lane == 0 {
+            unsafe {
+                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) = PARTIAL[0];
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_gate_up_mid_qwarp32_kernel(
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        selected: &[i32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        abi_moe_gate_up_quantized(
+            true,
+            false,
+            xq_blocks,
+            expert_mid_dim,
+            n_expert,
+            clamp,
+            gate_expert_bytes,
+            gate_row_bytes,
+            gate_weights,
+            up_weights,
+            xq,
+            selected,
+            weights,
+            iq2_grid,
+            iq2_signs,
+            &mut gate_out,
+            &mut up_out,
+            &mut mid_out,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_gate_up_mid_decode_lut_qwarp32_kernel(
+        write_aux: u32,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        selected: &[i32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        abi_moe_gate_up_quantized(
+            write_aux != 0,
+            false,
+            xq_blocks,
+            expert_mid_dim,
+            n_expert,
+            clamp,
+            gate_expert_bytes,
+            gate_row_bytes,
+            gate_weights,
+            up_weights,
+            xq,
+            selected,
+            weights,
+            iq2_grid,
+            iq2_signs,
+            &mut gate_out,
+            &mut up_out,
+            &mut mid_out,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_gate_up_mid_decode_q4_k_qwarp32_kernel(
+        write_aux: u32,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        selected: &[i32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        mut gate_out: DisjointSlice<f32>,
+        mut up_out: DisjointSlice<f32>,
+        mut mid_out: DisjointSlice<f32>,
+    ) {
+        abi_moe_gate_up_quantized(
+            write_aux != 0,
+            true,
+            xq_blocks,
+            expert_mid_dim,
+            n_expert,
+            clamp,
+            gate_expert_bytes,
+            gate_row_bytes,
+            gate_weights,
+            up_weights,
+            xq,
+            selected,
+            weights,
+            iq2_grid,
+            iq2_signs,
+            &mut gate_out,
+            &mut up_out,
+            &mut mid_out,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_down_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        selected: &[i32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        let pair = thread::blockIdx_y();
+        if row >= out_dim || pair >= n_expert {
+            return;
+        }
+        let mut expert = selected[pair as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let row_base = expert as u64 * down_expert_bytes + u64::from(row) * down_row_bytes;
+        let mut accumulator = 0.0_f32;
+        let mut block = lane;
+        while block < midq_blocks {
+            accumulator += abi_moe_q2_q8_k_dot(
+                down_weights,
+                (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize,
+                midq,
+                (u64::from(pair) * u64::from(midq_blocks) + u64::from(block)) as usize,
+            );
+            block += 8;
+        }
+        accumulator = abi_moe_quarter_warp_sum(accumulator);
+        if lane == 0 {
+            unsafe {
+                *down_out.get_unchecked_mut((pair * out_dim + row) as usize) = accumulator;
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_down_sum6_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        selected: &[i32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        abi_moe_down_sum6(
+            false,
+            midq_blocks,
+            out_dim,
+            down_expert_bytes,
+            down_row_bytes,
+            down_weights,
+            midq,
+            selected,
+            &mut out,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_down_q4_k_sum6_qwarp32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        selected: &[i32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        abi_moe_down_sum6(
+            true,
+            midq_blocks,
+            out_dim,
+            down_expert_bytes,
+            down_row_bytes,
+            down_weights,
+            midq,
+            selected,
+            &mut out,
+        );
+    }
+
+    #[kernel]
+    pub fn abi_moe_sum_kernel(
+        out_dim: u32,
+        n_expert: u32,
+        down: &[f32],
+        mut out: DisjointSlice<f32>,
+    ) {
+        let row = thread::index_1d().get() as u32;
+        if row >= out_dim {
+            return;
+        }
+        let mut accumulator = 0.0_f32;
+        let mut slot = 0_u32;
+        while slot < n_expert {
+            accumulator += down[(slot * out_dim + row) as usize];
+            slot += 1;
+        }
+        unsafe {
+            *out.get_unchecked_mut(row as usize) = accumulator;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn abi_moe_gate_up_quantized(
+        write_aux_only: bool,
+        q4_k: bool,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        clamp: f32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        gate_weights: &[u8],
+        up_weights: &[u8],
+        xq: &[u8],
+        selected: &[i32],
+        weights: &[f32],
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+        gate_out: &mut DisjointSlice<f32>,
+        up_out: &mut DisjointSlice<f32>,
+        mid_out: &mut DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let pair = thread::blockIdx_y();
+        if pair >= n_expert {
+            return;
+        }
+        let mut expert = selected[pair as usize];
+        if expert < 0 {
+            expert = 0;
+        }
+        let mut rr = 0_u32;
+        while rr < 4 {
+            let row = thread::blockIdx_x() * 128 + row_lane + rr * 32;
+            if row < expert_mid_dim {
+                let row_base = expert as u64 * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+                let block_bytes = if q4_k {
+                    ABI_MOE_Q4_BLOCK_BYTES
+                } else {
+                    ABI_MOE_IQ2_BLOCK_BYTES
+                };
+                let mut gate = 0.0_f32;
+                let mut up = 0.0_f32;
+                let mut block = lane;
+                while block < xq_blocks {
+                    let q8_block = block as usize;
+                    let packed = (row_base + u64::from(block) * block_bytes) as usize;
+                    if q4_k {
+                        gate += abi_moe_q4_k_q8_k_dot(gate_weights, packed, xq, q8_block);
+                        up += abi_moe_q4_k_q8_k_dot(up_weights, packed, xq, q8_block);
+                    } else {
+                        gate += abi_moe_iq2_q8_k_dot(
+                            gate_weights,
+                            packed,
+                            xq,
+                            q8_block,
+                            iq2_grid,
+                            iq2_signs,
+                        );
+                        up += abi_moe_iq2_q8_k_dot(
+                            up_weights, packed, xq, q8_block, iq2_grid, iq2_signs,
+                        );
+                    }
+                    block += 8;
+                }
+                gate = abi_moe_quarter_warp_sum(gate);
+                up = abi_moe_quarter_warp_sum(up);
+                if lane == 0 {
+                    abi_moe_apply_clamp(&mut gate, &mut up, clamp);
+                    let offset = (pair * expert_mid_dim + row) as usize;
+                    unsafe {
+                        if write_aux_only {
+                            *gate_out.get_unchecked_mut(offset) = gate;
+                            *up_out.get_unchecked_mut(offset) = up;
+                        }
+                        *mid_out.get_unchecked_mut(offset) =
+                            (gate / (1.0 + (-gate).exp())) * up * weights[pair as usize];
+                    }
+                }
+            }
+            rr += 1;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn abi_moe_down_sum6(
+        q4_k: bool,
+        midq_blocks: u32,
+        out_dim: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        selected: &[i32],
+        out: &mut DisjointSlice<f32>,
+    ) {
+        let lane = thread::threadIdx_x() & 7;
+        let row = thread::blockIdx_x() * 32 + (thread::threadIdx_x() >> 3);
+        if row >= out_dim {
+            return;
+        }
+        let block_bytes = if q4_k {
+            ABI_MOE_Q4_BLOCK_BYTES
+        } else {
+            ABI_MOE_Q2_BLOCK_BYTES
+        };
+        let mut total = 0.0_f32;
+        let mut slot = 0_u32;
+        while slot < 6 {
+            let mut expert = selected[slot as usize];
+            if expert < 0 {
+                expert = 0;
+            }
+            let row_base = expert as u64 * down_expert_bytes + u64::from(row) * down_row_bytes;
+            let mut accumulator = 0.0_f32;
+            let mut block = lane;
+            while block < midq_blocks {
+                let packed = (row_base + u64::from(block) * block_bytes) as usize;
+                let q8_block =
+                    (u64::from(slot) * u64::from(midq_blocks) + u64::from(block)) as usize;
+                accumulator += if q4_k {
+                    abi_moe_q4_k_q8_k_dot(down_weights, packed, midq, q8_block)
+                } else {
+                    abi_moe_q2_q8_k_dot(down_weights, packed, midq, q8_block)
+                };
+                block += 8;
+            }
+            accumulator = abi_moe_quarter_warp_sum(accumulator);
+            if lane == 0 {
+                total += accumulator;
+            }
+            slot += 1;
+        }
+        if lane == 0 {
+            unsafe {
+                *out.get_unchecked_mut(row as usize) = total;
+            }
+        }
+    }
+
+    fn abi_moe_apply_clamp(gate: &mut f32, up: &mut f32, clamp: f32) {
+        if clamp > 1.0e-6 {
+            if *gate > clamp {
+                *gate = clamp;
+            }
+            if *up > clamp {
+                *up = clamp;
+            }
+            if *up < -clamp {
+                *up = -clamp;
+            }
+        }
+    }
+
+    fn abi_moe_iq2_f32_dot(
+        packed: &[u8],
+        base: usize,
+        x: &[f32],
+        x_base: usize,
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+    ) -> f32 {
+        let scale = f16::from_bits(abi_moe_load_u16(packed, base)) as f32;
+        let mut accumulator = 0.0_f32;
+        let mut ib32 = 0_usize;
+        while ib32 < ABI_MOE_QK_K / 32 {
+            let q2 = base + 2 + ib32 * 8;
+            let aux_g = abi_moe_load_u16(packed, q2) as u32
+                | ((abi_moe_load_u16(packed, q2 + 2) as u32) << 16);
+            let aux_s = abi_moe_load_u16(packed, q2 + 4) as u32
+                | ((abi_moe_load_u16(packed, q2 + 6) as u32) << 16);
+            let dl = scale * (0.5 + (aux_s >> 28) as f32) * 0.25;
+            let mut group = 0_u32;
+            while group < 4 {
+                let grid = iq2_grid[((aux_g >> (8 * group)) & 0xff) as usize];
+                let signs = iq2_signs[((aux_s >> (7 * group)) & 127) as usize];
+                let mut lane = 0_u32;
+                while lane < 8 {
+                    let mut value = ((grid >> (8 * lane)) & 0xff) as f32;
+                    if signs & (1_u8 << lane) != 0 {
+                        value = -value;
+                    }
+                    accumulator +=
+                        dl * value * x[x_base + ib32 * 32 + group as usize * 8 + lane as usize];
+                    lane += 1;
+                }
+                group += 1;
+            }
+            ib32 += 1;
+        }
+        accumulator
+    }
+
+    fn abi_moe_q2_f32_dot(packed: &[u8], base: usize, x: &[f32], x_base: usize) -> f32 {
+        let d = f16::from_bits(abi_moe_load_u16(packed, base + 80)) as f32;
+        let dmin = f16::from_bits(abi_moe_load_u16(packed, base + 82)) as f32;
+        let mut accumulator = 0.0_f32;
+        let mut il = 0_usize;
+        while il < 16 {
+            let chunk = il / 8;
+            let pair = il & 1;
+            let shift = ((il / 2) & 3) * 2;
+            let scale = packed[base + il];
+            let dl = d * (scale & 0x0f) as f32;
+            let ml = dmin * (scale >> 4) as f32;
+            let q = base + 16 + 32 * chunk + 16 * pair;
+            let xf = x_base + chunk * 128 + ((il % 8) / 2) * 32 + pair * 16;
+            let mut index = 0_usize;
+            while index < 16 {
+                accumulator +=
+                    (dl * ((packed[q + index] >> shift) & 3) as f32 - ml) * x[xf + index];
+                index += 1;
+            }
+            il += 1;
+        }
+        accumulator
+    }
+
+    fn abi_moe_iq2_q8_k_dot(
+        packed: &[u8],
+        base: usize,
+        q8: &[u8],
+        q8_block: usize,
+        iq2_grid: &[u64],
+        iq2_signs: &[u8],
+    ) -> f32 {
+        let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base)) as f32;
+        let mut block_sum = 0_i32;
+        let mut ib32 = 0_usize;
+        while ib32 < ABI_MOE_QK_K / 32 {
+            let q2 = base + 2 + ib32 * 8;
+            let aux_g = abi_moe_load_u16(packed, q2) as u32
+                | ((abi_moe_load_u16(packed, q2 + 2) as u32) << 16);
+            let aux_s = abi_moe_load_u16(packed, q2 + 4) as u32
+                | ((abi_moe_load_u16(packed, q2 + 6) as u32) << 16);
+            let multiplier = (2 * (aux_s >> 28) + 1) as i32;
+            let mut subtotal = 0_i32;
+            let mut group = 0_u32;
+            while group < 4 {
+                let grid = iq2_grid[((aux_g >> (8 * group)) & 0xff) as usize];
+                let signs = iq2_signs[((aux_s >> (7 * group)) & 127) as usize];
+                let mut lane = 0_u32;
+                while lane < 8 {
+                    let mut value = ((grid >> (8 * lane)) & 0xff) as i32;
+                    if signs & (1_u8 << lane) != 0 {
+                        value = -value;
+                    }
+                    subtotal += value
+                        * abi_moe_q8_value(
+                            q8,
+                            q8_block,
+                            ib32 * 32 + group as usize * 8 + lane as usize,
+                        );
+                    lane += 1;
+                }
+                group += 1;
+            }
+            block_sum += subtotal * multiplier;
+            ib32 += 1;
+        }
+        0.125 * weight_scale * abi_moe_q8_scale(q8, q8_block) * block_sum as f32
+    }
+
+    fn abi_moe_q2_q8_k_dot(packed: &[u8], base: usize, q8: &[u8], q8_block: usize) -> f32 {
+        let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base + 80)) as f32;
+        let weight_min = f16::from_bits(abi_moe_load_u16(packed, base + 82)) as f32;
+        let mut min_sum = 0_i32;
+        let mut scale = 0_usize;
+        while scale < 16 {
+            min_sum += abi_moe_q8_bsum(q8, q8_block, scale) * (packed[base + scale] >> 4) as i32;
+            scale += 1;
+        }
+        let mut quant_sum = 0_i32;
+        let mut scale_index = 0_usize;
+        let mut chunk = 0_usize;
+        while chunk < 2 {
+            let mut shift = 0_u32;
+            let mut group = 0_usize;
+            while group < 4 {
+                let first_scale = (packed[base + scale_index] & 0x0f) as i32;
+                scale_index += 1;
+                let second_scale = (packed[base + scale_index] & 0x0f) as i32;
+                scale_index += 1;
+                let q = base + 16 + chunk * 32;
+                let q8_base = chunk * 128 + group * 32;
+                let mut lane = 0_usize;
+                let mut first = 0_i32;
+                let mut second = 0_i32;
+                while lane < 16 {
+                    first += ((packed[q + lane] >> shift) & 3) as i32
+                        * abi_moe_q8_value(q8, q8_block, q8_base + lane);
+                    second += ((packed[q + 16 + lane] >> shift) & 3) as i32
+                        * abi_moe_q8_value(q8, q8_block, q8_base + 16 + lane);
+                    lane += 1;
+                }
+                quant_sum += first_scale * first + second_scale * second;
+                shift += 2;
+                group += 1;
+            }
+            chunk += 1;
+        }
+        abi_moe_q8_scale(q8, q8_block)
+            * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
+    }
+
+    fn abi_moe_q4_k_q8_k_dot(packed: &[u8], base: usize, q8: &[u8], q8_block: usize) -> f32 {
+        let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base)) as f32;
+        let weight_min = f16::from_bits(abi_moe_load_u16(packed, base + 2)) as f32;
+        let mut quant_sum = 0_i32;
+        let mut min_sum = 0_i32;
+        let mut group = 0_usize;
+        while group < 8 {
+            let scale = if group < 4 {
+                packed[base + 4 + group] & 63
+            } else {
+                (packed[base + 4 + group + 4] & 0x0f) | ((packed[base + 4 + group - 4] >> 6) << 4)
+            };
+            let minimum = if group < 4 {
+                packed[base + 4 + group + 4] & 63
+            } else {
+                (packed[base + 4 + group + 4] >> 4) | ((packed[base + 4 + group] >> 6) << 4)
+            };
+            min_sum += minimum as i32
+                * (abi_moe_q8_bsum(q8, q8_block, 2 * group)
+                    + abi_moe_q8_bsum(q8, q8_block, 2 * group + 1));
+            let q4 = base + 16 + (group >> 1) * 32;
+            let shift = if group & 1 == 0 { 0 } else { 4 };
+            let q8_start = group * 32;
+            let mut lane = 0_usize;
+            let mut subtotal = 0_i32;
+            while lane < 32 {
+                subtotal += ((packed[q4 + lane] >> shift) & 0x0f) as i32
+                    * abi_moe_q8_value(q8, q8_block, q8_start + lane);
+                lane += 1;
+            }
+            quant_sum += scale as i32 * subtotal;
+            group += 1;
+        }
+        abi_moe_q8_scale(q8, q8_block)
+            * (weight_scale * quant_sum as f32 - weight_min * min_sum as f32)
+    }
+
+    fn abi_moe_q8_scale(q8: &[u8], block: usize) -> f32 {
+        f32::from_bits(abi_moe_load_u32(
+            q8,
+            block * ABI_MOE_Q8_K_BLOCK_BYTES as usize,
+        ))
+    }
+
+    fn abi_moe_q8_value(q8: &[u8], block: usize, index: usize) -> i32 {
+        q8[block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index] as i8 as i32
+    }
+
+    fn abi_moe_q8_bsum(q8: &[u8], block: usize, index: usize) -> i32 {
+        abi_moe_load_u16(
+            q8,
+            block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 260 + index * 2,
+        ) as i16 as i32
+    }
+
+    fn abi_moe_quarter_warp_sum(mut value: f32) -> f32 {
+        let mut offset = 4_u32;
+        while offset > 0 {
+            value += warp::shuffle_xor_f32(value, offset);
+            offset >>= 1;
+        }
+        value
+    }
+
+    fn abi_moe_load_u16(values: &[u8], offset: usize) -> u16 {
+        values[offset] as u16 | ((values[offset + 1] as u16) << 8)
+    }
+
+    fn abi_moe_load_u32(values: &[u8], offset: usize) -> u32 {
+        values[offset] as u32
+            | ((values[offset + 1] as u32) << 8)
+            | ((values[offset + 2] as u32) << 16)
+            | ((values[offset + 3] as u32) << 24)
+    }
+
+    fn abi_moe_store_u32(values: &mut DisjointSlice<u8>, offset: usize, value: u32) {
+        unsafe {
+            *values.get_unchecked_mut(offset) = value as u8;
+            *values.get_unchecked_mut(offset + 1) = (value >> 8) as u8;
+            *values.get_unchecked_mut(offset + 2) = (value >> 16) as u8;
+            *values.get_unchecked_mut(offset + 3) = (value >> 24) as u8;
+        }
+    }
+
+    fn abi_moe_store_i16(values: &mut DisjointSlice<u8>, offset: usize, value: i16) {
+        let value = value as u16;
+        unsafe {
+            *values.get_unchecked_mut(offset) = value as u8;
+            *values.get_unchecked_mut(offset + 1) = (value >> 8) as u8;
+        }
+    }
+
+    fn abi_moe_round_ties_even(value: f32) -> i32 {
+        let lower = value.floor();
+        let fraction = value - lower;
+        let mut rounded = lower as i32;
+        if fraction > 0.5 || (fraction == 0.5 && (rounded & 1) != 0) {
+            rounded += 1;
+        }
+        rounded
+    }
+
+    fn abi_moe_clamp_i8(value: i32) -> i8 {
+        if value > 127 {
+            127
+        } else if value < -128 {
+            -128
+        } else {
+            value as i8
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3815,6 +4976,16 @@ pub(crate) struct AbiKernelModule {
     router_select_kernel: CudaFunction,
     router_select_parallel_kernel: CudaFunction,
     router_select_warp_topk_kernel: CudaFunction,
+    moe_q8_k_quantize_kernel: CudaFunction,
+    moe_gate_up_mid_f32_kernel: CudaFunction,
+    moe_down_f32_kernel: CudaFunction,
+    moe_gate_up_mid_qwarp32_kernel: CudaFunction,
+    moe_gate_up_mid_decode_lut_qwarp32_kernel: CudaFunction,
+    moe_gate_up_mid_decode_q4_k_qwarp32_kernel: CudaFunction,
+    moe_down_qwarp32_kernel: CudaFunction,
+    moe_down_sum6_qwarp32_kernel: CudaFunction,
+    moe_down_q4_k_sum6_qwarp32_kernel: CudaFunction,
+    moe_sum_kernel: CudaFunction,
     attention_decode_mixed_kernel: CudaFunction,
     attention_decode_mixed_heads8_online_kernel: CudaFunction,
     attention_prefill_raw_kernel: CudaFunction,
@@ -3932,6 +5103,36 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             router_select_warp_topk_kernel: module
                 .load_function("abi_router_select_warp_topk_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_q8_k_quantize_kernel: module
+                .load_function("abi_moe_q8_k_quantize_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_f32_kernel: module
+                .load_function("abi_moe_gate_up_mid_f32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_f32_kernel: module
+                .load_function("abi_moe_down_f32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_qwarp32_kernel: module
+                .load_function("abi_moe_gate_up_mid_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_decode_lut_qwarp32_kernel: module
+                .load_function("abi_moe_gate_up_mid_decode_lut_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_gate_up_mid_decode_q4_k_qwarp32_kernel: module
+                .load_function("abi_moe_gate_up_mid_decode_q4_k_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_qwarp32_kernel: module
+                .load_function("abi_moe_down_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_sum6_qwarp32_kernel: module
+                .load_function("abi_moe_down_sum6_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_q4_k_sum6_qwarp32_kernel: module
+                .load_function("abi_moe_down_q4_k_sum6_qwarp32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_sum_kernel: module
+                .load_function("abi_moe_sum_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             attention_decode_mixed_kernel: module
                 .load_function("abi_attention_decode_mixed_kernel")
@@ -5611,6 +6812,622 @@ impl AbiKernelModule {
                 function,
                 grid_dim,
                 block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn moe_q8_k_quantize_tensor(
+        &self,
+        stream: &CudaStream,
+        x_ptr: u64,
+        scratch_ptr: u64,
+        scratch_bytes: u64,
+        in_dim: u32,
+        n_rows: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (in_dim / ABI_MOE_QK_K as u32, n_rows, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut in_dim = in_dim;
+        let mut n_rows = n_rows;
+        let mut x_ptr = x_ptr;
+        let mut x_len = u64::from(in_dim) * u64::from(n_rows);
+        let mut scratch_ptr = scratch_ptr;
+        let mut scratch_len = scratch_bytes;
+        let mut params = [
+            (&mut in_dim as *mut u32).cast::<c_void>(),
+            (&mut n_rows as *mut u32).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+            (&mut scratch_ptr as *mut u64).cast::<c_void>(),
+            (&mut scratch_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_q8_k_quantize_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_f32_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        x_ptr: u64,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        expert_in_dim: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        clamp: f32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (expert_mid_dim, n_expert, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let elements = u64::from(n_expert) * u64::from(expert_mid_dim);
+        let mut expert_in_dim = expert_in_dim;
+        let mut expert_mid_dim = expert_mid_dim;
+        let mut n_expert = n_expert;
+        let mut clamp = clamp;
+        let mut gate_expert_bytes = gate_expert_bytes;
+        let mut gate_row_bytes = gate_row_bytes;
+        let mut gate_weights_ptr = gate_weights_ptr;
+        let mut gate_weights_len = gate_weight_bytes;
+        let mut up_weights_ptr = up_weights_ptr;
+        let mut up_weights_len = gate_weight_bytes;
+        let mut x_ptr = x_ptr;
+        let mut x_len = u64::from(expert_in_dim);
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(n_expert);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = u64::from(n_expert);
+        let mut iq2_grid_ptr = iq2_grid_ptr;
+        let mut iq2_grid_len = 256_u64;
+        let mut iq2_signs_ptr = iq2_signs_ptr;
+        let mut iq2_signs_len = 128_u64;
+        let mut gate_ptr = gate_ptr;
+        let mut gate_len = elements;
+        let mut up_ptr = up_ptr;
+        let mut up_len = elements;
+        let mut mid_ptr = mid_ptr;
+        let mut mid_len = elements;
+        let mut params = [
+            (&mut expert_in_dim as *mut u32).cast::<c_void>(),
+            (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut clamp as *mut f32).cast::<c_void>(),
+            (&mut gate_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut gate_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut gate_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut gate_weights_len as *mut u64).cast::<c_void>(),
+            (&mut up_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut up_weights_len as *mut u64).cast::<c_void>(),
+            (&mut x_ptr as *mut u64).cast::<c_void>(),
+            (&mut x_len as *mut u64).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut iq2_grid_ptr as *mut u64).cast::<c_void>(),
+            (&mut iq2_grid_len as *mut u64).cast::<c_void>(),
+            (&mut iq2_signs_ptr as *mut u64).cast::<c_void>(),
+            (&mut iq2_signs_len as *mut u64).cast::<c_void>(),
+            (&mut gate_ptr as *mut u64).cast::<c_void>(),
+            (&mut gate_len as *mut u64).cast::<c_void>(),
+            (&mut up_ptr as *mut u64).cast::<c_void>(),
+            (&mut up_len as *mut u64).cast::<c_void>(),
+            (&mut mid_ptr as *mut u64).cast::<c_void>(),
+            (&mut mid_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_gate_up_mid_f32_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_f32_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        mid_ptr: u64,
+        selected_ptr: u64,
+        down_weight_bytes: u64,
+        expert_mid_dim: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (out_dim, n_expert, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut expert_mid_dim = expert_mid_dim;
+        let mut out_dim = out_dim;
+        let mut n_expert = n_expert;
+        let mut down_expert_bytes = down_expert_bytes;
+        let mut down_row_bytes = down_row_bytes;
+        let mut down_weights_ptr = down_weights_ptr;
+        let mut down_weights_len = down_weight_bytes;
+        let mut mid_ptr = mid_ptr;
+        let mut mid_len = u64::from(n_expert) * u64::from(expert_mid_dim);
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(n_expert);
+        let mut down_ptr = down_ptr;
+        let mut down_len = u64::from(n_expert) * u64::from(out_dim);
+        let mut params = [
+            (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+            (&mut out_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut down_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_weights_len as *mut u64).cast::<c_void>(),
+            (&mut mid_ptr as *mut u64).cast::<c_void>(),
+            (&mut mid_len as *mut u64).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+            (&mut down_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_down_f32_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_qwarp32_tensor(
+        &self,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        clamp: f32,
+    ) -> bool {
+        unsafe {
+            self.moe_gate_up_mid_quantized_tensor(
+                &self.moe_gate_up_mid_qwarp32_kernel,
+                false,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                selected_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                gate_expert_bytes,
+                gate_row_bytes,
+                false,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_gate_up_mid_decode_tensor(
+        &self,
+        stream: &CudaStream,
+        q4_k: bool,
+        write_aux: bool,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        clamp: f32,
+    ) -> bool {
+        let function = if q4_k {
+            &self.moe_gate_up_mid_decode_q4_k_qwarp32_kernel
+        } else {
+            &self.moe_gate_up_mid_decode_lut_qwarp32_kernel
+        };
+        unsafe {
+            self.moe_gate_up_mid_quantized_tensor(
+                function,
+                true,
+                stream,
+                gate_ptr,
+                up_ptr,
+                mid_ptr,
+                gate_weights_ptr,
+                up_weights_ptr,
+                xq_ptr,
+                selected_ptr,
+                weights_ptr,
+                iq2_grid_ptr,
+                iq2_signs_ptr,
+                gate_weight_bytes,
+                xq_bytes,
+                xq_blocks,
+                expert_mid_dim,
+                n_expert,
+                gate_expert_bytes,
+                gate_row_bytes,
+                write_aux,
+                clamp,
+            )
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn moe_gate_up_mid_quantized_tensor(
+        &self,
+        function: &CudaFunction,
+        includes_write_aux: bool,
+        stream: &CudaStream,
+        gate_ptr: u64,
+        up_ptr: u64,
+        mid_ptr: u64,
+        gate_weights_ptr: u64,
+        up_weights_ptr: u64,
+        xq_ptr: u64,
+        selected_ptr: u64,
+        weights_ptr: u64,
+        iq2_grid_ptr: u64,
+        iq2_signs_ptr: u64,
+        gate_weight_bytes: u64,
+        xq_bytes: u64,
+        xq_blocks: u32,
+        expert_mid_dim: u32,
+        n_expert: u32,
+        gate_expert_bytes: u64,
+        gate_row_bytes: u64,
+        write_aux: bool,
+        clamp: f32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (expert_mid_dim.div_ceil(128), n_expert, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let elements = u64::from(n_expert) * u64::from(expert_mid_dim);
+        let mut write_aux = u32::from(write_aux);
+        let mut xq_blocks = xq_blocks;
+        let mut expert_mid_dim = expert_mid_dim;
+        let mut n_expert = n_expert;
+        let mut clamp = clamp;
+        let mut gate_expert_bytes = gate_expert_bytes;
+        let mut gate_row_bytes = gate_row_bytes;
+        let mut gate_weights_ptr = gate_weights_ptr;
+        let mut gate_weights_len = gate_weight_bytes;
+        let mut up_weights_ptr = up_weights_ptr;
+        let mut up_weights_len = gate_weight_bytes;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = xq_bytes;
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(n_expert);
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = u64::from(n_expert);
+        let mut iq2_grid_ptr = iq2_grid_ptr;
+        let mut iq2_grid_len = 256_u64;
+        let mut iq2_signs_ptr = iq2_signs_ptr;
+        let mut iq2_signs_len = 128_u64;
+        let mut gate_ptr = gate_ptr;
+        let mut gate_len = elements;
+        let mut up_ptr = up_ptr;
+        let mut up_len = elements;
+        let mut mid_ptr = mid_ptr;
+        let mut mid_len = elements;
+        if includes_write_aux {
+            let mut params = [
+                (&mut write_aux as *mut u32).cast::<c_void>(),
+                (&mut xq_blocks as *mut u32).cast::<c_void>(),
+                (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+                (&mut n_expert as *mut u32).cast::<c_void>(),
+                (&mut clamp as *mut f32).cast::<c_void>(),
+                (&mut gate_expert_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_row_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_len as *mut u64).cast::<c_void>(),
+                (&mut up_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_weights_len as *mut u64).cast::<c_void>(),
+                (&mut xq_ptr as *mut u64).cast::<c_void>(),
+                (&mut xq_len as *mut u64).cast::<c_void>(),
+                (&mut selected_ptr as *mut u64).cast::<c_void>(),
+                (&mut selected_len as *mut u64).cast::<c_void>(),
+                (&mut weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut weights_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_len as *mut u64).cast::<c_void>(),
+                (&mut gate_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_len as *mut u64).cast::<c_void>(),
+                (&mut up_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_len as *mut u64).cast::<c_void>(),
+                (&mut mid_ptr as *mut u64).cast::<c_void>(),
+                (&mut mid_len as *mut u64).cast::<c_void>(),
+            ];
+            unsafe {
+                cuda_core::launch_kernel_on_stream(
+                    function,
+                    config.grid_dim,
+                    config.block_dim,
+                    0,
+                    stream,
+                    &mut params,
+                )
+            }
+            .is_ok()
+        } else {
+            let mut params = [
+                (&mut xq_blocks as *mut u32).cast::<c_void>(),
+                (&mut expert_mid_dim as *mut u32).cast::<c_void>(),
+                (&mut n_expert as *mut u32).cast::<c_void>(),
+                (&mut clamp as *mut f32).cast::<c_void>(),
+                (&mut gate_expert_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_row_bytes as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_weights_len as *mut u64).cast::<c_void>(),
+                (&mut up_weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_weights_len as *mut u64).cast::<c_void>(),
+                (&mut xq_ptr as *mut u64).cast::<c_void>(),
+                (&mut xq_len as *mut u64).cast::<c_void>(),
+                (&mut selected_ptr as *mut u64).cast::<c_void>(),
+                (&mut selected_len as *mut u64).cast::<c_void>(),
+                (&mut weights_ptr as *mut u64).cast::<c_void>(),
+                (&mut weights_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_grid_len as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_ptr as *mut u64).cast::<c_void>(),
+                (&mut iq2_signs_len as *mut u64).cast::<c_void>(),
+                (&mut gate_ptr as *mut u64).cast::<c_void>(),
+                (&mut gate_len as *mut u64).cast::<c_void>(),
+                (&mut up_ptr as *mut u64).cast::<c_void>(),
+                (&mut up_len as *mut u64).cast::<c_void>(),
+                (&mut mid_ptr as *mut u64).cast::<c_void>(),
+                (&mut mid_len as *mut u64).cast::<c_void>(),
+            ];
+            unsafe {
+                cuda_core::launch_kernel_on_stream(
+                    function,
+                    config.grid_dim,
+                    config.block_dim,
+                    0,
+                    stream,
+                    &mut params,
+                )
+            }
+            .is_ok()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_qwarp32_tensor(
+        &self,
+        stream: &CudaStream,
+        down_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        selected_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (out_dim.div_ceil(32), n_expert, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut midq_blocks = midq_blocks;
+        let mut out_dim = out_dim;
+        let mut n_expert = n_expert;
+        let mut down_expert_bytes = down_expert_bytes;
+        let mut down_row_bytes = down_row_bytes;
+        let mut down_weights_ptr = down_weights_ptr;
+        let mut down_weights_len = down_weight_bytes;
+        let mut midq_ptr = midq_ptr;
+        let mut midq_len = midq_bytes;
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = u64::from(n_expert);
+        let mut down_ptr = down_ptr;
+        let mut down_len = u64::from(n_expert) * u64::from(out_dim);
+        let mut params = [
+            (&mut midq_blocks as *mut u32).cast::<c_void>(),
+            (&mut out_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut down_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_weights_len as *mut u64).cast::<c_void>(),
+            (&mut midq_ptr as *mut u64).cast::<c_void>(),
+            (&mut midq_len as *mut u64).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+            (&mut down_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_down_qwarp32_kernel,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn moe_down_sum6_tensor(
+        &self,
+        stream: &CudaStream,
+        q4_k: bool,
+        out_ptr: u64,
+        down_weights_ptr: u64,
+        midq_ptr: u64,
+        selected_ptr: u64,
+        down_weight_bytes: u64,
+        midq_bytes: u64,
+        midq_blocks: u32,
+        out_dim: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+    ) -> bool {
+        let function = if q4_k {
+            &self.moe_down_q4_k_sum6_qwarp32_kernel
+        } else {
+            &self.moe_down_sum6_qwarp32_kernel
+        };
+        let config = LaunchConfig {
+            grid_dim: (out_dim.div_ceil(32), 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut midq_blocks = midq_blocks;
+        let mut out_dim = out_dim;
+        let mut down_expert_bytes = down_expert_bytes;
+        let mut down_row_bytes = down_row_bytes;
+        let mut down_weights_ptr = down_weights_ptr;
+        let mut down_weights_len = down_weight_bytes;
+        let mut midq_ptr = midq_ptr;
+        let mut midq_len = midq_bytes;
+        let mut selected_ptr = selected_ptr;
+        let mut selected_len = 6_u64;
+        let mut out_ptr = out_ptr;
+        let mut out_len = u64::from(out_dim);
+        let mut params = [
+            (&mut midq_blocks as *mut u32).cast::<c_void>(),
+            (&mut out_dim as *mut u32).cast::<c_void>(),
+            (&mut down_expert_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_row_bytes as *mut u64).cast::<c_void>(),
+            (&mut down_weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_weights_len as *mut u64).cast::<c_void>(),
+            (&mut midq_ptr as *mut u64).cast::<c_void>(),
+            (&mut midq_len as *mut u64).cast::<c_void>(),
+            (&mut selected_ptr as *mut u64).cast::<c_void>(),
+            (&mut selected_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                function,
+                config.grid_dim,
+                config.block_dim,
+                0,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn moe_sum_tensor(
+        &self,
+        stream: &CudaStream,
+        out_ptr: u64,
+        down_ptr: u64,
+        out_dim: u32,
+        n_expert: u32,
+    ) -> bool {
+        let config = LaunchConfig {
+            grid_dim: (out_dim.div_ceil(THREADS_PER_BLOCK), 1, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut out_dim = out_dim;
+        let mut n_expert = n_expert;
+        let mut down_ptr = down_ptr;
+        let mut down_len = u64::from(out_dim) * u64::from(n_expert);
+        let mut out_ptr = out_ptr;
+        let mut out_len = u64::from(out_dim);
+        let mut params = [
+            (&mut out_dim as *mut u32).cast::<c_void>(),
+            (&mut n_expert as *mut u32).cast::<c_void>(),
+            (&mut down_ptr as *mut u64).cast::<c_void>(),
+            (&mut down_len as *mut u64).cast::<c_void>(),
+            (&mut out_ptr as *mut u64).cast::<c_void>(),
+            (&mut out_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.moe_sum_kernel,
+                config.grid_dim,
+                config.block_dim,
                 0,
                 stream,
                 &mut params,

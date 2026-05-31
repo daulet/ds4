@@ -1,9 +1,25 @@
 # DS4 Rust Port Status
 
-- Date: 2026-05-30 UTC
+- Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Single-Token Routed MoE ABI
+  is validated on B300. Rust exports `ds4_gpu_routed_moe_one_tensor` through
+  the reachable F32 fallback, IQ2/Q2 quantized, Q4_K, and environment-forced
+  single-token routes. A C-linked B300 witness proves packed Q8_K public
+  scratch aliasing, optional auxiliary writes, negative-expert fallback, and
+  validation rejection controls. Local tests pass with 154 tests; B300
+  feature tests pass with 161 tests; the static library exposes 74 symbols
+  and embeds 72 kernels. All 64 preceding linked ABI consumers pass against
+  the rebuilt archive with the known executable-stack warning. All 68 CUDA
+  ABI comparators pass, and the unified report passes with 240 passed, 45
+  skipped, and 0 failed. The pre-implementation and final pass-end
+  non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Batched routed MoE remains pending
+  because the public `mid_is_f16` result is absent from its current CUDA
+  definition; remaining graph compute, whole-archive/route promotion, C CUDA
+  removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Router Selection ABI
   is validated on B300. Rust exports `ds4_gpu_router_select_tensor` and
   `ds4_gpu_router_select_batch_tensor` through the current-C scalar,

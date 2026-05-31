@@ -16,7 +16,7 @@ from typing import Any, Iterable
 ROOT = Path(__file__).resolve().parents[1]
 MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
-NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
 FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-attention-output-low-q8-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
@@ -119,7 +119,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
-    report.check(len(symbols) == 73, "Rust ABI export implementation count drift")
+    report.check(len(symbols) == 74, "Rust ABI export implementation count drift")
     report.check("ds4_gpu_attention_output_low_q8_tensor" in symbols, "low-Q8 export missing")
     report.check("ds4_gpu_attention_output_q8_batch_tensor" in symbols, "batch output successor missing")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")

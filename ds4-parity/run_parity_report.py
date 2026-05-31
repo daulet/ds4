@@ -1928,6 +1928,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust CUDA public single-token routed-MoE ABI smoke",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_routed_moe_one_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

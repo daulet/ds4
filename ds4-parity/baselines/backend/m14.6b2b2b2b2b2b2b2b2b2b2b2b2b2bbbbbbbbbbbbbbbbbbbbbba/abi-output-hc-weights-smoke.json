@@ -64,5 +64,5 @@
     "remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
     "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
   ],
-  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
 }

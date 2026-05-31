@@ -128,7 +128,7 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
-    report.check(len(symbols) == 73, "Rust ABI export implementation count drift")
+    report.check(len(symbols) == 74, "Rust ABI export implementation count drift")
     for symbol in [
         "ds4_gpu_hc_weighted_sum_tensor",
         "ds4_gpu_hc_weighted_sum_split_tensor",
@@ -222,7 +222,7 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
     report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
         in texts["status"],
         "active remainder status missing",
     )

@@ -1,0 +1,99 @@
+{
+  "schema": "ds4.cuda_abi_routed_moe_one_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-single-token-routed-moe-abi",
+  "goal": "Rust-own only the public single-token routed MoE wrapper through its reachable F32 fallback, IQ2/Q2 quantized, Q4_K, and environment-selected dispatch while leaving batched routed MoE, route promotion, whole-archive policy, and C CUDA removal unclaimed.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_routed_moe_one_tensor"
+    ],
+    "semantics": [
+      "validate public model ranges, tensor spans, quantization types, and aligned expert dimensions before any output launch",
+      "use packed Q8_K scratch aliases in the public down and gate tensors for single-token quantized execution, or use F32 IQ2/Q2 kernels when that scratch cannot fit",
+      "dispatch default IQ2/Q2 decode-LUT and direct-six paths, Q4_K single-token direct-six paths, and environment-forced generic gate/down paths while mapping negative expert ids to expert zero"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_routed_moe_one_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_moe_q8_k_quantize_kernel",
+      "abi_moe_gate_up_mid_f32_kernel",
+      "abi_moe_down_f32_kernel",
+      "abi_moe_gate_up_mid_qwarp32_kernel",
+      "abi_moe_gate_up_mid_decode_lut_qwarp32_kernel",
+      "abi_moe_gate_up_mid_decode_q4_k_qwarp32_kernel",
+      "abi_moe_down_qwarp32_kernel",
+      "abi_moe_down_sum6_qwarp32_kernel",
+      "abi_moe_down_q4_k_sum6_qwarp32_kernel",
+      "abi_moe_sum_kernel"
+    ],
+    "adapter_boundary": "the public wrapper resolves three cached model ranges, retains host-uploaded IQ2 grid/sign tables, preserves the packed Q8_K public scratch aliases, and launches only the current-C single-token routes",
+    "reuse_boundary": "the public leaf promotes the measured M14.5c1, M14.5c2a, M14.5c2d, and single-token M14.5c2f routed-MoE behavior into the public archive",
+    "remaining_compute_boundary": "the batched routed-MoE wrapper is deferred because its public mid_is_f16 result contract is absent from the current CUDA definition; remaining graph compute, whole-archive retention policy, production route promotion, and C CUDA removal remain unowned",
+    "linkage_requirement": "the C-linked proof retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 74,
+    "exported_compute_symbol_count": 72,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "owns_routed_moe_one_tensor": true,
+    "preserves_f32_quantized_q4_k_and_environment_dispatch": true,
+    "preserves_packed_q8_k_public_scratch_aliasing": true,
+    "defers_batch_mid_is_f16_contract_gap": true,
+    "owns_routed_moe_batch_tensor": false,
+    "owns_complete_routed_moe_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 154,
+    "feature_release_test_count": 161,
+    "staticlib_export_count": 74,
+    "embedded_kernel_count": 72,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "f32_fallback_nonzero": true,
+      "default_iq2_q2_direct_sum_nonzero": true,
+      "packed_input_q8_alias_visible": true,
+      "packed_mid_q8_alias_visible": true,
+      "default_aux_unwritten": true,
+      "optional_gate_up_write_visible": true,
+      "forced_generic_gate_matches": true,
+      "forced_generic_down_matches": true,
+      "q4_k_direct_sum_nonzero": true,
+      "negative_expert_fallback_matches": true,
+      "invalid_model_range_preserves_output": true,
+      "invalid_type_rejected": true,
+      "invalid_q4_group_rejected": true,
+      "short_span_rejected": true,
+      "null_rejected": true,
+      "embedded_routed_moe_kernels_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 64,
+      "predecessor_relink_executable_stack_warning_count": 64
+    }
+  },
+  "integration_risks": [
+    "the public batched routed-MoE header and Rust FFI include a mid_is_f16 result pointer while the current CUDA definition omits it, so batched ABI ownership remains blocked",
+    "Q4_K default single-token execution is proved here; the unusual current-C environment-forced generic interpretation remains preserved by dispatch but is not promoted as an independent optimized contract",
+    "remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}
