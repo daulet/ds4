@@ -2870,6 +2870,16 @@ mod kernels {
         }
     }
 
+    macro_rules! abi_moe_down_load_u32 {
+        ($values:expr, $offset:expr) => {{
+            let offset = $offset;
+            $values[offset] as u32
+                | (($values[offset + 1] as u32) << 8)
+                | (($values[offset + 2] as u32) << 16)
+                | (($values[offset + 3] as u32) << 24)
+        }};
+    }
+
     #[allow(clippy::too_many_arguments, static_mut_refs)]
     #[kernel]
     pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel(
@@ -2968,26 +2978,29 @@ mod kernels {
                             scale_index += 1;
                             let second_scale = (down_weights[packed + scale_index] & 0x0f) as i32;
                             scale_index += 1;
-                            let first_word0 =
-                                ((abi_moe_load_u32(down_weights, q) >> shift) & 0x0303_0303) as i32;
-                            let first_word1 = ((abi_moe_load_u32(down_weights, q + 4) >> shift)
+                            let first_word0 = ((abi_moe_down_load_u32!(down_weights, q) >> shift)
                                 & 0x0303_0303) as i32;
-                            let first_word2 = ((abi_moe_load_u32(down_weights, q + 8) >> shift)
+                            let first_word1 = ((abi_moe_down_load_u32!(down_weights, q + 4)
+                                >> shift)
                                 & 0x0303_0303) as i32;
-                            let first_word3 = ((abi_moe_load_u32(down_weights, q + 12) >> shift)
+                            let first_word2 = ((abi_moe_down_load_u32!(down_weights, q + 8)
+                                >> shift)
                                 & 0x0303_0303) as i32;
-                            let second_word0 = ((abi_moe_load_u32(down_weights, q + 16) >> shift)
-                                & 0x0303_0303)
-                                as i32;
-                            let second_word1 = ((abi_moe_load_u32(down_weights, q + 20) >> shift)
-                                & 0x0303_0303)
-                                as i32;
-                            let second_word2 = ((abi_moe_load_u32(down_weights, q + 24) >> shift)
-                                & 0x0303_0303)
-                                as i32;
-                            let second_word3 = ((abi_moe_load_u32(down_weights, q + 28) >> shift)
-                                & 0x0303_0303)
-                                as i32;
+                            let first_word3 = ((abi_moe_down_load_u32!(down_weights, q + 12)
+                                >> shift)
+                                & 0x0303_0303) as i32;
+                            let second_word0 =
+                                ((abi_moe_down_load_u32!(down_weights, q + 16) >> shift)
+                                    & 0x0303_0303) as i32;
+                            let second_word1 =
+                                ((abi_moe_down_load_u32!(down_weights, q + 20) >> shift)
+                                    & 0x0303_0303) as i32;
+                            let second_word2 =
+                                ((abi_moe_down_load_u32!(down_weights, q + 24) >> shift)
+                                    & 0x0303_0303) as i32;
+                            let second_word3 =
+                                ((abi_moe_down_load_u32!(down_weights, q + 28) >> shift)
+                                    & 0x0303_0303) as i32;
                             let q8_base = chunk * 128 + group * 32;
                             let mut entry = 0_u32;
                             while entry < np {

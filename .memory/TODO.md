@@ -12594,3 +12594,30 @@
     after `60s`, then flushed `NO BLOCKERS` while termination completed.
     Total routed-MoE remains `2.90x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Load-Helper Expansion Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE down overhead by expanding the
+  repeated packed-Q2 load helper at its eight hot extraction sites.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-load-helper-expansion-performance-repair.json`
+- Evidence:
+  - The retained kernel introduces `abi_moe_down_load_u32!` only for the
+    cached down path; gate/up accumulation, multi-pair DP4A arithmetic,
+    dispatch, and default routing are unchanged.
+  - Emitted down PTX retains `8` DP4A sites and `51/6` local stores/loads,
+    but removes all `8` `abi_moe_load_u32` references and reduces call
+    instructions from `9` to `1`.
+  - A conservative interleaved B300 parent/candidate rebuild repeats down at
+    `1125.795 ms` versus `1119.090 ms` and total routed-MoE at `2680.160
+    ms` versus `2669.827 ms`. Two earlier candidate measurements record
+    `1115.446 ms` and `1116.715 ms` down.
+  - The repaired DSO SHA-256 is
+    `53717e57162ad2e0eedff267d3f22fa4a8246c5c065f7ad899ef544bd9894e91`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `267`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `2.89x` current-C, so default routing and
+    promotion blockers remain in force.

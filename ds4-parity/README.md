@@ -4341,6 +4341,19 @@ the repeated `subtotals[8]` path. Controlled B300 repeats lower gate/up from
 `2205.980 ms` to `1538.377 ms`; official-vector correctness is preserved and
 the graph route remains current-C.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA down load-helper expansion performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_down_load_helper_expansion_performance_repair.py --negative-test
+```
+
+The cached Rust down kernel now expands its eight packed-Q2 hot loads,
+removing eight PTX call boundaries without changing DP4A site count or local
+traffic. Conservative interleaved B300 repeats lower down from `1125.795
+ms` to `1119.090 ms`; official-vector correctness is preserved and the graph
+route remains current-C.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

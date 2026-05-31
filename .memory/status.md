@@ -4,6 +4,21 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Load-Helper Expansion Performance Repair
+  is validated on B300. The cached down kernel now expands the eight
+  little-endian packed-Q2 loads at their hot sites. Emitted PTX preserves
+  `8` DP4A sites and `51/6` local stores/loads while reducing down-kernel
+  call instructions from `9` to `1`; the repaired DSO SHA-256 is
+  `53717e57162ad2e0eedff267d3f22fa4a8246c5c065f7ad899ef544bd9894e91`.
+  In the conservative interleaved parent/candidate repeat, down falls from
+  `1125.795 ms` to `1119.090 ms` and total routed-MoE falls from
+  `2680.160 ms` to `2669.827 ms`; two earlier candidate measurements record
+  `1115.446 ms` and `1116.715 ms` down. Official vectors pass `1958` checks
+  plus `8` negative checks and B300 feature tests pass `176` tests; the
+  unified report passes with `267` passed, `50` skipped, and `0` failed.
+  Pre-implementation and final Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Routed-MoE remains `2.89x` current-C,
+  so promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate DP4A Accumulation Ordering Performance Repair
   is validated on B300. The cached gate/up kernel now decodes all eight
   signed IQ2 words per weight block and runs one ordered eight-DP4A chain per

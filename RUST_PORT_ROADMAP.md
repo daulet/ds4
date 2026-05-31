@@ -13432,6 +13432,35 @@ Stage split:
     Total routed-MoE remains `2.90x` current-C, so default current-C routing
     and promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Load-Helper Expansion Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE down overhead by removing repeated
+  packed-Q2 load call boundaries without changing the validated DP4A shape.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-load-helper-expansion-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_down_load_helper_expansion_performance_repair.py --negative-test`.
+- Evidence:
+  - The cached down row-span kernel expands its eight little-endian packed-Q2
+    word loads through `abi_moe_down_load_u32!`; gate/up, DP4A arithmetic,
+    down staging, dispatch, and default routing are unchanged.
+  - Emitted PTX retains `8` DP4A sites and `51/6` local stores/loads while
+    reducing down-kernel load-helper references from `8` to `0` and call
+    instructions from `9` to `1`.
+  - A conservative interleaved B300 parent/candidate rebuild repeats down at
+    `1125.795 ms` versus `1119.090 ms` (`1.006x`) and total routed-MoE at
+    `2680.160 ms` versus `2669.827 ms` (`1.004x`). Two earlier candidate
+    measurements record `1115.446 ms` and `1116.715 ms` down.
+  - The repaired DSO SHA-256 is
+    `53717e57162ad2e0eedff267d3f22fa4a8246c5c065f7ad899ef544bd9894e91`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `267`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `2.89x` current-C, so default current-C routing
+    and promotion blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and
