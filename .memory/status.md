@@ -4,6 +4,18 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Gate DP4A Performance Repair
+  is validated on B300. The cached gate/up row-span kernel now decodes each
+  IQ2 weight block once and applies packed DP4A across up to eight staged
+  pairs; cached down remains unchanged. The repaired DSO SHA-256 is
+  `926e67cb31746f434b994c020dfeaab9e1d124194d80bf371b599df832aaf032`.
+  On the profiled `2048`-token row, gate/up falls from `8217.639 ms` to
+  `2792.292 ms`, total routed-MoE falls from `12232.557 ms` to
+  `6802.279 ms`, and prefill rises from `106.95` to `168.88 tok/s`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. Down remains `3993.670 ms` versus
+  current-C `393.200 ms`, so route promotion stays blocked and the next
+  repair is cached down multi-pair DP4A.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA MoE Phase-Profile Parity
   is validated on B300. `DS4_CUDA_MOE_PROFILE=1` now emits the current-C
   phase schema from the Rust quantized batched routed-MoE path through

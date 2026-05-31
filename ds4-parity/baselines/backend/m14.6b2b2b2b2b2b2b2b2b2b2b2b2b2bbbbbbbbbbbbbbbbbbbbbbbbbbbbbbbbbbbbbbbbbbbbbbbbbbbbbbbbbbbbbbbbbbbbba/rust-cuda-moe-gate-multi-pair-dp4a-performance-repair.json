@@ -1,0 +1,109 @@
+{
+  "schema": "ds4.cuda_rust_moe_gate_multi_pair_dp4a_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-gateup-accelerated-down-open",
+  "goal": "Replace scalar per-pair IQ2 work in the cached Rust CUDA routed-MoE gate/up kernel with weight-reusing multi-pair DP4A computation while retaining current-C routing.",
+  "ownership": {
+    "changes_cached_gate_kernel_math": true,
+    "adds_multi_pair_iq2_dp4a": true,
+    "reuses_weight_decode_across_pairs": true,
+    "changes_cached_down_kernel_math": false,
+    "changes_default_dispatch": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false,
+    "default_current_c_route_preserved": true
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "kernel": "abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel",
+    "new_primitives": [
+      "abi_moe_cached_q8_word",
+      "abi_moe_iq2_signed_word",
+      "cuda_device::integer::dp4a_i8"
+    ],
+    "translation_constraint": "cuda-oxide cannot lower mutable fixed-array assignment through a device-function reference, so the multi-pair accumulator bodies remain inline in the gate/up kernel",
+    "scope_boundary": "the cached down Q2 path remains unchanged for a separately measured follow-on repair"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "parent_profiled_shared_library_sha256": "fd29d851b9d35a599f035913e6f8cb985641e90636537b714075675f9d98bd68",
+    "repaired_profiled_shared_library_sha256": "926e67cb31746f434b994c020dfeaab9e1d124194d80bf371b599df832aaf032",
+    "workload": "one 2048-token prefill frontier plus one generated token through Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "parent_rust_profile": {
+      "prefill_tps": 106.95,
+      "decode_tps": 16.15,
+      "profiled_layer_count": 43,
+      "gateup_ms": 8217.639,
+      "down_ms": 3998.630,
+      "total_ms": 12232.557
+    },
+    "repaired_rust_profile": {
+      "csv_sha256": "4464effd6038be66c29bb398219b05e112d87abb89ef37304ba7e39dda298d30",
+      "stderr_sha256": "8b7765f9039fd66baf01ca1df20afd1c1aa6507af474f4f8c990bd2b3fa39194",
+      "prefill_tps": 168.88,
+      "decode_tps": 16.34,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.027,
+      "sort_ms": 4.343,
+      "gateup_ms": 2792.292,
+      "midq_ms": 8.905,
+      "down_ms": 3993.670,
+      "sum_ms": 0.043,
+      "total_ms": 6802.279
+    },
+    "current_c_reference": {
+      "source_fixture": "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-phase-profile-parity.json",
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "gateup_speedup_over_parent": 2.94,
+      "total_speedup_over_parent": 1.80,
+      "prefill_gain_percent_over_parent": 57.9,
+      "repaired_gateup_ratio_to_current_c": 5.39,
+      "repaired_down_ratio_to_current_c": 10.16,
+      "remaining_primary_bottleneck": "cached-down-q2-multi-pair-dot"
+    },
+    "rejected_probes": {
+      "sm_100a_target_build": "CUDA_OXIDE_TARGET=sm_100a rejected by LLVM 18 llc because sm_100a is not a recognized NVPTX processor",
+      "per_pair_dp4a_dso_sha256": "a4e2308455d40176d7f16232c7aa5134291f0c945fbbe08ebd78c4f5a485e5b9",
+      "per_pair_dp4a_total_ms": 13489.699,
+      "per_pair_dp4a_gateup_ms": 9218.375,
+      "per_pair_dp4a_down_ms": 4255.053,
+      "per_pair_dp4a_decision": "rejected because packing work was repeated per pair and regressed the profiled workload"
+    },
+    "official_vector_probe": {
+      "summary_sha256": "6f38a1336011f51b93624a68cd238fbf622a59450c6d8fc1668f8e401de573a3",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Implement weight-reusing multi-pair DP4A computation for the unchanged cached down Q2 kernel and repeat phase profiling."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 267,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

@@ -140,8 +140,8 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
         "ABI_MOE_CACHED_DOWN_MAX_BLOCKS: usize = 8",
         "thread::sync_threads();",
         "S_IQ2_GRID",
-        "abi_moe_iq2_q8_k_cached_dot",
-        "abi_moe_q2_q8_k_cached_dot",
+        "S_IQ2_SIGNS",
+        "ABI_MOE_Q2_BLOCK_BYTES",
     ]:
         report.check(marker in texts["kernels"], f"cached kernel marker missing: {marker}")
     report.check("xq_blocks <= 16" in implementation.get("cache_boundary", ""), "gate cache boundary missing")

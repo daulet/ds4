@@ -12475,3 +12475,25 @@
     routing and promotion blockers remain in force. The pre-implementation
     and final Claude review attempts returned
     `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Gate DP4A Performance Repair
+
+- Status: done
+- Goal: accelerate the cached Rust CUDA routed-MoE gate/up phase by sharing
+  packed IQ2 DP4A weight work across the tile's staged pairs.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-gate-multi-pair-dp4a-performance-repair.json`
+- Evidence:
+  - The gate/up cached row-span kernel now holds eight pair accumulators,
+    decodes each signed IQ2 LUT word once per weight block, and applies
+    `integer::dp4a_i8` across staged pairs; the cached down kernel is
+    unchanged.
+  - On B300, gate/up improves from `8217.639 ms` to `2792.292 ms` and total
+    routed-MoE improves from `12232.557 ms` to `6802.279 ms`; prefill
+    increases from `106.95` to `168.88 tok/s`.
+  - A per-pair DP4A attempt was rejected after regressing total routed-MoE to
+    `13489.699 ms`, and `CUDA_OXIDE_TARGET=sm_100a` is blocked by the pod's
+    LLVM 18 `llc`.
+  - Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. Cached down still takes `3993.670 ms`
+    versus current-C `393.200 ms`; default routing remains current-C.

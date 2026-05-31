@@ -4279,6 +4279,18 @@ phase breakdown. B300 evidence isolates the remaining routed-MoE gap in
 gate/up and down dot computation, where the Rust cached kernels remain scalar
 per pair while current C uses packed multi-pair DP4A work.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA multi-pair gate DP4A performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_moe_gate_multi_pair_dp4a_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up row-span kernel now reuses packed IQ2 DP4A work across
+the tile's staged pairs. On B300 this lowers the profiled gate/up phase from
+`8217.639 ms` to `2792.292 ms` while preserving official-vector correctness;
+cached down remains the next performance repair and routing remains current-C.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

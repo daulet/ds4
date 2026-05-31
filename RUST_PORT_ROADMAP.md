@@ -13294,6 +13294,34 @@ Stage split:
     retained. The required Claude review attempts returned
     `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Gate DP4A Performance Repair
+
+- Status: done.
+- Goal: accelerate cached Rust CUDA routed-MoE gate/up work by reusing each
+  packed IQ2 weight decode across the tile's staged pair inputs.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-gate-multi-pair-dp4a-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_moe_gate_multi_pair_dp4a_performance_repair.py --negative-test`.
+- Evidence:
+  - The cached gate/up row-span kernel now holds eight pair accumulators and
+    applies packed `integer::dp4a_i8` dot work after decoding each signed IQ2
+    LUT word once. The cached down Q2 kernel and dispatch policy are unchanged.
+  - Across the same `43` profiled `2048`-token B300 layers, gate/up decreases
+    from `8217.639 ms` to `2792.292 ms` (`2.94x`) and total routed-MoE
+    decreases from `12232.557 ms` to `6802.279 ms` (`1.80x`). Prefill rises
+    from `106.95` to `168.88 tok/s`.
+  - A simpler per-pair DP4A substitution was rejected after increasing total
+    routed-MoE to `13489.699 ms`; it did not amortize weight packing. A
+    separate `CUDA_OXIDE_TARGET=sm_100a` build probe is blocked because LLVM
+    18 `llc` on the pod does not recognize that NVPTX processor.
+  - The repaired B300 DSO SHA-256 is
+    `926e67cb31746f434b994c020dfeaab9e1d124194d80bf371b599df832aaf032`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. Down remains `3993.670 ms` versus
+    current-C `393.200 ms`, so default current-C routing and promotion
+    blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

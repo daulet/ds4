@@ -2375,47 +2375,163 @@ mod kernels {
             if row < expert_mid_dim {
                 let row_base =
                     u64::from(expert) * gate_expert_bytes + u64::from(row) * gate_row_bytes;
+                let mut gate = [0.0_f32; 8];
+                let mut up = [0.0_f32; 8];
+                let mut block = lane;
+                while block < xq_blocks {
+                    let packed = (row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES) as usize;
+                    {
+                        let weight_scale =
+                            f16::from_bits(abi_moe_load_u16(gate_weights, packed)) as f32;
+                        let mut block_sums = [0_i32; 8];
+                        let mut ib32 = 0_usize;
+                        while ib32 < ABI_MOE_QK_K / 32 {
+                            let q2 = packed + 2 + ib32 * 8;
+                            let aux_g = abi_moe_load_u16(gate_weights, q2) as u32
+                                | ((abi_moe_load_u16(gate_weights, q2 + 2) as u32) << 16);
+                            let aux_s = abi_moe_load_u16(gate_weights, q2 + 4) as u32
+                                | ((abi_moe_load_u16(gate_weights, q2 + 6) as u32) << 16);
+                            let multiplier = (2 * (aux_s >> 28) + 1) as i32;
+                            let mut subtotals = [0_i32; 8];
+                            let mut group = 0_u32;
+                            while group < 4 {
+                                let grid =
+                                    unsafe { S_IQ2_GRID[((aux_g >> (8 * group)) & 0xff) as usize] };
+                                let signs =
+                                    unsafe { S_IQ2_SIGNS[((aux_s >> (7 * group)) & 127) as usize] };
+                                let weight_word0 = abi_moe_iq2_signed_word(grid, signs, 0);
+                                let weight_word1 = abi_moe_iq2_signed_word(grid, signs, 4);
+                                let q8_index = ib32 * 32 + group as usize * 8;
+                                let mut entry = 0_u32;
+                                while entry < np {
+                                    let q8_block =
+                                        entry as usize * xq_blocks as usize + block as usize;
+                                    subtotals[entry as usize] = integer::dp4a_i8(
+                                        weight_word0,
+                                        abi_moe_cached_q8_word(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index,
+                                        ),
+                                        subtotals[entry as usize],
+                                    );
+                                    subtotals[entry as usize] = integer::dp4a_i8(
+                                        weight_word1,
+                                        abi_moe_cached_q8_word(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 4,
+                                        ),
+                                        subtotals[entry as usize],
+                                    );
+                                    entry += 1;
+                                }
+                                group += 1;
+                            }
+                            let mut entry = 0_u32;
+                            while entry < np {
+                                block_sums[entry as usize] +=
+                                    subtotals[entry as usize] * multiplier;
+                                entry += 1;
+                            }
+                            ib32 += 1;
+                        }
+                        let mut entry = 0_u32;
+                        while entry < np {
+                            let q8_block = entry as usize * xq_blocks as usize + block as usize;
+                            gate[entry as usize] += 0.125
+                                * weight_scale
+                                * abi_moe_cached_q8_scale(unsafe { SXQ.as_ptr() }, q8_block)
+                                * block_sums[entry as usize] as f32;
+                            entry += 1;
+                        }
+                    }
+                    {
+                        let weight_scale =
+                            f16::from_bits(abi_moe_load_u16(up_weights, packed)) as f32;
+                        let mut block_sums = [0_i32; 8];
+                        let mut ib32 = 0_usize;
+                        while ib32 < ABI_MOE_QK_K / 32 {
+                            let q2 = packed + 2 + ib32 * 8;
+                            let aux_g = abi_moe_load_u16(up_weights, q2) as u32
+                                | ((abi_moe_load_u16(up_weights, q2 + 2) as u32) << 16);
+                            let aux_s = abi_moe_load_u16(up_weights, q2 + 4) as u32
+                                | ((abi_moe_load_u16(up_weights, q2 + 6) as u32) << 16);
+                            let multiplier = (2 * (aux_s >> 28) + 1) as i32;
+                            let mut subtotals = [0_i32; 8];
+                            let mut group = 0_u32;
+                            while group < 4 {
+                                let grid =
+                                    unsafe { S_IQ2_GRID[((aux_g >> (8 * group)) & 0xff) as usize] };
+                                let signs =
+                                    unsafe { S_IQ2_SIGNS[((aux_s >> (7 * group)) & 127) as usize] };
+                                let weight_word0 = abi_moe_iq2_signed_word(grid, signs, 0);
+                                let weight_word1 = abi_moe_iq2_signed_word(grid, signs, 4);
+                                let q8_index = ib32 * 32 + group as usize * 8;
+                                let mut entry = 0_u32;
+                                while entry < np {
+                                    let q8_block =
+                                        entry as usize * xq_blocks as usize + block as usize;
+                                    subtotals[entry as usize] = integer::dp4a_i8(
+                                        weight_word0,
+                                        abi_moe_cached_q8_word(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index,
+                                        ),
+                                        subtotals[entry as usize],
+                                    );
+                                    subtotals[entry as usize] = integer::dp4a_i8(
+                                        weight_word1,
+                                        abi_moe_cached_q8_word(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 4,
+                                        ),
+                                        subtotals[entry as usize],
+                                    );
+                                    entry += 1;
+                                }
+                                group += 1;
+                            }
+                            let mut entry = 0_u32;
+                            while entry < np {
+                                block_sums[entry as usize] +=
+                                    subtotals[entry as usize] * multiplier;
+                                entry += 1;
+                            }
+                            ib32 += 1;
+                        }
+                        let mut entry = 0_u32;
+                        while entry < np {
+                            let q8_block = entry as usize * xq_blocks as usize + block as usize;
+                            up[entry as usize] += 0.125
+                                * weight_scale
+                                * abi_moe_cached_q8_scale(unsafe { SXQ.as_ptr() }, q8_block)
+                                * block_sums[entry as usize] as f32;
+                            entry += 1;
+                        }
+                    }
+                    block += 8;
+                }
                 let mut entry = 0_u32;
                 while entry < np {
                     let pair =
                         sorted_pairs[(offsets[expert as usize] + local_start + entry) as usize];
-                    let mut gate = 0.0_f32;
-                    let mut up = 0.0_f32;
-                    let mut block = lane;
-                    while block < xq_blocks {
-                        let packed =
-                            (row_base + u64::from(block) * ABI_MOE_IQ2_BLOCK_BYTES) as usize;
-                        let staged_block = entry as usize * xq_blocks as usize + block as usize;
-                        gate += abi_moe_iq2_q8_k_cached_dot(
-                            gate_weights,
-                            packed,
-                            unsafe { SXQ.as_ptr() },
-                            staged_block,
-                            unsafe { S_IQ2_GRID.as_ptr() },
-                            unsafe { S_IQ2_SIGNS.as_ptr() },
-                        );
-                        up += abi_moe_iq2_q8_k_cached_dot(
-                            up_weights,
-                            packed,
-                            unsafe { SXQ.as_ptr() },
-                            staged_block,
-                            unsafe { S_IQ2_GRID.as_ptr() },
-                            unsafe { S_IQ2_SIGNS.as_ptr() },
-                        );
-                        block += 8;
-                    }
-                    gate = abi_moe_quarter_warp_sum(gate);
-                    up = abi_moe_quarter_warp_sum(up);
+                    let mut gate_value = abi_moe_quarter_warp_sum(gate[entry as usize]);
+                    let mut up_value = abi_moe_quarter_warp_sum(up[entry as usize]);
                     if lane == 0 {
-                        abi_moe_apply_clamp(&mut gate, &mut up, clamp);
+                        abi_moe_apply_clamp(&mut gate_value, &mut up_value, clamp);
                         let output = (pair * expert_mid_dim + row) as usize;
                         unsafe {
                             if write_aux != 0 {
-                                *gate_out.get_unchecked_mut(output) = gate;
-                                *up_out.get_unchecked_mut(output) = up;
+                                *gate_out.get_unchecked_mut(output) = gate_value;
+                                *up_out.get_unchecked_mut(output) = up_value;
                             }
-                            *mid_out.get_unchecked_mut(output) =
-                                (gate / (1.0 + (-gate).exp())) * up * weights[pair as usize];
+                            *mid_out.get_unchecked_mut(output) = (gate_value
+                                / (1.0 + (-gate_value).exp()))
+                                * up_value
+                                * weights[pair as usize];
                         }
                     }
                     entry += 1;
@@ -3765,51 +3881,6 @@ mod kernels {
         0.125 * weight_scale * abi_moe_q8_scale(q8, q8_block) * block_sum as f32
     }
 
-    fn abi_moe_iq2_q8_k_cached_dot(
-        packed: &[u8],
-        base: usize,
-        q8: *const u8,
-        q8_block: usize,
-        iq2_grid: *const u64,
-        iq2_signs: *const u8,
-    ) -> f32 {
-        let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base)) as f32;
-        let mut block_sum = 0_i32;
-        let mut ib32 = 0_usize;
-        while ib32 < ABI_MOE_QK_K / 32 {
-            let q2 = base + 2 + ib32 * 8;
-            let aux_g = abi_moe_load_u16(packed, q2) as u32
-                | ((abi_moe_load_u16(packed, q2 + 2) as u32) << 16);
-            let aux_s = abi_moe_load_u16(packed, q2 + 4) as u32
-                | ((abi_moe_load_u16(packed, q2 + 6) as u32) << 16);
-            let multiplier = (2 * (aux_s >> 28) + 1) as i32;
-            let mut subtotal = 0_i32;
-            let mut group = 0_u32;
-            while group < 4 {
-                let grid = unsafe { *iq2_grid.add(((aux_g >> (8 * group)) & 0xff) as usize) };
-                let signs = unsafe { *iq2_signs.add(((aux_s >> (7 * group)) & 127) as usize) };
-                let mut lane = 0_u32;
-                while lane < 8 {
-                    let mut value = ((grid >> (8 * lane)) & 0xff) as i32;
-                    if signs & (1_u8 << lane) != 0 {
-                        value = -value;
-                    }
-                    subtotal += value
-                        * abi_moe_cached_q8_value(
-                            q8,
-                            q8_block,
-                            ib32 * 32 + group as usize * 8 + lane as usize,
-                        );
-                    lane += 1;
-                }
-                group += 1;
-            }
-            block_sum += subtotal * multiplier;
-            ib32 += 1;
-        }
-        0.125 * weight_scale * abi_moe_cached_q8_scale(q8, q8_block) * block_sum as f32
-    }
-
     fn abi_moe_q2_q8_k_dot(packed: &[u8], base: usize, q8: &[u8], q8_block: usize) -> f32 {
         let weight_scale = f16::from_bits(abi_moe_load_u16(packed, base + 80)) as f32;
         let weight_min = f16::from_bits(abi_moe_load_u16(packed, base + 82)) as f32;
@@ -3964,6 +4035,27 @@ mod kernels {
 
     fn abi_moe_cached_q8_value(q8: *const u8, block: usize, index: usize) -> i32 {
         unsafe { *q8.add(block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index) as i8 as i32 }
+    }
+
+    fn abi_moe_cached_q8_word(q8: *const u8, block: usize, index: usize) -> i32 {
+        abi_moe_cached_load_u32(q8, block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index) as i32
+    }
+
+    fn abi_moe_iq2_signed_word(grid: u64, signs: u8, lane: u32) -> i32 {
+        let mut word = 0_u32;
+        let mut element = 0_u32;
+        while element < 4 {
+            let source_lane = lane + element;
+            let value = ((grid >> (8 * source_lane)) & 0xff) as i32;
+            let signed = if signs & (1_u8 << source_lane) != 0 {
+                -value
+            } else {
+                value
+            };
+            word |= (signed as i8 as u8 as u32) << (8 * element);
+            element += 1;
+        }
+        word as i32
     }
 
     fn abi_moe_cached_q8_bsum(q8: *const u8, block: usize, index: usize) -> i32 {
