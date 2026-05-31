@@ -3,7 +3,19 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Expert-Tile Metadata Routed MoE ABI Module
+  is validated on B300. The retained Rust CUDA ABI module now embeds the
+  expert-tile offset and descriptor metadata entries required by later
+  tile4/tile8/tile16 batch routes. The rebuilt static library still exposes
+  74 Rust ABI symbols, now embeds 81 kernels, and links/runs the existing
+  C-linked public single-token consumer while loading the enlarged module.
+  Local tests pass with 156 tests; B300 feature tests pass with 163 tests;
+  all 70 CUDA ABI comparators pass; and the unified report passes with 243
+  passed, 45 skipped, and 0 failed. The pre-implementation and final
+  pass-end non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Projection, atomic, row-span, and
+  public batched routed-MoE ownership remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Sorted Batched Routed MoE ABI Module
   is validated on B300. The retained Rust CUDA ABI module now embeds
   sorted-pair count/prefix/scatter plus sorted P2 and no-P2 IQ2/Q2 gate/down

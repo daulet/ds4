@@ -1,0 +1,85 @@
+{
+  "schema": "ds4.cuda_abi_routed_moe_expert_tile_metadata_module_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-embedded-expert-tile-metadata-module",
+  "goal": "Retain the B300-proved expert-tile offset and descriptor metadata kernels in the Rust CUDA ABI module without exporting the public batched routed-MoE wrapper before tile projection and accumulation dispatch is integrated.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_routed_moe_batch_tensor"
+    ],
+    "prior_proof_sources": [
+      "rust/ds4-cuda/src/bin/routed_moe_expert_tiles_smoke.rs",
+      "ds4-parity/baselines/backend/m14.5c2c1/routed-moe-expert-tiles-smoke.json"
+    ],
+    "semantics": [
+      "expert-tile dispatch consumes sorted expert counts to construct tile offsets and expert/start descriptors for block sizes 4, 8, and optional down block size 16",
+      "tile projection, atomic-down, tile16 projection, and row-span branches remain separate current-C dispatch behavior not owned by this metadata-only leaf"
+    ]
+  },
+  "implementation": {
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "regression_harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_routed_moe_one_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_moe_build_expert_tile_offsets_kernel",
+      "abi_moe_build_expert_tiles_kernel"
+    ],
+    "reuse_boundary": "this module leaf embeds only metadata kernels already executed on B300 in M14.5c2c1 after the published sorted-pair module prerequisite",
+    "remaining_compute_boundary": "Rust still does not export ds4_gpu_routed_moe_batch_tensor; tile4/tile8 projections, atomic-down, tile16, and row-span dispatch remain pending",
+    "linkage_requirement": "the existing C-linked public single-token consumer retains and loads the enlarged Rust static-library kernel module with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 74,
+    "exported_compute_symbol_count": 72,
+    "embedded_kernel_count": 81,
+    "consumes_sorted_routed_moe_module": true,
+    "embeds_expert_tile_offsets_kernel": true,
+    "embeds_expert_tile_descriptors_kernel": true,
+    "owns_tile_projection_kernels": false,
+    "owns_atomic_or_rowspan_batch_dispatch": false,
+    "owns_routed_moe_batch_tensor": false,
+    "owns_complete_routed_moe_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "target": "sm_80",
+    "local_library_test_count": 156,
+    "feature_release_test_count": 163,
+    "staticlib_export_count": 74,
+    "embedded_kernel_count": 81,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "embedded_routed_moe_kernels_loaded": true,
+      "single_token_public_regression_remains_passing": true,
+      "expert_tile_offsets_entry_generated": true,
+      "expert_tile_descriptors_entry_generated": true
+    }
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 156,
+    "b300_feature_release_test_count": 163,
+    "cuda_abi_comparators_passed": 70,
+    "unified_report_passed": 243,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "integration_risks": [
+    "the public Rust batched routed-MoE wrapper remains deferred because tile projection, atomic-down, tile16, and row-span branches are still not retained in the ABI module",
+    "these retained descriptor kernels are loaded by the static-library module but are not newly dispatched by a public host wrapper in this prerequisite",
+    "whole-archive retention policy, production route promotion, and C CUDA removal remain pending"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

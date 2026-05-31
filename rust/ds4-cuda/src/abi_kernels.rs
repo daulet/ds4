@@ -1997,6 +1997,55 @@ mod kernels {
         }
     }
 
+    #[kernel]
+    pub fn abi_moe_build_expert_tile_offsets_kernel(
+        block_m: u32,
+        counts: &[u32],
+        mut tile_offsets: DisjointSlice<u32>,
+        mut tile_total: DisjointSlice<u32>,
+    ) {
+        if thread::threadIdx_x() != 0 {
+            return;
+        }
+        let mut sum = 0_u32;
+        let mut expert = 0_usize;
+        while expert < ABI_MOE_SORTED_EXPERTS {
+            unsafe {
+                *tile_offsets.get_unchecked_mut(expert) = sum;
+            }
+            sum += counts[expert].div_ceil(block_m);
+            expert += 1;
+        }
+        unsafe {
+            *tile_offsets.get_unchecked_mut(ABI_MOE_SORTED_EXPERTS) = sum;
+            *tile_total.get_unchecked_mut(0) = sum;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_moe_build_expert_tiles_kernel(
+        block_m: u32,
+        counts: &[u32],
+        tile_offsets: &[u32],
+        mut tile_experts: DisjointSlice<u32>,
+        mut tile_starts: DisjointSlice<u32>,
+    ) {
+        let expert = thread::threadIdx_x() as usize;
+        if expert >= ABI_MOE_SORTED_EXPERTS {
+            return;
+        }
+        let tile_count = counts[expert].div_ceil(block_m);
+        let offset = tile_offsets[expert];
+        let mut tile = 0_u32;
+        while tile < tile_count {
+            unsafe {
+                *tile_experts.get_unchecked_mut((offset + tile) as usize) = expert as u32;
+                *tile_starts.get_unchecked_mut((offset + tile) as usize) = tile * block_m;
+            }
+            tile += 1;
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[kernel]
     pub fn abi_moe_gate_up_mid_f32_kernel(
@@ -5265,6 +5314,10 @@ pub(crate) struct AbiKernelModule {
     #[allow(dead_code)]
     moe_scatter_sorted_pairs_kernel: CudaFunction,
     #[allow(dead_code)]
+    moe_build_expert_tile_offsets_kernel: CudaFunction,
+    #[allow(dead_code)]
+    moe_build_expert_tiles_kernel: CudaFunction,
+    #[allow(dead_code)]
     moe_gate_up_mid_sorted_qwarp32_kernel: CudaFunction,
     #[allow(dead_code)]
     moe_gate_up_mid_sorted_p2_qwarp32_kernel: CudaFunction,
@@ -5416,6 +5469,12 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_scatter_sorted_pairs_kernel: module
                 .load_function("abi_moe_scatter_sorted_pairs_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_build_expert_tile_offsets_kernel: module
+                .load_function("abi_moe_build_expert_tile_offsets_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_build_expert_tiles_kernel: module
+                .load_function("abi_moe_build_expert_tiles_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_gate_up_mid_sorted_qwarp32_kernel: module
                 .load_function("abi_moe_gate_up_mid_sorted_qwarp32_kernel")

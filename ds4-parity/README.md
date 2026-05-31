@@ -3965,6 +3965,19 @@ expanded embedded module loads without changing the published ABI surface.
 Rust batched routed-MoE export remains pending until the expert-tile,
 atomic-down, tile16, and row-span paths are integrated.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA embedded expert-tile metadata routed-MoE ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_expert_tile_metadata_module_smoke.py --negative-test
+```
+
+The retained module now also embeds the previously measured expert-tile
+offset and descriptor metadata kernels. A C-linked B300 public
+single-token regression consumer proves that the 81-entry module loads
+without expanding the public Rust ABI. Tile projections, atomic accumulation,
+tile16, row-span dispatch, and the public batched wrapper remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

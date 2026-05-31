@@ -12345,8 +12345,49 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because expert-tile offset and descriptor construction has an existing
+  B300 proof independent of the pending tile projection and accumulation
+  branches.
+- Goal: retain expert-tile descriptor metadata in the ABI module, then
+  integrate or further scope tile projection, atomic-down, tile16, and
+  row-span routed-MoE batch routes before connecting remaining graph
+  compute, whole-archive retention policy, and production route-promotion
+  work without claiming C CUDA removal before those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Expert-Tile Metadata Routed MoE ABI Module
+
+- Status: done.
+- Goal: retain the B300-proved expert-tile offset and descriptor metadata
+  kernels in the Rust CUDA ABI module while keeping all projection and public
+  batched routed-MoE ownership deferred.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-expert-tile-metadata-module-smoke.json`.
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_expert_tile_metadata_module_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi_kernels.rs` now retains
+    `abi_moe_build_expert_tile_offsets_kernel` and
+    `abi_moe_build_expert_tiles_kernel`, the metadata surface needed by
+    tile4, tile8, and later tile16 batch branches.
+  - `rust/ds4-cuda/src/lib.rs` records 81 embedded kernels while preserving
+    74 public Rust ABI symbols and expressly not claiming projection, atomic,
+    row-span, or public batch ownership.
+  - The rebuilt B300 static library links and runs the existing C-linked
+    public single-token routed-MoE consumer while loading the 81-entry module.
+  - Local library tests pass with 156 tests; B300 release-feature tests pass
+    with 163 tests; all 70 CUDA ABI comparators pass; and the unified report
+    passes with 243 passed, 45 skipped, and 0 failed. The pre-implementation
+    and final pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Tile4/tile8 projection, atomic-down, tile16, row-span, public batched
+    routed-MoE export, route promotion, and C CUDA removal remain open.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active.
-- Goal: integrate or further scope the remaining expert-tile, atomic-down,
+- Goal: integrate or further scope tile4/tile8 projection, atomic-down,
   tile16, and row-span routed-MoE batch routes, then connect remaining graph
   compute, whole-archive retention policy, and production route-promotion
   work without claiming C CUDA removal before those gates pass.
