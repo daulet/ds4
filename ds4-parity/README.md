@@ -3992,6 +3992,20 @@ C-linked B300 public single-token regression consumer proves that the
 row-span dispatch, shared-cache specialization, and the public batched
 wrapper remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA embedded tile16 row32 atomic-down routed-MoE ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_tile16_row32_atomic_module_smoke.py --negative-test
+```
+
+The retained module now embeds the previously measured tile16 row32
+atomic-down entry while reusing block-16 descriptor construction and output
+zeroing already present in the ABI module. A C-linked B300 public single-token
+regression consumer proves that the 87-entry module loads without expanding
+the public Rust ABI. Widened row-span dispatch, shared-cache specialization,
+and the public batched wrapper remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

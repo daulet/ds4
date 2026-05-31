@@ -1968,6 +1968,14 @@ class ParityReport:
                     "--negative-test",
                 ],
             ),
+            (
+                "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust CUDA embedded tile16 row32 atomic ABI module",
+                [
+                    sys.executable,
+                    "ds4-parity/check_cuda_abi_routed_moe_tile16_row32_atomic_module_smoke.py",
+                    "--negative-test",
+                ],
+            ),
         ]
         for name, command in commands:
             item = ReportItem(name=name, kind="comparator", command=command)

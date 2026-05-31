@@ -2183,6 +2183,7 @@ mod kernels {
     ) {
         abi_moe_down_expert_tile_row32(
             4,
+            false,
             midq_blocks,
             out_dim,
             n_expert,
@@ -2222,6 +2223,47 @@ mod kernels {
     ) {
         abi_moe_down_expert_tile_row32(
             8,
+            false,
+            midq_blocks,
+            out_dim,
+            n_expert,
+            atomic_out,
+            down_expert_bytes,
+            down_row_bytes,
+            down_weights,
+            midq,
+            sorted_pairs,
+            offsets,
+            counts,
+            tile_total,
+            tile_experts,
+            tile_starts,
+            &mut down_out,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
+    pub fn abi_moe_down_expert_tile16_row32_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        atomic_out: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        abi_moe_down_expert_tile_row32(
+            16,
+            true,
             midq_blocks,
             out_dim,
             n_expert,
@@ -3071,6 +3113,7 @@ mod kernels {
     #[allow(clippy::too_many_arguments)]
     fn abi_moe_down_expert_tile_row32(
         tile_width: u32,
+        require_even_tile_pair: bool,
         midq_blocks: u32,
         out_dim: u32,
         n_expert: u32,
@@ -3098,6 +3141,9 @@ mod kernels {
         }
         let expert = tile_experts[tile as usize];
         let local_start = tile_starts[tile as usize];
+        if require_even_tile_pair && local_start & 8 != 0 {
+            return;
+        }
         let row_base = u64::from(expert) * down_expert_bytes + u64::from(row) * down_row_bytes;
         let mut entry = 0_u32;
         while entry < tile_width {
@@ -5672,6 +5718,8 @@ pub(crate) struct AbiKernelModule {
     #[allow(dead_code)]
     moe_down_expert_tile8_row32_kernel: CudaFunction,
     #[allow(dead_code)]
+    moe_down_expert_tile16_row32_kernel: CudaFunction,
+    #[allow(dead_code)]
     moe_gate_up_mid_sorted_qwarp32_kernel: CudaFunction,
     #[allow(dead_code)]
     moe_gate_up_mid_sorted_p2_qwarp32_kernel: CudaFunction,
@@ -5844,6 +5892,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_down_expert_tile8_row32_kernel: module
                 .load_function("abi_moe_down_expert_tile8_row32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_expert_tile16_row32_kernel: module
+                .load_function("abi_moe_down_expert_tile16_row32_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_gate_up_mid_sorted_qwarp32_kernel: module
                 .load_function("abi_moe_gate_up_mid_sorted_qwarp32_kernel")

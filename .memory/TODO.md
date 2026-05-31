@@ -11723,8 +11723,43 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because tile16 row32 atomic down is already B300-proved and can be
+  retained independently of row-span and shared-cache dispatch.
+- Goal: retain tile16 row32 atomic down, then integrate or further scope
+  row-span and shared-cache routed-MoE batch dispatch before connecting
+  remaining graph compute, whole-archive retention policy, and production
+  route-promotion work without claiming C CUDA removal before those gates
+  pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Tile16 Row32 Atomic Routed MoE ABI Module
+
+- Status: done
+- Goal: retain the tile16 row32 routed-MoE atomic-down kernel in the Rust
+  CUDA ABI module without claiming public batched routed-MoE ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-routed-moe-tile16-row32-atomic-module-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_routed_moe_tile16_row32_atomic_module_smoke.py --negative-test`.
+- Evidence:
+  - One new retained entry embeds tile16 row32 atomic down with its
+    current-C tile-start alignment guard while reusing retained descriptor
+    construction and zeroing prerequisites.
+  - The B300 rebuilt-staticlib regression consumer loads 87 embedded kernels
+    while the archive continues to expose 74 Rust ABI symbols.
+  - Local tests pass with 158 tests; B300 feature tests pass with 165 tests;
+    all 72 CUDA ABI comparators pass; and the unified report passes with 245
+    passed, 45 skipped, and 0 failed. The pre-implementation and final
+    pass-end non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Row-span, shared-cache specialization, and public batched routed-MoE
+    ownership remain pending.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
-- Goal: integrate or further scope tile16, row-span, and shared-cache
-  routed-MoE batch dispatch, then connect remaining graph compute,
-  whole-archive retention policy, and production route-promotion work
-  without claiming C CUDA removal before those gates pass.
+- Goal: integrate or further scope row-span and shared-cache routed-MoE batch
+  dispatch, then connect remaining graph compute, whole-archive retention
+  policy, and production route-promotion work without claiming C CUDA
+  removal before those gates pass.

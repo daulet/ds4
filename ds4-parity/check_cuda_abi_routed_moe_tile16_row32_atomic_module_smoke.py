@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate retained sorted batched routed-MoE kernels in the Rust CUDA ABI module."""
+"""Validate retained tile16 row32 atomic-down kernel in the Rust CUDA ABI module."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
 NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-routed-moe-sorted-module-smoke.json"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-routed-moe-tile16-row32-atomic-module-smoke.json"
 REGRESSION_HARNESS = ROOT / "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_routed_moe_one_link_smoke.c"
 
 
@@ -46,7 +46,7 @@ def main(argv: Iterable[str]) -> int:
         "lib": (ROOT / "rust/ds4-cuda/src/lib.rs").read_text(encoding="utf-8"),
         "abi": (ROOT / "rust/ds4-cuda/src/abi.rs").read_text(encoding="utf-8"),
         "kernels": (ROOT / "rust/ds4-cuda/src/abi_kernels.rs").read_text(encoding="utf-8"),
-        "prior_smoke": (ROOT / "rust/ds4-cuda/src/bin/routed_moe_sorted_p2_smoke.rs").read_text(encoding="utf-8"),
+        "prior_smoke": (ROOT / "rust/ds4-cuda/src/bin/routed_moe_tile8_row32_smoke.rs").read_text(encoding="utf-8"),
         "harness": REGRESSION_HARNESS.read_text(encoding="utf-8"),
         "roadmap": (ROOT / "RUST_PORT_ROADMAP.md").read_text(encoding="utf-8"),
         "todo": (ROOT / ".memory/TODO.md").read_text(encoding="utf-8"),
@@ -59,65 +59,51 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     status = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA embedded sorted routed-MoE ABI module: {status} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA embedded tile16 row32 atomic ABI module: {status} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
 
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.cuda_abi_routed_moe_sorted_module_smoke.v1", "schema drift")
+    report.check(fixture.get("schema") == "ds4.cuda_abi_routed_moe_tile16_row32_atomic_module_smoke.v1", "schema drift")
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
-    report.check(
-        fixture.get("status") == "b300-pass-staticlib-embedded-sorted-routed-moe-module",
-        "status drift",
-    )
-    validate_oracle(report, fixture, texts)
-    validate_ownership(report, fixture, texts)
+    report.check(fixture.get("status") == "b300-pass-staticlib-embedded-tile16-row32-atomic-module", "status drift")
+    oracle = require_dict(report, fixture.get("oracle"), "oracle")
+    report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
+    for marker in [
+        "moe_down_expert_tile16_row32_kernel<<<",
+        "const uint32_t use_down_tile16 =",
+        "moe_build_expert_tile_offsets_kernel<<<1, 1>>>(tile16_offsets, tile16_total, counts, 16u)",
+        "moe_build_expert_tiles_kernel<<<1, 256>>>(tile16_experts, tile16_starts, tile16_offsets, counts, 16u)",
+        "const uint32_t use_atomic_down =",
+        "zero_kernel<<<",
+        "moe_down_expert_tile16_rowspan_kernel<512><<<",
+    ]:
+        report.check(marker in texts["cuda"], f"current-C route marker missing: {marker}")
+    for marker in [
+        "pub fn moe_down_expert_tile16_row32_kernel",
+        "M14_5C2C5_SCOPE.owns_moe_down_expert_tile16_row32_kernel",
+        "M14_5C2C5_SCOPE.owns_tile16_atomic_down_dispatch",
+    ]:
+        report.check(marker in texts["prior_smoke"], f"prior proof marker missing: {marker}")
+    validate_scope(report, fixture, texts)
     validate_execution(report, fixture, texts)
     validate_wiring(report, fixture, texts)
 
 
-def validate_oracle(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    oracle = require_dict(report, fixture.get("oracle"), "oracle")
-    report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
-    report.check(oracle.get("symbols") == ["ds4_gpu_routed_moe_batch_tensor"], "oracle symbol drift")
-    for marker in [
-        "const uint32_t use_sorted_pairs = n_tokens > 1u;",
-        "moe_count_sorted_pairs_kernel<<<",
-        "moe_prefix_sorted_pairs_kernel<<<",
-        "moe_scatter_sorted_pairs_kernel<<<",
-        "moe_gate_up_mid_sorted_p2_qwarp32_kernel<<<",
-        "moe_down_sorted_p2_qwarp32_kernel<<<",
-        "moe_gate_up_mid_sorted_qwarp32_kernel<<<",
-        "moe_down_sorted_qwarp32_kernel<<<",
-        "const uint32_t use_expert_tiles =",
-        "const uint32_t use_atomic_down =",
-        'extern "C" int ds4_gpu_routed_moe_batch_tensor',
-        "bool *mid_is_f16",
-    ]:
-        report.check(marker in texts["cuda"], f"current-C route marker missing: {marker}")
-    for marker in [
-        "pub fn moe_count_sorted_pairs_kernel",
-        "pub fn moe_gate_up_mid_sorted_qwarp32_kernel",
-        "pub fn moe_gate_up_mid_sorted_p2_qwarp32_kernel",
-        "pub fn moe_down_sorted_qwarp32_kernel",
-        "pub fn moe_down_sorted_p2_qwarp32_kernel",
-    ]:
-        report.check(marker in texts["prior_smoke"], f"prior B300 proof marker missing: {marker}")
-
-
-def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
+def validate_scope(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
         ("exported_abi_symbol_count", 74),
         ("exported_compute_symbol_count", 72),
-        ("embedded_kernel_count", 79),
-        ("consumes_published_routed_moe_one_abi", True),
-        ("embeds_sorted_pair_metadata_kernels", True),
-        ("embeds_sorted_p2_and_no_p2_projection_kernels", True),
+        ("embedded_kernel_count", 87),
+        ("consumes_row32_tiled_atomic_module", True),
+        ("reuses_block16_expert_tile_metadata", True),
+        ("embeds_tile16_row32_down_kernel", True),
+        ("owns_tile16_row32_atomic_down_surface", True),
+        ("owns_rowspan_or_shared_cache_batch_dispatch", False),
         ("owns_routed_moe_batch_tensor", False),
-        ("owns_expert_tile_atomic_or_rowspan_batch_dispatch", False),
         ("owns_complete_routed_moe_abi", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
@@ -129,14 +115,14 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
     report.check("ds4_gpu_routed_moe_one_tensor" in symbols, "published single-token export missing")
     report.check("ds4_gpu_routed_moe_batch_tensor" not in symbols, "public batched route exported early")
     for marker in [
-        "pub struct CudaAbiRoutedMoeSortedModuleScope",
-        "M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
-        "embedded_kernel_count: 79",
-        "embeds_sorted_pair_metadata_kernels: true",
-        "embeds_sorted_p2_and_no_p2_projection_kernels: true",
+        "pub struct CudaAbiRoutedMoeTile16Row32AtomicModuleScope",
+        "M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
+        "embedded_kernel_count: 87",
+        "reuses_block16_expert_tile_metadata: true",
+        "embeds_tile16_row32_down_kernel: true",
+        "owns_tile16_row32_atomic_down_surface: true",
+        "owns_rowspan_or_shared_cache_batch_dispatch: false",
         "owns_routed_moe_batch_tensor: false",
-        "owns_expert_tile_atomic_or_rowspan_batch_dispatch: false",
-        "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
 
@@ -144,28 +130,14 @@ def validate_ownership(report: Report, fixture: dict[str, Any], texts: dict[str,
 def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
     entries = implementation.get("embedded_kernel_entries", [])
-    entry_names = [
-        "abi_moe_count_sorted_pairs_kernel",
-        "abi_moe_prefix_sorted_pairs_kernel",
-        "abi_moe_scatter_sorted_pairs_kernel",
-        "abi_moe_gate_up_mid_sorted_qwarp32_kernel",
-        "abi_moe_gate_up_mid_sorted_p2_qwarp32_kernel",
-        "abi_moe_down_sorted_qwarp32_kernel",
-        "abi_moe_down_sorted_p2_qwarp32_kernel",
-    ]
-    for entry in entry_names:
-        report.check(entry in entries, f"evidence entry missing: {entry}")
-        report.check(f"pub fn {entry}" in texts["kernels"], f"embedded kernel missing: {entry}")
-        report.check(f'load_function("{entry}")' in texts["kernels"], f"module loader missing: {entry}")
-    for marker in [
-        "DeviceAtomicU32",
-        "AtomicOrdering::Relaxed",
-        "abi_moe_iq2_q8_k_dot",
-        "abi_moe_q2_q8_k_dot",
-        "abi_moe_quarter_warp_sum",
-    ]:
-        report.check(marker in texts["kernels"], f"kernel implementation marker missing: {marker}")
-    report.check("expert-tile" in implementation.get("remaining_compute_boundary", ""), "remaining route boundary missing")
+    entry = "abi_moe_down_expert_tile16_row32_kernel"
+    report.check(entry in entries, f"evidence entry missing: {entry}")
+    report.check(f"pub fn {entry}" in texts["kernels"], f"embedded kernel missing: {entry}")
+    report.check(f'load_function("{entry}")' in texts["kernels"], f"loader entry missing: {entry}")
+    report.check("require_even_tile_pair && local_start & 8 != 0" in texts["kernels"], "tile16 alignment guard missing")
+    report.check("fetch_add(accumulator, AtomicOrdering::Relaxed)" in texts["kernels"], "atomic down operation missing")
+    report.check("row-span" in implementation.get("remaining_compute_boundary", ""), "row-span boundary missing")
+    report.check("shared-cache" in implementation.get("remaining_compute_boundary", ""), "shared-cache boundary missing")
     execution = require_dict(report, fixture.get("b300_execution"), "b300_execution")
     for key, expected in [
         ("date_utc", "2026-05-31"),
@@ -175,10 +147,10 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
         ("node", "c1v17-b300n1-nic1"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
         ("target", "sm_80"),
-        ("local_library_test_count", 155),
-        ("feature_release_test_count", 162),
+        ("local_library_test_count", 158),
+        ("feature_release_test_count", 165),
         ("staticlib_export_count", 74),
-        ("embedded_kernel_count", 79),
+        ("embedded_kernel_count", 87),
     ]:
         report.check(execution.get(key) == expected, f"B300 evidence drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
@@ -186,18 +158,18 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
         "c_linked_rust_staticlib",
         "embedded_routed_moe_kernels_loaded",
         "single_token_public_regression_remains_passing",
-        "sorted_pair_metadata_entries_generated",
-        "sorted_no_p2_projection_entries_generated",
-        "sorted_p2_projection_entries_generated",
+        "tile16_down_entry_generated",
+        "tile16_local_start_alignment_guard_retained",
+        "device_atomic_f32_path_lowered",
     ]:
         report.check(observed.get(key) is True, f"observed module smoke drift: {key}")
-    report.check("embedded_routed_moe_kernels_loaded" in texts["harness"], "staticlib regression harness marker missing")
+    report.check("embedded_routed_moe_kernels_loaded" in texts["harness"], "regression harness marker missing")
     validation = require_dict(report, fixture.get("validation"), "validation")
     for key, expected in [
-        ("local_ds4_cuda_library_test_count", 155),
-        ("b300_feature_release_test_count", 162),
-        ("cuda_abi_comparators_passed", 69),
-        ("unified_report_passed", 242),
+        ("local_ds4_cuda_library_test_count", 158),
+        ("b300_feature_release_test_count", 165),
+        ("cuda_abi_comparators_passed", 72),
+        ("unified_report_passed", 245),
         ("unified_report_skipped", 45),
         ("unified_report_failed", 0),
     ]:
@@ -205,27 +177,28 @@ def validate_execution(report: Report, fixture: dict[str, Any], texts: dict[str,
 
 
 def validate_wiring(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-routed-moe-sorted-module-smoke.json"
-    checker = "check_cuda_abi_routed_moe_sorted_module_smoke.py"
-    item = f"{MILESTONE}: Embedded Sorted Batched Routed MoE ABI Module"
+    path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-routed-moe-tile16-row32-atomic-module-smoke.json"
+    checker = "check_cuda_abi_routed_moe_tile16_row32_atomic_module_smoke.py"
+    item = f"{MILESTONE}: Embedded Tile16 Row32 Atomic Routed MoE ABI Module"
     for target, label in [("roadmap", "roadmap"), ("todo", "TODO"), ("status", "status")]:
         report.check(item in texts[target], f"{label} item missing")
-    report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
-    report.check(fixture_path in texts["todo"], "TODO fixture missing")
+    report.check(path in texts["roadmap"], "roadmap fixture missing")
+    report.check(path in texts["todo"], "TODO fixture missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
-    report.check(checker in texts["report"], "unified report wiring missing")
-    report.check(f"Active item: {NEXT_STAGE}" in texts["status"], "new active stage missing")
+    report.check(checker in texts["report"], "report checker wiring missing")
+    report.check(f"Active item: {NEXT_STAGE}" in texts["status"], "active stage missing")
     report.check(fixture.get("next_required_stage") == NEXT_STAGE, "next stage drift")
     review = require_dict(report, fixture.get("review"), "review")
-    report.check(review.get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "pre-review evidence missing")
-    report.check(review.get("final") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "final review evidence missing")
+    report.check(review.get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "pre-review missing")
+    report.check(review.get("final") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "final review missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("embedded entry missing", lambda value: value["implementation"]["embedded_kernel_entries"].pop()),
-        ("public batch overclaim", lambda value: value["ownership"].update({"owns_routed_moe_batch_tensor": True})),
-        ("embedded count mismatch", lambda value: value["ownership"].update({"embedded_kernel_count": 78})),
+        ("tile16 entry missing", lambda value: value["implementation"]["embedded_kernel_entries"].clear()),
+        ("tile16 ownership missing", lambda value: value["ownership"].update({"owns_tile16_row32_atomic_down_surface": False})),
+        ("wider route overclaim", lambda value: value["ownership"].update({"owns_rowspan_or_shared_cache_batch_dispatch": True})),
+        ("kernel count mismatch", lambda value: value["ownership"].update({"embedded_kernel_count": 86})),
         ("next stage drift", lambda value: value.update({"next_required_stage": "wrong"})),
     ]:
         candidate = copy.deepcopy(fixture)
