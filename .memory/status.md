@@ -3,7 +3,24 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Default-Route Promotion And C CUDA Removal Execution
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Rust CUDA Promotion Acceptance And Route Decision
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Backend Identity Log Compatibility Repair
+  is validated on B300. The opt-in Rust CUDA DSO had already generated
+  correct regular CLI, long-context, and server/tool results, but retained
+  graph validators rejected it because `ds4_gpu_init` omitted the
+  current-C-compatible backend identity marker. The Rust substrate now
+  exposes compute capability and successful first initialization emits
+  `ds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)`.
+  The rebuilt DSO SHA-256 is
+  `223542460727037720a65a43961692ff9b42bbd75ddabea16344eb1094e69903`;
+  it passes the regular target-stream CLI comparator (`144` checks plus `5`
+  negative checks), directly completes retained graph long-context recall
+  with all `16` expected assignments, and passes server/tool quality (`167`
+  checks plus `8` negative checks) for both tool-call cases. Benchmark
+  capture and route promotion remain active; C host removal is not claimed.
+  Local `ds4-cuda` tests pass with `169` tests. The pre-execution,
+  follow-on, and final non-interactive Claude review attempts each returned
+  `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Promotion Acceptance Matrix And Rerun Contract
   is defined without promoting a runtime route. The prior Rust CUDA
   official-vector leaf proves all `13` exercised selected tokens through

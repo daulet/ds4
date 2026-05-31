@@ -2119,6 +2119,11 @@ pub extern "C" fn ds4_gpu_init() -> c_int {
             let Ok(opened) = CudaOxideSubstrate::open(0) else {
                 return false;
             };
+            if let (Ok(name), Ok((major, minor))) =
+                (opened.device_name(), opened.compute_capability())
+            {
+                eprintln!("ds4: CUDA backend initialized on {name} (sm_{major}{minor})");
+            }
             update_abi_blas_math_state();
             *backend = Some(opened);
         }

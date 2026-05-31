@@ -13145,11 +13145,53 @@ Stage split:
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Execution
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  after the first Rust-DSO graph reruns showed correct long-context and
+  server/tool behavior but failed the retained production validators because
+  the Rust backend did not emit the current-C-compatible B300 identity line.
+- Goal: repair that observable backend contract separately from the remaining
+  benchmark capture and route-decision work.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Backend Identity Log Compatibility Repair
+
+- Status: done.
+- Goal: restore the existing CUDA backend identity stderr contract from the
+  opt-in Rust DSO without changing runtime selection or kernel computation.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-backend-identity-log-compatibility-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_backend_identity_log_compatibility_repair.py --negative-test`.
+- Evidence:
+  - `ds4_gpu_init` now queries the device name and compute capability through
+    the Rust-owned CUDA substrate and emits the established
+    `ds4: CUDA backend initialized on <device> (sm_<capability>)` line only
+    after the first successful process-local initialization.
+  - Before this repair, the Rust DSO passed regular CLI parity and produced
+    correct long-context and server/tool behavior, but the retained graph
+    validators rejected its missing B300 backend identity marker.
+  - A rebuilt B300 Rust DSO with SHA-256
+    `223542460727037720a65a43961692ff9b42bbd75ddabea16344eb1094e69903`
+    passes the regular target-stream CLI comparator (`144` checks plus `5`
+    negative checks), directly completes retained graph long-context fact
+    recall with all `16` assignments correct, and passes server/tool quality
+    (`167` checks plus `8` negative checks) for both tool-call modes.
+  - The B300 identity line observed on the repaired long-context route is
+    `ds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)`;
+    the GPU returned to `0 MiB` allocated memory after each completed probe.
+  - Default-route promotion and current-C CUDA removal are not claimed:
+    benchmark capture and the route decision remain outstanding, and the
+    opt-in feature still retains C host engine sources.
+  - Local `ds4-cuda` tests pass with `169` tests. The pre-execution,
+    follow-on, and final non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Rust CUDA Promotion Acceptance And Route Decision
+
 - Status: active.
-- Goal: run the remaining CLI, long-context, server/tool, and benchmark
-  acceptance gates through the opt-in Rust CUDA DSO on B300, then decide
-  default-route promotion and current-C CUDA retention without overclaiming
-  C host removal.
+- Goal: capture the remaining benchmark evidence through the repaired opt-in
+  Rust CUDA DSO on B300, then decide default-route promotion and current-C
+  CUDA retention without overclaiming C host removal.
 
 ## Removal Criteria for C Host Code
 

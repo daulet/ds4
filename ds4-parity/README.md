@@ -4226,6 +4226,20 @@ long-context, server/tool quality, and benchmark behavior with
 `DS4_CUDA_RUST_DYLIB` set. Current-C routing and C host sources remain
 retained while those gates are pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA backend identity-log compatibility repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_backend_identity_log_compatibility_repair.py --negative-test
+```
+
+The opt-in Rust CUDA DSO now emits the established device/capability identity
+line after successful first initialization. On B300, the repaired DSO passes
+the regular one-shot CLI comparator, directly completes the retained
+long-context fact-recall command with all `16` assignments correct, and
+passes the existing server/tool quality comparator for both tool-call cases.
+Benchmark capture and any default-route promotion decision remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

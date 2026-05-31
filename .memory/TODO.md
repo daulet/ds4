@@ -12362,7 +12362,41 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Default-Route Promotion And C CUDA Removal Execution
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  after Rust-DSO graph validation exposed a missing current-C-compatible
+  backend identity line despite correct generated behavior.
+- Goal: record the compatibility repair separately from the remaining
+  benchmark and route-decision work.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Backend Identity Log Compatibility Repair
+
+- Status: done
+- Goal: make the Rust CUDA DSO satisfy the existing production-backend stderr
+  identity contract without altering runtime route selection or kernel math.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-backend-identity-log-compatibility-repair.json`
+- Comparator:
+  `ds4-parity/check_cuda_rust_backend_identity_log_compatibility_repair.py --negative-test`.
+- Evidence:
+  - The Rust CUDA substrate now exposes compute capability alongside the
+    existing device-name query; first successful `ds4_gpu_init` emits the
+    same device/capability identity format expected by graph validators.
+  - The repaired B300 Rust DSO SHA-256 is
+    `223542460727037720a65a43961692ff9b42bbd75ddabea16344eb1094e69903`.
+    It passes the regular CLI target-stream comparator, emits
+    `ds4: CUDA backend initialized on NVIDIA B300 SXM6 AC (sm_103)` while
+    completing long-context fact recall with all `16` expected assignments,
+    and passes the server/tool quality comparator for both requests.
+  - Default-route promotion, current-C CUDA removal, and C host removal remain
+    unclaimed: benchmark capture and the route decision are still pending.
+  - Local `ds4-cuda` tests pass with `169` tests. The pre-execution,
+    follow-on, and final non-interactive Claude review attempts each returned
+    `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Rust CUDA Promotion Acceptance And Route Decision
+
 - Status: active
-- Goal: execute the pending CLI, long-context, server/tool, and benchmark
-  gates through `cuda-rust-backend`, then decide default routing and
-  current-C CUDA retention.
+- Goal: execute the remaining benchmark gate through the repaired
+  `cuda-rust-backend` DSO, then decide default routing and current-C CUDA
+  retention without claiming C host removal.

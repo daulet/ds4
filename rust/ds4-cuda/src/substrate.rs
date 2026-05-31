@@ -30,6 +30,10 @@ impl CudaOxideSubstrate {
         self.context.device_name()
     }
 
+    pub fn compute_capability(&self) -> Result<(i32, i32), DriverError> {
+        self.context.compute_capability()
+    }
+
     pub fn device_ordinal(&self) -> usize {
         self.context.ordinal()
     }

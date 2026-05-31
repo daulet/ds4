@@ -1,0 +1,126 @@
+{
+  "schema": "ds4.cuda_rust_backend_identity_log_compatibility_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-cli-long-context-server-tool",
+  "goal": "Restore the production backend identity stderr contract for the opt-in Rust CUDA DSO, then rerun the live acceptance cases blocked by the missing marker.",
+  "ownership": {
+    "changes_rust_cuda_backend_identity_logging": true,
+    "changes_kernel_math": false,
+    "changes_runtime_route": false,
+    "default_current_c_route_preserved": true,
+    "default_cli_gate_closed": true,
+    "long_context_gate_closed": true,
+    "server_tool_quality_gate_closed": true,
+    "benchmark_gate_closed": false,
+    "runtime_route_promoted": false,
+    "c_host_removal_allowed": false,
+    "c_cuda_removal_allowed": false
+  },
+  "implementation": {
+    "substrate_source": "rust/ds4-cuda/src/substrate.rs",
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "device_query_added": "CudaOxideSubstrate::compute_capability",
+    "initialization_function": "ds4_gpu_init",
+    "stderr_format": "ds4: CUDA backend initialized on {name} (sm_{major}{minor})",
+    "metadata_query_failure_changes_init_result": false,
+    "emission_scope": "first successful backend initialization in each process"
+  },
+  "pre_repair_blocker": {
+    "shared_library_sha256": "299ec502207cece357323516d7c1273d3658917878503c201a97557a4eb79fad",
+    "default_cli_status": "passed",
+    "long_context_candidate_behavior": "passed-facts-and-cache-accounting",
+    "long_context_legacy_validator_status": "failed-rust-stderr-missing-b300-marker-plus-no-build-metadata",
+    "server_tool_candidate_behavior": "passed-both-tool-call-cases",
+    "server_tool_validator_status": "failed-only-rust-stderr-missing-b300-marker",
+    "root_cause": "Rust ds4_gpu_init initialized the device successfully but omitted the current-C-compatible B300 identity line required by existing production graph validators."
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "shared_library": "/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+    "shared_library_sha256": "223542460727037720a65a43961692ff9b42bbd75ddabea16344eb1094e69903",
+    "engine_feature": "cuda-rust-backend",
+    "engine_dylib_environment": "DS4_CUDA_RUST_DYLIB=/workspace/ds4/target-staticlib/release/libds4_cuda.so",
+    "linked_binary_sha256": {
+      "ds4-cli-one-shot-rs": "aa4266265cbb3e9ad9a57c12d21d64a0136654827759dc15fe0c6d98e6ed7b95",
+      "ds4-runtime-long-context-rs": "0d5897e31b72ee6b43a5d2f6cf6e580bab4be2e7318f3f3daebfe785119de447",
+      "ds4-server-runtime-rs": "fd13bdd0c1532be9932ccc0cffc6566d20e0bdf3bc57b1a856a39a82a58f7423",
+      "ds4-runtime-graph-bench-rs": "908f184bf5175d6dc84105a571d6fc7f33c109006c6108e8f3625555186cd9ae"
+    },
+    "default_cli": {
+      "runtime_graph_route": "target-stream",
+      "wall_elapsed_seconds": 261,
+      "comparator_check_count": 144,
+      "negative_check_count": 5,
+      "stdout_sha256": "df6430206d0d99d2cfd29d2ed12d356dbd9463df725d14613e95653c2b8c020e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "passed": true
+    },
+    "long_context": {
+      "runtime_graph_route": "graph",
+      "capture_kind": "retained-candidate-command-direct",
+      "wall_elapsed_seconds": 379,
+      "stdout_sha256": "43aa16fade0d797b65b689b340a5c3412e1cd2aad493b8679f11be2830e36dbf",
+      "stderr_sha256": "d79679ca88ee39d36043424150ba131849a23168f73cfacfb91605dd13a5adee",
+      "b300_identity_marker_present": true,
+      "prompt_tokens": 30474,
+      "completion_tokens": 76,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 30474,
+      "live_tokens_before": 0,
+      "live_prompt_common": 0,
+      "finish_reason": "stop",
+      "expected_fact_count": 16,
+      "matched_fact_count": 16,
+      "passed": true
+    },
+    "server_tool_quality": {
+      "runtime_graph_route": "graph",
+      "wall_elapsed_seconds": 332,
+      "summary_sha256": "471a96fe91c063ca0afee15385d0c0619107d679ca3d33d3fbc321fb7b233a68",
+      "stdout_sha256": "4aa0487e4ef6383b5bee4e35d574dcf0a5f51313258d20069cef0c2513380d37",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 167,
+      "negative_check_count": 8,
+      "cases": [
+        {
+          "id": "fast",
+          "finish_reason": "tool_calls",
+          "tool_name": "list_files",
+          "arguments": "{\"path\":\".\"}",
+          "b300_identity_marker_present": true,
+          "stderr_sha256": "fa7cf5d1b0628a1e8060491df2c00ab3ca1c1c56656f630ec67b794639866cc1"
+        },
+        {
+          "id": "exact",
+          "finish_reason": "tool_calls",
+          "tool_name": "list_files",
+          "arguments": "{\"path\":\".\"}",
+          "b300_identity_marker_present": true,
+          "stderr_sha256": "f86f72e80bdd2a42a260dd92f8910ecb9b100bff01683e900ec3eff441703177"
+        }
+      ],
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "local_format_check_passed": true,
+    "local_diff_check_passed": true,
+    "unified_report_passed": 263,
+    "unified_report_skipped": 45,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_execution": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "follow_on_identity_log_fix": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Rust CUDA Promotion Acceptance And Route Decision"
+}
