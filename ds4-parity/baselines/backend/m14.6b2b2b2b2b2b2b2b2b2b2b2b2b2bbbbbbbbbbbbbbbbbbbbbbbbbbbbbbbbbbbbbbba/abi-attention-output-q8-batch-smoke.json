@@ -1,0 +1,89 @@
+{
+  "schema": "ds4.cuda_abi_attention_output_q8_batch_smoke.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-staticlib-public-attention-output-q8-batch-abi",
+  "goal": "Rust-own the complete public batched Q8 attention output wrapper, including its optional output-A cuBLAS branch and attention-labeled output-B projection, without claiming prefill, routed MoE, or route-promotion surface.",
+  "oracle": {
+    "source": "ds4_cuda.cu",
+    "symbols": [
+      "ds4_gpu_attention_output_q8_batch_tensor"
+    ],
+    "semantics": [
+      "reject invalid packed output-A/output-B model ranges, head/low/output spans, zero geometry, or null pointers before output-A writes",
+      "run native grouped Q8 output-A projection when quality, environment, token-count, or expanded-weight availability prevents the optional cuBLAS branch",
+      "run the optional grouped output-A F16 cuBLAS branch when current-C gates admit attn_output_a conversion, then project through output-B with the attn_output_b cache label"
+    ]
+  },
+  "implementation": {
+    "abi_source": "rust/ds4-cuda/src/abi.rs",
+    "kernel_source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "scope_source": "rust/ds4-cuda/src/lib.rs",
+    "harness_source": "ds4-parity/fixtures/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi_attention_output_q8_batch_link_smoke.c",
+    "embedded_kernel_entries": [
+      "abi_quantize_q8_0_f32_kernel",
+      "abi_grouped_q8_0_a_preq_warp8_kernel",
+      "abi_attention_pack_group_heads_f16_kernel",
+      "abi_f16_to_f32_kernel",
+      "abi_attention_expand_group_weights_sgemm_kernel",
+      "abi_attention_unpack_group_low_kernel"
+    ],
+    "adapter_boundary": "the cuda-oxide public BLAS API exposes safe SGEMM rather than CUDA_R_16F cublasGemmStridedBatchedEx, so the published branch preserves F16-rounded operands through a live F32 SGEMM adapter already proven in M14.4d8b",
+    "reuse_boundary": "the public wrapper reuses retained Q8 activation scratch, the native grouped output-A path, and a labeled internal Q8 matmul implementation for output-B while adding retained cuBLAS adapter scratch",
+    "remaining_compute_boundary": "prefill attention, routed MoE, route promotion, and C CUDA removal remain unowned",
+    "linkage_requirement": "the C-linked proof retains Rust exports and embedded kernels with --whole-archive"
+  },
+  "ownership": {
+    "exported_abi_symbol_count": 68,
+    "exported_compute_symbol_count": 50,
+    "public_gpu_abi_function_count": 81,
+    "consumes_cached_model_ranges": true,
+    "reuses_q8_activation_scratch": true,
+    "owns_attention_output_q8_batch_tensor": true,
+    "owns_native_and_cublas_output_a_dispatch": true,
+    "preserves_attention_q8_cache_labels": true,
+    "owns_remaining_attention_abi": false,
+    "owns_remaining_graph_compute_abi": false,
+    "owns_complete_ds4_gpu_abi": false,
+    "changes_default_route": false,
+    "production_build_still_compiles_ds4_cuda_cu": true
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-30",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "local_library_test_count": 151,
+    "feature_release_test_count": 158,
+    "staticlib_export_count": 68,
+    "embedded_kernel_count": 50,
+    "observed": {
+      "c_linked_rust_staticlib": true,
+      "native_two_stage_output_matches": true,
+      "partial_q8_block_matches": true,
+      "cublas_a_output_matches": true,
+      "cublas_a_dispatch_diverges_from_native": true,
+      "cublas_a_environment_gate_matches": true,
+      "cublas_a_minimum_token_gate_matches": true,
+      "attention_output_cache_labels_honored": true,
+      "invalid_model_range_preserves_outputs": true,
+      "invalid_shape_rejected": true,
+      "null_rejected": true,
+      "embedded_output_adapter_kernels_loaded": true,
+      "predecessor_c_linked_regression_consumers_passed": 61,
+      "predecessor_relink_executable_stack_warning_count": 61
+    }
+  },
+  "integration_risks": [
+    "the batched wrapper shares retained Q8 activations, F16 conversion cache, and the refactored labeled Q8 matmul implementation with published projection exports, so preceding linked consumers remain mandatory regressions",
+    "the output-A cuBLAS adapter deliberately uses F16-rounded operands through cuda-oxide safe SGEMM because the public wrapper does not expose current-C CUDA_R_16F strided batched GEMM directly",
+    "prefill attention wrappers, routed MoE, remaining graph compute, production route promotion, whole-archive retention policy, and C CUDA removal remain pending",
+    "the generated embedded CUDA object still emits an executable-stack linker warning during C-linked staticlib proof"
+  ],
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+}

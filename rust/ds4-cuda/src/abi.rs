@@ -1,4 +1,4 @@
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::mem::ManuallyDrop;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use cuda_core::{
     BlasMathMode, CudaEvent, DeviceBuffer, IntoResult, ManagedBuffer, PinnedHostBuffer,
     ProjectionConfig, ReadOnlyPageableHostMemory, ReadOnlyRegisteredHostMemory,
+    StridedBatchedSgemmConfig,
 };
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -19,8 +20,9 @@ use crate::q8_policy::{
 use crate::substrate::CudaOxideSubstrate;
 #[cfg(feature = "cuda-oxide-kernels")]
 use crate::{
-    q8_dp4a_enabled, select_f16_pair_projection_path, select_f16_projection_path,
-    select_f32_projection_path, select_q8_matmul_path, F16PairProjectionDispatch,
+    q8_dp4a_enabled, select_attention_output_a_path, select_f16_pair_projection_path,
+    select_f16_projection_path, select_f32_projection_path, select_q8_matmul_path,
+    AttentionOutputADispatchOptions, AttentionOutputAPath, F16PairProjectionDispatch,
     F16PairProjectionPath, F16ProjectionDispatch, Q8MatmulDispatchOptions, Q8MatmulPath,
     DS4_CUDA_ATTENTION_RAW_SCORE_CAP, DS4_CUDA_ATTENTION_SCORE_CAP,
 };
@@ -34,6 +36,9 @@ static ABI_F16_ACTIVATIONS: Mutex<Option<DeviceBuffer<f16>>> = Mutex::new(None);
 static ABI_Q8_ACTIVATIONS: Mutex<Option<AbiQ8Activations>> = Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_INDEXED_TOPK_SORT_SCRATCH: Mutex<Option<DeviceBuffer<i32>>> = Mutex::new(None);
+#[cfg(feature = "cuda-oxide-kernels")]
+static ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH: Mutex<Option<AbiAttentionOutputCublasScratch>> =
+    Mutex::new(None);
 #[cfg(feature = "cuda-oxide-kernels")]
 static ABI_Q8_CACHE: Mutex<AbiQ8Cache> = Mutex::new(AbiQ8Cache {
     f16_ranges: Vec::new(),
@@ -119,6 +124,13 @@ struct AbiQ8Cache {
 struct AbiQ8Activations {
     quantized: DeviceBuffer<i8>,
     scales: DeviceBuffer<f32>,
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+struct AbiAttentionOutputCublasScratch {
+    packed_heads: DeviceBuffer<f32>,
+    transposed_weights: DeviceBuffer<f32>,
+    packed_low: DeviceBuffer<f32>,
 }
 
 #[cfg(target_os = "linux")]
@@ -410,6 +422,35 @@ fn with_abi_q8_activations<T>(
         });
     }
     operation(activations.as_mut()?)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+fn with_abi_attention_output_cublas_scratch<T>(
+    backend: &CudaOxideSubstrate,
+    packed_head_elements: usize,
+    transposed_weight_elements: usize,
+    packed_low_elements: usize,
+    operation: impl FnOnce(&mut AbiAttentionOutputCublasScratch) -> Option<T>,
+) -> Option<T> {
+    if packed_head_elements == 0 || transposed_weight_elements == 0 || packed_low_elements == 0 {
+        return None;
+    }
+    let mut scratch = ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH.lock().ok()?;
+    if scratch.as_ref().is_none_or(|current| {
+        current.packed_heads.len() < packed_head_elements
+            || current.transposed_weights.len() < transposed_weight_elements
+            || current.packed_low.len() < packed_low_elements
+    }) {
+        if scratch.is_some() {
+            backend.synchronize().ok()?;
+        }
+        *scratch = Some(AbiAttentionOutputCublasScratch {
+            packed_heads: backend.zeroed::<f32>(packed_head_elements).ok()?,
+            transposed_weights: backend.zeroed::<f32>(transposed_weight_elements).ok()?,
+            packed_low: backend.zeroed::<f32>(packed_low_elements).ok()?,
+        });
+    }
+    operation(scratch.as_mut()?)
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
@@ -1911,6 +1952,10 @@ pub extern "C" fn ds4_gpu_cleanup() {
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut activations) = ABI_Q8_ACTIVATIONS.lock() {
                 *activations = None;
+            }
+            #[cfg(feature = "cuda-oxide-kernels")]
+            if let Ok(mut scratch) = ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH.lock() {
+                *scratch = None;
             }
             #[cfg(feature = "cuda-oxide-kernels")]
             if let Ok(mut q8_cache) = ABI_Q8_CACHE.lock() {
@@ -5035,6 +5080,378 @@ pub unsafe extern "C" fn ds4_gpu_attention_output_low_q8_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
+fn attention_output_a_cublas_min_tokens() -> u32 {
+    let Ok(value) = std::env::var("DS4_CUDA_ATTENTION_OUTPUT_A_CUBLAS_MIN") else {
+        return 2;
+    };
+    let Ok(value) = CString::new(value) else {
+        return 2;
+    };
+    let mut end = ptr::null_mut();
+    // SAFETY: `value` is NUL-terminated and `end` is valid for `strtol`.
+    let parsed = unsafe { libc::strtol(value.as_ptr(), &mut end, 10) };
+    if end.cast_const() != value.as_ptr() && parsed > 1 && parsed < 4096 {
+        parsed as u32
+    } else {
+        2
+    }
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn attention_output_a_native_impl(
+    backend: &CudaOxideSubstrate,
+    low: &Ds4GpuTensor,
+    heads: &Ds4GpuTensor,
+    weight_ptr: u64,
+    group_dim: u64,
+    rank: u64,
+    n_groups: u32,
+    n_tokens: u32,
+) -> bool {
+    let blocks = group_dim.div_ceil(32);
+    let Some(rows) = u64::from(n_tokens).checked_mul(u64::from(n_groups)) else {
+        return false;
+    };
+    let Some(quantized_elements) = rows
+        .checked_mul(blocks)
+        .and_then(|value| value.checked_mul(32))
+    else {
+        return false;
+    };
+    let Some(scale_elements) = rows.checked_mul(blocks) else {
+        return false;
+    };
+    let Some(quantized_elements) = usize::try_from(quantized_elements).ok() else {
+        return false;
+    };
+    let Some(scale_elements) = usize::try_from(scale_elements).ok() else {
+        return false;
+    };
+    with_abi_q8_activations(backend, quantized_elements, scale_elements, |activations| {
+        with_abi_kernels(backend, |kernels| {
+            if !unsafe {
+                kernels.quantize_q8_f32_tensor(
+                    backend.stream(),
+                    heads.device_ptr(),
+                    activations.quantized.cu_deviceptr(),
+                    activations.scales.cu_deviceptr(),
+                    group_dim,
+                    blocks,
+                    rows,
+                )
+            } {
+                return Some(false);
+            }
+            Some(unsafe {
+                kernels.attention_output_low_q8_tensor(
+                    backend.stream(),
+                    low.device_ptr(),
+                    weight_ptr,
+                    activations.quantized.cu_deviceptr(),
+                    activations.scales.cu_deviceptr(),
+                    group_dim,
+                    rank,
+                    n_groups,
+                    n_tokens,
+                    q8_dp4a_enabled(std::env::var_os("DS4_CUDA_NO_Q8_DP4A").is_some()),
+                )
+            })
+        })
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn attention_output_a_cublas_impl(
+    backend: &CudaOxideSubstrate,
+    blas: &cuda_core::Blas,
+    low: &Ds4GpuTensor,
+    heads: &Ds4GpuTensor,
+    expanded_weight_ptr: u64,
+    group_dim: u64,
+    rank: u64,
+    n_groups: u32,
+    n_tokens: u32,
+) -> bool {
+    let Some(packed_head_elements) = u64::from(n_tokens)
+        .checked_mul(u64::from(n_groups))
+        .and_then(|value| value.checked_mul(group_dim))
+    else {
+        return false;
+    };
+    let Some(transposed_weight_elements) = u64::from(n_groups)
+        .checked_mul(rank)
+        .and_then(|value| value.checked_mul(group_dim))
+    else {
+        return false;
+    };
+    let Some(packed_low_elements) = u64::from(n_tokens)
+        .checked_mul(u64::from(n_groups))
+        .and_then(|value| value.checked_mul(rank))
+    else {
+        return false;
+    };
+    let Some(packed_head_count) = usize::try_from(packed_head_elements).ok() else {
+        return false;
+    };
+    let Some(transposed_weight_count) = usize::try_from(transposed_weight_elements).ok() else {
+        return false;
+    };
+    let Some(packed_low_count) = usize::try_from(packed_low_elements).ok() else {
+        return false;
+    };
+    let Some(n_tokens_usize) = usize::try_from(n_tokens).ok() else {
+        return false;
+    };
+    let Some(n_groups_usize) = usize::try_from(n_groups).ok() else {
+        return false;
+    };
+    let Some(group_dim_usize) = usize::try_from(group_dim).ok() else {
+        return false;
+    };
+    let Some(rank_usize) = usize::try_from(rank).ok() else {
+        return false;
+    };
+    if !apply_abi_blas_math(blas) {
+        return false;
+    }
+    with_abi_f16_activations(backend, packed_head_count, |packed_heads_f16| {
+        with_abi_attention_output_cublas_scratch(
+            backend,
+            packed_head_count,
+            transposed_weight_count,
+            packed_low_count,
+            |scratch| {
+                with_abi_kernels(backend, |kernels| {
+                    if !unsafe {
+                        kernels.attention_pack_group_heads_f16_tensor(
+                            backend.stream(),
+                            heads.device_ptr(),
+                            packed_heads_f16.cu_deviceptr(),
+                            n_tokens,
+                            n_groups,
+                            group_dim,
+                        ) && kernels.f16_to_f32_tensor(
+                            backend.stream(),
+                            packed_heads_f16.cu_deviceptr(),
+                            scratch.packed_heads.cu_deviceptr(),
+                            packed_head_elements,
+                        ) && kernels.attention_expand_group_weights_sgemm_tensor(
+                            backend.stream(),
+                            expanded_weight_ptr,
+                            scratch.transposed_weights.cu_deviceptr(),
+                            n_groups,
+                            rank,
+                            group_dim,
+                        )
+                    } {
+                        return Some(false);
+                    }
+                    let Ok(config) = StridedBatchedSgemmConfig::packed(
+                        n_tokens_usize,
+                        rank_usize,
+                        group_dim_usize,
+                        n_groups_usize,
+                    ) else {
+                        return Some(false);
+                    };
+                    if blas
+                        .sgemm_strided_batched(
+                            backend.stream(),
+                            config,
+                            &scratch.packed_heads,
+                            &scratch.transposed_weights,
+                            &mut scratch.packed_low,
+                        )
+                        .is_err()
+                    {
+                        return Some(false);
+                    }
+                    Some(unsafe {
+                        kernels.attention_unpack_group_low_tensor(
+                            backend.stream(),
+                            scratch.packed_low.cu_deviceptr(),
+                            low.device_ptr(),
+                            n_tokens,
+                            n_groups,
+                            rank,
+                        )
+                    })
+                })
+            },
+        )
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_output_q8_batch_tensor(
+    out: *mut Ds4GpuTensor,
+    low: *mut Ds4GpuTensor,
+    _group_tmp: *mut Ds4GpuTensor,
+    _low_tmp: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    out_a_offset: u64,
+    out_b_offset: u64,
+    group_dim: u64,
+    rank: u64,
+    n_groups: u32,
+    out_dim: u64,
+    heads: *const Ds4GpuTensor,
+    n_tokens: u32,
+) -> c_int {
+    status(|| {
+        let Some(out_tensor) = (unsafe { tensor_ref(out.cast_const()) }) else {
+            return false;
+        };
+        let Some(low_tensor) = (unsafe { tensor_ref(low.cast_const()) }) else {
+            return false;
+        };
+        let Some(heads_tensor) = (unsafe { tensor_ref(heads) }) else {
+            return false;
+        };
+        let Some(low_dim) = u64::from(n_groups).checked_mul(rank) else {
+            return false;
+        };
+        let Some((_out_a_elements, _out_a_elements_usize, out_a_bytes)) =
+            abi_q8_shape(group_dim, low_dim)
+        else {
+            return false;
+        };
+        let Some((_out_b_elements, _out_b_elements_usize, out_b_bytes)) =
+            abi_q8_shape(low_dim, out_dim)
+        else {
+            return false;
+        };
+        let Some(head_bytes) = u64::from(n_tokens)
+            .checked_mul(u64::from(n_groups))
+            .and_then(|value| value.checked_mul(group_dim))
+            .and_then(|value| value.checked_mul(size_of::<f32>() as u64))
+        else {
+            return false;
+        };
+        let Some(low_bytes) = u64::from(n_tokens)
+            .checked_mul(low_dim)
+            .and_then(|value| value.checked_mul(size_of::<f32>() as u64))
+        else {
+            return false;
+        };
+        let Some(out_bytes) = u64::from(n_tokens)
+            .checked_mul(out_dim)
+            .and_then(|value| value.checked_mul(size_of::<f32>() as u64))
+        else {
+            return false;
+        };
+        if model_map.is_null()
+            || group_dim == 0
+            || rank == 0
+            || n_groups == 0
+            || out_dim == 0
+            || n_tokens == 0
+            || out_a_offset > model_size
+            || out_b_offset > model_size
+            || out_a_bytes > model_size - out_a_offset
+            || out_b_bytes > model_size - out_b_offset
+            || heads_tensor.bytes < head_bytes
+            || low_tensor.bytes < low_bytes
+            || out_tensor.bytes < out_bytes
+        {
+            return false;
+        }
+        let output_a_ok = with_backend(|backend| {
+            let blas = backend.blas_handle().ok();
+            let cublas_min_tokens = attention_output_a_cublas_min_tokens();
+            if !ABI_QUALITY_MODE.load(Ordering::Relaxed)
+                && blas.is_some()
+                && n_tokens >= cublas_min_tokens
+                && std::env::var_os("DS4_CUDA_NO_CUBLAS_ATTENTION_OUTPUT_A").is_none()
+            {
+                let _ = cache_abi_q8_f16_range(
+                    backend,
+                    model_map,
+                    model_size,
+                    out_a_offset,
+                    out_a_bytes,
+                    group_dim,
+                    low_dim,
+                    "attn_output_a",
+                    false,
+                );
+            }
+            let expanded_weight_ptr =
+                abi_q8_f16_ptr(model_map, out_a_offset, out_a_bytes, group_dim, low_dim);
+            let path = select_attention_output_a_path(AttentionOutputADispatchOptions {
+                quality_mode: ABI_QUALITY_MODE.load(Ordering::Relaxed),
+                cublas_ready: blas.is_some(),
+                n_tokens,
+                cublas_min_tokens,
+                no_cublas_attention_output_a: std::env::var_os(
+                    "DS4_CUDA_NO_CUBLAS_ATTENTION_OUTPUT_A",
+                )
+                .is_some(),
+                expanded_f16_ready: expanded_weight_ptr.is_some(),
+            });
+            match path {
+                AttentionOutputAPath::CublasF16 => Some(unsafe {
+                    attention_output_a_cublas_impl(
+                        backend,
+                        blas.as_ref()?,
+                        low_tensor,
+                        heads_tensor,
+                        expanded_weight_ptr?,
+                        group_dim,
+                        rank,
+                        n_groups,
+                        n_tokens,
+                    )
+                }),
+                AttentionOutputAPath::NativeQ8 => with_cached_abi_model_range(
+                    backend,
+                    model_map,
+                    model_size,
+                    out_a_offset,
+                    out_a_bytes,
+                    |weight_ptr| {
+                        Some(unsafe {
+                            attention_output_a_native_impl(
+                                backend,
+                                low_tensor,
+                                heads_tensor,
+                                weight_ptr,
+                                group_dim,
+                                rank,
+                                n_groups,
+                                n_tokens,
+                            )
+                        })
+                    },
+                ),
+            }
+        })
+        .unwrap_or(false);
+        output_a_ok
+            && unsafe {
+                matmul_q8_0_tensor_labeled(
+                    out,
+                    model_map,
+                    model_size,
+                    out_b_offset,
+                    low_dim,
+                    out_dim,
+                    low.cast_const(),
+                    u64::from(n_tokens),
+                    "attn_output_b",
+                ) != 0
+            }
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
 #[no_mangle]
 pub unsafe extern "C" fn ds4_gpu_hc_weighted_sum_tensor(
     out: *mut Ds4GpuTensor,
@@ -5903,8 +6320,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_f32_tensor(
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]
-#[no_mangle]
-pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
+unsafe fn matmul_q8_0_tensor_labeled(
     out: *mut Ds4GpuTensor,
     model_map: *const c_void,
     model_size: u64,
@@ -5913,6 +6329,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
     out_dim: u64,
     x: *const Ds4GpuTensor,
     n_tok: u64,
+    label: &str,
 ) -> c_int {
     status(|| {
         let Some(out) = (unsafe { tensor_ref(out.cast_const()) }) else {
@@ -5961,7 +6378,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
                             .is_none()
                         && q8_f32_cache_allowed(
                             abi_q8_cache_options(),
-                            Some("q8_0"),
+                            Some(label),
                             in_dim,
                             out_dim,
                         )
@@ -5988,7 +6405,7 @@ pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
                             weight_bytes,
                             in_dim,
                             out_dim,
-                            "q8_0",
+                            label,
                             false,
                         );
                     }
@@ -6195,6 +6612,33 @@ pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
         })
         .unwrap_or(false)
     })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
+pub unsafe extern "C" fn ds4_gpu_matmul_q8_0_tensor(
+    out: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    weight_offset: u64,
+    in_dim: u64,
+    out_dim: u64,
+    x: *const Ds4GpuTensor,
+    n_tok: u64,
+) -> c_int {
+    unsafe {
+        matmul_q8_0_tensor_labeled(
+            out,
+            model_map,
+            model_size,
+            weight_offset,
+            in_dim,
+            out_dim,
+            x,
+            n_tok,
+            "q8_0",
+        )
+    }
 }
 
 #[cfg(feature = "cuda-oxide-kernels")]

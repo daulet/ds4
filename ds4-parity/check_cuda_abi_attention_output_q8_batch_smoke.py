@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Rust CUDA public single-token attention decode heads ABI smoke."""
+"""Validate the Rust CUDA public batched Q8 attention output ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,22 +14,11 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
 NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-attention-decode-heads-smoke.json"
-CUDA_C = ROOT / "ds4_cuda.cu"
-CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
-CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
-CUDA_KERNELS = ROOT / "rust/ds4-cuda/src/abi_kernels.rs"
-HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_attention_decode_heads_link_smoke.c"
-GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
-GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
-ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
-TODO = ROOT / ".memory/TODO.md"
-STATUS = ROOT / ".memory/status.md"
-README = ROOT / "ds4-parity/README.md"
-REPORT = ROOT / "ds4-parity/run_parity_report.py"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-attention-output-q8-batch-smoke.json"
+HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_attention_output_q8_batch_link_smoke.c"
 
 
 @dataclass
@@ -53,48 +42,49 @@ def main(argv: Iterable[str]) -> int:
     args = parser.parse_args(list(argv))
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     texts = {
-        "cuda_c": CUDA_C.read_text(encoding="utf-8"),
-        "lib": CUDA_LIB.read_text(encoding="utf-8"),
-        "abi": CUDA_ABI.read_text(encoding="utf-8"),
-        "kernels": CUDA_KERNELS.read_text(encoding="utf-8"),
+        "cuda_c": (ROOT / "ds4_cuda.cu").read_text(encoding="utf-8"),
+        "lib": (ROOT / "rust/ds4-cuda/src/lib.rs").read_text(encoding="utf-8"),
+        "abi": (ROOT / "rust/ds4-cuda/src/abi.rs").read_text(encoding="utf-8"),
+        "kernels": (ROOT / "rust/ds4-cuda/src/abi_kernels.rs").read_text(encoding="utf-8"),
         "harness": HARNESS.read_text(encoding="utf-8"),
-        "gpu_build": GPU_BUILD.read_text(encoding="utf-8"),
-        "gpu_sys": GPU_SYS.read_text(encoding="utf-8"),
-        "roadmap": ROADMAP.read_text(encoding="utf-8"),
-        "todo": TODO.read_text(encoding="utf-8"),
-        "status": STATUS.read_text(encoding="utf-8"),
-        "readme": README.read_text(encoding="utf-8"),
-        "report": REPORT.read_text(encoding="utf-8"),
+        "gpu_build": (ROOT / "rust/ds4-gpu/build.rs").read_text(encoding="utf-8"),
+        "gpu_sys": (ROOT / "rust/ds4-gpu-sys/src/lib.rs").read_text(encoding="utf-8"),
+        "roadmap": (ROOT / "RUST_PORT_ROADMAP.md").read_text(encoding="utf-8"),
+        "todo": (ROOT / ".memory/TODO.md").read_text(encoding="utf-8"),
+        "status": (ROOT / ".memory/status.md").read_text(encoding="utf-8"),
+        "readme": (ROOT / "ds4-parity/README.md").read_text(encoding="utf-8"),
+        "report": (ROOT / "ds4-parity/run_parity_report.py").read_text(encoding="utf-8"),
     }
     report = ReportState()
     validate(report, fixture, texts)
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA public attention decode heads ABI smoke: {state} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA public batched Q8 attention output ABI smoke: {state} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
 
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.cuda_abi_attention_decode_heads_smoke.v1", "schema drift")
+    report.check(fixture.get("schema") == "ds4.cuda_abi_attention_output_q8_batch_smoke.v1", "schema drift")
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
     report.check(
-        fixture.get("status") == "b300-pass-staticlib-public-attention-decode-heads-abi",
+        fixture.get("status") == "b300-pass-staticlib-public-attention-output-q8-batch-abi",
         "status drift",
     )
     oracle = require_dict(report, fixture.get("oracle"), "oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
-    report.check(oracle.get("symbols") == ["ds4_gpu_attention_decode_heads_tensor"], "oracle symbols drift")
+    report.check(oracle.get("symbols") == ["ds4_gpu_attention_output_q8_batch_tensor"], "oracle symbols drift")
     for marker in [
-        'extern "C" int ds4_gpu_attention_decode_heads_tensor(',
-        "if (!cuda_attention_score_buffer_fits(n_comp))",
-        'getenv("DS4_CUDA_NO_WINDOW_ATTENTION") == NULL',
-        "attention_decode_mixed_heads8_online_kernel<<<",
-        "attention_decode_mixed_kernel<<<",
+        'extern "C" int ds4_gpu_attention_output_q8_batch_tensor(',
+        'getenv("DS4_CUDA_NO_CUBLAS_ATTENTION_OUTPUT_A") == NULL',
+        'cuda_q8_f16_ptr(model_map, out_a_offset, out_a_bytes, group_dim, low_dim, "attn_output_a")',
+        "cublasGemmStridedBatchedEx",
+        "cuda_matmul_q8_0_tensor_labeled(",
+        '"attn_output_b"',
     ]:
-        report.check(marker in texts["cuda_c"], f"current-C attention marker missing: {marker}")
+        report.check(marker in texts["cuda_c"], f"current-C batch-output marker missing: {marker}")
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
     validate_wiring(report, fixture, texts)
@@ -103,14 +93,14 @@ def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
-        ("exported_abi_symbol_count", 63),
-        ("exported_compute_symbol_count", 41),
+        ("exported_abi_symbol_count", 68),
+        ("exported_compute_symbol_count", 50),
         ("public_gpu_abi_function_count", 81),
         ("consumes_cached_model_ranges", True),
-        ("owns_attention_decode_heads_tensor", True),
-        ("owns_attention_decode_mixed_kernel", True),
-        ("owns_attention_decode_mixed_heads8_online_kernel", True),
-        ("preserves_overflow_online_dispatch", True),
+        ("reuses_q8_activation_scratch", True),
+        ("owns_attention_output_q8_batch_tensor", True),
+        ("owns_native_and_cublas_output_a_dispatch", True),
+        ("preserves_attention_q8_cache_labels", True),
         ("owns_remaining_attention_abi", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
@@ -121,34 +111,38 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
     report.check(len(symbols) == 68, "Rust ABI export implementation count drift")
-    report.check("ds4_gpu_attention_decode_heads_tensor" in symbols, "attention decode export missing")
+    report.check("ds4_gpu_attention_output_q8_batch_tensor" in symbols, "batch-output export missing")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
-        'pub unsafe extern "C" fn ds4_gpu_attention_decode_heads_tensor',
-        "with_cached_abi_model_range(",
-        "DS4_CUDA_ATTENTION_SCORE_CAP - DS4_CUDA_ATTENTION_RAW_SCORE_CAP",
-        'std::env::var_os("DS4_CUDA_NO_WINDOW_ATTENTION").is_some()',
-        "kernels.attention_decode_mixed_heads8_online_tensor(",
-        "kernels.attention_decode_mixed_tensor(",
+        'pub unsafe extern "C" fn ds4_gpu_attention_output_q8_batch_tensor',
+        "attention_output_a_cublas_min_tokens()",
+        "attention_output_a_native_impl(",
+        "attention_output_a_cublas_impl(",
+        '\"attn_output_a\"',
+        '\"attn_output_b\"',
+        "matmul_q8_0_tensor_labeled(",
+        "ABI_ATTENTION_OUTPUT_CUBLAS_SCRATCH",
+        "*scratch = None;",
     ]:
         report.check(marker in texts["abi"], f"Rust ABI marker missing: {marker}")
     for marker in [
-        "pub fn abi_attention_decode_mixed_kernel",
-        "pub fn abi_attention_decode_mixed_heads8_online_kernel",
-        "static mut SOFTMAX: SharedArray<f32, 4>",
-        "score_row < raw_count + comp_count",
-        "pub(crate) unsafe fn attention_decode_mixed_tensor(",
-        "pub(crate) unsafe fn attention_decode_mixed_heads8_online_tensor(",
+        "pub fn abi_attention_pack_group_heads_f16_kernel",
+        "pub fn abi_f16_to_f32_kernel",
+        "pub fn abi_attention_expand_group_weights_sgemm_kernel",
+        "pub fn abi_attention_unpack_group_low_kernel",
+        "attention_pack_group_heads_f16_kernel: CudaFunction",
+        '.load_function("abi_attention_unpack_group_low_kernel")',
     ]:
         report.check(marker in texts["kernels"], f"Rust kernel marker missing: {marker}")
     for marker in [
-        "pub struct CudaAbiAttentionDecodeHeadsScope",
-        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
-        "exported_abi_symbol_count: 63",
-        "exported_compute_symbol_count: 41",
-        "owns_attention_decode_heads_tensor: true",
-        "preserves_overflow_online_dispatch: true",
+        "pub struct CudaAbiAttentionOutputBatchQ8Scope",
+        "M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
+        "exported_abi_symbol_count: 68",
+        "exported_compute_symbol_count: 50",
+        "owns_attention_output_q8_batch_tensor: true",
+        "owns_native_and_cublas_output_a_dispatch: true",
+        "preserves_attention_q8_cache_labels: true",
         "owns_remaining_attention_abi: false",
         "changes_default_route: false",
     ]:
@@ -158,11 +152,16 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
 
 def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
-    report.check(
-        implementation.get("embedded_kernel_entries")
-        == ["abi_attention_decode_mixed_kernel", "abi_attention_decode_mixed_heads8_online_kernel"],
-        "kernel ownership drift",
-    )
+    entries = implementation.get("embedded_kernel_entries", [])
+    for marker in [
+        "abi_grouped_q8_0_a_preq_warp8_kernel",
+        "abi_attention_pack_group_heads_f16_kernel",
+        "abi_f16_to_f32_kernel",
+        "abi_attention_expand_group_weights_sgemm_kernel",
+        "abi_attention_unpack_group_low_kernel",
+    ]:
+        report.check(marker in entries, f"embedded kernel entry missing: {marker}")
+    report.check("safe SGEMM" in implementation.get("adapter_boundary", ""), "SGEMM adapter boundary missing")
     report.check("--whole-archive" in implementation.get("linkage_requirement", ""), "linkage path missing")
     execution = require_dict(report, fixture.get("b300_execution"), "b300_execution")
     for key, expected in [
@@ -172,51 +171,49 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("pod", "ds4-rust-port-b300"),
         ("node", "c1v17-b300n1-nic1"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 147),
-        ("feature_release_test_count", 154),
-        ("staticlib_export_count", 63),
-        ("embedded_kernel_count", 41),
+        ("local_library_test_count", 151),
+        ("feature_release_test_count", 158),
+        ("staticlib_export_count", 68),
+        ("embedded_kernel_count", 50),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
-        "generic_masked_output_matches",
-        "raw_only_ring_wrapped_output_matches",
-        "sink_softmax_matches",
-        "overflow_online_output_matches",
-        "overflow_raw_visibility_matches",
-        "overflow_env_disable_rejected",
-        "overflow_mask_rejected",
-        "invalid_model_range_preserves_output",
+        "native_two_stage_output_matches",
+        "partial_q8_block_matches",
+        "cublas_a_output_matches",
+        "cublas_a_dispatch_diverges_from_native",
+        "cublas_a_environment_gate_matches",
+        "cublas_a_minimum_token_gate_matches",
+        "attention_output_cache_labels_honored",
+        "invalid_model_range_preserves_outputs",
         "invalid_shape_rejected",
         "null_rejected",
-        "embedded_attention_decode_kernels_loaded",
+        "embedded_output_adapter_kernels_loaded",
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
-    report.check(observed.get("predecessor_c_linked_regression_consumers_passed") == 57, "predecessor count drift")
-    report.check(observed.get("predecessor_relink_executable_stack_warning_count") == 57, "warning count drift")
+    report.check(observed.get("predecessor_c_linked_regression_consumers_passed") == 61, "predecessor count drift")
+    report.check(observed.get("predecessor_relink_executable_stack_warning_count") == 61, "warning count drift")
     for marker in [
-        "#define ONLINE_N_COMP 7937u",
-        "reference_generic(",
-        "ds4_gpu_attention_decode_heads_tensor(",
-        'setenv("DS4_CUDA_NO_WINDOW_ATTENTION"',
-        "overflow_raw_visibility_matches",
-        "invalid_model_range_preserves_output",
+        "#define N_TOKENS 3u",
+        "ds4_gpu_attention_output_q8_batch_tensor(",
+        'setenv("DS4_CUDA_NO_CUBLAS_ATTENTION_OUTPUT_A"',
+        '"DS4_CUDA_ATTENTION_OUTPUT_A_CUBLAS_MIN"',
+        "attention_output_cache_labels_honored",
+        "invalid_model_range_preserves_outputs",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
     risks = fixture.get("integration_risks", [])
-    report.check(any("score-cap bounded" in value for value in risks), "score-cap risk missing")
-    report.check(any("raw visibility" in value for value in risks), "overflow raw-visibility risk missing")
-    report.check(any("zero launch geometry" in value for value in risks), "checked geometry risk missing")
-    report.check(any("remaining attention" in value for value in risks), "remaining-attention risk missing")
+    report.check(any("safe SGEMM" in value for value in risks), "SGEMM adapter risk missing")
+    report.check(any("prefill attention" in value for value in risks), "prefill deferral risk missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-attention-decode-heads-smoke.json"
-    checker = "check_cuda_abi_attention_decode_heads_smoke.py"
-    item = f"{MILESTONE}: Public Single-Token Attention Decode Heads ABI"
+    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-attention-output-q8-batch-smoke.json"
+    checker = "check_cuda_abi_attention_output_q8_batch_smoke.py"
+    item = f"{MILESTONE}: Public Batched Q8 Attention Output ABI"
     for target, label in [("roadmap", "roadmap"), ("todo", "TODO"), ("status", "status")]:
         report.check(item in texts[target], f"{label} item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
@@ -237,10 +234,11 @@ def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[st
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("generic decode mismatch", lambda value: value["b300_execution"]["observed"].update({"generic_masked_output_matches": False})),
-        ("overflow decode mismatch", lambda value: value["b300_execution"]["observed"].update({"overflow_online_output_matches": False})),
-        ("remaining attention overclaim", lambda value: value["ownership"].update({"owns_remaining_attention_abi": True})),
-        ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
+        ("numeric mismatch", lambda value: value["b300_execution"]["observed"].update({"native_two_stage_output_matches": False})),
+        ("cuBLAS gate mismatch", lambda value: value["b300_execution"]["observed"].update({"cublas_a_environment_gate_matches": False})),
+        ("cache label mismatch", lambda value: value["ownership"].update({"preserves_attention_q8_cache_labels": False})),
+        ("attention overclaim", lambda value: value["ownership"].update({"owns_remaining_attention_abi": True})),
+        ("next stage drift", lambda value: value.update({"next_required_stage": "wrong"})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)

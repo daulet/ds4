@@ -2216,6 +2216,86 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_attention_pack_group_heads_f16_kernel(
+        n_tokens: u32,
+        n_groups: u32,
+        group_dim: u64,
+        heads: &[f32],
+        mut packed: DisjointSlice<f16>,
+    ) {
+        let index = thread::index_1d().get() as u64;
+        let count = u64::from(n_groups) * u64::from(n_tokens) * group_dim;
+        if index >= count {
+            return;
+        }
+        let dimension = index % group_dim;
+        let quotient = index / group_dim;
+        let token = quotient % u64::from(n_tokens);
+        let group = quotient / u64::from(n_tokens);
+        let source = (token * u64::from(n_groups) + group) * group_dim + dimension;
+        unsafe {
+            *packed.get_unchecked_mut(index as usize) = heads[source as usize] as f16;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_f16_to_f32_kernel(count: u64, input: &[f16], mut output: DisjointSlice<f32>) {
+        let index = thread::index_1d().get() as u64;
+        if index < count {
+            unsafe {
+                *output.get_unchecked_mut(index as usize) = input[index as usize] as f32;
+            }
+        }
+    }
+
+    #[kernel]
+    pub fn abi_attention_expand_group_weights_sgemm_kernel(
+        n_groups: u32,
+        rank: u64,
+        group_dim: u64,
+        weights: &[f16],
+        mut transposed: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d().get() as u64;
+        let count = u64::from(n_groups) * rank * group_dim;
+        if index >= count {
+            return;
+        }
+        let dimension = index % group_dim;
+        let quotient = index / group_dim;
+        let output_row = quotient % rank;
+        let group = quotient / rank;
+        let destination = (group * group_dim + dimension) * rank + output_row;
+        unsafe {
+            *transposed.get_unchecked_mut(destination as usize) = weights[index as usize] as f32;
+        }
+    }
+
+    #[kernel]
+    pub fn abi_attention_unpack_group_low_kernel(
+        n_tokens: u32,
+        n_groups: u32,
+        rank: u64,
+        packed: &[f32],
+        mut low: DisjointSlice<f32>,
+    ) {
+        let index = thread::index_1d().get() as u64;
+        let count = u64::from(n_groups) * u64::from(n_tokens) * rank;
+        if index >= count {
+            return;
+        }
+        let output_rank = index % rank;
+        let quotient = index / rank;
+        let token = quotient % u64::from(n_tokens);
+        let group = quotient / u64::from(n_tokens);
+        let low_dim = u64::from(n_groups) * rank;
+        let destination = token * low_dim + group * rank + output_rank;
+        unsafe {
+            *low.get_unchecked_mut(destination as usize) = packed[index as usize];
+        }
+    }
+
+    #[kernel]
     pub fn abi_matmul_q8_0_preq_kernel(
         in_dim: u64,
         out_dim: u64,
@@ -2870,6 +2950,10 @@ pub(crate) struct AbiKernelModule {
     dequant_q8_0_to_f32_kernel: CudaFunction,
     quantize_q8_0_f32_kernel: CudaFunction,
     grouped_q8_0_a_preq_warp8_kernel: CudaFunction,
+    attention_pack_group_heads_f16_kernel: CudaFunction,
+    f16_to_f32_kernel: CudaFunction,
+    attention_expand_group_weights_sgemm_kernel: CudaFunction,
+    attention_unpack_group_low_kernel: CudaFunction,
     matmul_q8_0_preq_kernel: CudaFunction,
     matmul_q8_0_preq_warp8_kernel: CudaFunction,
     matmul_q8_0_preq_batch_warp8_kernel: CudaFunction,
@@ -2991,6 +3075,18 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             grouped_q8_0_a_preq_warp8_kernel: module
                 .load_function("abi_grouped_q8_0_a_preq_warp8_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_pack_group_heads_f16_kernel: module
+                .load_function("abi_attention_pack_group_heads_f16_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            f16_to_f32_kernel: module
+                .load_function("abi_f16_to_f32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_expand_group_weights_sgemm_kernel: module
+                .load_function("abi_attention_expand_group_weights_sgemm_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            attention_unpack_group_low_kernel: module
+                .load_function("abi_attention_unpack_group_low_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             matmul_q8_0_preq_kernel: module
                 .load_function("abi_matmul_q8_0_preq_kernel")
@@ -5150,6 +5246,182 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.grouped_q8_0_a_preq_warp8_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn attention_pack_group_heads_f16_tensor(
+        &self,
+        stream: &CudaStream,
+        heads_ptr: u64,
+        packed_ptr: u64,
+        n_tokens: u32,
+        n_groups: u32,
+        group_dim: u64,
+    ) -> bool {
+        let Some(count) = u64::from(n_groups)
+            .checked_mul(u64::from(n_tokens))
+            .and_then(|value| value.checked_mul(group_dim))
+        else {
+            return false;
+        };
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut n_tokens = n_tokens;
+        let mut n_groups = n_groups;
+        let mut group_dim = group_dim;
+        let mut heads_ptr = heads_ptr;
+        let mut heads_len = count;
+        let mut packed_ptr = packed_ptr;
+        let mut packed_len = count;
+        let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut n_groups as *mut u32).cast::<c_void>(),
+            (&mut group_dim as *mut u64).cast::<c_void>(),
+            (&mut heads_ptr as *mut u64).cast::<c_void>(),
+            (&mut heads_len as *mut u64).cast::<c_void>(),
+            (&mut packed_ptr as *mut u64).cast::<c_void>(),
+            (&mut packed_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.attention_pack_group_heads_f16_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn f16_to_f32_tensor(
+        &self,
+        stream: &CudaStream,
+        input_ptr: u64,
+        output_ptr: u64,
+        count: u64,
+    ) -> bool {
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut count = count;
+        let mut input_ptr = input_ptr;
+        let mut input_len = count;
+        let mut output_ptr = output_ptr;
+        let mut output_len = count;
+        let mut params = [
+            (&mut count as *mut u64).cast::<c_void>(),
+            (&mut input_ptr as *mut u64).cast::<c_void>(),
+            (&mut input_len as *mut u64).cast::<c_void>(),
+            (&mut output_ptr as *mut u64).cast::<c_void>(),
+            (&mut output_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.f16_to_f32_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn attention_expand_group_weights_sgemm_tensor(
+        &self,
+        stream: &CudaStream,
+        weights_ptr: u64,
+        transposed_ptr: u64,
+        n_groups: u32,
+        rank: u64,
+        group_dim: u64,
+    ) -> bool {
+        let Some(count) = u64::from(n_groups)
+            .checked_mul(rank)
+            .and_then(|value| value.checked_mul(group_dim))
+        else {
+            return false;
+        };
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut n_groups = n_groups;
+        let mut rank = rank;
+        let mut group_dim = group_dim;
+        let mut weights_ptr = weights_ptr;
+        let mut weights_len = count;
+        let mut transposed_ptr = transposed_ptr;
+        let mut transposed_len = count;
+        let mut params = [
+            (&mut n_groups as *mut u32).cast::<c_void>(),
+            (&mut rank as *mut u64).cast::<c_void>(),
+            (&mut group_dim as *mut u64).cast::<c_void>(),
+            (&mut weights_ptr as *mut u64).cast::<c_void>(),
+            (&mut weights_len as *mut u64).cast::<c_void>(),
+            (&mut transposed_ptr as *mut u64).cast::<c_void>(),
+            (&mut transposed_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.attention_expand_group_weights_sgemm_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    pub(crate) unsafe fn attention_unpack_group_low_tensor(
+        &self,
+        stream: &CudaStream,
+        packed_ptr: u64,
+        low_ptr: u64,
+        n_tokens: u32,
+        n_groups: u32,
+        rank: u64,
+    ) -> bool {
+        let Some(count) = u64::from(n_groups)
+            .checked_mul(u64::from(n_tokens))
+            .and_then(|value| value.checked_mul(rank))
+        else {
+            return false;
+        };
+        let Some(config) = launch_config(count) else {
+            return false;
+        };
+        let mut n_tokens = n_tokens;
+        let mut n_groups = n_groups;
+        let mut rank = rank;
+        let mut packed_ptr = packed_ptr;
+        let mut packed_len = count;
+        let mut low_ptr = low_ptr;
+        let mut low_len = count;
+        let mut params = [
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut n_groups as *mut u32).cast::<c_void>(),
+            (&mut rank as *mut u64).cast::<c_void>(),
+            (&mut packed_ptr as *mut u64).cast::<c_void>(),
+            (&mut packed_len as *mut u64).cast::<c_void>(),
+            (&mut low_ptr as *mut u64).cast::<c_void>(),
+            (&mut low_len as *mut u64).cast::<c_void>(),
+        ];
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.attention_unpack_group_low_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

@@ -3874,6 +3874,21 @@ prefill attention, routed MoE, remaining graph compute, whole-archive
 retention policy, route promotion, C CUDA removal, and the embedded-object
 executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public batched Q8 attention output ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_attention_output_q8_batch_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public batched Q8 output wrapper
+through native grouped output-A, optional F16-rounded safe-SGEMM output-A,
+and attention-labeled output-B projection. It proves the cuBLAS selection and
+fallback gates, output-B cache-label behavior, and rejection controls.
+Prefill attention, routed MoE, remaining graph compute, whole-archive
+retention policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

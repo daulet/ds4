@@ -11408,6 +11408,51 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public batched Q8 attention-output wrapper is independently
+  comparable once its native path, optional cuBLAS output-A branch, and
+  attention-labeled output-B path are kept together.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Batched Q8 Attention Output ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_attention_output_q8_batch_tensor` including native
+  grouped Q8 output-A, optional F16-rounded safe-SGEMM output-A dispatch, and
+  attention-labeled output-B projection without claiming prefill, routed MoE,
+  remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-attention-output-q8-batch-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_attention_output_q8_batch_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the checked wrapper, preserves the
+    `attn_output_a` and `attn_output_b` cache-label policy, and resets retained
+    cuBLAS adapter scratch during public cleanup.
+  - `rust/ds4-cuda/src/abi_kernels.rs` embeds the proven grouped-head pack,
+    F16-to-F32 adapter, expanded-weight transpose, and low-unpack kernels
+    alongside the native grouped Q8 output-A path.
+  - A C-linked B300 consumer proves native two-stage output, partial-block
+    projection, optional output-A cuBLAS selection, environment and
+    minimum-token fallback gates, label-sensitive output-B behavior,
+    invalid-range preservation, invalid-shape rejection, and null rejection.
+  - Local library tests pass with 151 tests; B300 release-feature tests pass
+    with 158 tests; the static library exposes 68 Rust ABI symbols and embeds
+    50 kernels.
+  - All 61 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 65 CUDA ABI comparators
+    pass.
+  - The unified report passes with 237 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Prefill attention, routed MoE, production route promotion, and C CUDA
+    removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before
