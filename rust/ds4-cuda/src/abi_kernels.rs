@@ -2168,6 +2168,54 @@ mod kernels {
     }
 
     #[kernel]
+    pub fn abi_grouped_q8_0_a_preq_warp8_kernel(
+        group_dim: u64,
+        rank: u64,
+        n_groups: u32,
+        n_tokens: u32,
+        blocks: u64,
+        use_dp4a: u32,
+        weights: &[u8],
+        xq: &[i8],
+        xscale: &[f32],
+        mut low: DisjointSlice<f32>,
+    ) {
+        let row = thread::blockIdx_x() as u64 * 8 + (thread::threadIdx_x() >> 5) as u64;
+        let token = thread::blockIdx_y() as u64;
+        let lane = (thread::threadIdx_x() & 31) as u64;
+        let low_dim = u64::from(n_groups) * rank;
+        if row >= low_dim || token >= u64::from(n_tokens) {
+            return;
+        }
+        let group = row / rank;
+        let row_in_group = row - group * rank;
+        let xrow = token * u64::from(n_groups) + group;
+        let mut acc = 0.0_f32;
+        let mut block = lane;
+        while block < blocks {
+            let remaining = group_dim - block * 32;
+            let count = if remaining < 32 { remaining } else { 32 };
+            let weight_base = (((group * rank + row_in_group) * blocks + block) * 34) as usize;
+            let scale_bits = weights[weight_base] as u16 | ((weights[weight_base + 1] as u16) << 8);
+            let weight_scale = f16::from_bits(scale_bits) as f32;
+            let xq_base = ((xrow * blocks + block) * 32) as usize;
+            let dot = q8_dot(weights, weight_base, xq, xq_base, count, use_dp4a != 0);
+            acc += weight_scale * xscale[(xrow * blocks + block) as usize] * dot as f32;
+            block += 32;
+        }
+        let mut offset = 16_u32;
+        while offset > 0 {
+            acc += warp::shuffle_down_f32(acc, offset);
+            offset >>= 1;
+        }
+        if lane == 0 {
+            unsafe {
+                *low.get_unchecked_mut(token as usize * low_dim as usize + row as usize) = acc;
+            }
+        }
+    }
+
+    #[kernel]
     pub fn abi_matmul_q8_0_preq_kernel(
         in_dim: u64,
         out_dim: u64,
@@ -2821,6 +2869,7 @@ pub(crate) struct AbiKernelModule {
     dequant_q8_0_to_f16_kernel: CudaFunction,
     dequant_q8_0_to_f32_kernel: CudaFunction,
     quantize_q8_0_f32_kernel: CudaFunction,
+    grouped_q8_0_a_preq_warp8_kernel: CudaFunction,
     matmul_q8_0_preq_kernel: CudaFunction,
     matmul_q8_0_preq_warp8_kernel: CudaFunction,
     matmul_q8_0_preq_batch_warp8_kernel: CudaFunction,
@@ -2939,6 +2988,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             quantize_q8_0_f32_kernel: module
                 .load_function("abi_quantize_q8_0_f32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            grouped_q8_0_a_preq_warp8_kernel: module
+                .load_function("abi_grouped_q8_0_a_preq_warp8_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             matmul_q8_0_preq_kernel: module
                 .load_function("abi_matmul_q8_0_preq_kernel")
@@ -5027,6 +5079,77 @@ impl AbiKernelModule {
         unsafe {
             cuda_core::launch_kernel_on_stream(
                 &self.quantize_q8_0_f32_kernel,
+                config.grid_dim,
+                config.block_dim,
+                config.shared_mem_bytes,
+                stream,
+                &mut params,
+            )
+        }
+        .is_ok()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) unsafe fn attention_output_low_q8_tensor(
+        &self,
+        stream: &CudaStream,
+        low_ptr: u64,
+        weight_ptr: u64,
+        xq_ptr: u64,
+        xscale_ptr: u64,
+        group_dim: u64,
+        rank: u64,
+        n_groups: u32,
+        n_tokens: u32,
+        use_dp4a: bool,
+    ) -> bool {
+        let blocks = group_dim.div_ceil(32);
+        let Some(low_dim) = u64::from(n_groups).checked_mul(rank) else {
+            return false;
+        };
+        let Ok(grid_x) = u32::try_from(low_dim.div_ceil(8)) else {
+            return false;
+        };
+        let config = LaunchConfig {
+            grid_dim: (grid_x, n_tokens, 1),
+            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut group_dim = group_dim;
+        let mut rank = rank;
+        let mut n_groups = n_groups;
+        let mut n_tokens = n_tokens;
+        let mut blocks = blocks;
+        let mut use_dp4a = u32::from(use_dp4a);
+        let mut weight_ptr = weight_ptr;
+        let mut weight_len = low_dim * blocks * 34;
+        let mut xq_ptr = xq_ptr;
+        let mut xq_len = u64::from(n_tokens) * u64::from(n_groups) * blocks * 32;
+        let mut xscale_ptr = xscale_ptr;
+        let mut xscale_len = u64::from(n_tokens) * u64::from(n_groups) * blocks;
+        let mut low_ptr = low_ptr;
+        let mut low_len = u64::from(n_tokens) * low_dim;
+        let mut params = [
+            (&mut group_dim as *mut u64).cast::<c_void>(),
+            (&mut rank as *mut u64).cast::<c_void>(),
+            (&mut n_groups as *mut u32).cast::<c_void>(),
+            (&mut n_tokens as *mut u32).cast::<c_void>(),
+            (&mut blocks as *mut u64).cast::<c_void>(),
+            (&mut use_dp4a as *mut u32).cast::<c_void>(),
+            (&mut weight_ptr as *mut u64).cast::<c_void>(),
+            (&mut weight_len as *mut u64).cast::<c_void>(),
+            (&mut xq_ptr as *mut u64).cast::<c_void>(),
+            (&mut xq_len as *mut u64).cast::<c_void>(),
+            (&mut xscale_ptr as *mut u64).cast::<c_void>(),
+            (&mut xscale_len as *mut u64).cast::<c_void>(),
+            (&mut low_ptr as *mut u64).cast::<c_void>(),
+            (&mut low_len as *mut u64).cast::<c_void>(),
+        ];
+        // SAFETY: the ABI validates packed output-A weights and output spans,
+        // and retains the quantized activation buffers through this launch.
+        unsafe {
+            cuda_core::launch_kernel_on_stream(
+                &self.grouped_q8_0_a_preq_warp8_kernel,
                 config.grid_dim,
                 config.block_dim,
                 config.shared_mem_bytes,

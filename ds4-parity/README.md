@@ -3859,6 +3859,21 @@ Prefill and output-Q8 attention, routed MoE, remaining graph compute,
 whole-archive retention policy, route promotion, C CUDA removal, and the
 embedded-object executable-stack warning remain open.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba Rust
+CUDA public low-Q8 attention output ABI:
+
+```sh
+python3 ds4-parity/check_cuda_abi_attention_output_low_q8_smoke.py --negative-test
+```
+
+The C-linked B300 fixture executes the public single-token low-Q8 output
+wrapper through the existing embedded Q8 quantizer and the grouped output-A
+projection kernel. It proves partial-block native projection, DP4A
+environment-gate equivalence, and rejection controls. Batched output-Q8 and
+prefill attention, routed MoE, remaining graph compute, whole-archive
+retention policy, route promotion, C CUDA removal, and the embedded-object
+executable-stack warning remain open.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -3,7 +3,23 @@
 - Date: 2026-05-30 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Low-Q8 Attention Output ABI
+  is validated on B300. Rust exports
+  `ds4_gpu_attention_output_low_q8_tensor` by reusing retained Q8 activation
+  scratch and the existing embedded quantizer while adding the grouped
+  output-A projection kernel. A C-linked B300 witness proves native low-Q8
+  output, partial Q8 block handling, DP4A environment-gate equivalence,
+  invalid model-range output preservation, invalid-shape rejection, and null
+  rejection. Local tests pass with 150 tests; B300 feature tests pass with
+  157 tests; the static library exposes 67 symbols and embeds 46 kernels.
+  All 60 preceding linked ABI consumers pass against the rebuilt archive with
+  the known executable-stack warning. All 64 CUDA ABI comparators pass, and
+  the unified report passes with 236 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Batched
+  output-Q8, prefill attention, routed MoE, remaining graph compute,
+  whole-archive/route promotion, C CUDA removal, and the warning remain open.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Indexed Batched Attention ABI
   is validated on B300. Rust exports
   `ds4_gpu_attention_indexed_mixed_batch_heads_tensor` through embedded

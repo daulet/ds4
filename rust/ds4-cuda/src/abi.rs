@@ -4919,6 +4919,123 @@ pub unsafe extern "C" fn ds4_gpu_attention_indexed_mixed_batch_heads_tensor(
 
 #[cfg(feature = "cuda-oxide-kernels")]
 #[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ds4_gpu_attention_output_low_q8_tensor(
+    low: *mut Ds4GpuTensor,
+    model_map: *const c_void,
+    model_size: u64,
+    out_a_offset: u64,
+    group_dim: u64,
+    rank: u64,
+    n_groups: u32,
+    heads: *const Ds4GpuTensor,
+) -> c_int {
+    status(|| {
+        let Some(low) = (unsafe { tensor_ref(low.cast_const()) }) else {
+            return false;
+        };
+        let Some(heads) = (unsafe { tensor_ref(heads) }) else {
+            return false;
+        };
+        let Some(low_dim) = u64::from(n_groups).checked_mul(rank) else {
+            return false;
+        };
+        let Some((_weight_elements, _weight_elements_usize, weight_bytes)) =
+            abi_q8_shape(group_dim, low_dim)
+        else {
+            return false;
+        };
+        let Some(head_elements) = u64::from(n_groups).checked_mul(group_dim) else {
+            return false;
+        };
+        let Some(head_bytes) = head_elements.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        let Some(low_bytes) = low_dim.checked_mul(size_of::<f32>() as u64) else {
+            return false;
+        };
+        if model_map.is_null()
+            || group_dim == 0
+            || rank == 0
+            || n_groups == 0
+            || out_a_offset > model_size
+            || weight_bytes > model_size - out_a_offset
+            || heads.bytes < head_bytes
+            || low.bytes < low_bytes
+        {
+            return false;
+        }
+        with_backend(|backend| {
+            with_cached_abi_model_range(
+                backend,
+                model_map,
+                model_size,
+                out_a_offset,
+                weight_bytes,
+                |weight_ptr| {
+                    let blocks = group_dim.div_ceil(32);
+                    let Some(quantized_elements) = u64::from(n_groups)
+                        .checked_mul(blocks)
+                        .and_then(|value| value.checked_mul(32))
+                    else {
+                        return Some(false);
+                    };
+                    let Some(scale_elements) = u64::from(n_groups).checked_mul(blocks) else {
+                        return Some(false);
+                    };
+                    let Some(quantized_elements) = usize::try_from(quantized_elements).ok() else {
+                        return Some(false);
+                    };
+                    let Some(scale_elements) = usize::try_from(scale_elements).ok() else {
+                        return Some(false);
+                    };
+                    with_abi_q8_activations(
+                        backend,
+                        quantized_elements,
+                        scale_elements,
+                        |activations| {
+                            with_abi_kernels(backend, |kernels| {
+                                if !unsafe {
+                                    kernels.quantize_q8_f32_tensor(
+                                        backend.stream(),
+                                        heads.device_ptr(),
+                                        activations.quantized.cu_deviceptr(),
+                                        activations.scales.cu_deviceptr(),
+                                        group_dim,
+                                        blocks,
+                                        u64::from(n_groups),
+                                    )
+                                } {
+                                    return Some(false);
+                                }
+                                Some(unsafe {
+                                    kernels.attention_output_low_q8_tensor(
+                                        backend.stream(),
+                                        low.device_ptr(),
+                                        weight_ptr,
+                                        activations.quantized.cu_deviceptr(),
+                                        activations.scales.cu_deviceptr(),
+                                        group_dim,
+                                        rank,
+                                        n_groups,
+                                        1,
+                                        q8_dp4a_enabled(
+                                            std::env::var_os("DS4_CUDA_NO_Q8_DP4A").is_some(),
+                                        ),
+                                    )
+                                })
+                            })
+                        },
+                    )
+                },
+            )
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[cfg(feature = "cuda-oxide-kernels")]
+#[no_mangle]
 pub unsafe extern "C" fn ds4_gpu_hc_weighted_sum_tensor(
     out: *mut Ds4GpuTensor,
     residual_hc: *const Ds4GpuTensor,

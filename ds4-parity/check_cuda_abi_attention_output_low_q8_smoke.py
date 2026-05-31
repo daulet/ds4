@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Rust CUDA public composed FP8 raw KV storage ABI smoke."""
+"""Validate the Rust CUDA public low-Q8 attention output ABI smoke."""
 
 from __future__ import annotations
 
@@ -14,14 +14,15 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 MILESTONE_DIR = MILESTONE.lower()
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-composed-kv-fp8-raw-store-smoke.json"
+NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-attention-output-low-q8-smoke.json"
 CUDA_C = ROOT / "ds4_cuda.cu"
 CUDA_LIB = ROOT / "rust/ds4-cuda/src/lib.rs"
 CUDA_ABI = ROOT / "rust/ds4-cuda/src/abi.rs"
 CUDA_KERNELS = ROOT / "rust/ds4-cuda/src/abi_kernels.rs"
-HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_composed_kv_fp8_raw_store_link_smoke.c"
+HARNESS = ROOT / f"ds4-parity/fixtures/backend/{MILESTONE_DIR}/abi_attention_output_low_q8_link_smoke.c"
 GPU_BUILD = ROOT / "rust/ds4-gpu/build.rs"
 GPU_SYS = ROOT / "rust/ds4-gpu-sys/src/lib.rs"
 ROADMAP = ROOT / "RUST_PORT_ROADMAP.md"
@@ -70,28 +71,29 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA public composed FP8 raw KV storage ABI smoke: {state} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA public low-Q8 attention output ABI smoke: {state} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
 
 
 def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    report.check(fixture.get("schema") == "ds4.cuda_abi_composed_kv_fp8_raw_store_smoke.v1", "schema drift")
+    report.check(fixture.get("schema") == "ds4.cuda_abi_attention_output_low_q8_smoke.v1", "schema drift")
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
     report.check(
-        fixture.get("status") == "b300-pass-staticlib-public-composed-kv-fp8-raw-store-abi",
+        fixture.get("status") == "b300-pass-staticlib-public-attention-output-low-q8-abi",
         "status drift",
     )
     oracle = require_dict(report, fixture.get("oracle"), "oracle")
     report.check(oracle.get("source") == "ds4_cuda.cu", "oracle source drift")
-    report.check(oracle.get("symbols") == ["ds4_gpu_kv_fp8_store_raw_tensor"], "oracle symbols drift")
+    report.check(oracle.get("symbols") == ["ds4_gpu_attention_output_low_q8_tensor"], "oracle symbols drift")
     for marker in [
-        'extern "C" int ds4_gpu_kv_fp8_store_raw_tensor(',
-        "return ds4_gpu_dsv4_fp8_kv_quantize_tensor(kv, 1, head_dim, n_rot) &&",
-        "ds4_gpu_store_raw_kv_tensor(raw_cache, kv, raw_cap, raw_row, head_dim);",
+        'extern "C" int ds4_gpu_attention_output_low_q8_tensor(',
+        "quantize_q8_0_f32_kernel<<<qgrid, 32>>>",
+        "grouped_q8_0_a_preq_warp8_kernel<<<grid_a, 256>>>",
+        "const int use_dp4a = cuda_q8_use_dp4a();",
     ]:
-        report.check(marker in texts["cuda_c"], f"current-C composed KV marker missing: {marker}")
+        report.check(marker in texts["cuda_c"], f"current-C low-Q8 marker missing: {marker}")
     validate_ownership(report, fixture, texts)
     validate_execution(report, fixture, texts)
     validate_wiring(report, fixture, texts)
@@ -100,13 +102,15 @@ def validate(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]
 def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
-        ("exported_abi_symbol_count", 57),
-        ("exported_compute_symbol_count", 33),
+        ("exported_abi_symbol_count", 67),
+        ("exported_compute_symbol_count", 46),
         ("public_gpu_abi_function_count", 81),
-        ("owns_kv_fp8_store_raw_tensor", True),
-        ("reuses_fp8_kv_quantize_kernel", True),
-        ("reuses_store_raw_kv_batch_kernel", True),
-        ("owns_new_embedded_kernel", False),
+        ("consumes_cached_model_ranges", True),
+        ("reuses_q8_activation_scratch", True),
+        ("owns_attention_output_low_q8_tensor", True),
+        ("owns_grouped_q8_output_a_kernel", True),
+        ("owns_attention_output_q8_batch_tensor", False),
+        ("owns_remaining_attention_abi", False),
         ("owns_remaining_graph_compute_abi", False),
         ("owns_complete_ds4_gpu_abi", False),
         ("changes_default_route", False),
@@ -116,30 +120,36 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
     symbols = set(re.findall(r'pub (?:unsafe )?extern "C" fn (ds4_gpu_[A-Za-z0-9_]+)', texts["abi"]))
     ffi_symbols = set(re.findall(r"pub fn (ds4_gpu_[A-Za-z0-9_]+)\s*\(", texts["gpu_sys"]))
     report.check(len(symbols) == 67, "Rust ABI export implementation count drift")
-    report.check("ds4_gpu_kv_fp8_store_raw_tensor" in symbols, "composed KV export missing")
+    report.check("ds4_gpu_attention_output_low_q8_tensor" in symbols, "low-Q8 export missing")
+    report.check("ds4_gpu_attention_output_q8_batch_tensor" not in symbols, "batch output overclaim")
     report.check(len(ffi_symbols) == 81, "public GPU ABI function count drift")
     report.check(symbols <= ffi_symbols, "Rust exports do not match public GPU ABI")
     for marker in [
-        'pub unsafe extern "C" fn ds4_gpu_kv_fp8_store_raw_tensor',
-        "ds4_gpu_dsv4_fp8_kv_quantize_tensor(kv, 1, head_dim, n_rot)",
-        "ds4_gpu_store_raw_kv_tensor(raw_cache, kv.cast_const(), raw_cap, row, head_dim)",
+        'pub unsafe extern "C" fn ds4_gpu_attention_output_low_q8_tensor',
+        "with_cached_abi_model_range(",
+        "with_abi_q8_activations(",
+        "kernels.quantize_q8_f32_tensor(",
+        "kernels.attention_output_low_q8_tensor(",
+        'std::env::var_os("DS4_CUDA_NO_Q8_DP4A").is_some()',
     ]:
-        report.check(marker in texts["abi"], f"Rust composed KV ABI marker missing: {marker}")
-    quantize = texts["abi"].index("ds4_gpu_dsv4_fp8_kv_quantize_tensor(kv, 1, head_dim, n_rot)")
-    raw_store = texts["abi"].index("ds4_gpu_store_raw_kv_tensor(raw_cache, kv.cast_const(), raw_cap, row, head_dim)")
-    report.check(quantize < raw_store, "Rust composed KV call ordering drift")
+        report.check(marker in texts["abi"], f"Rust ABI marker missing: {marker}")
     for marker in [
-        "pub fn abi_fp8_kv_quantize_kernel",
-        "pub fn abi_store_raw_kv_batch_kernel",
+        "pub fn abi_quantize_q8_0_f32_kernel",
+        "pub fn abi_grouped_q8_0_a_preq_warp8_kernel",
+        "grouped_q8_0_a_preq_warp8_kernel: CudaFunction",
+        '.load_function("abi_grouped_q8_0_a_preq_warp8_kernel")',
+        "pub(crate) unsafe fn attention_output_low_q8_tensor(",
     ]:
-        report.check(marker in texts["kernels"], f"reused embedded kernel missing: {marker}")
+        report.check(marker in texts["kernels"], f"Rust kernel marker missing: {marker}")
     for marker in [
-        "pub struct CudaAbiComposedKvFp8RawStoreScope",
-        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
-        "exported_abi_symbol_count: 57",
-        "exported_compute_symbol_count: 33",
-        "owns_kv_fp8_store_raw_tensor: true",
-        "owns_new_embedded_kernel: false",
+        "pub struct CudaAbiAttentionOutputLowQ8Scope",
+        "pub const M14_6B2B2B2B2B2B2B2B2B2B2B2B2B2BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA_SCOPE",
+        "exported_abi_symbol_count: 67",
+        "exported_compute_symbol_count: 46",
+        "reuses_q8_activation_scratch: true",
+        "owns_attention_output_low_q8_tensor: true",
+        "owns_attention_output_q8_batch_tensor: false",
+        "owns_remaining_attention_abi: false",
         "changes_default_route: false",
     ]:
         report.check(marker in texts["lib"], f"scope marker missing: {marker}")
@@ -149,8 +159,9 @@ def validate_ownership(report: ReportState, fixture: dict[str, Any], texts: dict
 def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
     report.check(
-        implementation.get("reused_kernel_entries") == ["abi_fp8_kv_quantize_kernel", "abi_store_raw_kv_batch_kernel"],
-        "kernel reuse drift",
+        implementation.get("embedded_kernel_entries")
+        == ["abi_quantize_q8_0_f32_kernel", "abi_grouped_q8_0_a_preq_warp8_kernel"],
+        "embedded low-Q8 kernel entries drift",
     )
     report.check("--whole-archive" in implementation.get("linkage_requirement", ""), "linkage path missing")
     execution = require_dict(report, fixture.get("b300_execution"), "b300_execution")
@@ -161,77 +172,70 @@ def validate_execution(report: ReportState, fixture: dict[str, Any], texts: dict
         ("pod", "ds4-rust-port-b300"),
         ("node", "c1v17-b300n1-nic1"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("local_library_test_count", 141),
-        ("feature_release_test_count", 148),
-        ("staticlib_export_count", 57),
-        ("embedded_kernel_count", 33),
+        ("local_library_test_count", 150),
+        ("feature_release_test_count", 157),
+        ("staticlib_export_count", 67),
+        ("embedded_kernel_count", 46),
     ]:
         report.check(execution.get(key) == expected, f"execution drift: {key}")
     observed = require_dict(report, execution.get("observed"), "observed")
     for key in [
         "c_linked_rust_staticlib",
-        "composed_fp8_raw_store_output_matches",
-        "fp8_rope_tail_preserved",
-        "f16_raw_store_roundtrip_matches",
-        "uint32_raw_row_wrap_matches",
-        "raw_store_failure_retains_fp8_mutation",
+        "low_q8_output_matches",
+        "partial_q8_block_matches",
+        "dp4a_environment_gate_matches",
+        "invalid_model_range_preserves_output",
         "invalid_shape_rejected",
         "null_rejected",
-        "reuses_embedded_fp8_and_raw_store_kernels",
+        "embedded_grouped_q8_output_kernel_loaded",
     ]:
         report.check(observed.get(key) is True, f"observed smoke drift: {key}")
-    report.check(observed.get("predecessor_c_linked_regression_consumers_passed") == 51, "predecessor count drift")
-    report.check(observed.get("predecessor_relink_executable_stack_warning_count") == 51, "warning count drift")
+    report.check(observed.get("predecessor_c_linked_regression_consumers_passed") == 60, "predecessor count drift")
+    report.check(observed.get("predecessor_relink_executable_stack_warning_count") == 60, "warning count drift")
     for marker in [
-        "reference_fp8_kv_quantize(",
-        "half_roundtrip(",
-        "ds4_gpu_kv_fp8_store_raw_tensor(kv, raw, RAW_CAP, RAW_ROW, HEAD_DIM, N_ROT)",
-        "ds4_gpu_kv_fp8_store_raw_tensor(kv, short_raw, RAW_CAP, RAW_ROW, HEAD_DIM, N_ROT)",
-        "raw_store_failure_retains_fp8_mutation",
+        "#define GROUP_DIM 35u",
+        "ds4_gpu_attention_output_low_q8_tensor(",
+        'setenv("DS4_CUDA_NO_Q8_DP4A"',
+        "partial_q8_block_matches",
+        "invalid_model_range_preserves_output",
     ]:
         report.check(marker in texts["harness"], f"C-linked harness marker missing: {marker}")
     risks = fixture.get("integration_risks", [])
-    report.check(any("partial mutation" in value for value in risks), "failure-ordering risk missing")
-    report.check(any("route promotion" in value for value in risks), "remaining-compute risk missing")
+    report.check(any("retained Q8 scratch" in value for value in risks), "Q8 scratch risk missing")
+    report.check(any("ds4_gpu_attention_output_q8_batch_tensor" in value for value in risks), "batch deferral risk missing")
+    report.check(any("prefill attention" in value for value in risks), "prefill deferral risk missing")
     report.check(any("executable-stack" in value for value in risks), "linker warning risk missing")
 
 
 def validate_wiring(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-composed-kv-fp8-raw-store-smoke.json"
-    checker = "check_cuda_abi_composed_kv_fp8_raw_store_smoke.py"
-    item = f"{MILESTONE}: Public Composed FP8 Raw KV Storage ABI"
+    fixture_path = f"ds4-parity/baselines/backend/{MILESTONE_DIR}/abi-attention-output-low-q8-smoke.json"
+    checker = "check_cuda_abi_attention_output_low_q8_smoke.py"
+    item = f"{MILESTONE}: Public Low-Q8 Attention Output ABI"
     for target, label in [("roadmap", "roadmap"), ("todo", "TODO"), ("status", "status")]:
         report.check(item in texts[target], f"{label} item missing")
     report.check(fixture_path in texts["roadmap"], "roadmap fixture missing")
     report.check(fixture_path in texts["todo"], "TODO fixture missing")
     report.check(checker in texts["readme"], "README checker wiring missing")
     report.check(checker in texts["report"], "unified report checker wiring missing")
-    report.check(
-        "Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy"
-        in texts["status"],
-        "active remainder status missing",
-    )
+    report.check(f"Active item: {NEXT_STAGE}" in texts["status"], "active remainder status missing")
     report.check(
         fixture.get("review", {}).get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
         "pre-implementation review evidence missing",
     )
     report.check(
         fixture.get("review", {}).get("final") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
-        "final review evidence missing",
+        "final review timeout evidence missing",
     )
-    report.check(
-        fixture.get("next_required_stage")
-        == "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy",
-        "next stage drift",
-    )
+    report.check(fixture.get("next_required_stage") == NEXT_STAGE, "next stage drift")
 
 
 def run_negative_tests(report: ReportState, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("composed output failure", lambda value: value["b300_execution"]["observed"].update({"composed_fp8_raw_store_output_matches": False})),
-        ("failure ordering removed", lambda value: value["b300_execution"]["observed"].update({"raw_store_failure_retains_fp8_mutation": False})),
-        ("new kernel overclaim", lambda value: value["ownership"].update({"owns_new_embedded_kernel": True})),
-        ("route overclaim", lambda value: value["ownership"].update({"changes_default_route": True})),
+        ("numeric mismatch", lambda value: value["b300_execution"]["observed"].update({"low_q8_output_matches": False})),
+        ("DP4A gate mismatch", lambda value: value["b300_execution"]["observed"].update({"dp4a_environment_gate_matches": False})),
+        ("batch output overclaim", lambda value: value["ownership"].update({"owns_attention_output_q8_batch_tensor": True})),
+        ("attention overclaim", lambda value: value["ownership"].update({"owns_remaining_attention_abi": True})),
+        ("next stage drift", lambda value: value.update({"next_required_stage": "wrong"})),
     ]:
         candidate = copy.deepcopy(fixture)
         mutate(candidate)

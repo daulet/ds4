@@ -11367,6 +11367,47 @@
 
 ################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
 
+- Status: split into M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+  and M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  because the public single-token low-Q8 attention-output wrapper has no
+  cuBLAS branch and is independently comparable before batched output,
+  prefill, routed MoE, and route work.
+- Goal: connect remaining graph compute, whole-archive retention policy, and
+  production route-promotion work without claiming C CUDA removal before
+  those gates pass.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Public Low-Q8 Attention Output ABI
+
+- Status: done
+- Goal: Rust-own `ds4_gpu_attention_output_low_q8_tensor` through native
+  grouped Q8 projection without claiming batched output-Q8, prefill, routed
+  MoE, remaining graph compute, or route ownership.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/abi-attention-output-low-q8-smoke.json`
+- Comparator:
+  `ds4-parity/check_cuda_abi_attention_output_low_q8_smoke.py --negative-test`.
+- Evidence:
+  - `rust/ds4-cuda/src/abi.rs` exports the checked wrapper through cached
+    packed output-A model ranges and retained Q8 activation scratch.
+  - `rust/ds4-cuda/src/abi_kernels.rs` reuses the embedded Q8 quantizer and
+    adds grouped output-A projection with the current-C DP4A selection.
+  - A C-linked B300 consumer proves native low-Q8 output, partial-block
+    projection, DP4A environment-gate equivalence, invalid-range
+    preservation, invalid-shape rejection, and null rejection.
+  - Local library tests pass with 150 tests; B300 release-feature tests pass
+    with 157 tests; the static library exposes 67 Rust ABI symbols and embeds
+    46 kernels.
+  - All 60 preceding linked ABI consumers pass against the rebuilt archive
+    with the known executable-stack warning, and all 64 CUDA ABI comparators
+    pass.
+  - The unified report passes with 236 passed, 45 skipped, and 0 failed. The
+    pre-implementation and final pass-end non-interactive Claude review
+    attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+  - Batched output-Q8 and prefill attention, routed MoE, production route
+    promotion, and C CUDA removal remain unclaimed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: Remaining Graph Compute And Route Promotion Policy
+
 - Status: active
 - Goal: connect remaining graph compute, whole-archive retention policy, and
   production route-promotion work without claiming C CUDA removal before
