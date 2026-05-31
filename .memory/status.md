@@ -4,6 +4,24 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Staged-Pair Scalar Expansion Performance Repair
+  is validated on B300 from the corrected row-256 cached gate parent. The
+  opt-in Rust cached gate/up kernel expands its fixed staged-pair entry
+  dimension into named scalar accumulators: emitted PTX moves from `16` to
+  `128` DP4A sites while local stores/loads fall from `36/8` to `0/0`. The
+  repaired DSO SHA-256 is
+  `cc4e745dfaffbcb1672118bc33b2c8795c438adba4d9bb8f3f220ed01ea3368c`
+  and its PTX SHA-256 is
+  `2b35a748f0653cc39145b418fe9087d4cd37e4750a596f95e27d2a7ea29871bf`.
+  An adjacent B300 parent/candidate comparison lowers gate/up from
+  `1448.003 ms` to `1256.146 ms` and total routed-MoE from `2325.307 ms`
+  to `2133.521 ms`, while prefill rises from `216.02` to `222.92 tok/s`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. The unified report passes with `274`
+  passed, `50` skipped, and `0` failed. Pre-implementation and final Claude
+  review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total
+  routed-MoE remains `2.31x` current-C, so default routing and promotion
+  blockers remain in force.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Row-Span 256 Default Performance Repair
   is validated on B300 from corrected cached-down arithmetic. The opt-in Rust
   DSO host dispatch now honors the existing row-256 and row-128 gate controls

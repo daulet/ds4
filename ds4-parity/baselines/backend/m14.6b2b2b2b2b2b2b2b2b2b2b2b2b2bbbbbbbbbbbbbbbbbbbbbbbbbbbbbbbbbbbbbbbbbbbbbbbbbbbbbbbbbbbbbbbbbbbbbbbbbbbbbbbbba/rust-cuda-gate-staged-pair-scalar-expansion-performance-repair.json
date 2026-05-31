@@ -1,0 +1,121 @@
+{
+  "schema": "ds4.cuda_rust_gate_staged_pair_scalar_expansion_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-rust-gate-staged-pair-scalar-expansion-route-blocked",
+  "goal": "Reduce cached Rust CUDA routed-MoE gate/up overhead by expanding the fixed staged-pair entry dimension into named scalar accumulators.",
+  "ownership": {
+    "changes_cached_gate_kernel_body": true,
+    "expands_staged_pair_entry_dimension": true,
+    "uses_named_scalar_accumulators": true,
+    "retains_iq2_weight_arithmetic": true,
+    "retains_cached_down_kernel": true,
+    "retains_rowspan_policy": true,
+    "changes_default_current_c_route": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "kernel": "abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel",
+    "parent_dp4a_sites": 16,
+    "repaired_dp4a_sites": 128,
+    "parent_local_store_sites": 36,
+    "parent_local_load_sites": 8,
+    "repaired_local_store_sites": 0,
+    "repaired_local_load_sites": 0,
+    "scope_boundary": "only the opt-in Rust cached gate/up kernel staged-pair accumulator representation changes; corrected down arithmetic, row-span policy, the benchmark executable, and default current-C routing are unchanged"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "candidate_benchmark_binary_sha256": "908f184bf5175d6dc84105a571d6fc7f33c109006c6108e8f3625555186cd9ae",
+    "parent_shared_library_sha256": "0f835118466070058b1aaf1488262ba8121af707e272ac61ecbc5c8adffa509f",
+    "parent_ptx_sha256": "3da678adc63c955636ab363b489f8c3f43d15601f73ca661f4ae779bc8517b8e",
+    "repaired_shared_library_sha256": "cc4e745dfaffbcb1672118bc33b2c8795c438adba4d9bb8f3f220ed01ea3368c",
+    "repaired_ptx_sha256": "2b35a748f0653cc39145b418fe9087d4cd37e4750a596f95e27d2a7ea29871bf",
+    "repaired_kernel_ptx_sha256": "3a3aeb32abf9bc991a2997d14ed8eb2eb49a57b0838d2b062c1c24bdd3010351",
+    "workload": "one 2048-token prefill frontier plus one generated token through the Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "parent_control_profile": {
+      "csv_sha256": "48e71d2b4788df6fda46745fab597c9e1404efdedf35a282604b8d111a319519",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e5dd9360b5d9cc9e2dffbaae6a32bc91407287e1580454095d27b46e4f142bc3",
+      "prefill_tps": 216.02,
+      "decode_tps": 16.14,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.065,
+      "sort_ms": 4.294,
+      "gateup_ms": 1448.003,
+      "midq_ms": 8.901,
+      "down_ms": 860.999,
+      "sum_ms": 0.043,
+      "total_ms": 2325.307
+    },
+    "repaired_warmup_profile": {
+      "csv_sha256": "c06cc22991bf5ac71b355b76b8f5b7b1ce87ade3fc184414105a11f138c71e97",
+      "stderr_sha256": "e82e89f4d04401a6e28faba0079cbe1bfe4d6dde14ba761a234cd3573762853c",
+      "prefill_tps": 155.29,
+      "decode_tps": 16.22,
+      "gateup_ms": 1256.230,
+      "down_ms": 860.931,
+      "total_ms": 2133.443,
+      "decision": "not used for end-to-end attribution because its prefill throughput is a first-run outlier while its profiled phase aggregate agrees with the resident repeat"
+    },
+    "repaired_resident_repeat_profile": {
+      "csv_sha256": "0b8a91e8d7efa10e33e9a091d2b46a64dafe62628bb617f0f03a58b16fb3ed98",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "d970033c31a91159bcfe6aa23a3e81cf3cf35d55eb5da76d4f4425c2a39b2dec",
+      "prefill_tps": 222.92,
+      "decode_tps": 16.29,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.145,
+      "sort_ms": 4.368,
+      "gateup_ms": 1256.146,
+      "midq_ms": 8.880,
+      "down_ms": 860.939,
+      "sum_ms": 0.043,
+      "total_ms": 2133.521
+    },
+    "adjacent_attribution": {
+      "gateup_speedup_over_parent": 1.153,
+      "total_speedup_over_parent": 1.090,
+      "gateup_reduction_percent_over_parent": 13.25,
+      "total_reduction_percent_over_parent": 8.25,
+      "prefill_increase_percent_over_parent": 3.19,
+      "repaired_gateup_ratio_to_current_c": 2.43,
+      "repaired_down_ratio_to_current_c": 2.19,
+      "repaired_total_ratio_to_current_c": 2.31,
+      "remaining_primary_bottleneck": "cached-gateup-native-instruction-and-scheduling-gap"
+    },
+    "official_vector_probe": {
+      "summary_sha256": "b2aaa8af7f7d9e854179a85f72bb2fd774207ecb0bf8c76f5e40353ce837b331",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Continue reducing the remaining cached gate/up native instruction and scheduling gap; corrected routed-MoE total remains 2.31x current-C."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 274,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

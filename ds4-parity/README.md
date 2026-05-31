@@ -4431,6 +4431,20 @@ same-DSO B300 comparison lowers gate/up from `1462.508 ms` at explicit
 row-512 to `1447.708 ms` by default; PTX is unchanged, official-vector
 correctness is preserved, and the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA gate staged-pair scalar expansion performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_gate_staged_pair_scalar_expansion_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up kernel expands the fixed staged-pair entry dimension
+into named scalars. On B300, emitted PTX moves from `16` to `128` DP4A sites
+while local stores/loads drop from `36/8` to `0/0`; an adjacent parent versus
+candidate run lowers gate/up from `1448.003 ms` to `1256.146 ms` and total
+routed-MoE from `2325.307 ms` to `2133.521 ms`. Official-vector correctness
+is preserved, and the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

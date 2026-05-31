@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Rust CUDA cached routed-MoE gate multi-pair DP4A repair."""
+"""Validate the Rust CUDA cached-gate staged-pair scalar expansion repair."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from typing import Any, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
+MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
-FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE.lower()}/rust-cuda-moe-gate-multi-pair-dp4a-performance-repair.json"
+FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE.lower()}/rust-cuda-gate-staged-pair-scalar-expansion-performance-repair.json"
 
 
 @dataclass
@@ -56,7 +56,7 @@ def main(argv: Iterable[str]) -> int:
     if args.negative_test:
         run_negative_tests(report, fixture, texts)
     state = "PASS" if report.ok else "FAIL"
-    print(f"{MILESTONE} Rust CUDA MoE gate multi-pair DP4A repair: {state} ({report.checks} checks)")
+    print(f"{MILESTONE} Rust CUDA gate staged-pair scalar expansion repair: {state} ({report.checks} checks)")
     for error in report.errors:
         print(f"- {error}", file=sys.stderr)
     return 0 if report.ok else 1
@@ -64,47 +64,58 @@ def main(argv: Iterable[str]) -> int:
 
 def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     report.check(
-        fixture.get("schema") == "ds4.cuda_rust_moe_gate_multi_pair_dp4a_performance_repair.v1",
+        fixture.get("schema") == "ds4.cuda_rust_gate_staged_pair_scalar_expansion_performance_repair.v1",
         "schema drift",
     )
     report.check(fixture.get("milestone") == MILESTONE, "milestone drift")
-    report.check(fixture.get("status") == "b300-pass-gateup-accelerated-down-open", "status drift")
+    report.check(
+        fixture.get("status") == "b300-pass-rust-gate-staged-pair-scalar-expansion-route-blocked",
+        "status drift",
+    )
     ownership = require_dict(report, fixture.get("ownership"), "ownership")
     for key, expected in [
-        ("changes_cached_gate_kernel_math", True),
-        ("adds_multi_pair_iq2_dp4a", True),
-        ("reuses_weight_decode_across_pairs", True),
-        ("changes_cached_down_kernel_math", False),
-        ("changes_default_dispatch", False),
+        ("changes_cached_gate_kernel_body", True),
+        ("expands_staged_pair_entry_dimension", True),
+        ("uses_named_scalar_accumulators", True),
+        ("retains_iq2_weight_arithmetic", True),
+        ("retains_cached_down_kernel", True),
+        ("retains_rowspan_policy", True),
+        ("changes_default_current_c_route", False),
         ("official_vector_gate_preserved", True),
         ("runtime_route_promoted", False),
-        ("default_current_c_route_preserved", True),
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
-    validate_implementation(report, texts["kernels"])
+    validate_implementation(report, fixture, texts["kernels"])
     validate_execution(report, fixture)
     validate_wiring(report, fixture, texts)
 
 
-def validate_implementation(report: Report, kernels: str) -> None:
-    gate = kernels.split("pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(", 1)[1].split(
-        "pub fn abi_moe_atomic_output_zero_kernel(", 1
-    )[0]
-    gate_accumulators_present = "let mut gate = [0.0_f32; 8];" in gate or all(
-        f"let mut gate{entry} = 0.0_f32;" in gate for entry in range(8)
-    )
-    up_accumulators_present = "let mut up = [0.0_f32; 8];" in gate or all(
-        f"let mut up{entry} = 0.0_f32;" in gate for entry in range(8)
-    )
-    report.check(gate_accumulators_present, "gate multi-pair accumulators missing")
-    report.check(up_accumulators_present, "up multi-pair accumulators missing")
-    report.check(gate.count("integer::dp4a_i8(") in (4, 16), "gate/up DP4A call layout drift")
-    report.check(
-        "fn abi_moe_iq2_signed_word" in kernels or "macro_rules! abi_moe_iq2_signed_word" in kernels,
-        "IQ2 packed sign computation missing",
-    )
-    report.check("fn abi_moe_cached_q8_word" in kernels, "cached q8 word helper missing")
-    report.check("fn abi_moe_iq2_q8_k_cached_dot(" not in kernels, "scalar cached IQ2 helper retained")
+def validate_implementation(report: Report, fixture: dict[str, Any], kernels: str) -> None:
+    implementation = require_dict(report, fixture.get("implementation"), "implementation")
+    gate = kernels.split("pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel", 1)[1]
+    gate = gate.split("pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel", 1)[0]
+    for key, expected in [
+        ("source", "rust/ds4-cuda/src/abi_kernels.rs"),
+        ("kernel", "abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel"),
+        ("parent_dp4a_sites", 16),
+        ("repaired_dp4a_sites", 128),
+        ("parent_local_store_sites", 36),
+        ("parent_local_load_sites", 8),
+        ("repaired_local_store_sites", 0),
+        ("repaired_local_load_sites", 0),
+    ]:
+        report.check(implementation.get(key) == expected, f"implementation evidence drift: {key}")
+    report.check("let mut gate = [0.0_f32; 8];" not in gate, "gate array retained in repaired kernel")
+    report.check("let mut up = [0.0_f32; 8];" not in gate, "up array retained in repaired kernel")
+    report.check("let mut block_sums = [0_i32; 8];" not in gate, "block-sum array retained in repaired kernel")
+    for entry in range(8):
+        report.check(f"let mut gate{entry} = 0.0_f32;" in gate, f"gate scalar missing: {entry}")
+        report.check(f"let mut up{entry} = 0.0_f32;" in gate, f"up scalar missing: {entry}")
+        report.check(
+            gate.count(f"accumulate_entry!({entry}, block_sum{entry});") == 2,
+            f"staged-pair expansion missing: {entry}",
+        )
+        report.check(f"emit_entry!({entry}, gate{entry}, up{entry});" in gate, f"output scalar missing: {entry}")
 
 
 def validate_execution(report: Report, fixture: dict[str, Any]) -> None:
@@ -114,43 +125,45 @@ def validate_execution(report: Report, fixture: dict[str, Any]) -> None:
         ("kube_context", "hou2-prod1"),
         ("pod", "ds4-rust-port-b300"),
         ("device_name", "NVIDIA B300 SXM6 AC"),
-        ("repaired_profiled_shared_library_sha256", "926e67cb31746f434b994c020dfeaab9e1d124194d80bf371b599df832aaf032"),
+        ("parent_shared_library_sha256", "0f835118466070058b1aaf1488262ba8121af707e272ac61ecbc5c8adffa509f"),
+        ("parent_ptx_sha256", "3da678adc63c955636ab363b489f8c3f43d15601f73ca661f4ae779bc8517b8e"),
+        ("repaired_shared_library_sha256", "cc4e745dfaffbcb1672118bc33b2c8795c438adba4d9bb8f3f220ed01ea3368c"),
+        ("repaired_ptx_sha256", "2b35a748f0653cc39145b418fe9087d4cd37e4750a596f95e27d2a7ea29871bf"),
         ("gpu_utilization_percent_after_each_completed_probe", 0),
         ("gpu_memory_mib_after_each_completed_probe", 0),
     ]:
         report.check(execution.get(key) == expected, f"B300 evidence drift: {key}")
-    parent = require_dict(report, execution.get("parent_rust_profile"), "parent profile")
-    repaired = require_dict(report, execution.get("repaired_rust_profile"), "repaired profile")
-    current_c = require_dict(report, execution.get("current_c_reference"), "current-C reference")
-    attribution = require_dict(report, execution.get("attribution"), "attribution")
-    for profile, label, gateup, down, total in [
-        (parent, "parent", 8217.639, 3998.630, 12232.557),
-        (repaired, "repaired", 2792.292, 3993.670, 6802.279),
-        (current_c, "current-C", 517.818, 393.200, 924.283),
+    parent = require_dict(report, execution.get("parent_control_profile"), "parent profile")
+    repaired = require_dict(report, execution.get("repaired_resident_repeat_profile"), "repaired profile")
+    for profile, label, gateup, total in [
+        (parent, "parent", 1448.003, 2325.307),
+        (repaired, "repaired", 1256.146, 2133.521),
     ]:
         report.check(profile.get("gateup_ms") == gateup, f"{label} gate/up drift")
-        report.check(profile.get("down_ms") == down, f"{label} down drift")
         report.check(profile.get("total_ms") == total, f"{label} total drift")
+    attribution = require_dict(report, execution.get("adjacent_attribution"), "attribution")
     for key, expected in [
-        ("gateup_speedup_over_parent", 2.94),
-        ("total_speedup_over_parent", 1.80),
-        ("prefill_gain_percent_over_parent", 57.9),
-        ("repaired_down_ratio_to_current_c", 10.16),
-        ("remaining_primary_bottleneck", "cached-down-q2-multi-pair-dot"),
+        ("gateup_speedup_over_parent", 1.153),
+        ("total_speedup_over_parent", 1.090),
+        ("gateup_reduction_percent_over_parent", 13.25),
+        ("total_reduction_percent_over_parent", 8.25),
+        ("prefill_increase_percent_over_parent", 3.19),
+        ("repaired_total_ratio_to_current_c", 2.31),
     ]:
         report.check(attribution.get(key) == expected, f"attribution drift: {key}")
-    rejected = require_dict(report, execution.get("rejected_probes"), "rejected probes")
-    report.check(rejected.get("per_pair_dp4a_total_ms") == 13489.699, "rejected per-pair probe drift")
-    report.check("sm_100a is not a recognized" in rejected.get("sm_100a_target_build", ""), "target blocker missing")
     official = require_dict(report, execution.get("official_vector_probe"), "official vectors")
+    report.check(
+        official.get("summary_sha256") == "b2aaa8af7f7d9e854179a85f72bb2fd774207ecb0bf8c76f5e40353ce837b331",
+        "official summary hash drift",
+    )
     report.check(official.get("comparator_check_count") == 1958, "official check-count drift")
     report.check(official.get("negative_check_count") == 8, "official negative-count drift")
     report.check(official.get("passed") is True, "official pass missing")
 
 
 def validate_wiring(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
-    item = f"{MILESTONE}: Rust CUDA Multi-Pair Gate DP4A Performance Repair"
-    checker = "check_cuda_rust_moe_gate_multi_pair_dp4a_performance_repair.py"
+    item = f"{MILESTONE}: Rust CUDA Gate Staged-Pair Scalar Expansion Performance Repair"
+    checker = "check_cuda_rust_gate_staged_pair_scalar_expansion_performance_repair.py"
     for target, label in [("roadmap", "roadmap"), ("todo", "TODO"), ("status", "status")]:
         report.check(item in texts[target], f"{label} item missing")
     report.check(checker in texts["readme"], "README wiring missing")
@@ -160,22 +173,22 @@ def validate_wiring(report: Report, fixture: dict[str, Any], texts: dict[str, st
     decision = require_dict(report, fixture.get("decision"), "decision")
     report.check(decision.get("default_route") == "retain-current-c", "default route drift")
     report.check(decision.get("rust_cuda_dso_promotion") == "blocked", "promotion drift")
-    report.check("cached down Q2" in decision.get("next_scoped_repair", ""), "next repair missing")
     validation = require_dict(report, fixture.get("validation"), "validation")
     report.check(validation.get("local_ds4_cuda_library_test_count") == 169, "local test-count drift")
     report.check(validation.get("b300_feature_release_test_count") == 176, "B300 test-count drift")
-    report.check(validation.get("unified_report_passed") == 267, "unified pass-count drift")
-    report.check(validation.get("unified_report_skipped") == 45, "unified skip-count drift")
+    report.check(validation.get("unified_report_passed") == 274, "unified pass-count drift")
+    report.check(validation.get("unified_report_skipped") == 50, "unified skip-count drift")
     report.check(validation.get("unified_report_failed") == 0, "unified failure-count drift")
     review = require_dict(report, fixture.get("review"), "review")
-    report.check(review.get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "pre-review missing")
+    report.check(review.get("pre_implementation") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "pre-implementation review missing")
     report.check(review.get("final") == "CLAUDE_REVIEW_TIMEOUT_AFTER_60S", "final review missing")
 
 
 def run_negative_tests(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> None:
     for label, mutate in [
-        ("lost speedup", lambda value: value["b300_execution"]["repaired_rust_profile"].update({"gateup_ms": 8217.639})),
-        ("down overclaim", lambda value: value["ownership"].update({"changes_cached_down_kernel_math": True})),
+        ("lost DP4A exposure", lambda value: value["implementation"].update({"repaired_dp4a_sites": 16})),
+        ("lost local-memory reduction", lambda value: value["implementation"].update({"repaired_local_store_sites": 36})),
+        ("lost speedup", lambda value: value["b300_execution"]["repaired_resident_repeat_profile"].update({"gateup_ms": 1448.003})),
         ("promotion overclaim", lambda value: value["decision"].update({"rust_cuda_dso_promotion": "passed"})),
         ("official mismatch", lambda value: value["b300_execution"]["official_vector_probe"].update({"passed": False})),
     ]:

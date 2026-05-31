@@ -12791,3 +12791,31 @@
     review attempts and final review returned
     `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains `2.52x`
     current-C, so default routing and promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Staged-Pair Scalar Expansion Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE gate/up overhead by expanding the
+  fixed staged-pair entry dimension into named scalar accumulators.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-gate-staged-pair-scalar-expansion-performance-repair.json`
+- Evidence:
+  - Only the cached gate/up kernel body changes; corrected down arithmetic,
+    row-span policy, the benchmark executable, and default current-C routing
+    remain unchanged.
+  - Named scalar gate/up and per-block accumulators allow emitted PTX to
+    expose `128` DP4A sites instead of `16` while reducing local
+    stores/loads from `36/8` to `0/0`.
+  - An adjacent B300 parent/candidate comparison lowers gate/up from
+    `1448.003 ms` to `1256.146 ms` and total routed-MoE from `2325.307 ms`
+    to `2133.521 ms`; prefill rises from `216.02` to `222.92 tok/s`.
+  - The retained DSO SHA-256 is
+    `cc4e745dfaffbcb1672118bc33b2c8795c438adba4d9bb8f3f220ed01ea3368c`
+    and PTX SHA-256 is
+    `2b35a748f0653cc39145b418fe9087d4cd37e4750a596f95e27d2a7ea29871bf`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `274`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `2.31x` current-C, so default routing and
+    promotion blockers remain in force.
