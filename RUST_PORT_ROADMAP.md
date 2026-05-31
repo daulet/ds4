@@ -13490,6 +13490,37 @@ Stage split:
     Total routed-MoE remains `2.66x` current-C, so default current-C routing
     and promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Row-Span Default Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE gate/up overhead by making the
+  measured row-512 launch policy the no-override choice on the opt-in Rust
+  route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-gate-rowspan-default-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_gate_rowspan_default_performance_repair.py --negative-test`.
+- Evidence:
+  - Only the Rust DSO host-dispatch no-override `gate_row_span` selection
+    changes from `1024` to `512`; the existing explicit row-512/row-2048
+    controls, cached kernels, benchmark executable, and default current-C
+    route remain unchanged.
+  - On the committed parent DSO, two explicit row-512 probes reduce gate/up
+    to `1483.300 ms` and `1482.803 ms`, while a row-2048 probe regresses it
+    to `1678.049 ms`; the committed no-override row-1024 result is
+    `1533.245 ms`.
+  - The rebuilt no-override candidate records `1482.510 ms` gate/up and
+    `2408.000 ms` total routed-MoE versus `1533.245 ms` and `2454.643 ms`
+    for the parent default, reductions of `3.31%` and `1.90%`.
+  - The candidate DSO SHA-256 is
+    `f198f32a20679409416b929dedc4fa0a4c10688b6a34788604a390bbcd7e8673`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The pre-implementation and final Claude
+    review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The
+    unified report passes with `269` passed, `50` skipped, and `0` failed.
+    Total routed-MoE remains `2.61x` current-C, so default current-C routing
+    and promotion blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

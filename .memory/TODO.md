@@ -12649,3 +12649,30 @@
     Claude review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
     Total routed-MoE remains `2.66x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Row-Span Default Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE gate/up overhead by changing the
+  no-override row-span choice on the opt-in Rust route from `1024` to the
+  measured row-512 policy.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-gate-rowspan-default-performance-repair.json`
+- Evidence:
+  - Only `gate_row_span` selection in `rust/ds4-cuda/src/abi.rs` changes;
+    kernel arithmetic, the already-linked benchmark executable, explicit
+    row-512/row-2048 controls, and default current-C routing are retained.
+  - Parent-DSO override probes select row-512 twice at `1483.300 ms` and
+    `1482.803 ms` gate/up, while row-2048 regresses to `1678.049 ms`; the
+    parent no-override row-1024 result is `1533.245 ms`.
+  - The rebuilt candidate defaults to row-512 and records `1482.510 ms`
+    gate/up and `2408.000 ms` total versus `1533.245 ms` and `2454.643 ms`
+    for the parent default.
+  - The candidate DSO SHA-256 is
+    `f198f32a20679409416b929dedc4fa0a4c10688b6a34788604a390bbcd7e8673`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. Pre-implementation and final Claude
+    review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The
+    unified report passes with `269` passed, `50` skipped, and `0` failed.
+    Total routed-MoE remains `2.61x` current-C, so default routing and
+    promotion blockers remain in force.

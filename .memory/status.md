@@ -4,6 +4,22 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Row-Span Default Performance Repair
+  is validated on B300. Only the opt-in Rust DSO host-dispatch
+  `gate_row_span` no-override choice changes from `1024` to `512`; explicit
+  row-512/row-2048 controls, cached kernels, the benchmark executable, and
+  default current-C routing remain unchanged. On the parent DSO, explicit
+  row-512 probes record `1483.300 ms` and `1482.803 ms` gate/up while
+  row-2048 regresses to `1678.049 ms`; the parent no-override result is
+  `1533.245 ms`. The rebuilt no-override candidate records `1482.510 ms`
+  gate/up and `2408.000 ms` total versus parent `1533.245 ms` and
+  `2454.643 ms`; its DSO SHA-256 is
+  `f198f32a20679409416b929dedc4fa0a4c10688b6a34788604a390bbcd7e8673`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. Pre-implementation and final Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The unified
+  report passes with `269` passed, `50` skipped, and `0` failed. Routed-MoE
+  remains `2.61x` current-C, so promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Q2-Group Expansion Performance Repair
   is validated on B300. The cached down kernel now expands its four Q2
   group steps within each existing ordered chunk while preserving the

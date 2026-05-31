@@ -4367,6 +4367,18 @@ traffic grows only from `51/6` to `54/9`. Adjacent B300 runs lower down from
 `1116.221 ms` to `905.109 ms`; official-vector correctness is preserved and
 the graph route remains current-C.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA gate row-span default performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_gate_rowspan_default_performance_repair.py --negative-test
+```
+
+The opt-in Rust DSO now selects the measured row-512 cached gate policy when
+no gate-rowspan override is present. B300 no-override measurement lowers
+gate/up from `1533.245 ms` to `1482.510 ms`; official-vector correctness is
+preserved and the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
