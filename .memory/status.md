@@ -4,6 +4,23 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Row-Span Default Performance Repair
+  is validated on B300. Only the opt-in Rust DSO host-dispatch
+  `down_row_span` no-override choice changes from `2048` to `512`; the
+  formerly fallback-backed explicit row-2048 selection now has its own
+  branch. Kernels, gate policy, the benchmark executable, and default
+  current-C routing remain unchanged. On the parent DSO, explicit row-512
+  probes record `839.498 ms` and `838.727 ms` down while row-1024 records
+  `858.887 ms`; the parent no-override result is `908.823 ms`. The rebuilt
+  no-override candidate records `839.144 ms` down and `2337.688 ms` total
+  versus parent `908.823 ms` and `2408.000 ms`; explicit row-2048 records
+  `907.456 ms` down. Its DSO SHA-256 is
+  `2276b1a9975548255d487aa0c9c3c8d28e143c2182b87944a3aab269b26d6099`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. Pre-implementation and final Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The unified
+  report passes with `270` passed, `50` skipped, and `0` failed. Routed-MoE
+  remains `2.53x` current-C, so promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Row-Span Default Performance Repair
   is validated on B300. Only the opt-in Rust DSO host-dispatch
   `gate_row_span` no-override choice changes from `1024` to `512`; explicit

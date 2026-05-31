@@ -12676,3 +12676,31 @@
     unified report passes with `269` passed, `50` skipped, and `0` failed.
     Total routed-MoE remains `2.61x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Row-Span Default Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE down overhead by changing the
+  no-override row-span choice on the opt-in Rust route from `2048` to the
+  measured row-512 policy.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-rowspan-default-performance-repair.json`
+- Evidence:
+  - Only `down_row_span` selection in `rust/ds4-cuda/src/abi.rs` changes;
+    the row-2048 environment control now has an explicit branch so the
+    previous launch policy remains selectable. Kernels, gate policy, the
+    benchmark executable, and default current-C routing are retained.
+  - Parent-DSO override probes select row-512 twice at `839.498 ms` and
+    `838.727 ms` down, while row-1024 records `858.887 ms`; the parent
+    no-override row-2048 result is `908.823 ms`.
+  - The rebuilt candidate defaults to row-512 and records `839.144 ms` down
+    and `2337.688 ms` total versus `908.823 ms` and `2408.000 ms` for the
+    parent default. The explicit row-2048 probe records `907.456 ms` down.
+  - The candidate DSO SHA-256 is
+    `2276b1a9975548255d487aa0c9c3c8d28e143c2182b87944a3aab269b26d6099`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. Pre-implementation and final Claude
+    review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The
+    unified report passes with `270` passed, `50` skipped, and `0` failed.
+    Total routed-MoE remains `2.53x` current-C, so default routing and
+    promotion blockers remain in force.

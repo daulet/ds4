@@ -1,0 +1,151 @@
+{
+  "schema": "ds4.cuda_rust_down_rowspan_default_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-opt-in-rust-down-rowspan-default-route-blocked",
+  "goal": "Reduce cached Rust CUDA routed-MoE down overhead by selecting the measured row-512 launch policy when the opt-in Rust route has no down-rowspan override.",
+  "ownership": {
+    "changes_opt_in_rust_down_rowspan_default": true,
+    "selects_row512_without_override": true,
+    "retains_explicit_row512_control": true,
+    "retains_explicit_row1024_control": true,
+    "makes_existing_row2048_control_explicit": true,
+    "changes_cuda_kernel_body": false,
+    "changes_default_current_c_route": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi.rs",
+    "policy_expression": "down_row_span",
+    "parent_no_override_row_span": 2048,
+    "repaired_no_override_row_span": 512,
+    "explicit_controls_retained": [
+      "DS4_CUDA_MOE_DOWN_ROW512",
+      "DS4_CUDA_MOE_DOWN_ROW1024",
+      "DS4_CUDA_MOE_DOWN_ROW2048"
+    ],
+    "row2048_preservation_reason": "row-2048 previously relied on the fallback value and requires an explicit branch when the fallback changes to row-512",
+    "retained_gate_no_override_row_span": 512,
+    "cuda_kernel_source_changed": false,
+    "scope_boundary": "only opt-in Rust DSO down-rowspan policy changes; kernel arithmetic, engine binary, gate policy, and current-C default routing remain unchanged"
+  },
+  "b300_execution": {
+    "date_utc": "2026-05-31",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "node": "c1v17-b300n1-nic1",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "candidate_benchmark_binary_sha256": "908f184bf5175d6dc84105a571d6fc7f33c109006c6108e8f3625555186cd9ae",
+    "parent_profiled_shared_library_sha256": "f198f32a20679409416b929dedc4fa0a4c10688b6a34788604a390bbcd7e8673",
+    "repaired_profiled_shared_library_sha256": "2276b1a9975548255d487aa0c9c3c8d28e143c2182b87944a3aab269b26d6099",
+    "workload": "one 2048-token prefill frontier plus one generated token through the Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "parent_default_profile": {
+      "row_span": 2048,
+      "csv_sha256": "3e4afa666dc121d42e640e745c32d633987bc108d82b6fb023f38583a6480ee1",
+      "stderr_sha256": "38360a2ce0e0dad44717b2819ce819dc2f4aa9a05ca5ba3eb94b695fb0468f2b",
+      "prefill_tps": 212.77,
+      "decode_tps": 16.26,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.145,
+      "sort_ms": 4.566,
+      "gateup_ms": 1482.510,
+      "midq_ms": 8.904,
+      "down_ms": 908.823,
+      "sum_ms": 0.043,
+      "total_ms": 2408.000
+    },
+    "parent_row512_override_profiles": [
+      {
+        "csv_sha256": "7681dd6d7912338109fcb4ff17f713f9f8e3c8d71823a8f499b954b1248e21b3",
+        "stderr_sha256": "ee3e2f599980d6a3008420172766fabc27104a2ed5543763fd42da4db1218854",
+        "gateup_ms": 1482.426,
+        "down_ms": 839.498,
+        "total_ms": 2338.179
+      },
+      {
+        "csv_sha256": "ffb6a6af1a6105fa83c86be0619289854814e308b92fec32b9af5fe52a4445da",
+        "stderr_sha256": "99a4303d01c3a738a9cbb8291a8d697a545b1f56e679e41d2c1fa1d2539b27ea",
+        "gateup_ms": 1482.749,
+        "down_ms": 838.727,
+        "total_ms": 2337.745
+      }
+    ],
+    "parent_row1024_probe": {
+      "csv_sha256": "e447ae39ba70d08dce217ec55f7a34f24087a6d294c0b560738706c831daec6c",
+      "stderr_sha256": "3e251cc520f0cfbf309e6de5a52d37feccf99d71259e8144ca9ba4e6b863f9e4",
+      "gateup_ms": 1482.711,
+      "down_ms": 858.887,
+      "total_ms": 2357.958,
+      "decision": "not retained because row-512 is consistently faster for cached down and total routed-MoE"
+    },
+    "repaired_default_profile": {
+      "row_span": 512,
+      "csv_sha256": "75c52ce2100d67ac12cff781b5ae0ece4bb4a39eede38e4f56f8e334b47bfaf2",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "804bfafabb77f57f11bad08d7c43f23815d09b8972b797f243ddd5980eb13ef9",
+      "prefill_tps": 217.56,
+      "decode_tps": 16.20,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.095,
+      "sort_ms": 4.306,
+      "gateup_ms": 1482.196,
+      "midq_ms": 8.901,
+      "down_ms": 839.144,
+      "sum_ms": 0.043,
+      "total_ms": 2337.688
+    },
+    "repaired_explicit_row2048_profile": {
+      "row_span": 2048,
+      "csv_sha256": "c8c50df3d5ed734e1740c98122efef94a6980e867d1b5a4d12c5ee268673cdd2",
+      "stderr_sha256": "c55612c3e24be6ec0376dbd2dd8ae53cfd651b4cd66780a7a59b9c6d48310763",
+      "gateup_ms": 1482.150,
+      "down_ms": 907.456,
+      "total_ms": 2405.914,
+      "decision": "retained as an explicit override reproducing the prior row-2048 policy after the fallback changes"
+    },
+    "current_c_reference": {
+      "source_fixture": "ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-moe-phase-profile-parity.json",
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "down_speedup_over_parent_default": 1.083,
+      "total_speedup_over_parent_default": 1.030,
+      "down_reduction_percent_over_parent_default": 7.67,
+      "total_reduction_percent_over_parent_default": 2.92,
+      "repaired_gateup_ratio_to_current_c": 2.86,
+      "repaired_down_ratio_to_current_c": 2.13,
+      "repaired_total_ratio_to_current_c": 2.53,
+      "remaining_primary_bottleneck": "cached-gateup-and-down-native-codegen-gap"
+    },
+    "official_vector_probe": {
+      "summary_sha256": "19b07084fcb75e10acd345c8ead79ae28aa50911ea3fcb4f0b4715c457435ab9",
+      "stdout_sha256": "c5d015f9da7baf94515c74eb03ea30356682d2dbfeab7bb3e03f2145ec6a508f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Investigate the remaining roughly 2.5x routed-MoE native-codegen gap before route promotion."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 270,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

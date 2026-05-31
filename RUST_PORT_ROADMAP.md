@@ -13521,6 +13521,38 @@ Stage split:
     Total routed-MoE remains `2.61x` current-C, so default current-C routing
     and promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Row-Span Default Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE down overhead by making the
+  measured row-512 launch policy the no-override choice on the opt-in Rust
+  route.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-rowspan-default-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_down_rowspan_default_performance_repair.py --negative-test`.
+- Evidence:
+  - Only the Rust DSO host-dispatch no-override `down_row_span` choice
+    changes from `2048` to `512`; the formerly fallback-backed explicit
+    row-2048 control is now preserved by its own branch. Kernels, gate
+    policy, the benchmark executable, and default current-C routing remain
+    unchanged.
+  - On the committed parent DSO, two explicit row-512 probes reduce down to
+    `839.498 ms` and `838.727 ms`, while row-1024 records `858.887 ms`; the
+    committed no-override row-2048 result is `908.823 ms`.
+  - The rebuilt no-override candidate records `839.144 ms` down and
+    `2337.688 ms` total routed-MoE versus `908.823 ms` and `2408.000 ms`
+    for the parent default, reductions of `7.67%` and `2.92%`. Its explicit
+    row-2048 probe records `907.456 ms` down, preserving the old selection.
+  - The candidate DSO SHA-256 is
+    `2276b1a9975548255d487aa0c9c3c8d28e143c2182b87944a3aab269b26d6099`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. Pre-implementation and final Claude
+    review attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. The
+    unified report passes with `270` passed, `50` skipped, and `0` failed.
+    Total routed-MoE remains `2.53x` current-C, so default current-C routing
+    and promotion blockers remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

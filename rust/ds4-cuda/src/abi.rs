@@ -8071,8 +8071,14 @@ pub unsafe extern "C" fn ds4_gpu_routed_moe_batch_tensor(
                                             .is_some()
                                             {
                                                 1024
-                                            } else {
+                                            } else if std::env::var_os(
+                                                "DS4_CUDA_MOE_DOWN_ROW2048",
+                                            )
+                                            .is_some()
+                                            {
                                                 2048
+                                            } else {
+                                                512
                                             };
                                             let use_down_rowspan = use_atomic_down
                                                 && expert_tile_m == 8

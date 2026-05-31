@@ -4379,6 +4379,19 @@ no gate-rowspan override is present. B300 no-override measurement lowers
 gate/up from `1533.245 ms` to `1482.510 ms`; official-vector correctness is
 preserved and the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA down row-span default performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_down_rowspan_default_performance_repair.py --negative-test
+```
+
+The opt-in Rust DSO now selects the measured row-512 cached down policy when
+no down-rowspan override is present, while preserving explicit row-2048
+selection. B300 no-override measurement lowers down from `908.823 ms` to
+`839.144 ms`; official-vector correctness is preserved and the default
+current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
