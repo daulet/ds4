@@ -2375,6 +2375,84 @@ mod kernels {
 
     #[allow(clippy::too_many_arguments)]
     #[kernel]
+    pub fn abi_moe_down_expert_tile16_rowspan_kernel(
+        midq_blocks: u32,
+        out_dim: u32,
+        n_expert: u32,
+        row_span: u32,
+        atomic_out: u32,
+        down_expert_bytes: u64,
+        down_row_bytes: u64,
+        down_weights: &[u8],
+        midq: &[u8],
+        sorted_pairs: &[u32],
+        offsets: &[u32],
+        counts: &[u32],
+        tile_total: &[u32],
+        tile_experts: &[u32],
+        tile_starts: &[u32],
+        mut down_out: DisjointSlice<f32>,
+    ) {
+        let tile = thread::blockIdx_y();
+        if tile >= tile_total[0] {
+            return;
+        }
+        let expert = tile_experts[tile as usize];
+        let local_start = tile_starts[tile as usize];
+        if local_start & 8 != 0 {
+            return;
+        }
+        let lane = thread::threadIdx_x() & 7;
+        let row_lane = thread::threadIdx_x() >> 3;
+        let mut row_offset = 0_u32;
+        while row_offset < row_span {
+            let row = thread::blockIdx_x() * row_span + row_lane + row_offset;
+            if row < out_dim {
+                let row_base =
+                    u64::from(expert) * down_expert_bytes + u64::from(row) * down_row_bytes;
+                let mut entry = 0_u32;
+                while entry < 16 {
+                    let local_pair = local_start + entry;
+                    if local_pair < counts[expert as usize] {
+                        let pair = sorted_pairs[(offsets[expert as usize] + local_pair) as usize];
+                        let mut accumulator = 0.0_f32;
+                        let mut block = lane;
+                        while block < midq_blocks {
+                            accumulator += abi_moe_q2_q8_k_dot(
+                                down_weights,
+                                (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize,
+                                midq,
+                                (u64::from(pair) * u64::from(midq_blocks) + u64::from(block))
+                                    as usize,
+                            );
+                            block += 8;
+                        }
+                        accumulator = abi_moe_quarter_warp_sum(accumulator);
+                        if lane == 0 {
+                            if atomic_out != 0 {
+                                let token = pair / n_expert;
+                                let output = (token * out_dim + row) as usize;
+                                let cell = unsafe {
+                                    &*(down_out.as_mut_ptr().add(output) as *const DeviceAtomicF32)
+                                };
+                                cell.fetch_add(accumulator, AtomicOrdering::Relaxed);
+                            } else {
+                                unsafe {
+                                    *down_out.get_unchecked_mut((pair * out_dim + row) as usize) =
+                                        accumulator;
+                                }
+                            }
+                        }
+                    }
+                    entry += 1;
+                }
+            }
+            row_offset += 32;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[kernel]
     pub fn abi_moe_gate_up_mid_f32_kernel(
         expert_in_dim: u32,
         expert_mid_dim: u32,
@@ -5813,6 +5891,8 @@ pub(crate) struct AbiKernelModule {
     #[allow(dead_code)]
     moe_down_expert_tile16_row32_kernel: CudaFunction,
     #[allow(dead_code)]
+    moe_down_expert_tile16_rowspan_kernel: CudaFunction,
+    #[allow(dead_code)]
     moe_gate_up_mid_sorted_qwarp32_kernel: CudaFunction,
     #[allow(dead_code)]
     moe_gate_up_mid_sorted_p2_qwarp32_kernel: CudaFunction,
@@ -5991,6 +6071,9 @@ impl AbiKernelModule {
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_down_expert_tile16_row32_kernel: module
                 .load_function("abi_moe_down_expert_tile16_row32_kernel")
+                .map_err(AbiKernelLoadError::Driver)?,
+            moe_down_expert_tile16_rowspan_kernel: module
+                .load_function("abi_moe_down_expert_tile16_rowspan_kernel")
                 .map_err(AbiKernelLoadError::Driver)?,
             moe_gate_up_mid_sorted_qwarp32_kernel: module
                 .load_function("abi_moe_gate_up_mid_sorted_qwarp32_kernel")

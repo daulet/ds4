@@ -3,7 +3,20 @@
 - Date: 2026-05-31 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
-- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Remaining Graph Compute And Route Promotion Policy
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Down Rowspan Routed MoE ABI Module
+  is validated on B300. The retained Rust CUDA ABI module now embeds one
+  tile16 atomic down row-span functional projection entry for the current
+  row512, row1024, and row2048 route surface while preserving the tile-start
+  alignment guard and token-indexed atomic accumulation branch. The rebuilt
+  static library still exposes 74 Rust ABI symbols, now embeds 89 kernels,
+  and links/runs the existing C-linked public single-token consumer while
+  loading the enlarged module. Local tests pass with 160 tests; B300 feature
+  tests pass with 167 tests; all 74 CUDA ABI comparators pass; and the
+  unified report passes with 247 passed, 45 skipped, and 0 failed. The
+  pre-implementation and final pass-end non-interactive Claude review
+  attempts each returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Shared-cache
+  specialization and public batched routed-MoE ownership remain deferred.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Embedded Gate Rowspan Routed MoE ABI Module
   is validated on B300. The retained Rust CUDA ABI module now embeds one
   tile8 gate row-span functional projection entry for the current row512,

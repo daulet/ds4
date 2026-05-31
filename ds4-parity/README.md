@@ -4020,6 +4020,20 @@ regression consumer proves that the 88-entry module loads without expanding
 the public Rust ABI. Tile16 down row-span dispatch, shared-cache
 specialization, and the public batched wrapper remain pending.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA embedded down row-span routed-MoE ABI module:
+
+```sh
+python3 ds4-parity/check_cuda_abi_routed_moe_down_rowspan_module_smoke.py --negative-test
+```
+
+The retained module now embeds the previously measured functional tile16
+atomic down row-span entry over row512, row1024, and row2048 scheduling while
+preserving its alignment guard and token-indexed accumulation behavior. A
+C-linked B300 public single-token regression consumer proves that the 89-entry
+module loads without expanding the public Rust ABI. Shared-cache
+specialization and the public batched wrapper remain pending.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
