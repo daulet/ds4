@@ -4132,20 +4132,13 @@ mod kernels {
     }
 
     fn abi_moe_iq2_signed_word(grid: u64, signs: u8, lane: u32) -> i32 {
-        let mut word = 0_u32;
-        let mut element = 0_u32;
-        while element < 4 {
-            let source_lane = lane + element;
-            let value = ((grid >> (8 * source_lane)) & 0xff) as i32;
-            let signed = if signs & (1_u8 << source_lane) != 0 {
-                -value
-            } else {
-                value
-            };
-            word |= (signed as i8 as u8 as u32) << (8 * element);
-            element += 1;
-        }
-        word as i32
+        let bits = (signs >> lane) as u32;
+        let mask = (0_u32.wrapping_sub(bits & 1) & 0x0000_00ff)
+            | (0_u32.wrapping_sub((bits >> 1) & 1) & 0x0000_ff00)
+            | (0_u32.wrapping_sub((bits >> 2) & 1) & 0x00ff_0000)
+            | (0_u32.wrapping_sub((bits >> 3) & 1) & 0xff00_0000);
+        let values = (grid >> (8 * lane)) as u32;
+        ((values ^ mask).wrapping_add(mask & 0x0101_0101)) as i32
     }
 
     fn abi_moe_cached_q8_bsum(q8: *const u8, block: usize, index: usize) -> i32 {

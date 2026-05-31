@@ -13349,6 +13349,35 @@ Stage split:
     current-C `517.818 ms`, so default current-C routing and promotion
     blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Branchless IQ2 Signed-Word Performance Repair
+
+- Status: done.
+- Goal: reduce the residual cached Rust CUDA gate/up gap by replacing
+  per-byte conditional IQ2 signed-word construction with a proven-equivalent
+  branchless packed transform.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-branchless-iq2-signed-word-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_branchless_iq2_signed_word_performance_repair.py --negative-test`.
+- Evidence:
+  - Current-C creates IQ2 signed words with `__vcmpne4`/`__vsub4`, but the
+    pinned cuda-oxide integer API exposes `dp4a_i8` only. The Rust helper now
+    creates byte masks and applies packed two's-complement arithmetic without
+    its prior per-byte branch loop.
+  - The comparator proves this transform over all `65536` combinations of
+    the live `256`-entry grid, `128`-entry sign table, and two four-byte
+    halves. The minimum grid byte is `8`, which excludes cross-byte carries.
+  - A controlled B300 parent/candidate rebuild repeats gate/up at
+    `2796.005 ms` versus `2691.558 ms` (`1.04x`) and total routed-MoE at
+    `3940.005 ms` versus `3833.824 ms` (`1.03x`). Prefill rises from
+    `185.60` to `188.17 tok/s`.
+  - The repaired DSO SHA-256 is
+    `383fe12843109a33719bcbac5e38ec1b22ea95f9e45647b2ecc47c3f88a79f01`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. Total routed-MoE remains `4.15x`
+    current-C, so default current-C routing and promotion blockers remain in
+    force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

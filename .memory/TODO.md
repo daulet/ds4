@@ -12518,3 +12518,28 @@
   - Gate/up now dominates the remaining gap at `2795.404 ms` versus
     current-C `517.818 ms`; total routed-MoE remains `4.26x` current-C, so
     default routing and promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Branchless IQ2 Signed-Word Performance Repair
+
+- Status: done
+- Goal: reduce residual cached gate/up work by replacing per-byte conditional
+  IQ2 sign packing with an equivalent branchless packed transform.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-branchless-iq2-signed-word-performance-repair.json`
+- Evidence:
+  - The pinned cuda-oxide integer surface exposes `dp4a_i8` but not
+    current-C's `__vcmpne4`/`__vsub4` byte operations. The retained Rust
+    transform uses packed masks and `wrapping_add` and is exhaustively
+    equivalent across all `65536` table/sign/half-word cases; every grid byte
+    is nonzero (`minimum=8`).
+  - A controlled parent rebuild reproduces DSO
+    `e26a3d3364367a2cc71dc6fb99be048b3a282c727d3321e15f41d14fbb8d6443`
+    at gate/up `2796.005 ms` and total `3940.005 ms`; the candidate rebuild
+    reproduces DSO
+    `383fe12843109a33719bcbac5e38ec1b22ea95f9e45647b2ecc47c3f88a79f01`
+    at gate/up `2691.558 ms` and total `3833.824 ms`.
+  - Gate/up improves `1.04x`, total improves `1.03x`, and prefill rises from
+    `185.60` to `188.17 tok/s`. Official vectors pass `1958` checks plus `8`
+    negative checks and B300 feature tests pass `176` tests.
+  - Total routed-MoE remains `4.15x` current-C, so default routing and
+    promotion blockers remain in force.

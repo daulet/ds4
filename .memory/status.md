@@ -4,6 +4,19 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Branchless IQ2 Signed-Word Performance Repair
+  is validated on B300. `abi_moe_iq2_signed_word` now forms four signed IQ2
+  bytes with a branchless packed transform whose equivalence is checked over
+  all `65536` grid/sign/half-word cases; cuda-oxide does not expose the
+  current-C packed byte intrinsics at its pinned revision. The repaired DSO
+  SHA-256 is
+  `383fe12843109a33719bcbac5e38ec1b22ea95f9e45647b2ecc47c3f88a79f01`.
+  In controlled parent/candidate repeats, gate/up falls from `2796.005 ms`
+  to `2691.558 ms`, total routed-MoE falls from `3940.005 ms` to
+  `3833.824 ms`, and prefill rises from `185.60` to `188.17 tok/s`.
+  Official vectors pass `1958` checks plus `8` negative checks and B300
+  feature tests pass `176` tests. Routed-MoE remains `4.15x` current-C, so
+  promotion stays blocked.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Multi-Pair Down DP4A Performance Repair
   is validated on B300. The cached down row-span kernel now shares packed Q2
   DP4A weight work across up to sixteen staged pairs while retaining per-pair

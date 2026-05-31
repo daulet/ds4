@@ -4303,6 +4303,18 @@ sixteen staged pairs. On B300 this lowers down from `3993.670 ms` to
 `1126.795 ms` while preserving official-vector correctness; gate/up remains
 the dominant gap and routing remains current-C.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA branchless IQ2 signed-word performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_branchless_iq2_signed_word_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up signed-word helper now uses a table-proven branchless
+packed transform. Controlled B300 repeats lower gate/up from `2796.005 ms`
+to `2691.558 ms` while official-vector correctness is preserved; the graph
+route remains current-C.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
