@@ -12819,3 +12819,34 @@
     Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
     Total routed-MoE remains `2.31x` current-C, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Word Load Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE overhead by replacing byte-built
+  staged Q8 scale and DP4A words with aligned `u32` loads.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-cached-q8-aligned-word-load-performance-repair.json`
+- Evidence:
+  - Cached `SXQ` and `SMIDQ` buffers now carry four-byte alignment while
+    retaining byte staging; only naturally aligned Q8 scale and DP4A word
+    reads use `abi_moe_cached_load_aligned_u32`.
+  - Gate/up PTX retains `128` DP4A sites while shared byte loads drop from
+    `584` to `8` with `128` shared `u32` loads. Down PTX retains `32` DP4A
+    sites while shared byte loads drop from `134` to `2` with `32` shared
+    `u32` loads.
+  - An adjacent B300 parent/candidate comparison lowers gate/up from
+    `1255.901 ms` to `752.829 ms`, down from `860.766 ms` to `632.945 ms`,
+    and total routed-MoE from `2132.947 ms` to `1402.260 ms`; prefill rises
+    from `222.88` to `230.07 tok/s`. A fast-SwiGLU probe was rejected at
+    `1256.183 ms` gate/up because it did not improve the retained parent.
+  - The repaired DSO SHA-256 is
+    `ccc6dc7fe28acb3edd9d11c22198f1bd2eed7a451e1a7bbc67b1d3c4a3d3dfbc`
+    and PTX SHA-256 is
+    `e97c1c1f18d3329625fe8ea737aea11873db6335609d1a569d1693b832addb6b`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `275`
+    passed, `50` skipped, and `0` failed. Pre-implementation and final
+    Claude review attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`.
+    Total routed-MoE remains `1.52x` current-C, so default routing and
+    promotion blockers remain in force.

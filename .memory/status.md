@@ -4,6 +4,28 @@
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Word Load Performance Repair
+  is validated on B300 from the retained scalar staged-pair parent. Cached
+  `SXQ` and `SMIDQ` buffers now carry four-byte alignment, and only naturally
+  aligned Q8 scale and DP4A word reads use
+  `abi_moe_cached_load_aligned_u32`. Gate/up PTX retains `128` DP4A sites
+  while shared byte loads fall from `584` to `8`; down retains `32` DP4A
+  sites while shared byte loads fall from `134` to `2`. The repaired DSO
+  SHA-256 is
+  `ccc6dc7fe28acb3edd9d11c22198f1bd2eed7a451e1a7bbc67b1d3c4a3d3dfbc`
+  and its PTX SHA-256 is
+  `e97c1c1f18d3329625fe8ea737aea11873db6335609d1a569d1693b832addb6b`.
+  An adjacent B300 parent/candidate comparison lowers gate/up from
+  `1255.901 ms` to `752.829 ms`, down from `860.766 ms` to `632.945 ms`,
+  and total routed-MoE from `2132.947 ms` to `1402.260 ms`; prefill rises
+  from `222.88` to `230.07 tok/s`. A fast-SwiGLU probe was rejected because
+  its `1256.183 ms` gate/up total did not improve the parent. Official
+  vectors pass `1958` checks plus `8` negative checks and B300 feature tests
+  pass `176` tests. The unified report passes with `275` passed, `50`
+  skipped, and `0` failed. Pre-implementation and final Claude review
+  attempts returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE
+  remains `1.52x` current-C, so default routing and promotion blockers remain
+  in force.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Staged-Pair Scalar Expansion Performance Repair
   is validated on B300 from the corrected row-256 cached gate parent. The
   opt-in Rust cached gate/up kernel expands its fixed staged-pair entry

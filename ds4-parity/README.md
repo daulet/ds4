@@ -4445,6 +4445,20 @@ candidate run lowers gate/up from `1448.003 ms` to `1256.146 ms` and total
 routed-MoE from `2325.307 ms` to `2133.521 ms`. Official-vector correctness
 is preserved, and the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA cached Q8 aligned-word load performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_cached_q8_aligned_word_load_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up and down kernels now align staged Q8 buffers to four
+bytes and load their naturally aligned scale and DP4A word fields as `u32`.
+On B300, cached gate PTX reduces shared byte loads from `584` to `8` and down
+reduces them from `134` to `2`; an adjacent parent versus candidate run lowers
+total routed-MoE from `2132.947 ms` to `1402.260 ms`. Official-vector
+correctness is preserved, and the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

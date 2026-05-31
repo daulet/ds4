@@ -2345,6 +2345,7 @@ mod kernels {
         static mut SXQ: SharedArray<
             u8,
             { 8 * ABI_MOE_CACHED_GATE_MAX_BLOCKS * ABI_MOE_Q8_K_BLOCK_BYTES as usize },
+            4,
         > = SharedArray::UNINIT;
         static mut S_IQ2_GRID: SharedArray<u64, 256> = SharedArray::UNINIT;
         static mut S_IQ2_SIGNS: SharedArray<u8, 128> = SharedArray::UNINIT;
@@ -3079,6 +3080,7 @@ mod kernels {
         static mut SMIDQ: SharedArray<
             u8,
             { 16 * ABI_MOE_CACHED_DOWN_MAX_BLOCKS * ABI_MOE_Q8_K_BLOCK_BYTES as usize },
+            4,
         > = SharedArray::UNINIT;
 
         let tile = thread::blockIdx_y();
@@ -4364,14 +4366,15 @@ mod kernels {
     }
 
     fn abi_moe_cached_q8_scale(q8: *const u8, block: usize) -> f32 {
-        f32::from_bits(abi_moe_cached_load_u32(
+        f32::from_bits(abi_moe_cached_load_aligned_u32(
             q8,
             block * ABI_MOE_Q8_K_BLOCK_BYTES as usize,
         ))
     }
 
     fn abi_moe_cached_q8_word(q8: *const u8, block: usize, index: usize) -> i32 {
-        abi_moe_cached_load_u32(q8, block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index) as i32
+        abi_moe_cached_load_aligned_u32(q8, block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index)
+            as i32
     }
 
     fn abi_moe_cached_q8_bsum(q8: *const u8, block: usize, index: usize) -> i32 {
@@ -4405,13 +4408,8 @@ mod kernels {
         unsafe { *values.add(offset) as u16 | ((*values.add(offset + 1) as u16) << 8) }
     }
 
-    fn abi_moe_cached_load_u32(values: *const u8, offset: usize) -> u32 {
-        unsafe {
-            *values.add(offset) as u32
-                | ((*values.add(offset + 1) as u32) << 8)
-                | ((*values.add(offset + 2) as u32) << 16)
-                | ((*values.add(offset + 3) as u32) << 24)
-        }
+    fn abi_moe_cached_load_aligned_u32(values: *const u8, offset: usize) -> u32 {
+        unsafe { *values.add(offset).cast::<u32>() }
     }
 
     fn abi_moe_store_u32(values: &mut DisjointSlice<u8>, offset: usize, value: u32) {
