@@ -301,3 +301,16 @@ available directly from the repo.
 - Permanent rule: for Rust CUDA helper scheduling repairs, record both the
   helper PTX and each hot caller's call/shuffle/spill counts before attributing
   a performance change to inlining.
+
+## 2026-06-01: Match Typed Q8 Staging Width Before Tuning Consumers Further
+
+- Symptom: after aligned Q8 shared loads and reduction repairs, cached Rust
+  gate/up and down still trailed current C while staging the same Q8_K blocks
+  through byte copies.
+- Root cause: current C copies typed `cuda_block_q8_K` elements into shared
+  memory, while Rust retained byte-granularity staging even after its hot
+  consumers used aligned word loads.
+- Permanent rule: when a CUDA oracle stages naturally aligned block structs,
+  match both the shared consumption width and the staging width before
+  pursuing arithmetic approximations; retain based on repeated phase totals
+  when one-shot end-to-end throughput is noisy.

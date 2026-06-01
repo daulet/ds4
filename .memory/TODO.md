@@ -12975,3 +12975,27 @@
     returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains
     `1.33x` current-C, so default routing and promotion blockers remain in
     force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Word Staging Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE shared-staging overhead by copying
+  naturally aligned Q8_K blocks as `u32` words.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-cached-q8-aligned-word-staging-performance-repair.json`
+- Evidence:
+  - Rust cached gate/up and down staging now matches current-C typed Q8_K
+    copies with `73` aligned word transfers per `292`-byte block, preserving
+    aligned consumers, fixed-order reductions, DP4A topology, row-span
+    policy, benchmark executable, and default routing.
+  - Gate/up shared-store PTX changes from `u8/u32=2/0` to `1/1`, and down
+    from `1/0` to `0/1`; DP4A sites remain `128`/`256` with zero local
+    loads/stores.
+  - On B300 the adjacent parent/candidate comparison lowers gate/up from
+    `709.797 ms` to `618.603 ms`, down from `506.524 ms` to `457.611 ms`,
+    and total routed-MoE from `1232.588 ms` to `1092.494 ms`. Official
+    vectors pass `1958` checks plus `8` negative checks and feature tests
+    pass `176` tests. The unified report passes with `280` passed, `50`
+    skipped, and `0` failed; Claude review was unavailable because the CLI
+    was not logged in. Total routed-MoE remains `1.18x` current-C, so
+    default routing and promotion blockers remain in force.

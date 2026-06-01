@@ -13861,6 +13861,44 @@ Stage split:
     Total routed-MoE remains `1.33x` current-C, so default routing and
     promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Word Staging Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE shared-staging overhead by copying
+  naturally aligned Q8_K blocks as `u32` words.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-cached-q8-aligned-word-staging-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_cached_q8_aligned_word_staging_performance_repair.py --negative-test`.
+- Evidence:
+  - Current C stages typed `cuda_block_q8_K` elements in both corresponding
+    cached kernels. Rust now expresses the same aligned staging width using
+    `73` `u32` words per `292`-byte Q8_K block, while retaining aligned
+    Q8 consumption, the fixed-order reduction, DP4A topology, row-span
+    policy, benchmark executable, and default current-C route.
+  - Gate/up PTX changes shared stores from `2` `u8` and `0` `u32` sites to
+    `1` and `1`; down changes from `1` and `0` to `0` and `1`. Gate/up and
+    down retain `128` and `256` DP4A sites respectively and remain free of
+    local loads and stores.
+  - An adjacent B300 parent/candidate comparison lowers gate/up from
+    `709.797 ms` to `618.603 ms`, down from `506.524 ms` to `457.611 ms`,
+    and total routed-MoE from `1232.588 ms` to `1092.494 ms`, an `11.37%`
+    total phase reduction. A repeated candidate measure is within phase
+    noise of the first candidate run; variable whole-prefill throughput is
+    not used as the retention criterion.
+  - A fast-SwiGLU probe from the retained parent is rejected after total
+    routed-MoE measures `1233.845 ms`, slightly above that parent. The
+    repaired DSO SHA-256 is
+    `a09d4975d1ba6a35cd2d23500ce08c63b2037fd44c49c719acda1b0c98a9815e`
+    and PTX SHA-256 is
+    `8660a38acf70582a182f503df48e8890722bbd47599cdb916ef7c87fa6b5f606`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `280`
+    passed, `50` skipped, and `0` failed. Both Claude review attempts
+    returned `CLAUDE_REVIEW_UNAVAILABLE_NOT_LOGGED_IN`. Total routed-MoE
+    remains `1.18x` current-C, so default routing and promotion blockers
+    remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

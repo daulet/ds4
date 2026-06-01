@@ -1,5 +1,28 @@
 # DS4 Rust Port Status
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Word Staging Performance Repair
+  is validated on B300 from the retained fixed-order reduction parent. The
+  cached gate/up and down kernels now stage each aligned `cuda_block_q8_K`
+  equivalent as `73` `u32` words rather than byte copies, matching the typed
+  current-C shared copy contract while preserving aligned Q8 consumption,
+  DP4A topology, fixed-order quarter-warp reduction, row-span policy, and
+  default current-C routing. Gate/up PTX changes shared stores from `2` byte
+  sites and `0` word sites to `1` and `1`; down changes from `1` and `0` to
+  `0` and `1`, with DP4A sites held at `128`/`256` and no local spills. The
+  repaired DSO SHA-256 is
+  `a09d4975d1ba6a35cd2d23500ce08c63b2037fd44c49c719acda1b0c98a9815e`
+  and PTX SHA-256 is
+  `8660a38acf70582a182f503df48e8890722bbd47599cdb916ef7c87fa6b5f606`.
+  An adjacent B300 comparison lowers gate/up from `709.797 ms` to
+  `618.603 ms`, down from `506.524 ms` to `457.611 ms`, and total
+  routed-MoE from `1232.588 ms` to `1092.494 ms`; retention is based on
+  these repeated instrumented phase reductions rather than variable one-shot
+  prefill throughput. Official vectors pass `1958` checks plus `8` negative
+  checks and B300 feature tests pass `176` tests. The unified report passes
+  with `280` passed, `50` skipped, and `0` failed. Both Claude review
+  invocations returned `CLAUDE_REVIEW_UNAVAILABLE_NOT_LOGGED_IN`. Total
+  routed-MoE remains `1.18x` current-C, so default routing and promotion
+  blockers remain in force.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Fixed-Order Quarter-Warp Reduction Performance Repair
   is validated on B300 from the retained inline-reduction parent. Only
   `abi_moe_quarter_warp_sum` changes its reduction spelling from a runtime
@@ -45,7 +68,7 @@
   inspection and full device validation; final Claude review returned
   `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains `1.35x`
   current-C, so default routing and promotion blockers remain in force.
-- Date: 2026-05-31 UTC
+- Date: 2026-06-01 UTC
 - Branch: `main`
 - Starting oracle commit: `6975b57c196255e8ac4a22bb3be4dca18b92ebba`
 - Active item: M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair

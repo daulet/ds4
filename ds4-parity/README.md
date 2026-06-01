@@ -4515,6 +4515,20 @@ rather than retaining caller inlining; the measured B300 routed-MoE total
 still decreases from `1243.192 ms` to `1232.947 ms`. Official-vector
 correctness is preserved and the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA cached Q8 aligned-word staging performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_cached_q8_aligned_word_staging_performance_repair.py --negative-test
+```
+
+The cached Rust gate/up and down kernels now stage Q8_K blocks as aligned
+`u32` words, matching the typed current-C shared-copy contract. On B300,
+gate/up decreases from `709.797 ms` to `618.603 ms`, down decreases from
+`506.524 ms` to `457.611 ms`, and total routed-MoE decreases from
+`1232.588 ms` to `1092.494 ms`; official-vector correctness is preserved and
+the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
