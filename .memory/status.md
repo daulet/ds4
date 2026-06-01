@@ -1,5 +1,27 @@
 # DS4 Rust Port Status
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA In-Kernel Fixed-Order Reduction Performance Repair
+  is validated on B300 from the retained aligned-word staging parent. A
+  macro-expanded `4`, `2`, `1` quarter-warp shuffle tree is now used only
+  at cached gate/up and down emit sites, preserving aligned Q8 staging,
+  DP4A topology, row-span policy, and default current-C routing. Gate/up
+  replaces `16` reduction calls with `48` in-kernel shuffles, leaving only
+  its `8` exponential calls; down replaces all `8` reduction calls with
+  `24` shuffles. Both kernels remain free of local loads/stores. The repaired
+  DSO SHA-256 is
+  `76a3b57a0f59656944be9401ad008c2ea412b25c5ad1b3d293303110e7d4ada2`
+  and PTX SHA-256 is
+  `0304718144f8a00e425b388ca4ee2003240c6c4db9d11ef97d50d2ab102c5f5d`.
+  An adjacent B300 comparison lowers gate/up from `618.611 ms` to
+  `604.403 ms`, down from `457.720 ms` to `443.172 ms`, and total
+  routed-MoE from `1092.625 ms` to `1063.907 ms`; retention is based on
+  repeated instrumented phase reductions. Official vectors pass `1958`
+  checks plus `8` negative checks and B300 feature tests pass `176` tests.
+  The unified report passes with `281` passed, `50` skipped, and `0` failed.
+  Both Claude review invocations returned
+  `CLAUDE_REVIEW_UNAVAILABLE_NOT_LOGGED_IN`. Total routed-MoE remains
+  `1.15x` current-C, so default routing and promotion blockers remain in
+  force.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Word Staging Performance Repair
   is validated on B300 from the retained fixed-order reduction parent. The
   cached gate/up and down kernels now stage each aligned `cuda_block_q8_K`

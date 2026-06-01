@@ -2316,6 +2316,16 @@ mod kernels {
         }};
     }
 
+    macro_rules! abi_moe_quarter_warp_sum_inline {
+        ($value:expr) => {{
+            let mut value = $value;
+            value += warp::shuffle_xor_f32(value, 4);
+            value += warp::shuffle_xor_f32(value, 2);
+            value += warp::shuffle_xor_f32(value, 1);
+            value
+        }};
+    }
+
     #[allow(clippy::too_many_arguments, static_mut_refs)]
     #[kernel]
     pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(
@@ -2742,8 +2752,8 @@ mod kernels {
                         if np > $entry {
                             let pair = sorted_pairs
                                 [(offsets[expert as usize] + local_start + $entry) as usize];
-                            let mut gate_value = abi_moe_quarter_warp_sum($gate);
-                            let mut up_value = abi_moe_quarter_warp_sum($up);
+                            let mut gate_value = abi_moe_quarter_warp_sum_inline!($gate);
+                            let mut up_value = abi_moe_quarter_warp_sum_inline!($up);
                             if lane == 0 {
                                 abi_moe_apply_clamp(&mut gate_value, &mut up_value, clamp);
                                 let output = (pair * expert_mid_dim + row) as usize;
@@ -3275,7 +3285,7 @@ mod kernels {
                                     + local_start
                                     + entry_base
                                     + $entry) as usize];
-                                let accumulator = abi_moe_quarter_warp_sum($accumulator);
+                                let accumulator = abi_moe_quarter_warp_sum_inline!($accumulator);
                                 if lane == 0 {
                                     if atomic_out != 0 {
                                         let token = pair / n_expert;

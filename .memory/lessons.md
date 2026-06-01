@@ -314,3 +314,14 @@ available directly from the repo.
   match both the shared consumption width and the staging width before
   pursuing arithmetic approximations; retain based on repeated phase totals
   when one-shot end-to-end throughput is noisy.
+
+## 2026-06-01: Expand Fixed Reductions At The Hot Site When Helper Inlining Drifts
+
+- Symptom: the branch-free fixed-order quarter-warp helper improved Rust CUDA
+  phases but cuda-oxide emitted hot gate/up and down reduction calls while
+  current C kept the shuffle sequence in-kernel.
+- Root cause: a fixed-order device helper did not retain caller inlining even
+  with `#[inline(always)]`; macro expansion controls the hot-site PTX shape.
+- Permanent rule: when helper-level fixed ordering is useful but inlining
+  regresses, test a narrowly scoped macro-expanded hot site and verify call,
+  shuffle, and spill counts before retaining it.

@@ -4529,6 +4529,20 @@ gate/up decreases from `709.797 ms` to `618.603 ms`, down decreases from
 `1232.588 ms` to `1092.494 ms`; official-vector correctness is preserved and
 the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA in-kernel fixed-order reduction performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_in_kernel_fixed_order_reduction_performance_repair.py --negative-test
+```
+
+The cached gate/up and down kernels now expand the retained fixed-order
+quarter-warp shuffle sequence in-kernel. On B300, gate/up decreases from
+`618.611 ms` to `604.403 ms`, down decreases from `457.720 ms` to
+`443.172 ms`, and total routed-MoE decreases from `1092.625 ms` to
+`1063.907 ms`; official-vector correctness is preserved and the default
+current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

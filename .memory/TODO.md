@@ -12999,3 +12999,24 @@
     skipped, and `0` failed; Claude review was unavailable because the CLI
     was not logged in. Total routed-MoE remains `1.18x` current-C, so
     default routing and promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA In-Kernel Fixed-Order Reduction Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE reduction overhead by expanding
+  the fixed quarter-warp shuffle tree directly at the cached emit sites.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-in-kernel-fixed-order-reduction-performance-repair.json`
+- Evidence:
+  - Cached gate/up replaces `16` reduction calls with `48` in-kernel
+    shuffles, and cached down replaces `8` calls with `24` shuffles while
+    preserving aligned Q8 staging, DP4A topology, row-span policy, and zero
+    local spills.
+  - On B300 the adjacent parent/candidate comparison lowers gate/up from
+    `618.611 ms` to `604.403 ms`, down from `457.720 ms` to `443.172 ms`,
+    and total routed-MoE from `1092.625 ms` to `1063.907 ms`. Official
+    vectors pass `1958` checks plus `8` negative checks and feature tests
+    pass `176` tests. The unified report passes with `281` passed, `50`
+    skipped, and `0` failed; Claude review was unavailable because the CLI
+    was not logged in. Total routed-MoE remains `1.15x` current-C, so
+    default routing and promotion blockers remain in force.

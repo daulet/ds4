@@ -13899,6 +13899,41 @@ Stage split:
     remains `1.18x` current-C, so default routing and promotion blockers
     remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA In-Kernel Fixed-Order Reduction Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA routed-MoE reduction overhead by expanding
+  the retained fixed-order quarter-warp shuffle tree inside hot emit sites.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-in-kernel-fixed-order-reduction-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_in_kernel_fixed_order_reduction_performance_repair.py --negative-test`.
+- Evidence:
+  - Only the cached gate/up and down emit sites switch from calls to the
+    branch-free fixed-order helper to a macro-expanded identical `4`, `2`,
+    `1` shuffle sequence. Aligned Q8 staging, DP4A topology, row-span
+    policy, benchmark executable, and default current-C route remain
+    unchanged.
+  - Gate/up PTX replaces `16` reduction calls with `48` in-kernel shuffle
+    instructions, retaining only `8` exponential calls; down replaces its
+    `8` reduction calls with `24` shuffle instructions. Both preserve DP4A
+    counts and remain free of local loads and stores.
+  - An adjacent B300 parent/candidate comparison lowers gate/up from
+    `618.611 ms` to `604.403 ms`, down from `457.720 ms` to `443.172 ms`,
+    and total routed-MoE from `1092.625 ms` to `1063.907 ms`, a `2.63%`
+    total phase reduction. Variable whole-prefill throughput is not used as
+    the retention criterion.
+  - The repaired DSO SHA-256 is
+    `76a3b57a0f59656944be9401ad008c2ea412b25c5ad1b3d293303110e7d4ada2`
+    and PTX SHA-256 is
+    `0304718144f8a00e425b388ca4ee2003240c6c4db9d11ef97d50d2ab102c5f5d`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `281`
+    passed, `50` skipped, and `0` failed. Both Claude review attempts
+    returned `CLAUDE_REVIEW_UNAVAILABLE_NOT_LOGGED_IN`. Total routed-MoE
+    remains `1.15x` current-C, so default routing and promotion blockers
+    remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and
