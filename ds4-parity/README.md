@@ -4558,6 +4558,20 @@ from `443.318 ms` to `430.144 ms`, and total routed-MoE decreases from
 `1064.391 ms` to `1029.873 ms`; official-vector correctness is preserved and
 the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA cached Q8 aligned-pair staging performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_cached_q8_aligned_pair_staging_performance_repair.py --negative-test
+```
+
+The cached gate/up and down kernels retain the private padded Q8 layout while
+staging the aligned Q8 tail through paired shared `u64` stores. On B300,
+gate/up decreases from `583.532 ms` to `570.157 ms`, down decreases from
+`430.267 ms` to `423.871 ms`, and total routed-MoE decreases from
+`1030.111 ms` to `1010.385 ms`; official-vector correctness is preserved and
+the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

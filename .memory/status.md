@@ -1,5 +1,26 @@
 # DS4 Rust Port Status
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Pair Staging Performance Repair
+  is validated on B300 from the retained aligned-pair load parent. Private
+  cached Q8 staging now copies each scale word as `u32` and the aligned
+  remaining `72` words as `36` assembled `u64` shared stores, preserving the
+  external `292`-byte Q8_K layout, existing paired consumers, DP4A topology,
+  fixed-order reductions, row-span policy, and default current-C routing.
+  Gate/up PTX adds one `st.shared.u64` site (`1` to `2`) and down adds one
+  (`0` to `1`), while paired shared loads remain `72`/`128`, DP4A counts
+  remain `128`/`256`, and neither kernel gains local loads or stores. The
+  repaired DSO SHA-256 is
+  `5c06a124db2c5a0854ae8aebca63a870ebd07032ea9bb81f7c16e0379b497de6`
+  and PTX SHA-256 is
+  `92e32bdacd74a7aac3cbf443bef79d9c54cbb193c68f063b5ef6be0a430572e9`.
+  An adjacent B300 comparison lowers gate/up from `583.532 ms` to
+  `570.157 ms`, down from `430.267 ms` to `423.871 ms`, and total
+  routed-MoE from `1030.111 ms` to `1010.385 ms`, a `1.91%` total phase
+  reduction. Official vectors pass `1958` checks plus `8` negative checks
+  and B300 feature tests pass `176` tests. The unified report passes `283`
+  comparators with `50` skipped and `0` failed. Both requested Claude review
+  attempts timed out after `60` seconds. Total routed-MoE remains `1.09x`
+  current-C, so default routing and promotion blockers remain in force.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Pair Load Performance Repair
   is validated on B300 from the retained in-kernel reduction parent. The
   external Q8_K layout remains `292` bytes while cached gate/up and down

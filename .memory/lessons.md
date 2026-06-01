@@ -335,3 +335,13 @@ available directly from the repo.
 - Permanent rule: keep the external Q8 ABI unchanged, but when a private CUDA
   scratch representation needs paired loads, add explicit slot padding and
   validate PTX load width, spill counts, full vectors, and phase timing.
+
+## 2026-06-01: Carry Private Q8 Alignment Through Staging
+
+- Symptom: after aligning cached Q8 consumers, gate/up and down still trailed
+  current C while writing every private cached block as `73` separate words.
+- Root cause: the padded private slot aligns the `72`-word Q8 tail for paired
+  writes as well as paired reads, but staging had retained word-width stores.
+- Permanent rule: after introducing a private padded cache layout, measure
+  aligned producer width as well as consumer width while keeping the external
+  ABI and full-vector correctness fixed.

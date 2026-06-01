@@ -46,6 +46,7 @@ const ABI_MOE_Q8_K_BLOCK_WORDS: usize =
 const ABI_MOE_CACHED_Q8_DATA_OFFSET: usize = core::mem::size_of::<u32>();
 const ABI_MOE_CACHED_Q8_BLOCK_BYTES: usize =
     ABI_MOE_CACHED_Q8_DATA_OFFSET + ABI_MOE_Q8_K_BLOCK_BYTES as usize;
+const ABI_MOE_CACHED_Q8_TAIL_PAIRS: usize = (ABI_MOE_Q8_K_BLOCK_WORDS - 1) / 2;
 const ABI_MOE_SORTED_EXPERTS: usize = 256;
 const ABI_MOE_CACHED_GATE_MAX_BLOCKS: usize = 16;
 const ABI_MOE_CACHED_DOWN_MAX_BLOCKS: usize = 8;
@@ -2379,10 +2380,8 @@ mod kernels {
         let block_bytes = ABI_MOE_Q8_K_BLOCK_BYTES as usize;
         let thread_index = thread::threadIdx_x() as usize;
         let staged_blocks = np as usize * xq_blocks as usize;
-        let mut staged_word = thread_index;
-        while staged_word < staged_blocks * ABI_MOE_Q8_K_BLOCK_WORDS {
-            let staged_block = staged_word / ABI_MOE_Q8_K_BLOCK_WORDS;
-            let word_index = staged_word - staged_block * ABI_MOE_Q8_K_BLOCK_WORDS;
+        let mut staged_block = thread_index;
+        while staged_block < staged_blocks {
             let entry = staged_block / xq_blocks as usize;
             let block = staged_block - entry * xq_blocks as usize;
             let pair =
@@ -2392,16 +2391,39 @@ mod kernels {
             unsafe {
                 abi_moe_cached_store_aligned_u32(
                     SXQ.as_mut_ptr(),
+                    staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES + ABI_MOE_CACHED_Q8_DATA_OFFSET,
+                    abi_moe_cached_load_aligned_u32(xq.as_ptr(), input_block * block_bytes),
+                );
+            }
+            staged_block += THREADS_PER_BLOCK as usize;
+        }
+        let mut staged_pair = thread_index;
+        while staged_pair < staged_blocks * ABI_MOE_CACHED_Q8_TAIL_PAIRS {
+            let staged_block = staged_pair / ABI_MOE_CACHED_Q8_TAIL_PAIRS;
+            let tail_pair = staged_pair - staged_block * ABI_MOE_CACHED_Q8_TAIL_PAIRS;
+            let word_index = 1 + tail_pair * 2;
+            let entry = staged_block / xq_blocks as usize;
+            let block = staged_block - entry * xq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let token = pair / n_expert;
+            let input_block = token as usize * xq_blocks as usize + block;
+            let input_offset = input_block * block_bytes + word_index * core::mem::size_of::<u32>();
+            unsafe {
+                abi_moe_cached_store_aligned_u64(
+                    SXQ.as_mut_ptr(),
                     staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES
                         + ABI_MOE_CACHED_Q8_DATA_OFFSET
                         + word_index * core::mem::size_of::<u32>(),
-                    abi_moe_cached_load_aligned_u32(
-                        xq.as_ptr(),
-                        input_block * block_bytes + word_index * core::mem::size_of::<u32>(),
-                    ),
+                    abi_moe_cached_load_aligned_u32(xq.as_ptr(), input_offset) as u64
+                        | ((abi_moe_cached_load_aligned_u32(
+                            xq.as_ptr(),
+                            input_offset + core::mem::size_of::<u32>(),
+                        ) as u64)
+                            << 32),
                 );
             }
-            staged_word += THREADS_PER_BLOCK as usize;
+            staged_pair += THREADS_PER_BLOCK as usize;
         }
         if thread_index < 256 {
             unsafe {
@@ -3085,10 +3107,8 @@ mod kernels {
         let block_bytes = ABI_MOE_Q8_K_BLOCK_BYTES as usize;
         let thread_index = thread::threadIdx_x() as usize;
         let staged_blocks = np as usize * midq_blocks as usize;
-        let mut staged_word = thread_index;
-        while staged_word < staged_blocks * ABI_MOE_Q8_K_BLOCK_WORDS {
-            let staged_block = staged_word / ABI_MOE_Q8_K_BLOCK_WORDS;
-            let word_index = staged_word - staged_block * ABI_MOE_Q8_K_BLOCK_WORDS;
+        let mut staged_block = thread_index;
+        while staged_block < staged_blocks {
             let entry = staged_block / midq_blocks as usize;
             let block = staged_block - entry * midq_blocks as usize;
             let pair =
@@ -3097,16 +3117,38 @@ mod kernels {
             unsafe {
                 abi_moe_cached_store_aligned_u32(
                     SMIDQ.as_mut_ptr(),
+                    staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES + ABI_MOE_CACHED_Q8_DATA_OFFSET,
+                    abi_moe_cached_load_aligned_u32(midq.as_ptr(), input_block * block_bytes),
+                );
+            }
+            staged_block += THREADS_PER_BLOCK as usize;
+        }
+        let mut staged_pair = thread_index;
+        while staged_pair < staged_blocks * ABI_MOE_CACHED_Q8_TAIL_PAIRS {
+            let staged_block = staged_pair / ABI_MOE_CACHED_Q8_TAIL_PAIRS;
+            let tail_pair = staged_pair - staged_block * ABI_MOE_CACHED_Q8_TAIL_PAIRS;
+            let word_index = 1 + tail_pair * 2;
+            let entry = staged_block / midq_blocks as usize;
+            let block = staged_block - entry * midq_blocks as usize;
+            let pair =
+                sorted_pairs[(offsets[expert as usize] + local_start + entry as u32) as usize];
+            let input_block = pair as usize * midq_blocks as usize + block;
+            let input_offset = input_block * block_bytes + word_index * core::mem::size_of::<u32>();
+            unsafe {
+                abi_moe_cached_store_aligned_u64(
+                    SMIDQ.as_mut_ptr(),
                     staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES
                         + ABI_MOE_CACHED_Q8_DATA_OFFSET
                         + word_index * core::mem::size_of::<u32>(),
-                    abi_moe_cached_load_aligned_u32(
-                        midq.as_ptr(),
-                        input_block * block_bytes + word_index * core::mem::size_of::<u32>(),
-                    ),
+                    abi_moe_cached_load_aligned_u32(midq.as_ptr(), input_offset) as u64
+                        | ((abi_moe_cached_load_aligned_u32(
+                            midq.as_ptr(),
+                            input_offset + core::mem::size_of::<u32>(),
+                        ) as u64)
+                            << 32),
                 );
             }
-            staged_word += THREADS_PER_BLOCK as usize;
+            staged_pair += THREADS_PER_BLOCK as usize;
         }
         thread::sync_threads();
         let lane = thread::threadIdx_x() & 7;
@@ -4462,6 +4504,12 @@ mod kernels {
     fn abi_moe_cached_store_aligned_u32(values: *mut u8, offset: usize, value: u32) {
         unsafe {
             *values.add(offset).cast::<u32>() = value;
+        }
+    }
+
+    fn abi_moe_cached_store_aligned_u64(values: *mut u8, offset: usize, value: u64) {
+        unsafe {
+            *values.add(offset).cast::<u64>() = value;
         }
     }
 

@@ -129,10 +129,13 @@ def validate_implementation(report: Report, fixture: dict[str, Any], kernels: st
     report.check("*values.add(offset).cast::<u32>()" in kernels, "aligned Q8 word read missing")
     report.check("abi_moe_cached_load_u32(" not in kernels, "byte-built Q8 u32 helper retained")
     staging_successor = "check_cuda_rust_cached_q8_aligned_word_staging_performance_repair.py" in report_text
-    expected_aligned_load_uses = 4 if paired_successor else (5 if staging_successor else 3)
+    pair_staging_successor = "check_cuda_rust_cached_q8_aligned_pair_staging_performance_repair.py" in report_text
+    expected_aligned_load_uses = (
+        8 if pair_staging_successor else (4 if paired_successor else (5 if staging_successor else 3))
+    )
     report.check(
         kernels.count("abi_moe_cached_load_aligned_u32(") == expected_aligned_load_uses,
-        "aligned helper use drift outside registered consumers and staging successor",
+        "aligned helper use drift outside registered consumers and staging successors",
     )
     report.check("abi_moe_cached_q8_bsum" in down and "abi_moe_cached_load_u16(" in kernels, "Q8 bsum contract missing")
 

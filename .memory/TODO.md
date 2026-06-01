@@ -13040,6 +13040,31 @@
     and total routed-MoE from `1064.391 ms` to `1029.873 ms`. Official
     vectors pass `1958` checks plus `8` negative checks and feature tests
     pass `176` tests. The unified report passes `282` comparators with `50`
+  skipped and `0` failed; both requested Claude review attempts timed out
+  after `60` seconds. Total routed-MoE remains `1.11x` current-C, so
+  default routing and promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Pair Staging Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE shared-staging overhead by storing
+  the aligned private Q8 tail as `u64` pairs.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-cached-q8-aligned-pair-staging-performance-repair.json`
+- Evidence:
+  - Each private cached Q8 block retains its padded `296`-byte slot and
+    copies word `0` as `u32`, while the aligned remaining `72` words are
+    staged as `36` assembled `u64` shared stores. The external Q8_K layout,
+    paired consumers, arithmetic, row-span policy, and default route are
+    unchanged.
+  - Gate/up PTX adds one shared `u64` store site (`1` to `2`) and down adds
+    one (`0` to `1`), with paired shared loads retained at `72`/`128`,
+    DP4A sites retained at `128`/`256`, and zero local spill traffic.
+  - On B300 the adjacent parent/candidate comparison lowers gate/up from
+    `583.532 ms` to `570.157 ms`, down from `430.267 ms` to `423.871 ms`,
+    and total routed-MoE from `1030.111 ms` to `1010.385 ms`. Official
+    vectors pass `1958` checks plus `8` negative checks and feature tests
+    pass `176` tests. The unified report passes `283` comparators with `50`
     skipped and `0` failed; both requested Claude review attempts timed out
-    after `60` seconds. Total routed-MoE remains `1.11x` current-C, so
+    after `60` seconds. Total routed-MoE remains `1.09x` current-C, so
     default routing and promotion blockers remain in force.
