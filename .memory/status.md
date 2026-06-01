@@ -1,5 +1,25 @@
 # DS4 Rust Port Status
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Paired-Scale Global-Load Address-Space Performance Repair
+  is validated on B300 from the retained down metadata global-load parent.
+  Cached down now reads each aligned pair of low-nibble Q2 scale bytes
+  through one explicit global `u16` load while retaining the two metadata
+  loads, scalar packed-Q2 payload path, private Q8 layout, reductions, and
+  `256` DP4A sites. Down PTX changes from `2` to `6` `ld.global.u16`
+  sites, removes eight byte loads, and keeps `152/2` shared load/store sites
+  with zero local operations. The repaired DSO SHA-256 is
+  `b1ecf8387e4861481230900d67e5d8a2eef62258c151d4b36304e7b0e5a95e22`
+  and down-kernel PTX SHA-256 is
+  `77b98f86541e14e16c82538f5c4d289e18dd4cbbd88ee2671ac1c9736b97a7ee`.
+  Two order-reversed B300 comparisons lower down from `420.440 ms` to
+  `401.116 ms` and from `420.188 ms` to `401.120 ms`; total routed-MoE
+  drops from `958.863 ms` to `939.293 ms` and from `958.364 ms` to
+  `939.422 ms`. Official vectors pass `1958` checks plus `8` negative
+  checks and B300 feature tests pass `176` tests. The unified report passes
+  `286` comparators with `50` skipped and `0` failed; both requested Claude
+  review attempts timed out after `60` seconds. Rust is now `1.016x`
+  current-C total with down at `1.020x`; default routing remains current C
+  until the graph benchmark promotion gate is passed.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Metadata Global-Load Address-Space Performance Repair
   is validated on B300 from the retained gate global-load parent. Cached down
   now applies the pinned `cuda-oxide` global `u16` intrinsic only to aligned

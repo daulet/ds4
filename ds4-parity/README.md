@@ -4601,6 +4601,20 @@ decreases from `423.669 ms` to `420.358 ms` and from `423.519 ms` to
 `420.123 ms`; correctness is preserved and the default current-C route remains
 unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA down paired-scale global-load address-space performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_down_paired_scale_global_load_address_space_performance_repair.py --negative-test
+```
+
+The cached down path now emits explicit global halfword loads for aligned
+pairs of Q2 low-nibble scale bytes while leaving packed Q2 payload loads on
+the retained scalar path. Across two order-reversed B300 comparisons, down
+decreases from `420.440 ms` to `401.116 ms` and from `420.188 ms` to
+`401.120 ms`; correctness is preserved and the default current-C route remains
+unchanged pending the graph benchmark promotion gate.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

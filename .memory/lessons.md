@@ -370,3 +370,15 @@ available directly from the repo.
 - Permanent rule: isolate metadata, payload, and staging load changes as
   separate probes and retain only order-reversed phase wins with unchanged
   arithmetic and full-vector correctness.
+
+## 2026-06-01: Pair Q2 Scale Bytes Without Globalizing Q2 Payloads
+
+- Symptom: explicit halfword loads for the two Q2 metadata fields helped
+  cached down modestly, but repeated low-nibble scale bytes still followed
+  the scalar byte-load path.
+- Root cause: scale bytes are naturally consumed in adjacent pairs and are
+  aligned within every 84-byte Q2 block, so keeping them scalar leaves a
+  measurable read/decoding overhead without requiring payload changes.
+- Permanent rule: once an aligned narrow load is validated, apply it to
+  natural metadata/control pairs separately from quantized payload words and
+  confirm the result in both benchmark orders.

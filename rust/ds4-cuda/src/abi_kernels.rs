@@ -3005,10 +3005,10 @@ mod kernels {
 
     macro_rules! abi_moe_down_accumulate_q2_group {
         ($weights:expr, $q:expr, $shift:expr, $q8_base:expr, $scale_index:ident, $np:expr, $midq_blocks:expr, $block:expr, $q8:expr, $entry_base:expr, $sum0:ident, $sum1:ident, $sum2:ident, $sum3:ident, $sum4:ident, $sum5:ident, $sum6:ident, $sum7:ident) => {{
-            let first_scale = ($weights[$scale_index] & 0x0f) as i32;
-            $scale_index += 1;
-            let second_scale = ($weights[$scale_index] & 0x0f) as i32;
-            $scale_index += 1;
+            let packed_scales = abi_moe_global_load_u16($weights, $scale_index);
+            let first_scale = (packed_scales & 0x000f) as i32;
+            let second_scale = ((packed_scales >> 8) & 0x000f) as i32;
+            $scale_index += 2;
             let first_word0 =
                 ((abi_moe_down_load_u32!($weights, $q) >> $shift) & 0x0303_0303) as i32;
             let first_word1 =

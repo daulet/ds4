@@ -13121,3 +13121,28 @@
     review attempts timed out after `60` seconds. Rust remains `1.037x`
     current-C total with down at `1.068x`, so default routing and promotion
     blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Paired-Scale Global-Load Address-Space Performance Repair
+
+- Status: done
+- Goal: remove repeated down-path low-nibble scale-byte overhead by pairing
+  aligned reads without reopening the rejected Q2 payload globalization
+  scope.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-paired-scale-global-load-address-space-performance-repair.json`
+- Evidence:
+  - Cached down reads each aligned pair of low-nibble Q2 scale bytes through
+    one explicit global `u16` load, while retaining the two metadata loads,
+    scalar packed-Q2 payload path, private Q8 staging, and `256` DP4A sites.
+    Down PTX moves from `2` to `6` `ld.global.u16` sites and removes eight
+    byte loads with unchanged shared counts and zero local traffic.
+  - Two B300 order-reversed comparisons lower down from `420.440 ms` to
+    `401.116 ms` and from `420.188 ms` to `401.120 ms`; total routed-MoE
+    falls from `958.863 ms` to `939.293 ms` and from `958.364 ms` to
+    `939.422 ms`.
+  - Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes `286`
+    comparators with `50` skipped and `0` failed; both requested Claude
+    review attempts timed out after `60` seconds. Rust is now `1.016x`
+    current-C total with down at `1.020x`, so default routing remains current
+    C until the graph benchmark promotion gate is passed.
