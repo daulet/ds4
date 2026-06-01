@@ -106,7 +106,7 @@ def validate_implementation(report: Report, fixture: dict[str, Any], texts: dict
     report.check(".wrapping_add(mask & 0x0101_0101)" in helper, "packed two's-complement transform missing")
     report.check("__vcmpne4" in texts["cuda"], "current-C packed compare evidence missing")
     report.check("__vsub4" in texts["cuda"], "current-C packed subtract evidence missing")
-    report.check('rev = "1000e653df60a7814fa996d146e3823d0a364280"' in texts["cargo"], "cuda-oxide pin drift")
+    report.check('rev = "ae721dc95912a918f182d13b7ca55281aa29d8f9"' in texts["cargo"], "cuda-oxide pin drift")
     proof = require_dict(report, fixture.get("equivalence_proof"), "equivalence proof")
     signs_match = re.search(r"ABI_MOE_IQ2_SIGNS: \[u8; 128\] = \[(.*?)\];", kernels, re.S)
     grids_match = re.search(r"ABI_MOE_IQ2_GRID: \[u64; 256\] = \[(.*?)\];", kernels, re.S)

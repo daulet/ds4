@@ -5,9 +5,9 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
-cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "1000e653df60a7814fa996d146e3823d0a364280", optional = true }
-cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "1000e653df60a7814fa996d146e3823d0a364280", optional = true }
-cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "1000e653df60a7814fa996d146e3823d0a364280", optional = true }
+cuda-core = { git = "https://github.com/daulet/cuda-oxide", rev = "ae721dc95912a918f182d13b7ca55281aa29d8f9", optional = true }
+cuda-device = { git = "https://github.com/daulet/cuda-oxide", rev = "ae721dc95912a918f182d13b7ca55281aa29d8f9", optional = true }
+cuda-host = { git = "https://github.com/daulet/cuda-oxide", rev = "ae721dc95912a918f182d13b7ca55281aa29d8f9", optional = true }
 libc = { version = "0.2", optional = true }
 
 [features]

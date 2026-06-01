@@ -1,0 +1,138 @@
+{
+  "schema": "ds4.cuda_rust_gate_global_load_address_space_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-rust-gate-global-load-route-blocked",
+  "goal": "Reduce cached Rust CUDA gate/up global-read overhead through explicit global-address-space loads while retaining the rejected down-path scope boundary.",
+  "ownership": {
+    "changes_gate_global_load_address_space": true,
+    "changes_down_global_load_address_space": false,
+    "retains_private_padded_q8_layout": true,
+    "retains_paired_shared_staging": true,
+    "retains_fixed_order_reduction": true,
+    "retains_gate_dp4a_topology": true,
+    "retains_down_dp4a_topology": true,
+    "changes_default_current_c_route": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "cuda_oxide_revision": "ae721dc95912a918f182d13b7ca55281aa29d8f9",
+    "global_load_intrinsics": ["memory::load_global_u16", "memory::load_global_u32"],
+    "gate_global_u16_load_sites": 10,
+    "gate_global_u32_load_sites": 3,
+    "parent_gate_kernel_ptx_sha256": "c6bff9acaef5b7b5233bda62ce070a4a983cc2fa1fc3dd1c44c2199a8a1281f5",
+    "repaired_gate_kernel_ptx_sha256": "0faf967516eec02c57ebdcb18caa0082f3b9b7ef4a3032b0ad9f97b835f7fd3b",
+    "parent_gate_global_load_sites": 0,
+    "repaired_gate_global_load_sites": 13,
+    "repaired_gate_st_shared_u64_sites": 2,
+    "repaired_gate_dp4a_sites": 128,
+    "parent_down_kernel_ptx_sha256": "c36cab304a4ba78bdb783032f554789ad739dca5992bef5428dd1fa5028aa893",
+    "repaired_down_kernel_ptx_sha256": "b8362dc3584e4444d08588ea721becdc3fc197ab60cfc8b43ab7fb1a0d0d6372",
+    "parent_down_global_load_sites": 0,
+    "repaired_down_global_load_sites": 0,
+    "repaired_down_st_shared_u64_sites": 1,
+    "repaired_down_dp4a_sites": 256,
+    "scope_boundary": "only known aligned gate/up model and Q8 source reads use typed global loads; the attempted down globalization was rejected after a measured phase regression"
+  },
+  "b300_execution": {
+    "date_utc": "2026-06-01",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "parent_shared_library_sha256": "5c06a124db2c5a0854ae8aebca63a870ebd07032ea9bb81f7c16e0379b497de6",
+    "parent_ptx_sha256": "92e32bdacd74a7aac3cbf443bef79d9c54cbb193c68f063b5ef6be0a430572e9",
+    "repaired_shared_library_sha256": "8a8b4e2a8f6e7a3751b85c47c2fffa5a009a83c01365a6a6bdd5a83375c0f5c3",
+    "repaired_ptx_sha256": "55c1aea6973a6313299bb5bd4b9b708595a93f138052387766f79baff72c920a",
+    "workload": "one 2048-token prefill frontier plus one generated token through the Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "parent_control_profile": {
+      "csv_sha256": "76891b771641ee23ba40aa1da4ce12eb9209a7e57984efe787338e0fe7159c77",
+      "stderr_sha256": "a9d2ca1d9f545dc8565e75720577a80877f42cfc62851340d686fa4f33ae3e7b",
+      "prefill_tps": 255.94,
+      "decode_tps": 16.21,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.076,
+      "sort_ms": 4.212,
+      "gateup_ms": 567.730,
+      "midq_ms": 8.901,
+      "down_ms": 421.883,
+      "sum_ms": 0.043,
+      "total_ms": 1005.846
+    },
+    "repaired_confirmation_profile": {
+      "csv_sha256": "66eccc379ddfd2d6056b7e6f1a7dc0e9d174436342e7cc7971b7cabe24478dd7",
+      "stderr_sha256": "5df648c07b0939a8ebd04af990c0da3ba771db913648b7cfbe730ec5c596731c",
+      "prefill_tps": 179.12,
+      "decode_tps": 16.37,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.033,
+      "sort_ms": 4.170,
+      "gateup_ms": 519.560,
+      "midq_ms": 8.901,
+      "down_ms": 421.707,
+      "sum_ms": 0.043,
+      "total_ms": 957.414
+    },
+    "current_c_reference": {
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283
+    },
+    "attribution": {
+      "gateup_speedup_over_parent": 1.093,
+      "down_speedup_over_parent": 1.000,
+      "total_speedup_over_parent": 1.051,
+      "gateup_reduction_percent_over_parent": 8.48,
+      "down_reduction_percent_over_parent": 0.04,
+      "total_reduction_percent_over_parent": 4.82,
+      "repaired_gateup_ratio_to_current_c": 1.004,
+      "repaired_down_ratio_to_current_c": 1.073,
+      "repaired_total_ratio_to_current_c": 1.036,
+      "remaining_primary_bottleneck": "cached-down-gap-versus-current-c-native-route",
+      "retention_basis": "adjacent instrumented routed-MoE phase reduction; one-shot whole-prefill throughput is noisy"
+    },
+    "rejected_down_global_load_probe": {
+      "csv_sha256": "06fc6039d36325b1dff5bc255f0c794765cea3c54a9509d3f9851170a7c5339f",
+      "stderr_sha256": "14625fc23c966f9f2bb4dc87efb87516e0fd0dbf82fc3faf52e7ade85986467b",
+      "gateup_ms": 519.579,
+      "down_ms": 536.311,
+      "total_ms": 1072.121,
+      "retained": false
+    },
+    "feature_test_probe": {
+      "stdout_sha256": "a816c0c38ab5413825917fb0cadb0fab2e0d726ab6662ffa660aaabce8801b02",
+      "stderr_sha256": "6484b64bd5a6c604937a8992276d6fe8d918b74a3fde8da072ec4c6468a9bef7",
+      "passed": true,
+      "test_count": 176
+    },
+    "official_vector_probe": {
+      "summary_sha256": "42de5425a5febffe2074e3fa78008e65a11080f979390429bf64ea7200fe0cf0",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "max_abs_logprob_delta": 0.619237483,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Diagnose the residual cached down gap; gate/up is within 1.004x current-C while down remains 1.073x."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 284,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

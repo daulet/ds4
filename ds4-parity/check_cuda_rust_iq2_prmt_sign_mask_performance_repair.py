@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 MILESTONE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba"
 NEXT_STAGE = "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
 FIXTURE = ROOT / f"ds4-parity/baselines/backend/{MILESTONE.lower()}/rust-cuda-iq2-prmt-sign-mask-performance-repair.json"
-CURRENT_REVISION = "1000e653df60a7814fa996d146e3823d0a364280"
+CURRENT_REVISION = "ae721dc95912a918f182d13b7ca55281aa29d8f9"
+RECORDED_REPAIRED_REVISION = "1000e653df60a7814fa996d146e3823d0a364280"
 
 
 @dataclass
@@ -100,7 +101,7 @@ def validate_implementation(report: Report, fixture: dict[str, Any], texts: dict
     )[0]
     for key, expected in [
         ("parent_cuda_oxide_revision", "485bdd86fc1c900ad15ebd421b3b187619fe0903"),
-        ("repaired_cuda_oxide_revision", CURRENT_REVISION),
+        ("repaired_cuda_oxide_revision", RECORDED_REPAIRED_REVISION),
         ("intrinsic", "integer::prmt_b32_ba98"),
         ("ptx_operation", "prmt.b32"),
         ("ptx_selector", "0xba98"),

@@ -128,8 +128,9 @@ def validate_implementation(report: Report, fixture: dict[str, Any], kernels: st
     report.check(kernels.count("abi_moe_cached_store_aligned_u32(") == 3, "aligned Q8 store usage drift")
     paired_successor = "check_cuda_rust_cached_q8_aligned_pair_load_performance_repair.py" in report_text
     pair_staging_successor = "check_cuda_rust_cached_q8_aligned_pair_staging_performance_repair.py" in report_text
+    gate_global_load_successor = "check_cuda_rust_gate_global_load_address_space_performance_repair.py" in report_text
     expected_aligned_load_uses = (
-        8 if pair_staging_successor else (4 if paired_successor else 5)
+        5 if gate_global_load_successor else (8 if pair_staging_successor else (4 if paired_successor else 5))
     )
     report.check(
         kernels.count("abi_moe_cached_load_aligned_u32(") == expected_aligned_load_uses,

@@ -3,6 +3,18 @@
 Record only non-obvious findings discovered through trial and error that are not
 available directly from the repo.
 
+## 2026-06-01: Explicit Global Loads Need Phase-Scoped Retention
+
+- Symptom: forcing typed `ld.global` source reads in cached gate/up and down
+  improved gate/up but made down materially slower in the same B300 profile.
+- Root cause: fixing the address-space form is not a generally beneficial
+  transformation across these two different hot kernels; the down instruction
+  schedule or pressure response outweighs its nominal load-form improvement.
+- Permanent rule: introduce CUDA address-space intrinsics only on a
+  phase-attributed path with adjacent measurement. Retain the gate/up `u16` and
+  `u32` loads here, and reject the matching down edit until down has its own
+  measured repair.
+
 ## 2026-05-30: Staticlib Embedded Kernels Need Final-Link Retention And Package Module Names
 
 - Symptom: library-owned `add_kernel` and `repeat_hc_kernel` compiled into

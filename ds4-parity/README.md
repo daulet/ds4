@@ -4572,6 +4572,21 @@ gate/up decreases from `583.532 ms` to `570.157 ms`, down decreases from
 `1030.111 ms` to `1010.385 ms`; official-vector correctness is preserved and
 the default current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA gate global-load address-space performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_gate_global_load_address_space_performance_repair.py --negative-test
+```
+
+The cached gate/up path now uses explicit typed global loads for aligned model
+and Q8 source reads through the pinned `cuda-oxide` fork. An attempted matching
+down-path change was rejected after its measured regression. On B300, gate/up
+decreases from `567.730 ms` to `519.560 ms`, down remains effectively unchanged
+at `421.883 ms` to `421.707 ms`, and total routed-MoE decreases from
+`1005.846 ms` to `957.414 ms`; correctness is preserved and the default
+current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

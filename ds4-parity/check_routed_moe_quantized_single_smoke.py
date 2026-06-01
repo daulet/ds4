@@ -26,7 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 DEPENDENCY_REVISION = "485bdd86fc1c900ad15ebd421b3b187619fe0903"
-CURRENT_DEPENDENCY_REVISION = "1000e653df60a7814fa996d146e3823d0a364280"
+CURRENT_DEPENDENCY_REVISION = "ae721dc95912a918f182d13b7ca55281aa29d8f9"
 EXPECTED_OWNED = [
     "executable-local Q8_K activation quantization and packed IQ2/Q2 quantized dot proof",
     "default single-token IQ2-XXS/Q2_K routed MoE compute path with direct six-expert down output",

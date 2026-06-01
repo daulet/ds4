@@ -26,7 +26,7 @@ README = ROOT / "ds4-parity/README.md"
 REPORT = ROOT / "ds4-parity/run_parity_report.py"
 
 RECORDED_DEPENDENCY_REVISION = "aabe10dc4fa0086375104458909e222d1ac1cfe3"
-CURRENT_DEPENDENCY_REVISION = "1000e653df60a7814fa996d146e3823d0a364280"
+CURRENT_DEPENDENCY_REVISION = "ae721dc95912a918f182d13b7ca55281aa29d8f9"
 TOOL_REVISION = "981e3244a107d84d807cfb087793269c477cc764"
 EXPECTED_RUST_OWNED = [
     "executable-local cuda-oxide directional_steering_project_kernel launch proof",

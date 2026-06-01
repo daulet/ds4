@@ -13068,3 +13068,30 @@
     skipped and `0` failed; both requested Claude review attempts timed out
     after `60` seconds. Total routed-MoE remains `1.09x` current-C, so
     default routing and promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Gate Global-Load Address-Space Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA gate/up global-read overhead by emitting
+  explicit global-address-space loads only where the B300 profile supports
+  retaining them.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-gate-global-load-address-space-performance-repair.json`
+- Evidence:
+  - The pinned `cuda-oxide` fork revision
+    `ae721dc95912a918f182d13b7ca55281aa29d8f9` supplies typed aligned
+    `u16` and `u32` global loads. Cached gate/up PTX gains `10`
+    `ld.global.u16` and `3` `ld.global.u32` sites while retaining paired
+    shared staging, fixed-order reduction, and `128` DP4A sites.
+  - The broad gate/down probe was rejected: it made down `536.311 ms`.
+    The retained candidate leaves down at zero explicit global loads, with
+    paired shared staging and `256` DP4A sites unchanged.
+  - On B300 the adjacent parent/candidate comparison lowers gate/up from
+    `567.730 ms` to `519.560 ms`, leaves down at `421.883 ms` to
+    `421.707 ms`, and lowers total routed-MoE from `1005.846 ms` to
+    `957.414 ms`. Official vectors pass `1958` checks plus `8` negative
+    checks and feature tests pass `176` tests. The unified report passes
+    `284` comparators with `50` skipped and `0` failed; both requested Claude
+    review attempts timed out after `60` seconds. Total routed-MoE remains
+    `1.036x` current-C because down remains `1.073x`, so default routing and
+    promotion blockers remain in force.

@@ -13,7 +13,7 @@ use cuda_core::{CudaContext, CudaFunction, CudaModule, CudaStream, DriverError, 
 use cuda_device::mma::{load_a_m16n8k16, load_b_m16n8k16, mma_m16n8k16_f32_f16, zero_accumulator};
 use cuda_device::{
     atomic::{AtomicOrdering, DeviceAtomicF32, DeviceAtomicU32},
-    cuda_module, device, integer, kernel, thread, warp, DisjointSlice, DynamicSharedArray,
+    cuda_module, device, integer, kernel, memory, thread, warp, DisjointSlice, DynamicSharedArray,
     SharedArray,
 };
 use cuda_host::ltoir::{self, LtoirError};
@@ -2314,9 +2314,7 @@ mod kernels {
 
     macro_rules! abi_moe_cached_weight_load_u16 {
         ($values:expr, $offset:expr) => {{
-            let values = $values.as_ptr();
-            let offset = $offset;
-            unsafe { *values.add(offset) as u16 | ((*values.add(offset + 1) as u16) << 8) }
+            abi_moe_global_load_u16($values, $offset)
         }};
     }
 
@@ -2392,7 +2390,7 @@ mod kernels {
                 abi_moe_cached_store_aligned_u32(
                     SXQ.as_mut_ptr(),
                     staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES + ABI_MOE_CACHED_Q8_DATA_OFFSET,
-                    abi_moe_cached_load_aligned_u32(xq.as_ptr(), input_block * block_bytes),
+                    abi_moe_global_load_aligned_u32(xq.as_ptr(), input_block * block_bytes),
                 );
             }
             staged_block += THREADS_PER_BLOCK as usize;
@@ -2415,8 +2413,8 @@ mod kernels {
                     staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES
                         + ABI_MOE_CACHED_Q8_DATA_OFFSET
                         + word_index * core::mem::size_of::<u32>(),
-                    abi_moe_cached_load_aligned_u32(xq.as_ptr(), input_offset) as u64
-                        | ((abi_moe_cached_load_aligned_u32(
+                    abi_moe_global_load_aligned_u32(xq.as_ptr(), input_offset) as u64
+                        | ((abi_moe_global_load_aligned_u32(
                             xq.as_ptr(),
                             input_offset + core::mem::size_of::<u32>(),
                         ) as u64)
@@ -4487,6 +4485,16 @@ mod kernels {
             | ((values[offset + 1] as u32) << 8)
             | ((values[offset + 2] as u32) << 16)
             | ((values[offset + 3] as u32) << 24)
+    }
+
+    #[inline(always)]
+    fn abi_moe_global_load_u16(values: &[u8], offset: usize) -> u16 {
+        unsafe { memory::load_global_u16(values.as_ptr().add(offset).cast::<u16>()) as u16 }
+    }
+
+    #[inline(always)]
+    fn abi_moe_global_load_aligned_u32(values: *const u8, offset: usize) -> u32 {
+        unsafe { memory::load_global_u32(values.add(offset).cast::<u32>()) }
     }
 
     fn abi_moe_cached_load_u16(values: *const u8, offset: usize) -> u16 {
