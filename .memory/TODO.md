@@ -13020,3 +13020,26 @@
     skipped, and `0` failed; Claude review was unavailable because the CLI
     was not logged in. Total routed-MoE remains `1.15x` current-C, so
     default routing and promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Cached Q8 Aligned-Pair Load Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE shared-load overhead by pairing
+  adjacent staged Q8 DP4A words in eight-byte-aligned private scratch slots.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-cached-q8-aligned-pair-load-performance-repair.json`
+- Evidence:
+  - The external Q8_K layout remains `292` bytes; cached gate/up and down
+    scratch alone uses a `296`-byte, eight-byte-aligned slot with a four-byte
+    leading offset so adjacent value words are valid aligned `u64` reads.
+  - Gate/up shared Q8 loads change from `128` `u32` sites to `64` additional
+    `u64` sites, and down changes from `256` `u32` sites to `128` `u64`
+    sites; DP4A counts and zero local spill traffic remain unchanged.
+  - On B300 the adjacent parent/candidate comparison lowers gate/up from
+    `604.757 ms` to `583.429 ms`, down from `443.318 ms` to `430.144 ms`,
+    and total routed-MoE from `1064.391 ms` to `1029.873 ms`. Official
+    vectors pass `1958` checks plus `8` negative checks and feature tests
+    pass `176` tests. The unified report passes `282` comparators with `50`
+    skipped and `0` failed; both requested Claude review attempts timed out
+    after `60` seconds. Total routed-MoE remains `1.11x` current-C, so
+    default routing and promotion blockers remain in force.

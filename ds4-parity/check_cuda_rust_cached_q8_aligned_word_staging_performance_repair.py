@@ -86,12 +86,12 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
         ("runtime_route_promoted", False),
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
-    validate_implementation(report, fixture, texts["kernels"])
+    validate_implementation(report, fixture, texts["kernels"], texts["report"])
     validate_execution(report, fixture)
     validate_wiring(report, fixture, texts)
 
 
-def validate_implementation(report: Report, fixture: dict[str, Any], kernels: str) -> None:
+def validate_implementation(report: Report, fixture: dict[str, Any], kernels: str, report_text: str) -> None:
     implementation = require_dict(report, fixture.get("implementation"), "implementation")
     gate = kernels.split("pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel", 1)[1]
     gate = gate.split("pub fn abi_moe_down_expert_tile16_rowspan_cached_kernel", 1)[0]
@@ -126,7 +126,12 @@ def validate_implementation(report: Report, fixture: dict[str, Any], kernels: st
     report.check("ABI_MOE_Q8_K_BLOCK_BYTES as usize / core::mem::size_of::<u32>()" in kernels, "Q8 word sizing drift")
     report.check("fn abi_moe_cached_store_aligned_u32" in kernels, "aligned Q8 store helper missing")
     report.check(kernels.count("abi_moe_cached_store_aligned_u32(") == 3, "aligned Q8 store usage drift")
-    report.check(kernels.count("abi_moe_cached_load_aligned_u32(") == 5, "aligned Q8 load usage drift")
+    paired_successor = "check_cuda_rust_cached_q8_aligned_pair_load_performance_repair.py" in report_text
+    expected_aligned_load_uses = 4 if paired_successor else 5
+    report.check(
+        kernels.count("abi_moe_cached_load_aligned_u32(") == expected_aligned_load_uses,
+        "aligned Q8 load usage drift outside registered paired-load successor",
+    )
     for block, label, shared in [(gate, "gate", "SXQ"), (down, "down", "SMIDQ")]:
         report.check("let mut staged_word = thread_index;" in block, f"{label} word staging missing")
         report.check("ABI_MOE_Q8_K_BLOCK_WORDS" in block, f"{label} word staging bound missing")

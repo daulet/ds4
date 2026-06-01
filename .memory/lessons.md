@@ -325,3 +325,13 @@ available directly from the repo.
 - Permanent rule: when helper-level fixed ordering is useful but inlining
   regresses, test a narrowly scoped macro-expanded hot site and verify call,
   shuffle, and spill counts before retaining it.
+
+## 2026-06-01: Align Cached Q8 Values Rather Than External Q8 Blocks
+
+- Symptom: after aligned staging and in-kernel reduction repair, cached Rust
+  gate/up and down still emitted `128` and `256` shared `u32` Q8 input loads.
+- Root cause: Q8 values start four bytes into an external `292`-byte block, so
+  adjacent value words are not naturally eight-byte aligned in a packed cache.
+- Permanent rule: keep the external Q8 ABI unchanged, but when a private CUDA
+  scratch representation needs paired loads, add explicit slot padding and
+  validate PTX load width, spill counts, full vectors, and phase timing.

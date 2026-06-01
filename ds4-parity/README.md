@@ -4543,6 +4543,21 @@ quarter-warp shuffle sequence in-kernel. On B300, gate/up decreases from
 `1063.907 ms`; official-vector correctness is preserved and the default
 current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA cached Q8 aligned-pair load performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_cached_q8_aligned_pair_load_performance_repair.py --negative-test
+```
+
+The cached gate/up and down kernels now stage each Q8_K block in a private
+eight-byte-aligned scratch slot and consume adjacent DP4A input words as
+aligned `u64` pairs, leaving the external `292`-byte Q8_K layout unchanged.
+On B300, gate/up decreases from `604.757 ms` to `583.429 ms`, down decreases
+from `443.318 ms` to `430.144 ms`, and total routed-MoE decreases from
+`1064.391 ms` to `1029.873 ms`; official-vector correctness is preserved and
+the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

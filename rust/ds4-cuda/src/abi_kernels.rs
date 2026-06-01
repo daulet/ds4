@@ -43,6 +43,9 @@ const ABI_MOE_Q4_BLOCK_BYTES: u64 = 144;
 const ABI_MOE_Q8_K_BLOCK_BYTES: u64 = 292;
 const ABI_MOE_Q8_K_BLOCK_WORDS: usize =
     ABI_MOE_Q8_K_BLOCK_BYTES as usize / core::mem::size_of::<u32>();
+const ABI_MOE_CACHED_Q8_DATA_OFFSET: usize = core::mem::size_of::<u32>();
+const ABI_MOE_CACHED_Q8_BLOCK_BYTES: usize =
+    ABI_MOE_CACHED_Q8_DATA_OFFSET + ABI_MOE_Q8_K_BLOCK_BYTES as usize;
 const ABI_MOE_SORTED_EXPERTS: usize = 256;
 const ABI_MOE_CACHED_GATE_MAX_BLOCKS: usize = 16;
 const ABI_MOE_CACHED_DOWN_MAX_BLOCKS: usize = 8;
@@ -2355,8 +2358,8 @@ mod kernels {
     ) {
         static mut SXQ: SharedArray<
             u8,
-            { 8 * ABI_MOE_CACHED_GATE_MAX_BLOCKS * ABI_MOE_Q8_K_BLOCK_BYTES as usize },
-            4,
+            { 8 * ABI_MOE_CACHED_GATE_MAX_BLOCKS * ABI_MOE_CACHED_Q8_BLOCK_BYTES },
+            8,
         > = SharedArray::UNINIT;
         static mut S_IQ2_GRID: SharedArray<u64, 256> = SharedArray::UNINIT;
         static mut S_IQ2_SIGNS: SharedArray<u8, 128> = SharedArray::UNINIT;
@@ -2389,7 +2392,9 @@ mod kernels {
             unsafe {
                 abi_moe_cached_store_aligned_u32(
                     SXQ.as_mut_ptr(),
-                    staged_word * core::mem::size_of::<u32>(),
+                    staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES
+                        + ABI_MOE_CACHED_Q8_DATA_OFFSET
+                        + word_index * core::mem::size_of::<u32>(),
                     abi_moe_cached_load_aligned_u32(
                         xq.as_ptr(),
                         input_block * block_bytes + word_index * core::mem::size_of::<u32>(),
@@ -2479,77 +2484,65 @@ mod kernels {
                                     if np > $entry {
                                         let q8_block =
                                             $entry as usize * xq_blocks as usize + block as usize;
+                                        let q8_pair0 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index,
+                                        );
+                                        let q8_pair1 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 8,
+                                        );
+                                        let q8_pair2 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 16,
+                                        );
+                                        let q8_pair3 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 24,
+                                        );
                                         let mut subtotal = 0_i32;
                                         subtotal = integer::dp4a_i8(
                                             weight_word0,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index,
-                                            ),
+                                            q8_pair0 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word1,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 4,
-                                            ),
+                                            (q8_pair0 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word2,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 8,
-                                            ),
+                                            q8_pair1 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word3,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 12,
-                                            ),
+                                            (q8_pair1 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word4,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 16,
-                                            ),
+                                            q8_pair2 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word5,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 20,
-                                            ),
+                                            (q8_pair2 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word6,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 24,
-                                            ),
+                                            q8_pair3 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word7,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 28,
-                                            ),
+                                            (q8_pair3 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         $sum += subtotal * multiplier;
@@ -2634,77 +2627,65 @@ mod kernels {
                                     if np > $entry {
                                         let q8_block =
                                             $entry as usize * xq_blocks as usize + block as usize;
+                                        let q8_pair0 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index,
+                                        );
+                                        let q8_pair1 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 8,
+                                        );
+                                        let q8_pair2 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 16,
+                                        );
+                                        let q8_pair3 = abi_moe_cached_q8_pair(
+                                            unsafe { SXQ.as_ptr() },
+                                            q8_block,
+                                            q8_index + 24,
+                                        );
                                         let mut subtotal = 0_i32;
                                         subtotal = integer::dp4a_i8(
                                             weight_word0,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index,
-                                            ),
+                                            q8_pair0 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word1,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 4,
-                                            ),
+                                            (q8_pair0 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word2,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 8,
-                                            ),
+                                            q8_pair1 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word3,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 12,
-                                            ),
+                                            (q8_pair1 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word4,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 16,
-                                            ),
+                                            q8_pair2 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word5,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 20,
-                                            ),
+                                            (q8_pair2 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word6,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 24,
-                                            ),
+                                            q8_pair3 as u32 as i32,
                                             subtotal,
                                         );
                                         subtotal = integer::dp4a_i8(
                                             weight_word7,
-                                            abi_moe_cached_q8_word(
-                                                unsafe { SXQ.as_ptr() },
-                                                q8_block,
-                                                q8_index + 28,
-                                            ),
+                                            (q8_pair3 >> 32) as u32 as i32,
                                             subtotal,
                                         );
                                         $sum += subtotal * multiplier;
@@ -3029,48 +3010,24 @@ mod kernels {
                     if $np > $entry_base + $entry {
                         let q8_block = ($entry_base + $entry) as usize * $midq_blocks as usize
                             + $block as usize;
+                        let q8_pair0 = abi_moe_cached_q8_pair($q8, q8_block, $q8_base);
+                        let q8_pair1 = abi_moe_cached_q8_pair($q8, q8_block, $q8_base + 8);
+                        let q8_pair2 = abi_moe_cached_q8_pair($q8, q8_block, $q8_base + 16);
+                        let q8_pair3 = abi_moe_cached_q8_pair($q8, q8_block, $q8_base + 24);
                         let mut first = 0_i32;
-                        first = integer::dp4a_i8(
-                            first_word0,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base),
-                            first,
-                        );
-                        first = integer::dp4a_i8(
-                            first_word1,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 4),
-                            first,
-                        );
-                        first = integer::dp4a_i8(
-                            first_word2,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 8),
-                            first,
-                        );
-                        first = integer::dp4a_i8(
-                            first_word3,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 12),
-                            first,
-                        );
+                        first = integer::dp4a_i8(first_word0, q8_pair0 as u32 as i32, first);
+                        first =
+                            integer::dp4a_i8(first_word1, (q8_pair0 >> 32) as u32 as i32, first);
+                        first = integer::dp4a_i8(first_word2, q8_pair1 as u32 as i32, first);
+                        first =
+                            integer::dp4a_i8(first_word3, (q8_pair1 >> 32) as u32 as i32, first);
                         let mut second = 0_i32;
-                        second = integer::dp4a_i8(
-                            second_word0,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 16),
-                            second,
-                        );
-                        second = integer::dp4a_i8(
-                            second_word1,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 20),
-                            second,
-                        );
-                        second = integer::dp4a_i8(
-                            second_word2,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 24),
-                            second,
-                        );
-                        second = integer::dp4a_i8(
-                            second_word3,
-                            abi_moe_cached_q8_word($q8, q8_block, $q8_base + 28),
-                            second,
-                        );
+                        second = integer::dp4a_i8(second_word0, q8_pair2 as u32 as i32, second);
+                        second =
+                            integer::dp4a_i8(second_word1, (q8_pair2 >> 32) as u32 as i32, second);
+                        second = integer::dp4a_i8(second_word2, q8_pair3 as u32 as i32, second);
+                        second =
+                            integer::dp4a_i8(second_word3, (q8_pair3 >> 32) as u32 as i32, second);
                         $sum += first_scale * first + second_scale * second;
                     }
                 }};
@@ -3108,8 +3065,8 @@ mod kernels {
     ) {
         static mut SMIDQ: SharedArray<
             u8,
-            { 16 * ABI_MOE_CACHED_DOWN_MAX_BLOCKS * ABI_MOE_Q8_K_BLOCK_BYTES as usize },
-            4,
+            { 16 * ABI_MOE_CACHED_DOWN_MAX_BLOCKS * ABI_MOE_CACHED_Q8_BLOCK_BYTES },
+            8,
         > = SharedArray::UNINIT;
 
         let tile = thread::blockIdx_y();
@@ -3140,7 +3097,9 @@ mod kernels {
             unsafe {
                 abi_moe_cached_store_aligned_u32(
                     SMIDQ.as_mut_ptr(),
-                    staged_word * core::mem::size_of::<u32>(),
+                    staged_block * ABI_MOE_CACHED_Q8_BLOCK_BYTES
+                        + ABI_MOE_CACHED_Q8_DATA_OFFSET
+                        + word_index * core::mem::size_of::<u32>(),
                     abi_moe_cached_load_aligned_u32(
                         midq.as_ptr(),
                         input_block * block_bytes + word_index * core::mem::size_of::<u32>(),
@@ -4451,19 +4410,21 @@ mod kernels {
     fn abi_moe_cached_q8_scale(q8: *const u8, block: usize) -> f32 {
         f32::from_bits(abi_moe_cached_load_aligned_u32(
             q8,
-            block * ABI_MOE_Q8_K_BLOCK_BYTES as usize,
+            block * ABI_MOE_CACHED_Q8_BLOCK_BYTES + ABI_MOE_CACHED_Q8_DATA_OFFSET,
         ))
     }
 
-    fn abi_moe_cached_q8_word(q8: *const u8, block: usize, index: usize) -> i32 {
-        abi_moe_cached_load_aligned_u32(q8, block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 4 + index)
-            as i32
+    fn abi_moe_cached_q8_pair(q8: *const u8, block: usize, index: usize) -> u64 {
+        abi_moe_cached_load_aligned_u64(
+            q8,
+            block * ABI_MOE_CACHED_Q8_BLOCK_BYTES + ABI_MOE_CACHED_Q8_DATA_OFFSET + 4 + index,
+        )
     }
 
     fn abi_moe_cached_q8_bsum(q8: *const u8, block: usize, index: usize) -> i32 {
         abi_moe_cached_load_u16(
             q8,
-            block * ABI_MOE_Q8_K_BLOCK_BYTES as usize + 260 + index * 2,
+            block * ABI_MOE_CACHED_Q8_BLOCK_BYTES + ABI_MOE_CACHED_Q8_DATA_OFFSET + 260 + index * 2,
         ) as i16 as i32
     }
 
@@ -4492,6 +4453,10 @@ mod kernels {
 
     fn abi_moe_cached_load_aligned_u32(values: *const u8, offset: usize) -> u32 {
         unsafe { *values.add(offset).cast::<u32>() }
+    }
+
+    fn abi_moe_cached_load_aligned_u64(values: *const u8, offset: usize) -> u64 {
+        unsafe { *values.add(offset).cast::<u64>() }
     }
 
     fn abi_moe_cached_store_aligned_u32(values: *mut u8, offset: usize, value: u32) {

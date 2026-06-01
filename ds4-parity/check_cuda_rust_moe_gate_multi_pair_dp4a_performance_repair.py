@@ -81,12 +81,12 @@ def validate(report: Report, fixture: dict[str, Any], texts: dict[str, str]) -> 
         ("default_current_c_route_preserved", True),
     ]:
         report.check(ownership.get(key) == expected, f"ownership drift: {key}")
-    validate_implementation(report, texts["kernels"])
+    validate_implementation(report, texts["kernels"], texts["report"])
     validate_execution(report, fixture)
     validate_wiring(report, fixture, texts)
 
 
-def validate_implementation(report: Report, kernels: str) -> None:
+def validate_implementation(report: Report, kernels: str, report_text: str) -> None:
     gate = kernels.split("pub fn abi_moe_gate_up_mid_expert_tile8_rowspan_cached_kernel(", 1)[1].split(
         "pub fn abi_moe_atomic_output_zero_kernel(", 1
     )[0]
@@ -103,7 +103,12 @@ def validate_implementation(report: Report, kernels: str) -> None:
         "fn abi_moe_iq2_signed_word" in kernels or "macro_rules! abi_moe_iq2_signed_word" in kernels,
         "IQ2 packed sign computation missing",
     )
-    report.check("fn abi_moe_cached_q8_word" in kernels, "cached q8 word helper missing")
+    paired_successor = "check_cuda_rust_cached_q8_aligned_pair_load_performance_repair.py" in report_text
+    if paired_successor:
+        report.check("fn abi_moe_cached_q8_pair" in kernels, "registered cached q8 pair successor missing")
+        report.check("fn abi_moe_cached_q8_word" not in kernels, "retired cached q8 word helper retained")
+    else:
+        report.check("fn abi_moe_cached_q8_word" in kernels, "cached q8 word helper missing")
     report.check("fn abi_moe_iq2_q8_k_cached_dot(" not in kernels, "scalar cached IQ2 helper retained")
 
 
