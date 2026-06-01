@@ -4615,6 +4615,21 @@ decreases from `420.440 ms` to `401.116 ms` and from `420.188 ms` to
 `401.120 ms`; correctness is preserved and the default current-C route remains
 unchanged pending the graph benchmark promotion gate.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA persistent cuBLAS handle performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_persistent_cublas_handle_performance_repair.py --negative-test
+```
+
+The Rust CUDA substrate now retains one lazily initialized cuBLAS handle
+behind the serialized ABI backend lock instead of constructing it per graph
+operation. On B300, an order-reversed comparison raises Rust graph prefill
+from `259.64` to `468.40` tokens/s while preserving KV-cache bytes, and
+profiled prefill falls from `6434.948 ms` to `2714.401 ms`. Current C still
+reaches `1400.45` tokens/s and the repaired Rust attention stage remains
+`7.078x` slower than current C, so the default route is unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

@@ -1,5 +1,21 @@
 # DS4 Rust Port Status
 
+- M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Persistent cuBLAS Handle Performance Repair
+  is validated on B300 from the retained paired-scale parent. The Rust
+  `CudaOxideSubstrate` now initializes one `Blas` handle lazily and retains it
+  behind the existing serialized ABI backend lock, instead of constructing a
+  cuBLAS handle per graph operation. The repaired DSO SHA-256 is
+  `53898bdfc5ae12faa17ef614359c9f981eb5224dedef0237f7d1b32887315caf`.
+  An order-reversed B300 route comparison raises Rust prefill from `259.64`
+  to `468.40` tokens/s at identical `52184460` KV-cache bytes, while the
+  profiled prefill total falls from `6434.948 ms` to `2714.401 ms`.
+  The repaired path is still only `0.334x` current-C prefill throughput;
+  attention remains the dominant measured blocker at `1354.844 ms` versus
+  current-C `191.404 ms`. Official vectors pass `1958` checks plus `8`
+  negative checks and B300 feature tests pass `176` tests. The unified report
+  passes `287` comparators with `50` skipped and `0` failed; both requested
+  Claude review attempts timed out after `60` seconds. Default routing remains
+  current C until the graph benchmark promotion gate is passed.
 - M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Paired-Scale Global-Load Address-Space Performance Repair
   is validated on B300 from the retained down metadata global-load parent.
   Cached down now reads each aligned pair of low-nibble Q2 scale bytes

@@ -14102,6 +14102,38 @@ Stage split:
     current-C with down at `1.020x`; default routing remains current C until
     the graph benchmark promotion gate is passed.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Persistent cuBLAS Handle Performance Repair
+
+- Status: done.
+- Goal: reuse one serialized cuBLAS handle for Rust graph operations instead
+  of paying handle construction and teardown on each projection or attention
+  call.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-persistent-cublas-handle-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_persistent_cublas_handle_performance_repair.py --negative-test`.
+- Evidence:
+  - `CudaOxideSubstrate` now lazily stores one `Blas` handle in
+    `OnceLock<Blas>` and returns a borrowed handle. Its public ABI ownership
+    remains serialized by `BACKEND: Mutex<Option<CudaOxideSubstrate>>`, so
+    the retained handle does not make graph calls concurrent.
+  - The repaired DSO SHA-256 is
+    `53898bdfc5ae12faa17ef614359c9f981eb5224dedef0237f7d1b32887315caf`;
+    its parent is
+    `1bfe1d95896f23d22a3b8b03b85753cfe5d20af2780a8c939c6e969dfadcabed`.
+    The order-reversed B300 graph comparison raises Rust prefill from
+    `259.64` to `468.40` tokens/s with the same `52184460` KV-cache bytes,
+    and stage profiling lowers prefill time from `6434.948 ms` to
+    `2714.401 ms`.
+  - Current C remains materially faster at `1400.45` prefill tokens/s. The
+    repaired Rust attention stage remains `1354.844 ms` versus current-C
+    `191.404 ms`, or `7.078x`, so attention is the next measured blocker.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes `287`
+    comparators with `50` skipped and `0` failed; both requested Claude
+    review attempts timed out after `60` seconds. Default routing remains
+    current C until the graph benchmark promotion gate is passed.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

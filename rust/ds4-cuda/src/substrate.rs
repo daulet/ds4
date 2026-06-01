@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use cuda_core::{
     Blas, BlasError, CudaContext, CudaEvent, CudaStream, DeviceBuffer, DeviceCopy, DriverError,
@@ -13,17 +13,26 @@ use crate::allocation_policy::DeviceMemoryCapacity;
 ///
 /// This type owns the CUDA context and stream through `cuda-core`. It does not
 /// claim DS4 compute-kernel ownership or alter the runtime route.
-#[derive(Debug)]
 pub struct CudaOxideSubstrate {
     context: Arc<CudaContext>,
     stream: Arc<CudaStream>,
+    blas: OnceLock<Blas>,
 }
+
+// SAFETY: moving the substrate moves its retained cuBLAS handle without
+// concurrently using it. The public ABI serializes shared substrate access
+// through its backend mutex, and CUDA operations bind `context` before use.
+unsafe impl Send for CudaOxideSubstrate {}
 
 impl CudaOxideSubstrate {
     pub fn open(device_ordinal: usize) -> Result<Self, DriverError> {
         let context = CudaContext::new(device_ordinal)?;
         let stream = context.new_stream()?;
-        Ok(Self { context, stream })
+        Ok(Self {
+            context,
+            stream,
+            blas: OnceLock::new(),
+        })
     }
 
     pub fn device_name(&self) -> Result<String, DriverError> {
@@ -54,8 +63,16 @@ impl CudaOxideSubstrate {
         })
     }
 
-    pub fn blas_handle(&self) -> Result<Blas, BlasError> {
-        Blas::new(&self.context)
+    pub fn blas_handle(&self) -> Result<&Blas, BlasError> {
+        if let Some(blas) = self.blas.get() {
+            return Ok(blas);
+        }
+        let blas = Blas::new(&self.context)?;
+        let _ = self.blas.set(blas);
+        Ok(self
+            .blas
+            .get()
+            .expect("cuBLAS handle is present after successful initialization"))
     }
 
     pub fn synchronize(&self) -> Result<(), DriverError> {

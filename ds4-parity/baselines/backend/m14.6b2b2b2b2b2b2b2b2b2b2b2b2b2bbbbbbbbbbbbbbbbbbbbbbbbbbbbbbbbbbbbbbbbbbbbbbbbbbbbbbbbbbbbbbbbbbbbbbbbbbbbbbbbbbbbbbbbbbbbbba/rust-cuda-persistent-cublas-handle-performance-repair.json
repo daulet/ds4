@@ -1,0 +1,126 @@
+{
+  "schema": "ds4.cuda_rust_persistent_cublas_handle_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-rust-persistent-cublas-handle-route-blocked",
+  "goal": "Remove repeated cuBLAS handle creation from Rust CUDA graph execution by retaining one lazily initialized handle per serialized substrate instance.",
+  "ownership": {
+    "retains_one_blas_handle_per_substrate": true,
+    "reuses_handle_across_projection_and_attention_calls": true,
+    "retains_existing_kernel_dispatch": true,
+    "changes_cuda_oxide_revision": false,
+    "changes_default_current_c_route": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/substrate.rs",
+    "serialized_owner": "rust/ds4-cuda/src/abi.rs:BACKEND",
+    "handle_storage": "OnceLock<Blas>",
+    "scope_boundary": "only the cuda-oxide substrate handle lifetime changes; graph dispatch, kernels, weights, output contract, cuda-oxide revision, and route policy remain unchanged"
+  },
+  "b300_execution": {
+    "date_utc": "2026-06-01",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "parent_shared_library_sha256": "1bfe1d95896f23d22a3b8b03b85753cfe5d20af2780a8c939c6e969dfadcabed",
+    "repaired_shared_library_sha256": "53898bdfc5ae12faa17ef614359c9f981eb5224dedef0237f7d1b32887315caf",
+    "route_workload": "one 2048-token prefill frontier plus 32 generated tokens through the Rust runtime graph",
+    "profile_workload": "one 2048-token prefill frontier plus one generated token with layer, Q, graph-split, and MoE profiling enabled",
+    "parent_route_probe": {
+      "csv_sha256": "61dd54452ce559a6f9477c8ba902d0039c2de313e535e4418dcbb68f887d826d",
+      "stderr_sha256": "48e8302ebac1e64d16b81154ee5163bf787ca816880d6a0fa1a431b24e37217e",
+      "prefill_tps": 259.64,
+      "decode_tps": 14.93,
+      "kvcache_bytes": 52184460
+    },
+    "repaired_route_probe": {
+      "csv_sha256": "1cffee2ac30e4ca9ffcf480ae3033f268592c032a70fc051bc65a86e4243f71a",
+      "stderr_sha256": "150ecfe3815d1577592927d2319acbe8d45dbc4ad331f76461387fa7102d3160",
+      "prefill_tps": 468.40,
+      "decode_tps": 14.84,
+      "kvcache_bytes": 52184460
+    },
+    "parent_profile_probe": {
+      "csv_sha256": "b91c8ece3d34a85f7f26c242ecd8128efa80d055ea6656ac2b02ea12e518b63e",
+      "stderr_sha256": "49e59177918793c58ba5d3ac7c46a19bc2cae5a9d78844bc4a6110ea8dc76f8f",
+      "prefill_tps": 252.70,
+      "decode_tps": 16.26,
+      "profiled_layer_count": 43,
+      "prefill_total_ms": 6434.948,
+      "attention_ms": 1554.880,
+      "output_projection_ms": 642.935,
+      "q_path_ms": 674.842,
+      "routed_moe_ms": 947.216
+    },
+    "repaired_profile_probe": {
+      "csv_sha256": "7386e1e23b580c3cce6e465c3f0ae1950b4b73b763d62645f10465796eda2b2e",
+      "stderr_sha256": "5f8d8734a14cf8ccc8a812cef9b3d6782239b608ed18584548c78491e0bddc40",
+      "prefill_tps": 540.43,
+      "decode_tps": 16.29,
+      "profiled_layer_count": 43,
+      "prefill_total_ms": 2714.401,
+      "attention_ms": 1354.844,
+      "output_projection_ms": 191.542,
+      "q_path_ms": 53.584,
+      "routed_moe_ms": 942.979
+    },
+    "current_c_reference": {
+      "route_prefill_tps": 1400.45,
+      "route_decode_tps": 34.49,
+      "profile_prefill_tps": 1308.32,
+      "attention_ms": 191.404,
+      "output_projection_ms": 59.191,
+      "routed_moe_ms": 927.592,
+      "provenance": "adjacent current-C graph benchmark and profile probes captured before the retained repair"
+    },
+    "attribution": {
+      "repaired_route_prefill_speedup_over_parent": 1.804,
+      "repaired_route_prefill_increase_percent_over_parent": 80.40,
+      "repaired_profile_total_speedup_over_parent": 2.371,
+      "repaired_profile_total_reduction_percent_over_parent": 57.82,
+      "repaired_route_prefill_ratio_to_current_c": 0.334,
+      "repaired_route_decode_ratio_to_current_c": 0.430,
+      "repaired_attention_ratio_to_current_c": 7.078,
+      "repaired_output_projection_ratio_to_current_c": 3.236,
+      "remaining_primary_bottleneck": "attention",
+      "retention_basis": "order-reversed parent and candidate DSO comparison plus stage profiling; current-C promotion baseline remains unsatisfied"
+    },
+    "feature_test_probe": {
+      "stdout_sha256": "6e45552f5b2aec2b00b55ee4ed68b9f632a882053a25f471fbb17a862a6315ae",
+      "stderr_sha256": "7891fee3b24a4bc03bfb69c233831467348d8acfcdf4885143d44f05e2f82a8b",
+      "toolchain": "nightly-2026-04-03",
+      "passed": true,
+      "test_count": 176
+    },
+    "official_vector_probe": {
+      "summary_sha256": "5f97ed9cc8dcd9b8387a494a56f9f8cb179f09a42ccfe21a51fc97b9b3da2300",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "max_abs_logprob_delta": 0.619237483,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_completed_probe": 0,
+    "gpu_memory_mib_after_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Reduce Rust graph attention cost; the repaired attention stage is still 7.078x the current-C profiled stage."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 287,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

@@ -13146,3 +13146,32 @@
     review attempts timed out after `60` seconds. Rust is now `1.016x`
     current-C total with down at `1.020x`, so default routing remains current
     C until the graph benchmark promotion gate is passed.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Persistent cuBLAS Handle Performance Repair
+
+- Status: done
+- Goal: remove repeated cuBLAS handle initialization from Rust graph execution
+  while preserving the serialized backend ownership and route policy.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-persistent-cublas-handle-performance-repair.json`
+- Evidence:
+  - `CudaOxideSubstrate` now lazily retains one `Blas` instance in
+    `OnceLock<Blas>`; all ABI graph use remains serialized by the existing
+    `BACKEND` mutex. Graph dispatch, embedded kernels, `cuda-oxide` revision,
+    and default routing are unchanged.
+  - The B300 parent and repaired DSOs are
+    `1bfe1d95896f23d22a3b8b03b85753cfe5d20af2780a8c939c6e969dfadcabed`
+    and
+    `53898bdfc5ae12faa17ef614359c9f981eb5224dedef0237f7d1b32887315caf`.
+    In an order-reversed graph comparison, Rust prefill rises from `259.64`
+    to `468.40` tokens/s at equal `52184460` KV-cache bytes. With stage
+    profiling enabled, total prefill falls from `6434.948 ms` to
+    `2714.401 ms`.
+  - The repaired graph route still reaches only `0.334x` current-C prefill
+    throughput. Its attention stage remains `1354.844 ms` versus current-C
+    `191.404 ms` (`7.078x`), identifying attention as the next repair scope.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes `287`
+    comparators with `50` skipped and `0` failed; both requested Claude
+    review attempts timed out after `60` seconds. Default routing remains
+    current C until the graph benchmark promotion gate is passed.
