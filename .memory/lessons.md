@@ -289,3 +289,15 @@ available directly from the repo.
 - Permanent rule: keep the retained packed sign transform for portable Rust
   gate/up code; do not pursue a `vsub4` intrinsic unless a valid, measured
   target-specific lowering is first proven by assembly and end-to-end tests.
+
+## 2026-05-31: Check Emitted Calls Even For `#[inline(always)]` CUDA Helpers
+
+- Symptom: changing the retained inlined quarter-warp reduction loop into
+  three explicit shuffles caused cuda-oxide to emit out-of-line caller sites
+  again despite retaining `#[inline(always)]`.
+- Root cause: the CUDA code-generation decision changes with the expanded
+  helper body; source-level inlining annotations alone do not prove hot-kernel
+  PTX shape.
+- Permanent rule: for Rust CUDA helper scheduling repairs, record both the
+  helper PTX and each hot caller's call/shuffle/spill counts before attributing
+  a performance change to inlining.

@@ -4502,6 +4502,19 @@ quarter-warp shuffle reduction helper. On B300, gate/up decreases from
 `1244.513 ms`; official-vector correctness is preserved and the default
 current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA fixed-order quarter-warp reduction performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_fixed_order_quarter_warp_reduction_performance_repair.py --negative-test
+```
+
+The Rust CUDA reduction helper now expresses its fixed `4`, `2`, `1`
+shuffle sequence directly. Cuda-oxide emits a branch-free out-of-line helper
+rather than retaining caller inlining; the measured B300 routed-MoE total
+still decreases from `1243.192 ms` to `1232.947 ms`. Official-vector
+correctness is preserved and the default current-C route remains unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh

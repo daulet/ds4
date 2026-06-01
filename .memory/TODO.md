@@ -12946,3 +12946,32 @@
     review returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE
     remains `1.35x` current-C, so default routing and promotion blockers
     remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Fixed-Order Quarter-Warp Reduction Performance Repair
+
+- Status: done
+- Goal: reduce cached Rust CUDA routed-MoE reduction overhead by replacing the
+  fixed three-iteration quarter-warp stride loop with the same explicit
+  `4`, `2`, `1` shuffle sequence.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-fixed-order-quarter-warp-reduction-performance-repair.json`
+- Evidence:
+  - Only `abi_moe_quarter_warp_sum` changes its spelling; arithmetic order,
+    PRMT sign-mask construction, DP4A topology, row-span policy, benchmark
+    executable, and default current-C routing remain unchanged.
+  - Cuda-oxide emits a branch-free out-of-line helper with `3`
+    `shfl.sync` sites and `0` branch sites. Gate/up caller PTX therefore
+    returns to `16` reduction calls and down to `8`; neither introduces local
+    stores or loads.
+  - An adjacent B300 comparison lowers gate/up from `714.777 ms` to
+    `709.869 ms`, down from `512.130 ms` to `506.772 ms`, and total from
+    `1243.192 ms` to `1232.947 ms`. The repaired DSO SHA-256 is
+    `075bbcf0bbf81a1610f6bd44c0359185c770a432229cf769f40235285076af94`
+    and PTX SHA-256 is
+    `da7b9424ba1230d9dcaa68ae29c729387dada2c84ff15b70677897c1e6feaaec`.
+    Official vectors pass `1958` checks plus `8` negative checks and B300
+    feature tests pass `176` tests. The unified report passes with `279`
+    passed, `50` skipped, and `0` failed. Both Claude review attempts
+    returned `CLAUDE_REVIEW_TIMEOUT_AFTER_60S`. Total routed-MoE remains
+    `1.33x` current-C, so default routing and promotion blockers remain in
+    force.
