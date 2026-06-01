@@ -13095,3 +13095,29 @@
     review attempts timed out after `60` seconds. Total routed-MoE remains
     `1.036x` current-C because down remains `1.073x`, so default routing and
     promotion blockers remain in force.
+
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Metadata Global-Load Address-Space Performance Repair
+
+- Status: done
+- Goal: reduce the remaining cached Rust CUDA down-path metadata-read
+  overhead without retaining the measured regressions from broader
+  address-space or scheduling changes.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-metadata-global-load-address-space-performance-repair.json`
+- Evidence:
+  - Cached down now routes only aligned Q2 `weight_scale` and `weight_min`
+    reads at offsets `80` and `82` through the retained explicit global
+    `u16` intrinsic. Down PTX gains exactly `2` `ld.global.u16` sites while
+    retaining `256` DP4A sites and unchanged shared-memory counts.
+  - A packed-Q2 data-word `ld.global.u32` probe was rejected after down
+    changed from `423.855 ms` to `574.252 ms`; a four-entry expansion probe
+    was already rejected at `545.084 ms`.
+  - Two B300 order-reversed comparisons lower down from `423.669 ms` to
+    `420.358 ms` and from `423.519 ms` to `420.123 ms`; total routed-MoE
+    falls from `961.924 ms` to `958.728 ms` and from `961.746 ms` to
+    `958.190 ms`. Official vectors pass `1958` checks plus `8` negative
+    checks and feature tests pass `176` tests. The unified report passes `285`
+    comparators with `50` skipped and `0` failed; both requested Claude
+    review attempts timed out after `60` seconds. Rust remains `1.037x`
+    current-C total with down at `1.068x`, so default routing and promotion
+    blockers remain in force.

@@ -1,0 +1,183 @@
+{
+  "schema": "ds4.cuda_rust_down_metadata_global_load_address_space_performance_repair.v1",
+  "milestone": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba",
+  "status": "b300-pass-rust-down-metadata-global-load-route-blocked",
+  "goal": "Reduce cached Rust CUDA down metadata-read overhead through explicit global halfword loads while rejecting broader packed-weight address-space changes.",
+  "ownership": {
+    "retains_gate_global_load_address_space": true,
+    "changes_down_metadata_global_load_address_space": true,
+    "changes_down_packed_q2_word_address_space": false,
+    "changes_down_q8_staging_address_space": false,
+    "retains_private_padded_q8_layout": true,
+    "retains_paired_shared_staging": true,
+    "retains_fixed_order_reduction": true,
+    "retains_gate_dp4a_topology": true,
+    "retains_down_dp4a_topology": true,
+    "changes_default_current_c_route": false,
+    "official_vector_gate_preserved": true,
+    "runtime_route_promoted": false
+  },
+  "implementation": {
+    "source": "rust/ds4-cuda/src/abi_kernels.rs",
+    "cuda_oxide_revision": "ae721dc95912a918f182d13b7ca55281aa29d8f9",
+    "down_metadata_fields": ["weight_scale", "weight_min"],
+    "down_metadata_offsets": [80, 82],
+    "q2_block_bytes": 84,
+    "metadata_alignment_bytes": 2,
+    "parent_down_kernel_ptx_sha256": "b9ed33cb4081dd05db0e9956cb708f0c83da6091cba7fc51a490014fed1dd121",
+    "repaired_down_kernel_ptx_sha256": "b32b8ef94660dffe104dcd0b04ee61b16b03cbe9b0baf032c75bec7f0ab14cdf",
+    "parent_down_global_u16_load_sites": 0,
+    "repaired_down_global_u16_load_sites": 2,
+    "repaired_down_global_u32_load_sites": 0,
+    "parent_down_byte_load_sites": 45,
+    "repaired_down_byte_load_sites": 41,
+    "parent_down_shared_load_sites": 152,
+    "repaired_down_shared_load_sites": 152,
+    "parent_down_shared_store_sites": 2,
+    "repaired_down_shared_store_sites": 2,
+    "parent_down_dp4a_sites": 256,
+    "repaired_down_dp4a_sites": 256,
+    "parent_down_local_sites": 0,
+    "repaired_down_local_sites": 0,
+    "scope_boundary": "only aligned Q2 scale and minimum halfword fields in the cached-down kernel use explicit global loads; packed Q2 words and Q8 staging remain on the retained path"
+  },
+  "b300_execution": {
+    "date_utc": "2026-06-01",
+    "kube_context": "hou2-prod1",
+    "namespace": "default",
+    "pod": "ds4-rust-port-b300",
+    "device_name": "NVIDIA B300 SXM6 AC",
+    "parent_shared_library_sha256": "8a8b4e2a8f6e7a3751b85c47c2fffa5a009a83c01365a6a6bdd5a83375c0f5c3",
+    "repaired_shared_library_sha256": "39aa45d4a45cf81867c9b25d74afc30a5ad25f20552ec006bca8da9951271820",
+    "workload": "one 2048-token prefill frontier plus one generated token through the Rust runtime graph with DS4_CUDA_MOE_PROFILE=1",
+    "initial_parent_profile": {
+      "csv_sha256": "59a3d989f7bdf85f301f28b689427a27e88239b3d067b415cb5b6c621e9e9dab",
+      "stderr_sha256": "c931bf4d863b4eb0c69a8c9babd84b6ced85ef7a1168752761bfda6b6b24e9dc",
+      "prefill_tps": 252.69,
+      "decode_tps": 16.24,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.128,
+      "sort_ms": 4.340,
+      "gateup_ms": 521.836,
+      "midq_ms": 8.902,
+      "down_ms": 423.669,
+      "sum_ms": 0.043,
+      "total_ms": 961.924
+    },
+    "initial_repaired_profile": {
+      "csv_sha256": "421534677888b8ec6080befc65fb726cb7af1665c550b71106d63ec0a7c83787",
+      "stderr_sha256": "b9211027b9be363eb232c2f027e2195a8afc1e427d47b6651b76616ad7942a57",
+      "prefill_tps": 167.43,
+      "decode_tps": 16.24,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.138,
+      "sort_ms": 4.475,
+      "gateup_ms": 521.808,
+      "midq_ms": 8.901,
+      "down_ms": 420.358,
+      "sum_ms": 0.043,
+      "total_ms": 958.728
+    },
+    "confirmation_parent_profile": {
+      "csv_sha256": "7da3803b6d88c957545140ffb3356be0eab10b7e90d9dd0f09cd3ff7dd0a25ff",
+      "stderr_sha256": "6ae45f3b3f2bd587c10e9cad3fda2edcc91239288dc441a2f7ea9be9dc720e37",
+      "prefill_tps": 251.31,
+      "decode_tps": 16.26,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.186,
+      "sort_ms": 4.362,
+      "gateup_ms": 521.728,
+      "midq_ms": 8.902,
+      "down_ms": 423.519,
+      "sum_ms": 0.044,
+      "total_ms": 961.746
+    },
+    "confirmation_repaired_profile": {
+      "csv_sha256": "2b37317ec638d8c1746534e9a0de94c3261f38215d25ef042855f08e7d6eb7e6",
+      "stderr_sha256": "980c4b8b5fce3e9fa3a3791bafde87f2ed6e17a0a5dcc812da6a44ce76909c35",
+      "prefill_tps": 249.89,
+      "decode_tps": 16.21,
+      "profiled_layer_count": 43,
+      "xq_ms": 3.061,
+      "sort_ms": 4.345,
+      "gateup_ms": 521.718,
+      "midq_ms": 8.901,
+      "down_ms": 420.123,
+      "sum_ms": 0.043,
+      "total_ms": 958.190
+    },
+    "current_c_reference": {
+      "gateup_ms": 517.818,
+      "down_ms": 393.200,
+      "total_ms": 924.283,
+      "provenance": "retained adjacent reference from the immediately preceding gate global-load milestone"
+    },
+    "attribution": {
+      "initial_down_speedup_over_parent": 1.008,
+      "initial_down_reduction_percent_over_parent": 0.78,
+      "initial_total_speedup_over_parent": 1.003,
+      "initial_total_reduction_percent_over_parent": 0.33,
+      "confirmation_down_speedup_over_parent": 1.008,
+      "confirmation_down_reduction_percent_over_parent": 0.80,
+      "confirmation_total_speedup_over_parent": 1.004,
+      "confirmation_total_reduction_percent_over_parent": 0.37,
+      "repaired_gateup_ratio_to_current_c": 1.008,
+      "repaired_down_ratio_to_current_c": 1.068,
+      "repaired_total_ratio_to_current_c": 1.037,
+      "remaining_primary_bottleneck": "cached-down-code-generation-gap-versus-current-c",
+      "retention_basis": "two adjacent order-reversed instrumented phase comparisons; one-shot whole-prefill throughput is not used"
+    },
+    "rejected_packed_q2_global_u32_probe": {
+      "candidate_shared_library_sha256": "91dd22a88c75f289fabbd8e8bcde3914fbcb79832cfc65e090a174ea52898d8e",
+      "candidate_down_kernel_ptx_sha256": "bbf83e57d20d7e5199074e4ee55488c4a74f08fe19956a892be4c17a61f40076",
+      "candidate_down_global_u32_load_sites": 32,
+      "parent_down_ms": 423.855,
+      "candidate_down_ms": 574.252,
+      "parent_total_ms": 962.026,
+      "candidate_total_ms": 1112.460,
+      "retained": false
+    },
+    "rejected_four_entry_schedule_probe": {
+      "candidate_shared_library_sha256": "86e9287b4020d805f494e1823892a6e2d90e6b56043f072b574bfb7f8657d778",
+      "candidate_down_kernel_ptx_sha256": "d6b78abe79d8645f9d6773ea8155828f9953b2571e3095b054ba9b4f1afc9096",
+      "parent_down_ms": 423.644,
+      "candidate_down_ms": 545.084,
+      "retained": false
+    },
+    "feature_test_probe": {
+      "stdout_sha256": "3a1715e3e3d8bf40664eebc20eec98dfe2d1805427f65cce4af90096302960e7",
+      "stderr_sha256": "6c993de46b76a7d4b542d3a80fac423f62afe1a51060d0d5a4c778a63584566a",
+      "toolchain": "nightly-2026-04-03",
+      "passed": true,
+      "test_count": 176
+    },
+    "official_vector_probe": {
+      "summary_sha256": "4f5278d01c94168100e0cae92b95b221dd4a31b7fb9e3b910e39c0fde10b2802",
+      "stdout_sha256": "2fbecde7d4b737be3439ddf38f29695a82eec7c2b53f29ffd5ab5af701abc59d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "comparator_check_count": 1958,
+      "negative_check_count": 8,
+      "max_abs_logprob_delta": 0.619237483,
+      "passed": true
+    },
+    "gpu_utilization_percent_after_each_completed_probe": 0,
+    "gpu_memory_mib_after_each_completed_probe": 0
+  },
+  "decision": {
+    "default_route": "retain-current-c",
+    "rust_cuda_dso_promotion": "blocked",
+    "next_scoped_repair": "Diagnose the residual cached-down code generation gap; isolated explicit payload globalization and reduced entry scheduling are both measured regressions."
+  },
+  "validation": {
+    "local_ds4_cuda_library_test_count": 169,
+    "b300_feature_release_test_count": 176,
+    "unified_report_passed": 285,
+    "unified_report_skipped": 50,
+    "unified_report_failed": 0
+  },
+  "review": {
+    "pre_implementation": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S",
+    "final": "CLAUDE_REVIEW_TIMEOUT_AFTER_60S"
+  },
+  "next_required_stage": "M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb Rust CUDA Graph Benchmark Performance Repair"
+}

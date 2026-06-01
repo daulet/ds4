@@ -14037,6 +14037,39 @@ Stage split:
     `1.036x` current-C because down remains `1.073x`, so default routing and
     promotion blockers remain in force.
 
+################################################### M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba: Rust CUDA Down Metadata Global-Load Address-Space Performance Repair
+
+- Status: done.
+- Goal: reduce cached Rust CUDA down metadata-read overhead with an explicit
+  address-space change narrow enough to avoid the losing payload-load scope.
+- Fixture:
+  `ds4-parity/baselines/backend/m14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba/rust-cuda-down-metadata-global-load-address-space-performance-repair.json`.
+- Comparator:
+  `ds4-parity/check_cuda_rust_down_metadata_global_load_address_space_performance_repair.py --negative-test`.
+- Evidence:
+  - Cached down uses `memory::load_global_u16` only for aligned Q2
+    `weight_scale` and `weight_min` fields at offsets `80` and `82`.
+    Packed Q2 words, Q8 shared staging, fixed reduction order, and route
+    policy remain unchanged.
+  - Down PTX changes from zero explicit global loads to exactly `2`
+    `ld.global.u16` sites while retaining `152` shared loads, `2` shared
+    stores, `256` DP4A operations, and zero local-memory operations. The
+    rejected packed-Q2 `ld.global.u32` probe introduced `32` global word
+    loads and regressed down to `574.252 ms`.
+  - The repaired DSO SHA-256 is
+    `39aa45d4a45cf81867c9b25d74afc30a5ad25f20552ec006bca8da9951271820`
+    and down-kernel PTX SHA-256 is
+    `b32b8ef94660dffe104dcd0b04ee61b16b03cbe9b0baf032c75bec7f0ab14cdf`.
+    Order-reversed adjacent B300 comparisons lower down from `423.669 ms`
+    to `420.358 ms` and from `423.519 ms` to `420.123 ms`, with total
+    reductions from `961.924 ms` to `958.728 ms` and from `961.746 ms` to
+    `958.190 ms`. Official vectors pass `1958` checks plus `8` negative
+    checks and B300 feature tests pass `176` tests. The unified report passes
+    `285` comparators with `50` skipped and `0` failed; both requested Claude
+    review attempts timed out after `60` seconds. Rust total remains `1.037x`
+    current-C because down remains `1.068x`; default routing and promotion
+    blockers therefore remain in force.
+
 ## Removal Criteria for C Host Code
 
 C host code should only be removed after Rust owns the equivalent behavior and

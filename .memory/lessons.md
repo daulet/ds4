@@ -357,3 +357,16 @@ available directly from the repo.
 - Permanent rule: after introducing a private padded cache layout, measure
   aligned producer width as well as consumer width while keeping the external
   ABI and full-vector correctness fixed.
+
+## 2026-06-01: Isolate Metadata Loads From Packed Payload Loads
+
+- Symptom: cached down remained slower than current C after gate global-load
+  repair, but converting packed Q2 data words to explicit global `u32` loads
+  made down substantially slower despite a cleaner-looking PTX load shape.
+- Root cause: address-space lowering benefits are not uniform within the Q2
+  block; the two aligned halfword metadata reads improve modestly, while the
+  repeated packed payload-word conversion expands into a losing schedule on
+  B300.
+- Permanent rule: isolate metadata, payload, and staging load changes as
+  separate probes and retain only order-reversed phase wins with unchanged
+  arithmetic and full-vector correctness.

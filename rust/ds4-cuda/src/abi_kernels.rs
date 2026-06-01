@@ -3172,9 +3172,11 @@ mod kernels {
                         let packed =
                             (row_base + u64::from(block) * ABI_MOE_Q2_BLOCK_BYTES) as usize;
                         let weight_scale =
-                            f16::from_bits(abi_moe_load_u16(down_weights, packed + 80)) as f32;
+                            f16::from_bits(abi_moe_global_load_u16(down_weights, packed + 80))
+                                as f32;
                         let weight_min =
-                            f16::from_bits(abi_moe_load_u16(down_weights, packed + 82)) as f32;
+                            f16::from_bits(abi_moe_global_load_u16(down_weights, packed + 82))
+                                as f32;
                         let mut min_sum0 = 0_i32;
                         let mut min_sum1 = 0_i32;
                         let mut min_sum2 = 0_i32;

@@ -4587,6 +4587,20 @@ at `421.883 ms` to `421.707 ms`, and total routed-MoE decreases from
 `1005.846 ms` to `957.414 ms`; correctness is preserved and the default
 current-C route remains unchanged.
 
+Validate the M14.6b2b2b2b2b2b2b2b2b2b2b2b2b2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba
+Rust CUDA down metadata global-load address-space performance repair:
+
+```sh
+python3 ds4-parity/check_cuda_rust_down_metadata_global_load_address_space_performance_repair.py --negative-test
+```
+
+The cached down path now emits explicit global halfword loads only for the
+aligned Q2 scale and minimum metadata fields. Packed Q2 data-word global loads
+were measured and rejected. Across two order-reversed B300 comparisons, down
+decreases from `423.669 ms` to `420.358 ms` and from `423.519 ms` to
+`420.123 ms`; correctness is preserved and the default current-C route remains
+unchanged.
+
 Validate the M8.6 current-C CLI logprob/perplexity diagnostic oracle:
 
 ```sh
